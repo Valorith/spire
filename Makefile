@@ -162,9 +162,9 @@ build: ##@install Build
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) build
 
 publish: ##@images
-	docker push akkadius/spire:go-workspace
-	docker tag akkadius/spire:go-workspace akkadius/spire:go-workspace-v12
-	docker push akkadius/spire:go-workspace-v12
+	docker push eqemulator/spire:go-workspace
+	docker tag eqemulator/spire:go-workspace eqemulator/spire:go-workspace-v12
+	docker push eqemulator/spire:go-workspace-v12
 
 install: ##@install Runs installer
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) build
@@ -177,7 +177,7 @@ install: ##@install Runs installer
 
 install-assets: ##@install Installs assets
 	@./scripts/banner.sh "Initializing eq-asset-preview assets..."
-	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'curl --compressed -o /tmp/assets.zip -L https://github.com/Akkadius/eq-asset-preview/archive/refs/heads/master.zip'
+	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'curl --compressed -o /tmp/assets.zip -L https://github.com/EQEmuTools/eq-asset-preview/archive/refs/heads/master.zip'
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'unzip -o /tmp/assets.zip -d /tmp/assets'
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'cp -R /tmp/assets/eq-asset-preview-master/ ./frontend/public/'
 
@@ -210,7 +210,7 @@ init-strip-mysql-remote-root: ##@mysql Strips MySQL remote root user
 #----------------------
 
 build-assets: ##@build Builds static assets before packing into binary
-	curl --compressed -o /tmp/assets.zip -L https://github.com/Akkadius/eq-asset-preview/archive/refs/heads/master.zip
+	curl --compressed -o /tmp/assets.zip -L https://github.com/EQEmuTools/eq-asset-preview/archive/refs/heads/master.zip
 	unzip -qq -o /tmp/assets.zip -d /tmp/assets
 	cp -R /tmp/assets/eq-asset-preview-master/ ./frontend/public/
 
