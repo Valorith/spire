@@ -12,7 +12,7 @@ cmd = "go build -o /tmp/bin/app ."
 # Binary file yields from `cmd`.
 bin = "/bin/main"
 # Customize binary.
-full_bin = "APP_ENV=local /tmp/bin/app http:serve --port=3010"
+full_bin = "APP_ENV=production /tmp/bin/app http:serve --port=3010"
 # Web backend development (default)
 # full_bin = "APP_ENV=local /tmp/bin/app http:serve --port=3010"
 # Launcher development

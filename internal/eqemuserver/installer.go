@@ -1339,7 +1339,7 @@ func (a *Installer) installSpireBinary() error {
 		client := github.NewClient(&http.Client{Timeout: 5 * time.Second})
 		release, _, err := client.Repositories.GetLatestRelease(
 			context.Background(),
-			"Akkadius",
+			"EQEmuTools",
 			"spire",
 		)
 		if err != nil {

@@ -38,7 +38,7 @@ func NewSpireAssets(
 }
 
 const (
-	assetRepo = "Akkadius/eq-asset-preview"
+	assetRepo = "EQEmuTools/eq-asset-preview"
 )
 
 func (a SpireAssets) ServeStatic() echo.MiddlewareFunc {
