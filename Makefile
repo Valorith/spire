@@ -110,7 +110,7 @@ watch-be: ##@dev-watch Runs backend watcher
 
 seed-peq-database: ##@seed
 	$(COMPOSE_COMMAND) up -d workspace
-	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "curl http://db.projecteq.net/api/v1/dump/latest -o /tmp/db.zip"
+	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "curl https://db.eqemu.dev/api/v1/dump/latest -o /tmp/db.zip"
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "unzip -o /tmp/db.zip -d /tmp/db/"
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} -e 'DROP DATABASE ${MYSQL_EQEMU_DATABASE}; CREATE DATABASE ${MYSQL_EQEMU_DATABASE};'"
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "cd /tmp/db/peq-dump/ && mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} < ./create_all_tables.sql"
@@ -118,7 +118,7 @@ seed-peq-database: ##@seed
 
 # This needs to get cleaned up later
 seed-peq-database-prod: ##@seed
-	$(COMPOSE_COMMAND) exec prod bash -c "curl http://db.projecteq.net/api/v1/dump/latest -o /tmp/db.zip"
+	$(COMPOSE_COMMAND) exec prod bash -c "curl https://db.eqemu.dev/api/v1/dump/latest -o /tmp/db.zip"
 	$(COMPOSE_COMMAND) exec prod bash -c "unzip -o /tmp/db.zip -d /tmp/db/"
 	$(COMPOSE_COMMAND) exec prod bash -c "mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} -e 'DROP DATABASE ${MYSQL_EQEMU_DATABASE}; CREATE DATABASE ${MYSQL_EQEMU_DATABASE};'"
 	$(COMPOSE_COMMAND) exec prod bash -c "cd /tmp/db/peq-dump/ && mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} < ./create_all_tables.sql"

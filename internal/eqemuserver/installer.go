@@ -865,7 +865,7 @@ func (a *Installer) sourcePeqDatabase() error {
 	// download the latest database dump
 	err = download.WithProgress(
 		dumpZip,
-		"http://db.projecteq.net/api/v1/dump/latest",
+		"https://db.eqemu.dev/api/v1/dump/latest",
 	)
 	if err != nil {
 		return err
