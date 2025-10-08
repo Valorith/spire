@@ -445,7 +445,7 @@ func (a *Installer) cloneEQEmuMaps() error {
 	// download the zip file
 	err = download.WithProgress(
 		dumpZip,
-		"https://github.com/Akkadius/eqemu-maps/releases/latest/download/maps.zip",
+		"https://github.com/EQEmuTools/eqemu-maps/releases/latest/download/maps.zip",
 	)
 	if err != nil {
 		return err
@@ -760,7 +760,7 @@ func (a *Installer) initializeServerConfig() error {
 	}
 
 	// download the config file
-	res, err := http.Get("https://raw.githubusercontent.com/Akkadius/eqemu-install-v2/master/eqemu_config_docker.json")
+	res, err := http.Get("https://raw.githubusercontent.com/EQEmuTools/eqemu-install-v2/master/eqemu_config_docker.json")
 	if err != nil {
 		return err
 	}
@@ -1171,7 +1171,7 @@ func (a *Installer) checkIfMapsAreUpToDate() error {
 	}
 
 	// get latest release version
-	resp, err := http.Get("https://api.github.com/repos/Akkadius/eqemu-maps/releases/latest")
+	resp, err := http.Get("https://api.github.com/repos/EQEmuTools/eqemu-maps/releases/latest")
 	if err != nil {
 		return fmt.Errorf("could not get latest release version: %v", err)
 	}
@@ -1694,7 +1694,7 @@ func (a *Installer) initWindowsMysql() error {
 	a.logger.Info().Any("tempPath", tempPath).Msg("Downloading binaries")
 	err := download.WithProgress(
 		tempPath,
-		"https://github.com/Akkadius/eqemu-install-v2/releases/download/static/mariadb-10.11.4-winx64.msi",
+		"https://github.com/EQEmuTools/eqemu-install-v2/releases/download/static/mariadb-10.11.4-winx64.msi",
 	)
 	if err != nil {
 		return err
@@ -1781,7 +1781,7 @@ func (a *Installer) initWindowsPerl() error {
 	a.logger.Info().Any("tempPath", tempPath).Msg("Downloading binaries")
 	err := download.WithProgress(
 		tempPath,
-		"https://github.com/Akkadius/eqemu-install-v2/releases/download/static/strawberry-perl-5.24.4.1-64bit.msi",
+		"https://github.com/EQEmuTools/eqemu-install-v2/releases/download/static/strawberry-perl-5.24.4.1-64bit.msi",
 	)
 	if err != nil {
 		return err
@@ -1822,7 +1822,7 @@ func (a *Installer) initWindowsWget() error {
 	a.logger.Info().Any("downloadPath", downloadPath).Msg("Downloading binaries")
 	err := download.WithProgress(
 		downloadPath,
-		"https://github.com/Akkadius/eqemu-install-v2/releases/download/static/wget.exe",
+		"https://github.com/EQEmuTools/eqemu-install-v2/releases/download/static/wget.exe",
 	)
 	if err != nil {
 		return err
@@ -2384,7 +2384,7 @@ func (a *Installer) installVcRuntime() error {
 	a.logger.Info().Any("tempPath", tempPath).Msg("Downloading binaries")
 	err := download.WithProgress(
 		tempPath,
-		"https://github.com/Akkadius/eqemu-install-v2/releases/download/static/VC_redist.x64.exe",
+		"https://github.com/EQEmuTools/eqemu-install-v2/releases/download/static/VC_redist.x64.exe",
 	)
 	if err != nil {
 		return err
