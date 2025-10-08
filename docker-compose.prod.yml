@@ -66,14 +66,14 @@ services:
     labels:
       - "traefik.enable=true"
       # http
-      - "traefik.http.routers.spire-http.rule=Host(`spire.akkadius.com`)"
+      - "traefik.http.routers.spire-http.rule=Host(`spire.eqemu.dev`)"
       - "traefik.http.routers.spire-http.entrypoints=web"
       - "traefik.http.routers.spire-http.service=spire-http"
       - "traefik.http.services.spire-http.loadbalancer.server.port=3010"
       - "traefik.http.routers.spire-http.middlewares=spire-https"
       - "traefik.http.middlewares.spire-https.redirectscheme.scheme=https"
       # https
-      - "traefik.http.routers.spire-https.rule=Host(`spire.akkadius.com`)"
+      - "traefik.http.routers.spire-https.rule=Host(`spire.eqemu.dev`)"
       - "traefik.http.routers.spire-https.entrypoints=websecure"
       - "traefik.http.routers.spire-https.tls.certresolver=le"
       - "traefik.http.routers.spire-https.service=spire-https"
@@ -85,7 +85,7 @@ services:
 
   backup-cron:
     restart: unless-stopped
-    image: akkadius/eqemu-backup-cron:latest
+    image: eqemulator/eqemu-backup-cron:latest
     build:
       context: ./containers/backup-cron
     hostname: backup-cron

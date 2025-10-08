@@ -290,7 +290,7 @@ export default {
       return Time.format(time, "MMM D YYYY")
     },
     goToRelease(r) {
-      window.open(util.format("http://spire.akkadius.com/dev/release/%s", r), 'release_' + r);
+      window.open(util.format("http://spire.eqemu.dev/dev/release/%s", r), 'release_' + r);
     },
     async loadCounts() {
       return new Promise(async (resolve) => {

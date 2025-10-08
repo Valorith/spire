@@ -865,7 +865,7 @@ func (a *Installer) sourcePeqDatabase() error {
 	// download the latest database dump
 	err = download.WithProgress(
 		dumpZip,
-		"http://db.projecteq.net/api/v1/dump/latest",
+		"https://db.eqemu.dev/api/v1/dump/latest",
 	)
 	if err != nil {
 		return err
@@ -1339,7 +1339,7 @@ func (a *Installer) installSpireBinary() error {
 		client := github.NewClient(&http.Client{Timeout: 5 * time.Second})
 		release, _, err := client.Repositories.GetLatestRelease(
 			context.Background(),
-			"Akkadius",
+			"EQEmuTools",
 			"spire",
 		)
 		if err != nil {

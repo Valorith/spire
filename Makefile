@@ -110,7 +110,7 @@ watch-be: ##@dev-watch Runs backend watcher
 
 seed-peq-database: ##@seed
 	$(COMPOSE_COMMAND) up -d workspace
-	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "curl http://db.projecteq.net/api/v1/dump/latest -o /tmp/db.zip"
+	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "curl https://db.eqemu.dev/api/v1/dump/latest -o /tmp/db.zip"
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "unzip -o /tmp/db.zip -d /tmp/db/"
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} -e 'DROP DATABASE ${MYSQL_EQEMU_DATABASE}; CREATE DATABASE ${MYSQL_EQEMU_DATABASE};'"
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c "cd /tmp/db/peq-dump/ && mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} < ./create_all_tables.sql"
@@ -118,7 +118,7 @@ seed-peq-database: ##@seed
 
 # This needs to get cleaned up later
 seed-peq-database-prod: ##@seed
-	$(COMPOSE_COMMAND) exec prod bash -c "curl http://db.projecteq.net/api/v1/dump/latest -o /tmp/db.zip"
+	$(COMPOSE_COMMAND) exec prod bash -c "curl https://db.eqemu.dev/api/v1/dump/latest -o /tmp/db.zip"
 	$(COMPOSE_COMMAND) exec prod bash -c "unzip -o /tmp/db.zip -d /tmp/db/"
 	$(COMPOSE_COMMAND) exec prod bash -c "mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} -e 'DROP DATABASE ${MYSQL_EQEMU_DATABASE}; CREATE DATABASE ${MYSQL_EQEMU_DATABASE};'"
 	$(COMPOSE_COMMAND) exec prod bash -c "cd /tmp/db/peq-dump/ && mysql -h mysql -u${MYSQL_USERNAME} -p${MYSQL_PASSWORD} ${MYSQL_EQEMU_DATABASE} < ./create_all_tables.sql"
@@ -162,9 +162,9 @@ build: ##@install Build
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) build
 
 publish: ##@images
-	docker push akkadius/spire:go-workspace
-	docker tag akkadius/spire:go-workspace akkadius/spire:go-workspace-v12
-	docker push akkadius/spire:go-workspace-v12
+	docker push eqemulator/spire:go-workspace
+	docker tag eqemulator/spire:go-workspace eqemulator/spire:go-workspace-v12
+	docker push eqemulator/spire:go-workspace-v12
 
 install: ##@install Runs installer
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) build
@@ -177,7 +177,7 @@ install: ##@install Runs installer
 
 install-assets: ##@install Installs assets
 	@./scripts/banner.sh "Initializing eq-asset-preview assets..."
-	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'curl --compressed -o /tmp/assets.zip -L https://github.com/Akkadius/eq-asset-preview/archive/refs/heads/master.zip'
+	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'curl --compressed -o /tmp/assets.zip -L https://github.com/EQEmuTools/eq-asset-preview/archive/refs/heads/master.zip'
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'unzip -o /tmp/assets.zip -d /tmp/assets'
 	$(DRUNPREFIX) $(COMPOSE_COMMAND) exec workspace bash -c 'cp -R /tmp/assets/eq-asset-preview-master/ ./frontend/public/'
 
@@ -210,7 +210,7 @@ init-strip-mysql-remote-root: ##@mysql Strips MySQL remote root user
 #----------------------
 
 build-assets: ##@build Builds static assets before packing into binary
-	curl --compressed -o /tmp/assets.zip -L https://github.com/Akkadius/eq-asset-preview/archive/refs/heads/master.zip
+	curl --compressed -o /tmp/assets.zip -L https://github.com/EQEmuTools/eq-asset-preview/archive/refs/heads/master.zip
 	unzip -qq -o /tmp/assets.zip -d /tmp/assets
 	cp -R /tmp/assets/eq-asset-preview-master/ ./frontend/public/
 

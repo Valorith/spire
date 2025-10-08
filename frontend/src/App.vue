@@ -290,7 +290,7 @@ export default {
       let latest = "0.0.0";
 
       // fetch from github releases akkadius/spire
-      const url = 'https://api.github.com/repos/akkadius/spire/releases/latest'
+      const url = 'https://api.github.com/repos/eqemutools/spire/releases/latest'
       fetch(url)
         .then(response => response.json())
         .then(data => {
