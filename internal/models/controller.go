@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/Akkadius/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/http/routes"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )

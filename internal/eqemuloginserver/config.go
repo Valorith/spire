@@ -2,8 +2,8 @@ package eqemuloginserver
 
 import (
 	"encoding/json"
-	"github.com/Akkadius/spire/internal/logger"
-	"github.com/Akkadius/spire/internal/pathmgmt"
+	"github.com/EQEmuTools/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/pathmgmt"
 	"os"
 	"path/filepath"
 )

@@ -1,8 +1,8 @@
 package spa
 
 import (
-	"github.com/Akkadius/spire/internal/http/routes"
-	"github.com/Akkadius/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/gobuffalo/packr"
 	"github.com/labstack/echo/v4"
 	"net/http"

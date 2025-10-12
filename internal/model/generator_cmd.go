@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/Akkadius/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/spf13/cobra"
 	"gorm.io/gorm"
 )

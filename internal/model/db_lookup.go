@@ -3,7 +3,7 @@ package model
 import (
 	"database/sql"
 	"fmt"
-	"github.com/Akkadius/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/volatiletech/null/v8"
 )
 

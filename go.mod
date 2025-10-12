@@ -1,4 +1,4 @@
-module github.com/Akkadius/spire
+module github.com/EQEmuTools/spire
 
 go 1.23
 

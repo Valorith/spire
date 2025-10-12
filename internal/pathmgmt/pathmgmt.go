@@ -2,8 +2,8 @@ package pathmgmt
 
 import (
 	"errors"
-	"github.com/Akkadius/spire/internal/env"
-	"github.com/Akkadius/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/env"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"log"
 	"os"
 	"path/filepath"

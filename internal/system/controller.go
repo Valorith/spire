@@ -1,7 +1,7 @@
 package system
 
 import (
-	"github.com/Akkadius/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/http/routes"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"

@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/Akkadius/spire/internal/connection/contexts"
-	"github.com/Akkadius/spire/internal/database"
-	"github.com/Akkadius/spire/internal/encryption"
-	"github.com/Akkadius/spire/internal/models"
+	"github.com/EQEmuTools/spire/internal/connection/contexts"
+	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/encryption"
+	"github.com/EQEmuTools/spire/internal/models"
 )
 
 type Create struct {

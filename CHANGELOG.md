@@ -298,9 +298,9 @@
 
 **Spire Admin** Add real-time websocket streaming back into the zoneservers page in Spire admin. This adds net new functionality to be able to copy to clipboard, pause streams, and search the logs in real-time.
 
-![image](https://github.com/Akkadius/spire/assets/3319450/ea4293cf-cb7f-47c5-8858-6e246af86c22)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/ea4293cf-cb7f-47c5-8858-6e246af86c22)
 
-![image](https://github.com/Akkadius/spire/assets/3319450/6177c73c-8faf-40aa-9a8e-1144319031b8)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/6177c73c-8faf-40aa-9a8e-1144319031b8)
 
 ## [4.2.4] 5/28/2024
 
@@ -315,9 +315,9 @@
 
 **Launcher** Add feature that truncates server logs back a configurable amount of days (defaults to 7) on server start. This will keep your server logs from growing out of control and taking up disk space. This can be configured in the server config and the server launcher modal.
 
-![image](https://github.com/Akkadius/spire/assets/3319450/e6887073-c268-4fd4-a9ac-6b3d51a22e39)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/e6887073-c268-4fd4-a9ac-6b3d51a22e39)
 
-![image](https://github.com/Akkadius/spire/assets/3319450/0b037f27-e493-401d-9dca-3fe4d07fae9d)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/0b037f27-e493-401d-9dca-3fe4d07fae9d)
 
 ## [4.1.0] 5/22/2024
 
@@ -327,9 +327,9 @@
 * **Installer** Launcher sets config option `web-admin.launcher.updateOpcodesOnStart` to `true` by default
 * **Spire** Fix a potential crash issue during offline boots.
 
-![image](https://github.com/Akkadius/spire/assets/3319450/eb5ee780-e48f-469e-8040-fd21b7a0e0fe)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/eb5ee780-e48f-469e-8040-fd21b7a0e0fe)
 
-![image](https://github.com/Akkadius/spire/assets/3319450/aa7adbbc-c56e-4dcf-83d6-750eae8d63c6)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/aa7adbbc-c56e-4dcf-83d6-750eae8d63c6)
 
 ## [4.0.5] 5/13/2024
 
@@ -366,11 +366,11 @@ Occulus has been ported natively to Spire. All remaining features have been port
 * **Zone Server** The zone server page has had a UI overhaul, featuring a differentiation between active, inactive, and static zones. Players now show visually on this page. You can now search by zone name or player name. You can also kill zone processes directly from the UI.
 * **Server Locking** Fix error with locking server while offline.
 
-![image](https://github.com/Akkadius/spire/assets/3319450/c0e7e515-a3d2-4345-bb25-56f1696fb57f)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/c0e7e515-a3d2-4345-bb25-56f1696fb57f)
 
-![image](https://github.com/Akkadius/spire/assets/3319450/74ea9159-68e4-422a-ba83-af1588492243)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/74ea9159-68e4-422a-ba83-af1588492243)
 
-![image](https://github.com/Akkadius/spire/assets/3319450/8c87292e-775c-40a2-9238-3724af75a5a0)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/8c87292e-775c-40a2-9238-3724af75a5a0)
 
 ## [3.13.9] 5/05/2024
 
@@ -402,11 +402,11 @@ Occulus has been ported natively to Spire. All remaining features have been port
 
 #### Spawn Entry Editing, Pathfinder
 
-![image](https://github.com/Akkadius/spire/assets/3319450/29f34cb6-6961-4287-aadd-cd99a3644c5b)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/29f34cb6-6961-4287-aadd-cd99a3644c5b)
 
 #### S3D / EQG Zone Region Inspector
 
-![image](https://github.com/Akkadius/spire/assets/3319450/1c88abc3-25a9-4562-a869-976fee530a44)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/1c88abc3-25a9-4562-a869-976fee530a44)
 
 ## [3.12.3] 2/7/2024
 
@@ -430,7 +430,7 @@ Occulus has been ported natively to Spire. All remaining features have been port
 * **Spire** Add in application update notifications that inform the user when there is an update available. This is a new feature that will be used in the future to notify users of new Spire releases while in the UI. It supports ignoring the update, only checks periodically.
 * **Spire** Add a manual update check button to the navbar.
 
-![image](https://github.com/Akkadius/spire/assets/3319450/b0576ea5-0ce4-4062-a456-768985faca4b)
+![image](https://github.com/EQEmuTools/spire/assets/3319450/b0576ea5-0ce4-4062-a456-768985faca4b)
 
 ## [3.9.11] 1/24/2024
 
@@ -664,7 +664,7 @@ More improvements to pre-flight checks, they should fail pass-through now and no
 
 ## [3.1.1] 4/29/2023
 
-* Add command `spire:occulus-update` to update Occulus to the latest version or install it if it doesn't exist [#116](https://github.com/Akkadius/spire/pull/116)
+* Add command `spire:occulus-update` to update Occulus to the latest version or install it if it doesn't exist [#116](https://github.com/EQEmuTools/spire/pull/116)
 
 ## [3.1.0] 4/29/2023
 
@@ -672,10 +672,10 @@ More improvements to pre-flight checks, they should fail pass-through now and no
 
 ## [3.0.8] 4/28/2023
 
-* Spire will now exit immediately after updating if no terminal is attached [#114](https://github.com/Akkadius/spire/pull/114)
-* Spire web interface port can now be configured using **eqemu_config.json** @ **spire.http_port** if it exists or environment variable `SPIRE_HTTP_PORT` if it exists [#112](https://github.com/Akkadius/spire/pull/114)
-* Add command `spire:init [username] [password] --auth-enabled=true` to initialize a new Spire install with a default admin [#113](https://github.com/Akkadius/spire/pull/114)
-* Add command `user:change-password [username] [password]` to change a user's password [#113](https://github.com/Akkadius/spire/pull/114)
+* Spire will now exit immediately after updating if no terminal is attached [#114](https://github.com/EQEmuTools/spire/pull/114)
+* Spire web interface port can now be configured using **eqemu_config.json** @ **spire.http_port** if it exists or environment variable `SPIRE_HTTP_PORT` if it exists [#112](https://github.com/EQEmuTools/spire/pull/114)
+* Add command `spire:init [username] [password] --auth-enabled=true` to initialize a new Spire install with a default admin [#113](https://github.com/EQEmuTools/spire/pull/114)
+* Add command `user:change-password [username] [password]` to change a user's password [#113](https://github.com/EQEmuTools/spire/pull/114)
 
 ## [3.0.7] 4/15/2023 - Spire Admin
 
@@ -920,34 +920,34 @@ My pressing the **Control** key, you can now see a modal that will show you Spir
 
 ### Item Editor
 
-* Item editor edit button now is a hyperlink that can be opened in a new tab https://github.com/Akkadius/spire/issues/106
-* Item editor clone button now is a hyperlink that can be opened in a new tab https://github.com/Akkadius/spire/issues/106
+* Item editor edit button now is a hyperlink that can be opened in a new tab https://github.com/EQEmuTools/spire/issues/106
+* Item editor clone button now is a hyperlink that can be opened in a new tab https://github.com/EQEmuTools/spire/issues/106
 * Item editor now can deeply link to tabs
-* Added "Food" tab with proper item display values in item card preview https://github.com/Akkadius/spire/issues/100
+* Added "Food" tab with proper item display values in item card preview https://github.com/EQEmuTools/spire/issues/100
 * Added proper "zero value" for skillmodtype and extradmgskill (Thanks Kinglykrab)
 
 ### Spell Editor
 
-* Add "Corruption" to resist types https://github.com/Akkadius/spire/issues/92
+* Add "Corruption" to resist types https://github.com/EQEmuTools/spire/issues/92
 * Spell editor now can deeply link to tabs
-* Have DB String buttons open a new tab to prevent loss of progress in editor https://github.com/Akkadius/spire/issues/95
+* Have DB String buttons open a new tab to prevent loss of progress in editor https://github.com/EQEmuTools/spire/issues/95
 
 ### Merchant Editor
 
-* Fix an issue with new merchantlist entries creating a max_status of 0 preventing new merchant items from being displayed https://github.com/Akkadius/spire/issues/107
+* Fix an issue with new merchantlist entries creating a max_status of 0 preventing new merchant items from being displayed https://github.com/EQEmuTools/spire/issues/107
 
 ### NPC / Bot Spells Editor
 
-* Fix an issue where editing a spell results in a number type error https://github.com/Akkadius/spire/issues/83
+* Fix an issue where editing a spell results in a number type error https://github.com/EQEmuTools/spire/issues/83
 
 ### Quest API Explorer
 
-* Fix an issue with copy to clipboard for multiple events being displayed in search https://github.com/Akkadius/spire/issues/104
-* Added user preference default language https://github.com/Akkadius/spire/issues/98
+* Fix an issue with copy to clipboard for multiple events being displayed in search https://github.com/EQEmuTools/spire/issues/104
+* Added user preference default language https://github.com/EQEmuTools/spire/issues/98
 
 ### Fixes
 
-* Fixed [Bug] Merchant Editor creates new merchant list entries with max status of 0 https://github.com/Akkadius/spire/issues/107
+* Fixed [Bug] Merchant Editor creates new merchant list entries with max status of 0 https://github.com/EQEmuTools/spire/issues/107
 
 ## [2.6.1]
 
@@ -1258,7 +1258,7 @@ To be updated in official documentation
 
 ## [1.13.10]
 
-* Addresses an issue where connections endpoint was hit when booting the app. When Spire does not have a Spire database, it panics the backend. https://github.com/Akkadius/spire/issues/63
+* Addresses an issue where connections endpoint was hit when booting the app. When Spire does not have a Spire database, it panics the backend. https://github.com/EQEmuTools/spire/issues/63
 
 ## [1.13.9]
 
@@ -1462,7 +1462,7 @@ Item and Spell editor tools are now released in full, with the most feature rich
 
 ### Quest API Explorer
 
-Implemented searching by method param. [#23](https://github.com/Akkadius/spire/issues/23)
+Implemented searching by method param. [#23](https://github.com/EQEmuTools/spire/issues/23)
 
 ![image](https://user-images.githubusercontent.com/3319450/151752471-85e4df08-4f0c-4936-a082-f62557d1cd12.png)
 
@@ -1476,7 +1476,7 @@ All item icons in application now load from a spritesheet, removing the dependen
 
 ### Quest API Explorer
 
-* Fixed a bug where sub event examples for Lua were not formatted properly [#21](https://github.com/Akkadius/spire/issues/21)
+* Fixed a bug where sub event examples for Lua were not formatted properly [#21](https://github.com/EQEmuTools/spire/issues/21)
 
 ### Viewer Improvements
 
@@ -1573,14 +1573,14 @@ All item icons in application now load from a spritesheet, removing the dependen
 **Akkadius**
 
 Spire is now available for general release and the repository can be found
-here [https://github.com/Akkadius/spire](https://github.com/Akkadius/spire)
+here [https://github.com/EQEmuTools/spire](https://github.com/EQEmuTools/spire)
 
 ### Spire Desktop Release
 
 Spire can be ran as a standalone executable on Windows.
 
 Download the latest release
-here [https://github.com/Akkadius/spire/releases](https://github.com/Akkadius/spire/releases)
+here [https://github.com/EQEmuTools/spire/releases](https://github.com/EQEmuTools/spire/releases)
 
 To run, simply put **spire.exe** in your server directory and double click (On Windows)
 

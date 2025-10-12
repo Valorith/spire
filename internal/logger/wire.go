@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"github.com/Akkadius/spire/internal/env"
+	"github.com/EQEmuTools/spire/internal/env"
 	"os"
 	"strings"
 )
