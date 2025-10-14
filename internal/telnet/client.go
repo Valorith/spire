@@ -2,8 +2,8 @@ package telnet
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/env"
-	"github.com/Akkadius/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/env"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/ziutek/telnet"
 	"runtime"
 	"strings"

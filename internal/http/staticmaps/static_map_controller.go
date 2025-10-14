@@ -3,8 +3,8 @@ package staticmaps
 import (
 	_ "embed"
 	"fmt"
-	"github.com/Akkadius/spire/internal/database"
-	"github.com/Akkadius/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/http/routes"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )

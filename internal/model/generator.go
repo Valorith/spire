@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/Akkadius/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/gertd/go-pluralize"
 	"github.com/iancoleman/strcase"
 	"gopkg.in/yaml.v3"

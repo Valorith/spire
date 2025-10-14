@@ -2,10 +2,10 @@ package auth
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/database"
-	"github.com/Akkadius/spire/internal/http/routes"
-	"github.com/Akkadius/spire/internal/models"
-	"github.com/Akkadius/spire/internal/user"
+	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/models"
+	"github.com/EQEmuTools/spire/internal/user"
 	"github.com/danilopolani/gocialite"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/labstack/echo/v4"

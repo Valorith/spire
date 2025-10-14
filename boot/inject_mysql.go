@@ -2,10 +2,10 @@ package boot
 
 import (
 	"errors"
-	"github.com/Akkadius/spire/internal/database"
-	"github.com/Akkadius/spire/internal/env"
-	"github.com/Akkadius/spire/internal/eqemuserverconfig"
-	"github.com/Akkadius/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/env"
+	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"gorm.io/driver/mysql"
 	gormLogger "gorm.io/gorm/logger"
 	"log"

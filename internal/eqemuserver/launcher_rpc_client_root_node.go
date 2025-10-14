@@ -1,7 +1,7 @@
 package eqemuserver
 
 import (
-	"github.com/Akkadius/spire/internal/system"
+	"github.com/EQEmuTools/spire/internal/system"
 	"net/http"
 )
 

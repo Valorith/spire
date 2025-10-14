@@ -2,8 +2,8 @@ package github
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/download"
-	"github.com/Akkadius/spire/internal/unzip"
+	"github.com/EQEmuTools/spire/internal/download"
+	"github.com/EQEmuTools/spire/internal/unzip"
 	gocache "github.com/patrickmn/go-cache"
 	"io/ioutil"
 	"log"

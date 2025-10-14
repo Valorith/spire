@@ -2,7 +2,7 @@ package logger
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/console"
+	"github.com/EQEmuTools/spire/internal/console"
 	"github.com/rs/zerolog"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -133,7 +133,7 @@ func getCallerMeta() string {
 		if strings.Contains(pkg, "(*") {
 			callerType = pkg
 
-			// extract type from github.com/Akkadius/spire/internal/eqemuserver.(*QuestHotReloadWatcher)
+			// extract type from github.com/EQEmuTools/spire/internal/eqemuserver.(*QuestHotReloadWatcher)
 			// to QuestHotReloadWatcher
 			split := strings.Split(pkg, "(*")
 			if len(split) > 1 {

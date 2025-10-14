@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Akkadius/spire/internal/system"
+	"github.com/EQEmuTools/spire/internal/system"
 	"io"
 	"net/http"
 	"os"

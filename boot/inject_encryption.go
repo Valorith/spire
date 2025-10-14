@@ -1,7 +1,7 @@
 package boot
 
 import (
-	"github.com/Akkadius/spire/internal/encryption"
+	"github.com/EQEmuTools/spire/internal/encryption"
 	"github.com/google/wire"
 )
 

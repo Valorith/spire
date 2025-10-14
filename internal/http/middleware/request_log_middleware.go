@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/influx"
+	"github.com/EQEmuTools/spire/internal/influx"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/labstack/echo/v4"
 	"strconv"

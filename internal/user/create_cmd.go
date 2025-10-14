@@ -2,10 +2,10 @@ package user
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/database"
-	"github.com/Akkadius/spire/internal/encryption"
-	"github.com/Akkadius/spire/internal/logger"
-	"github.com/Akkadius/spire/internal/models"
+	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/encryption"
+	"github.com/EQEmuTools/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/spf13/cobra"
 )
 

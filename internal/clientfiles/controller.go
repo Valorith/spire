@@ -2,9 +2,9 @@ package clientfiles
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/database"
-	"github.com/Akkadius/spire/internal/http/routes"
-	"github.com/Akkadius/spire/internal/models"
+	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"

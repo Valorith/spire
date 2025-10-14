@@ -3,8 +3,8 @@ package eqemuserver
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Akkadius/spire/internal/logger"
-	"github.com/Akkadius/spire/internal/telnet"
+	"github.com/EQEmuTools/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/telnet"
 	"strings"
 )
 

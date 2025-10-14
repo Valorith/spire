@@ -2,12 +2,12 @@ package eqemuanalytics
 
 import (
 	"fmt"
-	"github.com/Akkadius/spire/internal/crashreporting"
-	"github.com/Akkadius/spire/internal/database"
-	"github.com/Akkadius/spire/internal/discord"
-	appmiddleware "github.com/Akkadius/spire/internal/http/middleware"
-	"github.com/Akkadius/spire/internal/http/routes"
-	"github.com/Akkadius/spire/internal/models"
+	"github.com/EQEmuTools/spire/internal/crashreporting"
+	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/discord"
+	appmiddleware "github.com/EQEmuTools/spire/internal/http/middleware"
+	"github.com/EQEmuTools/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"os"

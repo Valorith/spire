@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Akkadius/spire/internal/console"
+	"github.com/EQEmuTools/spire/internal/console"
 	"os"
 	"os/exec"
 	"runtime/debug"

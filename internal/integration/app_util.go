@@ -1,9 +1,9 @@
 package integration
 
 import (
-	"github.com/Akkadius/spire/boot"
-	"github.com/Akkadius/spire/internal/env"
-	"github.com/Akkadius/spire/internal/models"
+	"github.com/EQEmuTools/spire/boot"
+	"github.com/EQEmuTools/spire/internal/env"
+	"github.com/EQEmuTools/spire/internal/models"
 	"log"
 )
 
