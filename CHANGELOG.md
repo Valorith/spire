@@ -1,3 +1,7 @@
+## [4.23.4] 10/15/2025
+
+* Updated external asset references and GitHub URLs.
+
 ## [4.23.3] 8/2/2025
 
 * **Items** Revert experimental UX changes to the item search page. The changes were not well received by the community and for lack of time to address the issues, we are reverting them for now. 
