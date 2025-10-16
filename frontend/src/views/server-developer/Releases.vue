@@ -294,13 +294,16 @@ export default {
     async loadCounts() {
       const r = await SpireApi.v1().get(`analytics/server-crash-report/counts`)
       if (r.status === 200) {
-        this.counts       = r.data.crash_report_counts
-        this.uniqueCounts = r.data.unique_crash_counts
-        this.selfBuilt    = r.data.crash_report_counts.filter((e) => {
-          return e.server_version.includes("-dev")
-        }).sort((a, b) => {
-          return b.server_version.localeCompare(a.server_version);
-        });
+        this.counts       = r.data.crash_report_counts || []
+        this.uniqueCounts = r.data.unique_crash_counts || []
+
+        if (r.data.crash_report_counts) {
+          this.selfBuilt    = r.data.crash_report_counts.filter((e) => {
+            return e.server_version.includes("-dev")
+          }).sort((a, b) => {
+            return b.server_version.localeCompare(a.server_version);
+          });
+        }
       }
     },
     async loadReleases() {
