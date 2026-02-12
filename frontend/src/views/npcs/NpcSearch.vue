@@ -131,16 +131,22 @@
         </div>
       </div>
 
-      <!-- Race Icons -->
+      <!-- Race Icons + Additional Race Dropdown -->
       <div class="row mt-1">
-        <div class="col-12">
+        <div class="col-12" style="display: flex; align-items: center; flex-wrap: wrap;">
           <race-bitmask-calculator
             :centered-buttons="false"
             :display-all-none="true"
-            @fired="searchNpcs()"
+            @fired="selectedRaceDropdown = 0; searchNpcs()"
             :inputData.sync="selectedRaces"
             :mask="selectedRaces"
           />
+          <div style="display: inline-block; margin-left: 15px; position: relative; bottom: 5px;">
+            <select v-model="selectedRaceDropdown" @change="selectedRaces = 0; searchNpcs()" class="eq-input" style="min-width: 160px; font-size: 12px;">
+              <option :value="0">-- Other Races --</option>
+              <option v-for="(name, id) in allRaces" :key="id" :value="parseInt(id)">{{ id }}) {{ name }}</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -267,7 +273,7 @@ import {NpcTypeApi} from "../../app/api";
 import {SpireApi} from "../../app/api/spire-api";
 import {SpireQueryBuilder} from "../../app/api/spire-query-builder";
 import {DB_CLASSES} from "../../app/constants/eq-classes-constants";
-import {DB_RACE_NAMES} from "../../app/constants/eq-races-constants";
+import {DB_RACE_NAMES, RACE_MASTER_DATA} from "../../app/constants/eq-races-constants";
 import {BODYTYPES} from "../../app/constants/eq-bodytype-constants";
 import {DbSchema} from "../../app/db-schema";
 import {ROUTE} from "../../routes";
@@ -304,9 +310,11 @@ export default {
       classes: DB_CLASSES,
       bodytypes: BODYTYPES,
       ROUTE: ROUTE,
+      allRaces: DB_RACE_NAMES,
       selectedClasses: 0,
       selectedRaces: 0,
       selectOnlyClassEnabled: false,
+      selectedRaceDropdown: 0,
     }
   },
 
@@ -328,6 +336,7 @@ export default {
       if (q.classes) this.selectedClasses = parseInt(q.classes);
       if (q.races) this.selectedRaces = parseInt(q.races);
       if (q.classSelectOnly) this.selectOnlyClassEnabled = true;
+      if (q.raceId) this.selectedRaceDropdown = parseInt(q.raceId);
       if (q.level) this.selectedLevel = parseInt(q.level);
       if (q.levelType) this.selectedLevelType = parseInt(q.levelType);
       if (q.bodytype) this.selectedBodytype = parseInt(q.bodytype);
@@ -335,7 +344,7 @@ export default {
       if (q.orderBy) this.sortField = q.orderBy;
       if (q.orderDirection) this.sortDirection = q.orderDirection;
 
-      if (q.name || q.classes || q.races || q.level || q.bodytype) {
+      if (q.name || q.classes || q.races || q.raceId || q.level || q.bodytype) {
         this.searchNpcs();
       }
     },
@@ -346,6 +355,7 @@ export default {
       if (this.selectedClasses > 0) queryState.classes = this.selectedClasses;
       if (this.selectedRaces > 0) queryState.races = this.selectedRaces;
       if (this.selectOnlyClassEnabled) queryState.classSelectOnly = 1;
+      if (this.selectedRaceDropdown > 0) queryState.raceId = this.selectedRaceDropdown;
       if (parseInt(this.selectedLevel) > 0) queryState.level = this.selectedLevel;
       if (parseInt(this.selectedLevel) > 0 && parseInt(this.selectedLevelType) > 0) queryState.levelType = this.selectedLevelType;
       if (parseInt(this.selectedBodytype) >= 0) queryState.bodytype = this.selectedBodytype;
@@ -418,6 +428,11 @@ export default {
         }
       }
 
+      // Race dropdown (non-player races)
+      if (this.selectedRaceDropdown > 0) {
+        builder.where("race", "=", this.selectedRaceDropdown);
+      }
+
       // Column filters
       if (this.filters && this.filters.length > 0) {
         this.filters.forEach((f) => {
@@ -488,6 +503,7 @@ export default {
       this.selectedClasses = 0;
       this.selectedRaces = 0;
       this.selectOnlyClassEnabled = false;
+      this.selectedRaceDropdown = 0;
       this.selectedLevel = 0;
       this.selectedLevelType = 0;
       this.selectedBodytype = -1;
