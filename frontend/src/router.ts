@@ -439,13 +439,16 @@ router.beforeEach(async (to, from, next) => {
     AppEnv.routeCheckSpireInitialized(to, router)
   }
 
-  // Admin route guard: require authenticated admin user
+  // Admin route guard: require authenticated admin user (only when auth is configured)
   if (to.path.startsWith('/admin')) {
-    const user = await UserContext.getUser();
-    if (!user || !user.is_admin) {
-      EventBus.$emit('ROUTE_CHANGE', to);
-      next({ path: '/', replace: true });
-      return;
+    const authEnabled = AppEnv.isLocalAuthEnabled() || AppEnv.isGithubAuthEnabled();
+    if (authEnabled) {
+      const user = await UserContext.getUser();
+      if (!user || !user.is_admin) {
+        EventBus.$emit('ROUTE_CHANGE', to);
+        next({ path: '/', replace: true });
+        return;
+      }
     }
   }
 
