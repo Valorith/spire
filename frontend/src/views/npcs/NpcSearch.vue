@@ -127,7 +127,7 @@
 
     </eq-window>
 
-    <app-loader :is-loading="!loaded" padding="4"/>
+    <app-loader v-if="!loaded" :is-loading="!loaded" padding="4"/>
 
     <!-- Results Table -->
     <eq-window
