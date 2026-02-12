@@ -501,7 +501,7 @@ export default {
     },
 
     async getAllDbStrings(typeFilter) {
-      this.loading   = true
+      this.loading = true
       try {
         const builder = (new SpireQueryBuilder()).limit(100000)
         // Filter server-side when a specific type is requested (e.g. after create/delete/save)
@@ -512,6 +512,9 @@ export default {
         if (response.status === 200 && response.data) {
           return response.data
         }
+        return []
+      } catch (error) {
+        console.error("Error loading strings:", error)
         return []
       } finally {
         this.loading = false
