@@ -6,6 +6,7 @@ import {AppEnv} from "@/app/env/app-env";
 import {EventBus} from "@/app/event-bus/event-bus";
 import qs from "qs";
 import {scrollToHash} from "@/app/utility/scrollToTarget";
+import UserContext from "@/app/user/UserContext";
 
 Vue.use(Router)
 
@@ -436,6 +437,16 @@ router.beforeEach(async (to, from, next) => {
 
   if (typeof AppEnv.getEnv() !== 'undefined') {
     AppEnv.routeCheckSpireInitialized(to, router)
+  }
+
+  // Admin route guard: require authenticated admin user
+  if (to.path.startsWith('/admin')) {
+    const user = await UserContext.getUser();
+    if (!user || !user.is_admin) {
+      EventBus.$emit('ROUTE_CHANGE', to);
+      next({ path: '/', replace: true });
+      return;
+    }
   }
 
   EventBus.$emit('ROUTE_CHANGE', to);
