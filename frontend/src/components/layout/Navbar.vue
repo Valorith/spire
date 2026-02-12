@@ -54,7 +54,7 @@
       </div>
 
       <div class="collapse navbar-collapse" id="sidebarCollapse">
-        <div v-if="isAppLocal()">
+        <div v-if="isAppLocal() || isUserAdmin()">
           <h6 class="navbar-heading mt-3">
             Admin
           </h6>
@@ -575,7 +575,7 @@ export default {
         if (n.label && n.to) {
           let adminPanelRouteEnabled = false
           if (n.to.includes(ROUTE.ADMIN_ROOT)) {
-            if (!AppEnv.isAppLocal()) {
+            if (!AppEnv.isAppLocal() && !UserContext.isAdmin()) {
               continue;
             }
             adminPanelRouteEnabled = true
@@ -596,7 +596,7 @@ export default {
           for (let c of n.navs) {
             let adminPanelRouteEnabled = false
             if (c.to.includes(ROUTE.ADMIN_ROOT)) {
-              if (!AppEnv.isAppLocal()) {
+              if (!AppEnv.isAppLocal() && !UserContext.isAdmin()) {
                 continue;
               }
               adminPanelRouteEnabled = true
@@ -677,6 +677,10 @@ export default {
 
     isAppLocal() {
       return AppEnv.isAppLocal()
+    },
+
+    isUserAdmin() {
+      return this.user && this.user.is_admin
     },
 
     isUserLoggedIn() {
