@@ -484,6 +484,7 @@ export default {
           // On refresh after edit/delete, only reload the current type for efficiency
           const typeStrings = await this.getAllDbStrings(this.selectedType)
           // Replace only this type's entries in the cache
+          allStrings = allStrings || []
           allStrings = allStrings.filter(s => s.type !== parseInt(this.selectedType)).concat(typeStrings)
         } else {
           allStrings = await this.getAllDbStrings()
