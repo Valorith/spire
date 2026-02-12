@@ -54,7 +54,7 @@
       </div>
 
       <div class="collapse navbar-collapse" id="sidebarCollapse">
-        <div v-if="isAppLocal() || isUserAdmin()">
+        <div v-if="isUserAdmin()">
           <h6 class="navbar-heading mt-3">
             Admin
           </h6>
