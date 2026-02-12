@@ -326,7 +326,6 @@ export default {
             to: ROUTE.BOT_SPELLS_EDIT,
             icon: "ra ra-regeneration mr-1",
             isAlpha: true,
-            isNew: true,
             routes: ['bot-spells']
           },
         ]
@@ -348,6 +347,7 @@ export default {
             to: ROUTE.NPC_ROOT,
             icon: "fa fa-pencil-square mr-1",
             isNew: true,
+            isAlpha: true,
             routes: ['npc']
           },
           {
@@ -355,7 +355,6 @@ export default {
             to: ROUTE.NPC_EMOTES_EDIT,
             icon: "ra ra-death-skull mr-1",
             isAlpha: true,
-            isNew: true,
             routes: ['npc-emotes']
           },
           {
@@ -363,7 +362,6 @@ export default {
             to: ROUTE.MERCHANTS,
             icon: "ra ra-emerald mr-1",
             isAlpha: true,
-            isNew: true,
             routes: ['merchant', 'merchants']
           },
           {
@@ -371,7 +369,6 @@ export default {
             to: ROUTE.NPC_SPELLS_EDIT,
             icon: "ra ra-flame-symbol mr-1",
             isAlpha: true,
-            isNew: true,
             routes: ['npc-spells']
           },
           // {
@@ -379,7 +376,6 @@ export default {
           //   to: ROUTE.LOOT,
           //   icon: "ra ra-sword mr-1",
           //   isAlpha: true,
-          //   isNew: true,
           //   routes: ['loot']
           // },
         ]
@@ -468,10 +464,7 @@ export default {
             title: "Player Animations",
             to: ROUTE.PLAYER_ANIMATION_VIEWER,
             icon: "ra ra-player-dodge mr-1",
-            isNew: true
           },
-          { title: "Emitter Viewer", to: ROUTE.EMITTER_VIEWER, icon: "ra  ra-droplet-splash mr-1", isNew: true },
-          { title: "Spell Animations", to: ROUTE.SPELL_ANIMATION_VIEWER, icon: "ra ra-dragon mr-1", isNew: true }
         ]
       },
       spireApiNav: {
