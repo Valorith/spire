@@ -40,8 +40,8 @@
             :exact="nav.exact ? nav.exact : false"
           >
             <i :class="nav.icon" v-if="nav.icon"></i>{{ nav.title }}
-            <b-badge class="ml-3" variant="primary" v-if="nav.isAlpha">ALPHA</b-badge>
-            <b-badge class="ml-3" variant="primary" v-if="nav.isNew">NEW!</b-badge>
+            <b-badge class="ml-1" variant="primary" v-if="nav.isAlpha" style="font-size:.6em">ALPHA</b-badge>
+            <b-badge class="ml-1" variant="primary" v-if="nav.isNew" style="font-size:.6em">NEW!</b-badge>
 
           </router-link>
 
@@ -53,8 +53,8 @@
             v-if="nav.to.includes('http')"
           >
             <i :class="nav.icon" v-if="nav.icon"></i>{{ nav.title }}
-            <b-badge class="ml-3" variant="primary" v-if="nav.isAlpha">ALPHA</b-badge>
-            <b-badge class="ml-3" variant="primary" v-if="nav.isNew">NEW!</b-badge>
+            <b-badge class="ml-1" variant="primary" v-if="nav.isAlpha" style="font-size:.6em">ALPHA</b-badge>
+            <b-badge class="ml-1" variant="primary" v-if="nav.isNew" style="font-size:.6em">NEW!</b-badge>
           </a>
         </li>
       </ul>
@@ -100,5 +100,7 @@ export default {
 </script>
 
 <style scoped>
-
+.nav-link {
+  white-space: nowrap;
+}
 </style>
