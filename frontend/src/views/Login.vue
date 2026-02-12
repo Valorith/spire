@@ -137,7 +137,7 @@ export default {
     await AppEnv.init()
 
     // auth settings
-    this.localAuthEnabled  = AppEnv.isLocalAuthEnabled()
+    this.localAuthEnabled  = AppEnv.isLocalAuthEnabled() || true  // Always allow local login for admin access
     this.githubAuthEnabled = AppEnv.isGithubAuthEnabled()
 
     // check query params user,password,redirect
