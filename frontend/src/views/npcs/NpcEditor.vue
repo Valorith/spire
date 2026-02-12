@@ -270,6 +270,7 @@ import {DB_CLASSES}             from "@/app/constants/eq-classes-constants";
 import {DB_RACE_NAMES}          from "@/app/constants/eq-races-constants";
 import {BODYTYPES}              from "@/app/constants/eq-bodytype-constants";
 import {EditFormFieldUtil}      from "@/app/forms/edit-form-field-util";
+import {FreeIdFetcher}          from "@/app/free-id-fetcher";
 import NpcSpecialAbilities      from "../../components/tools/NpcSpecialAbilities";
 import {DB_SKILLS}              from "@/app/constants/eq-skill-constants";
 import {FLYMODE}                from "@/app/constants/eq-flymode-constants";
@@ -410,10 +411,31 @@ export default {
           EditFormFieldUtil.resetFieldEditedStatus()
         }
       } catch (error) {
+        // If the NPC doesn't exist yet (clone), try creating it
         if (error.response && error.response.data && error.response.data.error) {
-          this.error = error.response.data.error
-        } else {
-          this.error = "An error occurred while saving the NPC"
+          const err = error.response.data.error
+          const expectedError = err.includes("Cannot find entity")
+          if (!expectedError) {
+            this.error = err
+            return
+          }
+        }
+
+        try {
+          const {NpcTypeApi} = await import("@/app/api/api/npc-type-api")
+          const {SpireApi} = await import("@/app/api/spire-api")
+          const api = new NpcTypeApi(...SpireApi.cfg())
+          const createRes = await api.createNpcType({npcType: this.npc})
+          if (createRes.status === 200) {
+            this.sendNotification("Created new NPC!")
+            EditFormFieldUtil.resetFieldEditedStatus()
+          }
+        } catch (createError) {
+          if (createError.response && createError.response.data && createError.response.data.error) {
+            this.error = createError.response.data.error
+          } else {
+            this.error = "An error occurred while saving the NPC"
+          }
         }
       }
     },
@@ -473,6 +495,15 @@ export default {
     async load() {
       this.npc    = await Npcs.getNpc(this.$route.params.npc)
       this.loaded = true
+
+      // if we're cloning this NPC, automatically fetch a free ID
+      if (this.$route.query.hasOwnProperty("clone")) {
+        const id = await FreeIdFetcher.get("npc_types", "id", "name")
+        if (id > 0) {
+          EditFormFieldUtil.setFieldModifiedById('id')
+          this.npc.id = id
+        }
+      }
 
       setTimeout(() => {
         let hasSubEditorFields = [
