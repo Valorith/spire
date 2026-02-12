@@ -97,9 +97,9 @@
           <div class="mt-3">
             ID
             <b-input
-              v-model.number="selectedStringObject.id"
-              @keydown="updateSelectedString('id')"
+              :value="selectedStringObject.id"
               id="selected_id"
+              disabled
             />
           </div>
 
@@ -220,8 +220,7 @@ export default {
   watch: {
     '$route'() {
       console.log("route trigger")
-      this.reset()
-      this.init()
+      this.init(true)
     },
   },
 
@@ -313,12 +312,17 @@ export default {
     async createString() {
       console.log("create")
 
+      if (isNaN(parseInt(this.subSelectedType)) || parseInt(this.subSelectedType) < 0) {
+        this.error = "Please select a valid type first"
+        return
+      }
+
       // filter list by type
       let r = allStrings.filter((s) => s.type === parseInt(this.subSelectedType))
-        .sort((a, b) => (a.id > b.id) ? 1 : -1)
+        .sort((a, b) => a.id - b.id)
 
-      // grab last id + 1 from list
-      const newId = r[r.length - 1].id + 1
+      // grab last id + 1 from list (handle empty list)
+      const newId = r.length > 0 ? r[r.length - 1].id + 1 : 1
 
       // create
       try {
@@ -353,17 +357,22 @@ export default {
             {
               id: parseInt(this.subSelectedId)
             },
-            (new SpireQueryBuilder())
-              .where("type", "=", this.selectedType)
-              .get()
+            {
+              query: (new SpireQueryBuilder())
+                .where("type", "=", this.selectedType)
+                .get()
+            }
           )
 
           // success
           if (response.status === 200 && response.data) {
 
+            // Remove deleted item from cache immediately
+            allStrings = allStrings.filter(s => !(s.id === parseInt(this.subSelectedId) && s.type === parseInt(this.subSelectedType)))
+
             // get last element in current list and select it after deletion
             let r = allStrings.filter((s) => s.type === parseInt(this.subSelectedType))
-              .sort((a, b) => (a.id > b.id) ? 1 : -1)
+              .sort((a, b) => a.id - b.id)
 
             let lastElement = {}
 
@@ -447,10 +456,20 @@ export default {
       this.subSelectedId                = stringId
       this.subSelectedType              = typeId
       this.originalSelectedStringObject = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
-      this.selectedStringObject         = this.getSelectedStringObject()
+      this.selectedStringObject         = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
       this.updateQueryState()
     },
 
+    hasUnsavedChanges() {
+      return this.selectedStringObject && this.originalSelectedStringObject &&
+        JSON.stringify(this.selectedStringObject) !== JSON.stringify(this.originalSelectedStringObject)
+    },
+    warnUnsavedChanges(e) {
+      if (this.hasUnsavedChanges()) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    },
     isStringSelected(string) {
       return string.id === this.subSelectedId && string.type === this.subSelectedType
     },
@@ -460,8 +479,15 @@ export default {
      */
     async init(reset = false) {
       this.loadQueryState()
-      if (allStrings && allStrings.length === 0 || reset) {
-        allStrings = await this.getAllDbStrings()
+      if (!allStrings || allStrings.length === 0 || reset) {
+        if (reset && this.selectedType >= 0) {
+          // On refresh after edit/delete, only reload the current type for efficiency
+          const typeStrings = await this.getAllDbStrings(this.selectedType)
+          // Replace only this type's entries in the cache
+          allStrings = allStrings.filter(s => s.type !== parseInt(this.selectedType)).concat(typeStrings)
+        } else {
+          allStrings = await this.getAllDbStrings()
+        }
       }
       this.calculateStringTypeCounts(allStrings)
       this.originalSelectedStringObject = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
@@ -470,13 +496,14 @@ export default {
       this.scrollToHighlighted()
     },
 
-    async getAllDbStrings() {
+    async getAllDbStrings(typeFilter) {
       this.loading   = true
-      const response = await DbStrApiClient.listDbStrs(
-        (new SpireQueryBuilder())
-          .limit(100000)
-          .get()
-      )
+      const builder = (new SpireQueryBuilder()).limit(100000)
+      // Filter server-side when a specific type is requested (e.g. after create/delete/save)
+      if (typeof typeFilter !== 'undefined' && typeFilter >= 0) {
+        builder.where("type", "=", typeFilter)
+      }
+      const response = await DbStrApiClient.listDbStrs(builder.get())
       if (response.status === 200 && response.data) {
         this.loading = false
         return response.data
@@ -516,6 +543,10 @@ export default {
   },
   async mounted() {
     await this.init()
+    window.addEventListener('beforeunload', this.warnUnsavedChanges)
+  },
+  beforeDestroy() {
+    window.removeEventListener('beforeunload', this.warnUnsavedChanges)
   },
 }
 </script>
