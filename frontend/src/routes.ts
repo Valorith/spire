@@ -35,6 +35,8 @@ export const ROUTE = {
   LOGIN: "/login",
   LOGOUT: "/logout",
   HOME: "/",
+  NPC_ROOT: "/npc",
+  NPC_SEARCH: "/npcs",
   NPCS_EDIT: "/zone/npcs/:zone",
   NPC_EDIT: "/npc/:npc",
   NPC_EMOTES_EDIT: "/npc-emotes",
