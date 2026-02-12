@@ -318,8 +318,13 @@ export default {
     }
   },
 
-  mounted() {
-    this.npcTypeFields = DbSchema.getNpcTypeColumns ? DbSchema.getNpcTypeColumns() : [];
+  async mounted() {
+    try {
+      this.npcTypeFields = await DbSchema.getTableColumns('npc_types');
+    } catch (e) {
+      console.error("Failed to load npc_types schema:", e);
+      this.npcTypeFields = [];
+    }
     this.loadFromQuery();
   },
 
