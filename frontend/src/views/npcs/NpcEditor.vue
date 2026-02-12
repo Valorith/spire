@@ -11,6 +11,7 @@
             id="npc-edit-card"
             class="npc-edit-card minified-inputs"
             @mouseover.native="previewMain()"
+            @on-selected="onTabChange"
           >
             <eq-tab
               :name="tab.name"
@@ -125,6 +126,19 @@
                       </select>
 
                     </div>
+                    <div class="col-2 p-0" v-if="field.rangeSlider"
+                      @click="drawRangeVisualizer(field.field)"
+                    >
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        step="5"
+                        class="p-0 m-0 mt-2"
+                        style="width: 100%"
+                        v-model.number="npc[field.field]"
+                      >
+                    </div>
                   </div>
                 </div>
               </div>
@@ -132,6 +146,14 @@
             </eq-tab>
 
           </eq-tabs>
+        </eq-window>
+
+        <eq-window
+          v-if="rangeVisualizerActive && npc"
+          title="Range Visualizer"
+          class="mt-3"
+        >
+          <range-visualizer :unit-marker="parseInt(npc[activeRangeField]) || 0"/>
         </eq-window>
       </div>
 
@@ -141,6 +163,8 @@
         <eq-window v-if="npc && !isAnySelectorActive()" style="max-height: 95vh; overflow-y: scroll; overflow-x: hidden">
           <eq-npc-card-preview :npc="npc"/>
         </eq-window>
+
+
 
         <eq-window v-if="selectorActive['special_abilities']">
           <npc-special-abilities
@@ -233,6 +257,7 @@ import RaceSelector             from "../../components/selectors/RaceSelector";
 import FacialAppearanceSelector from "../../components/selectors/FacialAppearanceSelector";
 import MerchantSubEditor        from "../../components/subeditors/MerchantSubEditor";
 import LootSubEditor            from "../../components/subeditors/LootSubEditor";
+import RangeVisualizer          from "../../components/tools/RangeVisualizer";
 
 const MILLISECONDS_BEFORE_WINDOW_RESET = 10000;
 
@@ -240,6 +265,7 @@ export default {
   name: "ItemEdit",
   components: {
     LootSubEditor,
+    RangeVisualizer,
     MerchantSubEditor,
     FacialAppearanceSelector,
     RaceSelector,
@@ -264,6 +290,8 @@ export default {
 
       // selectors
       selectorActive: {},
+      rangeVisualizerActive: false,
+      activeRangeField: "",
       lastResetTime: Date.now(),
 
       // state, loaded or not
@@ -356,6 +384,8 @@ export default {
       for (const [k, v] of Object.entries(this.selectorActive)) {
         this.selectorActive[k] = false
       }
+      this.rangeVisualizerActive = false
+      this.activeRangeField = ""
 
       EditFormFieldUtil.resetFieldSubEditorHighlightedStatus()
     },
@@ -366,6 +396,18 @@ export default {
       this.$forceUpdate()
 
       EditFormFieldUtil.setFieldSubEditorHighlightedById(selector)
+    },
+    onTabChange() {
+      this.rangeVisualizerActive = false
+      this.activeRangeField = ""
+    },
+    drawRangeVisualizer(field) {
+      this.resetPreviewComponents()
+      this.activeRangeField = field
+      this.rangeVisualizerActive = true
+      this.lastResetTime = Date.now() + 5000
+      EditFormFieldUtil.setFieldSubEditorHighlightedById(field)
+      this.$forceUpdate()
     },
 
     /**
@@ -496,8 +538,8 @@ export default {
             { desc: 'Always Aggro', field: 'always_aggro', fType: 'checkbox' },
             { desc: "NPC Aggro", field: "npc_aggro", fType: "checkbox" },
 
-            { desc: "Aggro Radius", field: "aggroradius", fType: "text" },
-            { desc: "Assist Radius", field: "assistradius", fType: "text" },
+            { desc: "Aggro Radius", field: "aggroradius", fType: "text", rangeSlider: true, e: { onclick: () => this.drawRangeVisualizer("aggroradius") } },
+            { desc: "Assist Radius", field: "assistradius", fType: "text", rangeSlider: true, e: { onclick: () => this.drawRangeVisualizer("assistradius") } },
           ]
         },
         {
