@@ -114,6 +114,36 @@
         </div>
       </div>
 
+
+      <!-- Class Icons -->
+      <div class="row mt-2">
+        <div class="col-12">
+          <class-bitmask-calculator
+            :centered-buttons="false"
+            :display-all-none="true"
+            :add-only-button-enabled="true"
+            :add-only-state-enabled="selectOnlyClassEnabled"
+            @fired="searchNpcs()"
+            @selectOnly="selectOnlyClassEnabled = $event"
+            :inputData.sync="selectedClasses"
+            :mask="selectedClasses"
+          />
+        </div>
+      </div>
+
+      <!-- Race Icons -->
+      <div class="row mt-1">
+        <div class="col-12">
+          <race-bitmask-calculator
+            :centered-buttons="false"
+            :display-all-none="true"
+            @fired="searchNpcs()"
+            :inputData.sync="selectedRaces"
+            :mask="selectedRaces"
+          />
+        </div>
+      </div>
+
       <div class="row mt-3">
         <div class="col-12 p-0">
           <db-column-filter
@@ -241,11 +271,13 @@ import {DB_RACE_NAMES} from "../../app/constants/eq-races-constants";
 import {BODYTYPES} from "../../app/constants/eq-bodytype-constants";
 import {DbSchema} from "../../app/db-schema";
 import {ROUTE} from "../../routes";
+import ClassBitmaskCalculator from "../../components/tools/ClassBitmaskCalculator";
+import RaceBitmaskCalculator from "../../components/tools/RaceBitmaskCalculator";
 import {Npcs} from "../../app/npcs";
 
 export default {
   name: "NpcSearch",
-  components: {NpcPopover, DbColumnFilter, AppLoader, EqWindow},
+  components: {NpcPopover, DbColumnFilter, AppLoader, EqWindow, ClassBitmaskCalculator, RaceBitmaskCalculator},
   data() {
     return {
       // search
@@ -272,6 +304,9 @@ export default {
       classes: DB_CLASSES,
       bodytypes: BODYTYPES,
       ROUTE: ROUTE,
+      selectedClasses: 0,
+      selectedRaces: 0,
+      selectOnlyClassEnabled: false,
     }
   },
 
@@ -290,7 +325,9 @@ export default {
     loadFromQuery() {
       const q = this.$route.query;
       if (q.name) this.npcName = q.name;
-      if (q.class) this.selectedClass = parseInt(q.class);
+      if (q.classes) this.selectedClasses = parseInt(q.classes);
+      if (q.races) this.selectedRaces = parseInt(q.races);
+      if (q.classSelectOnly) this.selectOnlyClassEnabled = true;
       if (q.level) this.selectedLevel = parseInt(q.level);
       if (q.levelType) this.selectedLevelType = parseInt(q.levelType);
       if (q.bodytype) this.selectedBodytype = parseInt(q.bodytype);
@@ -298,7 +335,7 @@ export default {
       if (q.orderBy) this.sortField = q.orderBy;
       if (q.orderDirection) this.sortDirection = q.orderDirection;
 
-      if (q.name || q.class || q.level || q.bodytype) {
+      if (q.name || q.classes || q.races || q.level || q.bodytype) {
         this.searchNpcs();
       }
     },
@@ -306,7 +343,9 @@ export default {
     updateQueryState() {
       let queryState = {};
       if (this.npcName) queryState.name = this.npcName;
-      if (parseInt(this.selectedClass) > 0) queryState.class = this.selectedClass;
+      if (this.selectedClasses > 0) queryState.classes = this.selectedClasses;
+      if (this.selectedRaces > 0) queryState.races = this.selectedRaces;
+      if (this.selectOnlyClassEnabled) queryState.classSelectOnly = 1;
       if (parseInt(this.selectedLevel) > 0) queryState.level = this.selectedLevel;
       if (parseInt(this.selectedLevel) > 0 && parseInt(this.selectedLevelType) > 0) queryState.levelType = this.selectedLevelType;
       if (parseInt(this.selectedBodytype) >= 0) queryState.bodytype = this.selectedBodytype;
@@ -337,11 +376,6 @@ export default {
         }
       }
 
-      // Class filter
-      if (parseInt(this.selectedClass) > 0) {
-        builder.where("class", "=", this.selectedClass);
-      }
-
       // Level filter
       if (parseInt(this.selectedLevel) > 0) {
         let op = "=";
@@ -353,6 +387,35 @@ export default {
       // Bodytype filter
       if (parseInt(this.selectedBodytype) >= 0) {
         builder.where("bodytype", "=", this.selectedBodytype);
+      }
+
+      // Class filter (from icon selector)
+      if (this.selectedClasses > 0 && this.selectedClasses < 65535) {
+        // Extract selected class IDs from bitmask
+        const classMap = {1:1, 2:2, 4:3, 8:4, 16:5, 32:6, 64:7, 128:8, 256:9, 512:10, 1024:11, 2048:12, 4096:13, 8192:14, 16384:15, 32768:16};
+        const selectedIds = [];
+        for (const [bit, classId] of Object.entries(classMap)) {
+          if (this.selectedClasses & parseInt(bit)) selectedIds.push(classId);
+        }
+        if (selectedIds.length === 1) {
+          builder.where("class", "=", selectedIds[0]);
+        } else if (selectedIds.length > 1) {
+          selectedIds.forEach(id => builder.whereOr("class", "=", id));
+        }
+      }
+
+      // Race filter (from icon selector)
+      if (this.selectedRaces > 0 && this.selectedRaces < 65535) {
+        const raceMap = {1:1, 2:2, 4:3, 8:4, 16:5, 32:6, 64:7, 128:8, 256:9, 512:10, 1024:11, 2048:12, 4096:13, 8192:14, 16384:15, 32768:128, 65536:130, 131072:330, 262144:522};
+        const selectedIds = [];
+        for (const [bit, raceId] of Object.entries(raceMap)) {
+          if (this.selectedRaces & parseInt(bit)) selectedIds.push(raceId);
+        }
+        if (selectedIds.length === 1) {
+          builder.where("race", "=", selectedIds[0]);
+        } else if (selectedIds.length > 1) {
+          selectedIds.forEach(id => builder.whereOr("race", "=", id));
+        }
       }
 
       // Column filters
@@ -422,7 +485,9 @@ export default {
 
     resetForm() {
       this.npcName = "";
-      this.selectedClass = 0;
+      this.selectedClasses = 0;
+      this.selectedRaces = 0;
+      this.selectOnlyClassEnabled = false;
       this.selectedLevel = 0;
       this.selectedLevelType = 0;
       this.selectedBodytype = -1;
