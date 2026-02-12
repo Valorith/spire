@@ -4,14 +4,18 @@
       <div class="col-7">
         <eq-window>
 
-          <b-alert show dismissable variant="success" v-if="notification" class="mt-2">
-            <span @click="notification = ''" style="cursor: pointer">
-              <i class="fa fa-times mr-2"></i>
-            </span>
+          <div
+            v-if="notification"
+            :class="'text-center mt-2 btn-xs eq-header fade-in'"
+            style="width: 100%; font-size: 30px"
+            @click="notification = ''"
+          >
+            <i class="ra ra-book mr-1"></i>
             {{ notification }}
-          </b-alert>
+          </div>
+
           <b-alert show dismissable variant="danger" v-if="error" class="mt-2">
-            {{ error }}
+            <i class="fa fa-warning"></i> {{ error }}
           </b-alert>
 
           <app-loader :is-loading="!npc" class="mt-3 mb-3"/>
