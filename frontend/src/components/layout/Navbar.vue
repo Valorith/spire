@@ -338,7 +338,7 @@ export default {
           {
             title: "NPC Editor",
             to: ROUTE.NPC_ROOT,
-            icon: "fa fa-pencil-square mr-1",
+            icon: "ra ra-dragon mr-1",
             isNew: true,
             isAlpha: true,
             routes: ['npc']
