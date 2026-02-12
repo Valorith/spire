@@ -9,20 +9,23 @@ module.exports = {
     watchOptions: {
       ignored: [/node_modules/, /public/],
     },
-    proxy: process.env.SAGE_LOCAL_DEV === 'true' ? {
-      // Local development for EQ sage -- https://gitlab.com/knervous/eq-sage
-      "^/eqsage": {
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:3010",
         changeOrigin: true,
-        logLevel: 'debug',
-        target: "http://127.0.0.1:4100",
-        pathRewrite: (path) => path.replace(/^\/eqsage/, ""),
       },
-      "^/static": {
-        changeOrigin: true,
-        logLevel: 'debug',
-        target: "http://127.0.0.1:4100",
-      },
-    } : null,
+      ...(process.env.SAGE_LOCAL_DEV === 'true' ? {
+        "^/eqsage": {
+          changeOrigin: true,
+          target: "http://127.0.0.1:4100",
+          pathRewrite: (path) => path.replace(/^\/eqsage/, ""),
+        },
+        "^/static": {
+          changeOrigin: true,
+          target: "http://127.0.0.1:4100",
+        },
+      } : {}),
+    },
   },
   // configureWebpack: {
   //   plugins: [
