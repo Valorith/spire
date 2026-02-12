@@ -4,6 +4,16 @@
       <div class="col-7">
         <eq-window>
 
+          <b-alert show dismissable variant="success" v-if="notification" class="mt-2">
+            <span @click="notification = ''" style="cursor: pointer">
+              <i class="fa fa-times mr-2"></i>
+            </span>
+            {{ notification }}
+          </b-alert>
+          <b-alert show dismissable variant="danger" v-if="error" class="mt-2">
+            {{ error }}
+          </b-alert>
+
           <app-loader :is-loading="!npc" class="mt-3 mb-3"/>
 
           <eq-tabs
@@ -146,6 +156,19 @@
             </eq-tab>
 
           </eq-tabs>
+
+          <div class="text-center align-content-center mt-4" v-if="npc && npc.id >= 0">
+
+            <b-button
+              @click="saveNpc()"
+              size="sm"
+              variant="outline-warning"
+            >
+              <i class="ra ra-book"></i>
+              Save NPC
+            </b-button>
+
+          </div>
         </eq-window>
 
         <eq-window
@@ -288,6 +311,10 @@ export default {
       npc: null,
       originalNpc: {}, // item record data; used to reference original values in tools
 
+      // notifications
+      notification: "",
+      error: "",
+
       // selectors
       selectorActive: {},
       rangeVisualizerActive: false,
@@ -359,6 +386,36 @@ export default {
 
     setFieldModifiedById(field) {
       EditFormFieldUtil.setFieldModifiedById(field)
+    },
+
+    sendNotification(message) {
+      this.notification = message
+      this.dismissNotification()
+    },
+
+    dismissNotification() {
+      setTimeout(() => {
+        this.notification = ""
+      }, 5000)
+    },
+
+    async saveNpc() {
+      this.error        = ""
+      this.notification = ""
+
+      try {
+        const result = await Npcs.updateNpc(this.npc.id, this.npc)
+        if (result.status === 200) {
+          this.sendNotification("NPC updated successfully!")
+          EditFormFieldUtil.resetFieldEditedStatus()
+        }
+      } catch (error) {
+        if (error.response && error.response.data && error.response.data.error) {
+          this.error = error.response.data.error
+        } else {
+          this.error = "An error occurred while saving the NPC"
+        }
+      }
     },
 
     /**
