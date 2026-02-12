@@ -265,6 +265,10 @@ export default {
 
     loadQueryState() {
       console.log("loading query state")
+      // Clear selections first (they will be set if query params are present)
+      this.selectedType = -1
+      this.subSelectedId = -1
+      this.subSelectedType = -1
       if (this.$route.query.type >= 0) {
         this.selectedType    = parseInt(this.$route.query.type);
         this.subSelectedType = parseInt(this.$route.query.type);
@@ -480,7 +484,7 @@ export default {
     async init(reset = false) {
       this.loadQueryState()
       if (!allStrings || allStrings.length === 0 || reset) {
-        if (reset && this.selectedType >= 0) {
+        if (reset && this.selectedType >= 0 && Array.isArray(allStrings)) {
           // On refresh after edit/delete, only reload the current type for efficiency
           const typeStrings = await this.getAllDbStrings(this.selectedType)
           // Replace only this type's entries in the cache
@@ -491,22 +495,26 @@ export default {
       }
       this.calculateStringTypeCounts(allStrings)
       this.originalSelectedStringObject = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
-      this.selectedStringObject         = this.getSelectedStringObject()
+      this.selectedStringObject         = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
       this.listData()
       this.scrollToHighlighted()
     },
 
     async getAllDbStrings(typeFilter) {
       this.loading   = true
-      const builder = (new SpireQueryBuilder()).limit(100000)
-      // Filter server-side when a specific type is requested (e.g. after create/delete/save)
-      if (typeof typeFilter !== 'undefined' && typeFilter >= 0) {
-        builder.where("type", "=", typeFilter)
-      }
-      const response = await DbStrApiClient.listDbStrs(builder.get())
-      if (response.status === 200 && response.data) {
+      try {
+        const builder = (new SpireQueryBuilder()).limit(100000)
+        // Filter server-side when a specific type is requested (e.g. after create/delete/save)
+        if (typeof typeFilter !== 'undefined' && typeFilter >= 0) {
+          builder.where("type", "=", typeFilter)
+        }
+        const response = await DbStrApiClient.listDbStrs(builder.get())
+        if (response.status === 200 && response.data) {
+          return response.data
+        }
+        return []
+      } finally {
         this.loading = false
-        return response.data
       }
     },
 
