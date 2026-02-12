@@ -182,9 +182,19 @@ const router = new Router({
           meta: {title: "Merchant Edit"},
         },
         {
+          path: ROUTE.NPC_SEARCH,
+          component: () => import('./views/npcs/NpcSearch.vue'),
+          meta: {title: "NPC Search"},
+        },
+        {
           path: ROUTE.NPCS_EDIT,
           component: () => import('./views/npcs/NPCs.vue'),
           meta: {title: "NPC Grid Editor"},
+        },
+        {
+          path: ROUTE.NPC_ROOT,
+          component: () => import('./views/npcs/NpcSearch.vue'),
+          meta: {title: "NPC Search"},
         },
         {
           path: ROUTE.NPC_EDIT,

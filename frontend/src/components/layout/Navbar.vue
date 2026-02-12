@@ -337,6 +337,19 @@ export default {
         routePrefixMatches: ["npc", "merchant", "loot"],
         navs: [
           {
+            title: "Search",
+            to: ROUTE.NPC_ROOT,
+            icon: "fa fa-search mr-1",
+            isNew: true,
+            routes: ['npcs']
+          },
+          {
+            title: "NPC Editor",
+            to: ROUTE.NPC_ROOT,
+            icon: "fa fa-pencil-square mr-1",
+            routes: ['npc']
+          },
+          {
             title: "Emotes",
             to: ROUTE.NPC_EMOTES_EDIT,
             icon: "ra ra-death-skull mr-1",
