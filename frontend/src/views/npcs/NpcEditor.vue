@@ -135,7 +135,7 @@
                           :true-value="1"
                           :false-value="0"
                           v-model.number="npc[gf.field]"
-                          @input="npc[gf.field] = $event"
+                          @input="npc[gf.field] = $event; setFieldModifiedById(gf.field)"
                         />
 
                         <b-form-input
@@ -144,6 +144,7 @@
                           v-model.number="npc[gf.field]"
                           size="sm"
                           v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                          @input="setFieldModifiedById(gf.field)"
                           :style="npc[gf.field] === 0 ? 'opacity:.5' : ''"
                         />
 
@@ -153,6 +154,7 @@
                           :id="gf.field"
                           class="form-control form-control-sm"
                           v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                          @change="setFieldModifiedById(gf.field)"
                         >
                           <option
                             v-for="(desc, index) in gf.selectData"
@@ -194,6 +196,7 @@
                           rows="2"
                           max-rows="6"
                           v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                          @input="setFieldModifiedById(gf.field)"
                         />
 
                         <b-form-input
@@ -202,6 +205,7 @@
                           v-model.number="npc[gf.field]"
                           size="sm"
                           v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                          @input="setFieldModifiedById(gf.field)"
                           :style="npc[gf.field] <= 0 ? 'opacity:.5' : ''"
                         />
 
@@ -216,6 +220,7 @@
                           style="width: 100%"
                           v-model.number="npc[gf.field]"
                           @click="drawRangeVisualizer(gf.field)"
+                          @input="setFieldModifiedById(gf.field)"
                         >
                       </div>
                     </div>
