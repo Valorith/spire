@@ -218,7 +218,7 @@
 
           <!-- Lootdrops -->
           <eq-window title="Loot Drops" class="p-0">
-            <div class="d-flex justify-content-end px-2 pt-2">
+            <div class="d-flex justify-content-end px-3 pt-3 pb-1">
               <b-button
                 size="sm"
                 variant="outline-secondary"
