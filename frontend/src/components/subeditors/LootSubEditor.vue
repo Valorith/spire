@@ -18,14 +18,7 @@
               </span>
             </div>
           </div>
-          <button
-            @click="openFullEditor"
-            class="btn btn-sm btn-outline-info ml-2"
-            title="Open in full Loot Editor"
-            style="white-space: nowrap;"
-          >
-            <i class="fa fa-external-link-alt mr-1"></i> Full Editor
-          </button>
+          <!-- Full Editor button: reserved for future loot editor -->
         </div>
         <hr class="my-2" style="border-color: rgba(255,255,255,0.1);">
       </div>
