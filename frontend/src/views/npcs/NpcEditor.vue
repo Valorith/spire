@@ -204,6 +204,19 @@
                           v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
                           :style="npc[gf.field] <= 0 ? 'opacity:.5' : ''"
                         />
+
+                        <!-- range slider (grid) -->
+                        <input
+                          v-if="gf.rangeSlider"
+                          type="range"
+                          min="0"
+                          max="1000"
+                          step="5"
+                          class="mt-1"
+                          style="width: 100%"
+                          v-model.number="npc[gf.field]"
+                          @click="drawRangeVisualizer(gf.field)"
+                        >
                       </div>
                     </div>
                   </div>
@@ -1261,8 +1274,8 @@ export default {
               { desc: 'NPC Aggro', field: 'npc_aggro', fType: 'checkbox', col: 'col-6' },
             ]},
             { fields: [
-              { desc: 'Aggro Radius', field: 'aggroradius', fType: 'text', col: 'col-6' },
-              { desc: 'Assist Radius', field: 'assistradius', fType: 'text', col: 'col-6' },
+              { desc: 'Aggro Radius', field: 'aggroradius', fType: 'text', col: 'col-6', rangeSlider: true, e: { onclick: () => this.drawRangeVisualizer("aggroradius") } },
+              { desc: 'Assist Radius', field: 'assistradius', fType: 'text', col: 'col-6', rangeSlider: true, e: { onclick: () => this.drawRangeVisualizer("assistradius") } },
             ]},
           ],
         },

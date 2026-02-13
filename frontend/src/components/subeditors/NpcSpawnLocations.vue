@@ -148,7 +148,12 @@ export default {
           return;
         }
 
-        const spawngroupIds = [...new Set(entryResult.data.map((e) => e.spawngroup_id))].filter((v) => v != null);
+        const spawngroupIds = [...new Set(entryResult.data.map((e) => e.spawngroup_id || e.spawngroupID))].filter((v) => v != null && v !== undefined);
+        if (spawngroupIds.length === 0) {
+          this.loaded = true;
+          this.loading = false;
+          return;
+        }
 
         const spawn2Api = new Spawn2Api(...SpireApi.cfg());
         const spawn2Builder = new SpireQueryBuilder();
