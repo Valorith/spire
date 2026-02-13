@@ -1037,8 +1037,9 @@ export default {
         }
         return
       }
-      const idx = le._highlightIndex >= 0 ? le._highlightIndex : 0
-      this.addSearchedItem(leIndex, le._searchResults[idx])
+      // Only add if user has explicitly navigated to an item with arrow keys
+      if (le._highlightIndex < 0) return
+      this.addSearchedItem(leIndex, le._searchResults[le._highlightIndex])
     },
 
     searchItemsImmediate(leIndex) {
@@ -1100,7 +1101,7 @@ export default {
       if (!confirm('Remove ' + (lde.item ? lde.item.Name : 'item #' + lde.item_id) + '?')) return
       try {
         const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
-        await ldeApi.deleteLootdropEntry({ id: lde.lootdrop_id })
+        await ldeApi.deleteLootdropEntry({ id: lde.lootdrop_id }, { query: { item_id: lde.item_id } })
         this.showNotification('Removed item')
         await this.refreshCurrentTable()
       } catch (e) {
