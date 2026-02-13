@@ -1108,6 +1108,9 @@ export default {
           "alt_currency_id",
           "npc_faction_id",
 
+          "aggroradius",
+          "assistradius",
+
           "race",
           "gender",
           "texture",
