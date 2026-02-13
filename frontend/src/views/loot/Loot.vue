@@ -1098,10 +1098,11 @@ export default {
 
     async removeItem(leIndex, ldeIndex) {
       const lde = this.editEntries[leIndex].lootdrop.lootdrop_entries[ldeIndex]
-      if (!confirm('Remove ' + (lde.item ? lde.item.Name : 'item #' + lde.item_id) + '?')) return
+      if (!confirm('Remove ' + (lde.item ? lde.item.Name || lde.item.name : 'item #' + lde.item_id) + '?')) return
       try {
-        const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
-        await ldeApi.deleteLootdropEntry({ id: lde.lootdrop_id }, { query: { item_id: lde.item_id } })
+        // Direct axios call — generated client doesn't reliably pass item_id query param
+        // Composite key: lootdrop_id (path) + item_id (query) both required
+        await SpireApi.v1().delete('/lootdrop_entry/' + lde.lootdrop_id, { params: { item_id: lde.item_id } })
         this.showNotification('Removed item')
         await this.refreshCurrentTable()
       } catch (e) {
