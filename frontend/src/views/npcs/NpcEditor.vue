@@ -536,21 +536,11 @@
           @input="(val) => { npc.npc_spells_effects_id = val; setFieldModifiedById('npc_spells_effects_id'); }"
         />
 
-        <eq-window
+        <alt-currency-sub-editor
           v-if="selectorActive['alt_currency_id']"
-          title="Alternate Currency Selector"
-        >
-          <div class="p-2">
-            <p class="small" style="opacity:.7;">Enter the alternate currency ID this NPC uses for merchant transactions.</p>
-            <b-form-input
-              v-model.number="npc.alt_currency_id"
-              size="sm"
-              type="number"
-              placeholder="Currency ID"
-              @input="setFieldModifiedById('alt_currency_id')"
-            />
-          </div>
-        </eq-window>
+          :currency-id="npc ? npc.alt_currency_id : 0"
+          @input="(val) => { npc.alt_currency_id = val; setFieldModifiedById('alt_currency_id'); }"
+        />
 
       </div>
     </div>
@@ -589,6 +579,7 @@ import NpcSpawnLocations        from "../../components/subeditors/NpcSpawnLocati
 import FactionSubEditor         from "../../components/subeditors/FactionSubEditor";
 import { Chrome }               from "vue-color";
 import SpellsSubEditor          from "../../components/subeditors/SpellsSubEditor";
+import AltCurrencySubEditor     from "../../components/subeditors/AltCurrencySubEditor";
 import RangeVisualizer          from "../../components/tools/RangeVisualizer";
 
 const MILLISECONDS_BEFORE_WINDOW_RESET = 10000;
@@ -600,6 +591,7 @@ export default {
     NpcSpawnLocations,
     FactionSubEditor,
     SpellsSubEditor,
+    AltCurrencySubEditor,
     ChromePicker: Chrome,
     RangeVisualizer,
     MerchantSubEditor,
