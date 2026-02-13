@@ -1,55 +1,53 @@
 <template>
-  <div class="alt-currency-sub-editor" style="display: flex; flex-direction: column; height: 85vh;">
-    <eq-window title="Alternate Currency" style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+  <div class="alt-currency-sub-editor" style="height: 85vh; display: flex; flex-direction: column;">
+    <eq-window title="Alternate Currency">
 
       <!-- Current Selection -->
-      <div v-if="selectedCurrency" style="flex-shrink: 0; padding: 4px 0;">
+      <div v-if="selectedCurrency" class="mb-2">
         <div class="d-flex align-items-center">
-          <i class="fa fa-coins text-warning mr-2" style="font-size: 1.2em;"></i>
-          <div>
-            <div class="text-warning font-weight-bold" style="font-size: 1.05em;">
-              {{ selectedCurrency.itemName || 'Currency #' + selectedCurrency.id }}
-            </div>
-            <div class="mt-1">
-              <span class="info-badge mr-1">ID: {{ selectedCurrency.id }}</span>
-              <span class="info-badge">Item: {{ selectedCurrency.item_id }}</span>
-            </div>
-          </div>
+          <i class="fa fa-coins text-warning mr-2"></i>
+          <span class="text-warning font-weight-bold">{{ selectedCurrency.itemName }}</span>
+          <span class="info-badge ml-2">ID: {{ selectedCurrency.id }}</span>
         </div>
         <hr class="my-2" style="border-color: rgba(255,255,255,0.1);">
       </div>
 
-      <!-- Currency List -->
-      <div style="flex: 1; overflow-y: auto; min-height: 0;">
+      <!-- Scrollable Currency List -->
+      <div style="max-height: 55vh; overflow-y: auto;">
         <div v-if="loading" class="text-center py-4">
           <i class="fa fa-spinner fa-spin fa-2x text-warning"></i>
-          <div class="mt-2 small text-muted">Loading currencies...</div>
         </div>
 
-        <div v-else-if="filteredCurrencies.length === 0 && searchQuery" class="text-center text-muted py-4">
-          No currencies match "{{ searchQuery }}"
-        </div>
-
-        <div
-          v-for="c in filteredCurrencies"
-          :key="c.id"
-          class="currency-row d-flex align-items-center justify-content-between"
-          :class="{ 'currency-active': currencyId == c.id }"
-          @click="selectCurrency(c)"
-        >
-          <div class="d-flex align-items-center" style="min-width: 0;">
-            <item-popover v-if="c.item" :item="c.item" size="sm" />
-            <span v-else class="currency-name">{{ c.itemName || 'Unknown' }}</span>
-            <small class="text-muted ml-2">ID: {{ c.id }}</small>
-          </div>
-          <div v-if="currencyId == c.id" class="text-success">
-            <i class="fa fa-check"></i>
-          </div>
-        </div>
+        <table v-else class="eq-table eq-highlight-rows w-100" style="font-size: 13px;">
+          <thead>
+            <tr>
+              <th>Currency</th>
+              <th class="text-center" style="width: 60px;">ID</th>
+              <th style="width: 60px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="c in filteredCurrencies"
+              :key="c.id"
+              :style="currencyId == c.id ? 'background: rgba(40,167,69,0.15);' : ''"
+            >
+              <td>
+                <item-popover v-if="c.item" :item="c.item" size="sm" />
+                <span v-else>{{ c.itemName }}</span>
+              </td>
+              <td class="text-center text-muted">{{ c.id }}</td>
+              <td class="text-center">
+                <span v-if="currencyId == c.id" class="text-success"><i class="fa fa-check"></i></span>
+                <button v-else class="btn btn-xs btn-outline-success" @click="selectCurrency(c)">Select</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <!-- Search -->
-      <div class="search-bar" style="flex-shrink: 0;">
+      <!-- Search + Clear -->
+      <div class="mt-2 pt-2" style="border-top: 1px solid rgba(255,255,255,0.1);">
         <div class="input-group input-group-sm">
           <div class="input-group-prepend">
             <span class="input-group-text" style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15);">
@@ -67,12 +65,13 @@
             <button class="btn btn-outline-secondary btn-sm" @click="searchQuery = ''"><i class="fa fa-times"></i></button>
           </div>
         </div>
-        <div class="mt-2 text-center">
-          <button class="btn btn-xs btn-outline-danger" @click="selectNone()" v-if="currencyId > 0">
-            <i class="fa fa-times mr-1"></i> Clear Selection (set to 0)
+        <div class="text-center mt-2" v-if="currencyId > 0">
+          <button class="btn btn-xs btn-outline-danger" @click="selectNone()">
+            <i class="fa fa-times mr-1"></i> Clear (set to 0)
           </button>
         </div>
       </div>
+
     </eq-window>
   </div>
 </template>
@@ -107,8 +106,7 @@ export default {
       const q = this.searchQuery.toLowerCase();
       return this.currencies.filter(c =>
         (c.itemName && c.itemName.toLowerCase().includes(q)) ||
-        String(c.id).includes(q) ||
-        String(c.item_id).includes(q)
+        String(c.id).includes(q)
       );
     }
   },
@@ -153,35 +151,6 @@ export default {
   border-radius: 3px;
   padding: 1px 6px;
   font-size: 0.8em;
-  color: #ccc;
-}
-
-.currency-row {
-  padding: 8px 10px;
-  border-radius: 4px;
-  margin-bottom: 2px;
-  cursor: pointer;
-  transition: background 0.15s;
-  border: 1px solid transparent;
-}
-
-.currency-row:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.currency-active {
-  background: rgba(40, 167, 69, 0.1);
-  border-color: rgba(40, 167, 69, 0.3);
-}
-
-.currency-name {
   color: #ddd;
-  font-weight: 500;
-}
-
-.search-bar {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 10px;
-  margin-top: 10px;
 }
 </style>
