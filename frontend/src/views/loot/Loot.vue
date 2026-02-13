@@ -459,6 +459,7 @@
                           <div
                             v-if="le._searchResults && le._searchResults.length > 0"
                             class="item-search-dropdown"
+                            :style="getDropdownPosition(leIndex)"
                           >
                             <div
                               v-for="(item, ri) in le._searchResults"
@@ -480,12 +481,14 @@
                           <div
                             v-if="le._itemSearchQuery && le._itemSearchQuery.length >= 2 && le._searchResults && le._searchResults.length === 0 && !le._searching"
                             class="item-search-dropdown"
+                            :style="getDropdownPosition(leIndex)"
                           >
                             <div class="text-center p-2" style="opacity:.4; font-size:.85em;">No items found</div>
                           </div>
                           <div
                             v-if="le._searching"
                             class="item-search-dropdown"
+                            :style="getDropdownPosition(leIndex)"
                           >
                             <div class="text-center p-2" style="opacity:.5;"><i class="fa fa-spinner fa-spin mr-1"></i> Searching...</div>
                           </div>
@@ -973,6 +976,19 @@ export default {
       }
     },
 
+    getDropdownPosition(leIndex) {
+      const ref = this.$refs['itemSearch-' + leIndex]
+      if (ref && ref[0]) {
+        const rect = ref[0].getBoundingClientRect()
+        return {
+          top: rect.bottom + 'px',
+          left: rect.left + 'px',
+          width: rect.width + 'px',
+        }
+      }
+      return {}
+    },
+
     startAddItem(leIndex) {
       const le = this.editEntries[leIndex]
       this.$set(le, '_addingItem', true)
@@ -1263,17 +1279,14 @@ export default {
   position: relative;
 }
 .item-search-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 40px;
-  z-index: 1000;
+  position: fixed;
+  z-index: 9999;
   background: #1a1a2e;
   border: 1px solid rgba(255,193,7,0.3);
   border-radius: 0 0 6px 6px;
   max-height: 300px;
   overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.8);
 }
 .item-search-result {
   padding: 6px 10px;
