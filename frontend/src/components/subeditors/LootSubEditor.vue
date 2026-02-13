@@ -73,13 +73,8 @@
                 class="loot-item-row"
               >
                 <td style="padding: 4px 6px;">
-                  <div class="d-flex align-items-center">
-                    <item-popover v-if="dropEntry.item" :item="dropEntry.item" size="sm" class="mr-2" />
-                    <a v-if="dropEntry.item" :href="'#/item/' + dropEntry.item.id" class="item-link">
-                      {{ dropEntry.item.Name || dropEntry.item.name || 'Item #' + dropEntry.item_id }}
-                    </a>
-                    <span v-else class="text-muted">Item #{{ dropEntry.item_id }}</span>
-                  </div>
+                  <item-popover v-if="dropEntry.item" :item="dropEntry.item" size="sm" />
+                  <span v-else class="text-muted">Item #{{ dropEntry.item_id }}</span>
                 </td>
                 <td class="text-right" style="padding: 4px 6px;">
                   <span class="chance-text" :class="getChanceClass(dropEntry.chance)">{{ dropEntry.chance }}%</span>
