@@ -1418,13 +1418,13 @@ export default {
               { desc: 'Max Level', field: 'maxlevel', fType: 'text', col: 'col-12' },
             ]},
             { header: 'Resists', fields: [
-              { desc: 'MR', field: 'mr', fType: 'text', col: 'col-3', resistColor: '#4a9eff' },
-              { desc: 'FR', field: 'fr', fType: 'text', col: 'col-3', resistColor: '#ff4444' },
-              { desc: 'CR', field: 'cr', fType: 'text', col: 'col-3', resistColor: '#88ccff' },
-              { desc: 'DR', field: 'dr', fType: 'text', col: 'col-3', resistColor: '#44cc44' },
+              { desc: 'Magic', field: 'mr', fType: 'text', col: 'col-3', resistColor: '#4a9eff' },
+              { desc: 'Fire', field: 'fr', fType: 'text', col: 'col-3', resistColor: '#ff4444' },
+              { desc: 'Cold', field: 'cr', fType: 'text', col: 'col-3', resistColor: '#88ccff' },
+              { desc: 'Disease', field: 'dr', fType: 'text', col: 'col-3', resistColor: '#44cc44' },
             ]},
             { fields: [
-              { desc: 'PR', field: 'pr', fType: 'text', col: 'col-3', resistColor: '#bb66ff' },
+              { desc: 'Poison', field: 'pr', fType: 'text', col: 'col-3', resistColor: '#bb66ff' },
               { desc: 'Corruption', field: 'corrup', fType: 'text', col: 'col-3', resistColor: '#888888' },
               { desc: 'Physical', field: 'ph_r', fType: 'text', col: 'col-3', resistColor: '#ffcc44' },
             ]},

@@ -1,73 +1,105 @@
 <template>
   <div class="spells-sub-editor" style="display: flex; flex-direction: column; height: 85vh;">
-    <eq-window title="NPC Spells" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-      <!-- Current Spell List Info -->
-      <div v-if="currentSpellList" class="mb-2 p-2" style="background: rgba(0,0,0,0.3); border-radius: 4px; flex-shrink: 0;">
-        <div class="text-warning font-weight-bold mb-1">
-          <i class="fa fa-magic mr-1"></i> {{ currentSpellList.name || 'Spell List #' + currentSpellList.id }}
-        </div>
-        <div class="small" v-if="currentSpellList.parent_list">
-          <span class="text-muted">Parent List:</span>
-          <a :href="'#/npc-spells/' + currentSpellList.parent_list" class="text-info">{{ currentSpellList.parent_list }}</a>
+    <eq-window style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+
+      <!-- Header -->
+      <div style="flex-shrink: 0; padding: 4px 0;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div style="min-width: 0; flex: 1;">
+            <div class="d-flex align-items-center">
+              <i class="fa fa-magic text-warning mr-2" style="font-size: 1.2em;"></i>
+              <span v-if="currentSpellList" class="text-warning font-weight-bold" style="font-size: 1.1em;">
+                {{ currentSpellList.name || 'Spell List #' + currentSpellList.id }}
+              </span>
+              <span v-else class="text-muted" style="font-size: 1.1em;">NPC Spells</span>
+            </div>
+            <div v-if="currentSpellList" class="mt-1">
+              <span v-if="currentSpellList.parent_list" class="badge badge-dark mr-1" style="font-size: 0.8em;">
+                Parent: <a :href="'#/npc-spells/' + currentSpellList.parent_list" class="text-info">{{ currentSpellList.parent_list }}</a>
+              </span>
+              <span class="badge badge-dark" style="font-size: 0.8em;">
+                {{ spellEntries.length }} spell{{ spellEntries.length !== 1 ? 's' : '' }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
+      <hr v-if="currentSpellList" class="my-2" style="border-color: rgba(255,255,255,0.1);">
+
       <!-- Spell Entries -->
-      <div v-if="spellEntries.length > 0" class="mb-2" style="flex: 1; overflow-y: auto; min-height: 0;">
-        <table class="eq-table eq-highlight-rows w-100" style="font-size: 13px;">
-          <thead class="eq-table-floating-header">
+      <div v-if="spellEntries.length > 0" style="flex: 1; overflow-y: auto; min-height: 0;">
+        <table class="spell-table w-100">
+          <thead>
             <tr>
               <th>Spell</th>
-              <th class="text-center" style="width:60px;">Type</th>
-              <th class="text-center" style="width:60px;">Priority</th>
-              <th class="text-center" style="width:80px;">Level Range</th>
-              <th class="text-center" style="width:60px;">Recast</th>
+              <th class="text-center" style="width:65px;">Type</th>
+              <th class="text-center" style="width:50px;">Pri</th>
+              <th class="text-center" style="width:70px;">Levels</th>
+              <th class="text-center" style="width:55px;">Recast</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(entry, i) in spellEntries" :key="i">
-              <td>
-                <a :href="'#/spell/' + entry.spellid" class="text-light">
+            <tr v-for="(entry, i) in spellEntries" :key="i" class="spell-row">
+              <td style="padding: 4px 6px;">
+                <a :href="'#/spell/' + entry.spellid" class="spell-link">
                   {{ spellNames[entry.spellid] || 'Spell #' + entry.spellid }}
                 </a>
               </td>
-              <td class="text-center">{{ spellTypeLabel(entry.type) }}</td>
-              <td class="text-center">{{ entry.priority }}</td>
-              <td class="text-center">{{ entry.minlevel }}-{{ entry.maxlevel }}</td>
-              <td class="text-center">{{ entry.recast_delay }}s</td>
+              <td class="text-center" style="padding: 4px 6px;">
+                <span class="type-badge" :class="'type-' + entry.type">{{ spellTypeLabel(entry.type) }}</span>
+              </td>
+              <td class="text-center" style="padding: 4px 6px;">{{ entry.priority }}</td>
+              <td class="text-center" style="padding: 4px 6px;">{{ entry.minlevel }}–{{ entry.maxlevel }}</td>
+              <td class="text-center" style="padding: 4px 6px;">{{ entry.recast_delay }}s</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div v-else-if="!loading && !currentSpellList" class="text-center text-muted py-4" style="flex: 1;">
-        <i class="fa fa-magic fa-2x mb-2 d-block"></i>
-        No spell list assigned to this NPC.<br>Use the search below to assign one.
+      <div v-else-if="!loading && !currentSpellList" class="text-center text-muted py-5" style="flex: 1;">
+        <i class="fa fa-magic fa-3x mb-3 d-block" style="opacity: 0.3;"></i>
+        <div>No spell list assigned to this NPC.</div>
+        <small>Use the search below to assign one.</small>
       </div>
 
       <div v-else-if="loading" class="text-center py-4" style="flex: 1;">
-        <i class="fa fa-spinner fa-spin"></i> Loading spell data...
+        <i class="fa fa-spinner fa-spin fa-2x text-warning"></i>
+        <div class="mt-2 small text-muted">Loading spell data...</div>
       </div>
 
       <!-- Search -->
-      <div style="flex-shrink: 0; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px;">
-        <div class="input-group input-group-sm mb-2">
-          <input type="text" class="form-control" placeholder="Search spell lists by name or ID..." v-model="searchQuery" @input="debounceSearch">
-          <div class="input-group-append">
-            <button class="btn btn-outline-warning" @click="doSearch" :disabled="!searchQuery"><i class="fa fa-search"></i></button>
+      <div class="search-bar" style="flex-shrink: 0;">
+        <div class="input-group input-group-sm">
+          <div class="input-group-prepend">
+            <span class="input-group-text" style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15);">
+              <i class="fa fa-search text-muted"></i>
+            </span>
+          </div>
+          <input
+            type="text" class="form-control"
+            placeholder="Search spell lists by name or ID..."
+            v-model="searchQuery" @input="debounceSearch"
+            style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15); color: white;"
+          >
+          <div class="input-group-append" v-if="searchQuery">
+            <button class="btn btn-outline-secondary btn-sm" @click="searchQuery = ''; searchResults = [];"><i class="fa fa-times"></i></button>
           </div>
         </div>
-        <div v-if="searchResults.length > 0" style="max-height: 25vh; overflow-y: auto;">
-          <table class="eq-table eq-highlight-rows w-100" style="font-size: 13px;">
-            <thead><tr><th style="width:60px;">ID</th><th>Name</th><th style="width:70px;"></th></tr></thead>
-            <tbody>
-              <tr v-for="s in searchResults" :key="s.id">
-                <td>{{ s.id }}</td>
-                <td>{{ s.name }}</td>
-                <td><button class="btn btn-xs btn-outline-success" @click="selectSpellList(s)">Select</button></td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-if="searchResults.length > 0" class="mt-2" style="max-height: 20vh; overflow-y: auto;">
+          <div
+            v-for="s in searchResults" :key="s.id"
+            class="search-result-row d-flex align-items-center justify-content-between"
+            @click="selectSpellList(s)"
+          >
+            <div>
+              <span class="text-muted mr-2" style="font-size: 0.85em;">#{{ s.id }}</span>
+              <span>{{ s.name }}</span>
+            </div>
+            <button class="btn btn-xs btn-outline-success" @click.stop="selectSpellList(s)">
+              <i class="fa fa-check mr-1"></i> Select
+            </button>
+          </div>
         </div>
       </div>
     </eq-window>
@@ -135,3 +167,60 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.spell-table {
+  font-size: 0.85em;
+  border-collapse: collapse;
+}
+.spell-table thead th {
+  padding: 4px 6px;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.5;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-weight: normal;
+}
+.spell-row {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+.spell-row:hover {
+  background: rgba(255,255,255,0.04);
+}
+.spell-link {
+  color: #e0d6c2;
+  text-decoration: none;
+}
+.spell-link:hover {
+  color: #ffc107;
+  text-decoration: underline;
+}
+.type-badge {
+  font-size: 0.8em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: bold;
+}
+.type-0 { color: #ff6b6b; } /* Nuke */
+.type-1 { color: #5cff5c; } /* Heal */
+.type-2 { color: #5cacff; } /* Buff */
+.type-7 { color: #ff9933; } /* DOT */
+.type-9 { color: #bb66ff; } /* Debuff */
+.search-bar {
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+.search-result-row {
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.search-result-row:hover {
+  background: rgba(255,255,255,0.06);
+}
+</style>
