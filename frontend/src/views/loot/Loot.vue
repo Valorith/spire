@@ -237,6 +237,9 @@ export default {
         this.search = this.$route.query.q;
         console.log("search is ", this.search)
       }
+      if (typeof this.$route.query.loottableId !== 'undefined' && this.$route.query.loottableId !== "") {
+        this.search = this.$route.query.loottableId;
+      }
     },
 
     paginate() {

@@ -19,7 +19,8 @@
             </div>
           </div>
           <a
-            :href="'#/loot/' + currentLoottable.id"
+            :href="'#/loot?loottableId=' + currentLoottable.id"
+            target="_blank"
             class="btn btn-sm btn-outline-info ml-2"
             title="Open in full Loot Editor"
             style="white-space: nowrap;"
