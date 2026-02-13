@@ -54,7 +54,7 @@
       </div>
 
       <div class="collapse navbar-collapse" id="sidebarCollapse">
-        <div v-if="!isAuthEnabled() || isUserAdmin()">
+        <div v-if="isLocalHost()">
           <h6 class="navbar-heading mt-3">
             Admin
           </h6>
@@ -674,6 +674,11 @@ export default {
 
     isUserAdmin() {
       return this.user && this.user.is_admin
+    },
+
+    isLocalHost() {
+      const h = window.location.hostname;
+      return h === 'localhost' || h === '127.0.0.1' || h.startsWith('192.168.') || h.startsWith('10.');
     },
 
     isAuthEnabled() {
