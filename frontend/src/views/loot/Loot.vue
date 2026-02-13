@@ -234,7 +234,7 @@
                         style="opacity:.5; width: 14px;"
                       ></i>
                       <span class="lootdrop-name">{{ le.lootdrop.name || 'Lootdrop #' + le.lootdrop_id }}</span>
-                      <span class="badge badge-dark ml-2">ID: {{ le.lootdrop_id }}</span>
+                      <span class="badge ml-2" style="background: rgba(255,255,255,0.12); color: #fff;">ID: {{ le.lootdrop_id }}</span>
                       <span class="badge ml-2" style="background: rgba(255,193,7,0.2); color: #ffd54f;">
                         {{ le.lootdrop.lootdrop_entries ? le.lootdrop.lootdrop_entries.length : 0 }} items
                       </span>
