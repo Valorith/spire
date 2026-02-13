@@ -1,30 +1,24 @@
 <template>
   <div class="loot-sub-editor" style="display: flex; flex-direction: column; height: 85vh;">
-    <eq-window style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+    <eq-window title="Loot" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
 
-      <!-- Header -->
-      <div class="loot-header" style="flex-shrink: 0;">
+      <!-- Header Info -->
+      <div v-if="currentLoottable" style="flex-shrink: 0;">
         <div class="d-flex justify-content-between align-items-center">
           <div style="min-width: 0; flex: 1;">
-            <div class="d-flex align-items-center">
-              <i class="fa fa-treasure-chest text-warning mr-2" style="font-size: 1.2em;"></i>
-              <span v-if="currentLoottable" class="text-warning font-weight-bold" style="font-size: 1.1em;">
-                {{ currentLoottable.name || 'Loottable #' + currentLoottable.id }}
-              </span>
-              <span v-else class="text-muted">No Loot Table</span>
+            <div class="text-warning font-weight-bold" style="font-size: 1.05em;">
+              {{ currentLoottable.name || 'Loottable #' + currentLoottable.id }}
             </div>
-            <div v-if="currentLoottable && currentLoottable.mincash !== undefined" class="mt-1">
-              <span class="badge badge-dark mr-1" style="font-size: 0.8em;">
-                <i class="fa fa-coins text-warning mr-1"></i>
-                {{ formatCash(currentLoottable.mincash) }} – {{ formatCash(currentLoottable.maxcash) }}
+            <div class="mt-1">
+              <span class="info-badge mr-1">
+                <i class="fa fa-coins mr-1"></i>{{ formatCash(currentLoottable.mincash) }} – {{ formatCash(currentLoottable.maxcash) }}
               </span>
-              <span class="badge badge-dark" style="font-size: 0.8em;">
+              <span class="info-badge">
                 {{ loottableEntries.length }} lootdrop{{ loottableEntries.length !== 1 ? 's' : '' }}
               </span>
             </div>
           </div>
           <a
-            v-if="currentLoottable"
             :href="'#/loot/' + currentLoottable.id"
             class="btn btn-sm btn-outline-info ml-2"
             title="Open in full Loot Editor"
@@ -33,13 +27,11 @@
             <i class="fa fa-external-link-alt mr-1"></i> Full Editor
           </a>
         </div>
+        <hr class="my-2" style="border-color: rgba(255,255,255,0.1);">
       </div>
 
-      <!-- Divider -->
-      <hr v-if="currentLoottable" class="my-2" style="border-color: rgba(255,255,255,0.1);">
-
-      <!-- Loot Entries -->
-      <div v-if="loottableEntries.length > 0" class="loot-entries-scroll" style="flex: 1; overflow-y: auto; min-height: 0;">
+      <!-- Loot Entries (scrollable) -->
+      <div v-if="loottableEntries.length > 0" style="flex: 1; overflow-y: auto; min-height: 0;">
         <div
           v-for="(entry, ei) in loottableEntries"
           :key="'entry-' + ei"
@@ -57,10 +49,10 @@
                 <span class="text-muted ml-1">#{{ entry.lootdrop_id }}</span>
               </div>
               <div class="lootdrop-badges">
-                <span class="badge badge-info" title="Drop probability">{{ entry.probability }}%</span>
-                <span v-if="entry.multiplier > 1" class="badge badge-warning ml-1" title="Multiplier">×{{ entry.multiplier }}</span>
-                <span v-if="entry.droplimit > 0" class="badge badge-secondary ml-1" title="Drop limit">limit: {{ entry.droplimit }}</span>
-                <span v-if="entry.mindrop > 0" class="badge badge-secondary ml-1" title="Min drop">min: {{ entry.mindrop }}</span>
+                <span class="loot-badge loot-badge-chance" title="Drop probability">{{ entry.probability }}%</span>
+                <span v-if="entry.multiplier > 1" class="loot-badge loot-badge-mult ml-1" title="Multiplier">×{{ entry.multiplier }}</span>
+                <span v-if="entry.droplimit > 0" class="loot-badge loot-badge-limit ml-1" title="Drop limit">limit: {{ entry.droplimit }}</span>
+                <span v-if="entry.mindrop > 0" class="loot-badge loot-badge-limit ml-1" title="Min drop">min: {{ entry.mindrop }}</span>
               </div>
             </div>
           </div>
@@ -69,10 +61,9 @@
           <table v-if="(dropItems[entry.lootdrop_id] || []).length > 0" class="loot-item-table w-100">
             <thead>
               <tr>
-                <th style="width: 32px;"></th>
-                <th>Item</th>
-                <th class="text-right" style="width: 80px;">Chance</th>
-                <th class="text-center" style="width: 50px;">Qty</th>
+                <th>ITEM</th>
+                <th class="text-right" style="width: 80px;">CHANCE</th>
+                <th class="text-center" style="width: 50px;">QTY</th>
               </tr>
             </thead>
             <tbody>
@@ -81,30 +72,26 @@
                 :key="'drop-' + ei + '-' + di"
                 class="loot-item-row"
               >
-                <td class="text-center" style="padding: 2px 4px;">
-                  <item-popover v-if="dropEntry.item" :item="dropEntry.item" size="sm" />
-                </td>
                 <td style="padding: 4px 6px;">
-                  <a v-if="dropEntry.item" :href="'#/item/' + dropEntry.item.id" class="item-link">
-                    {{ dropEntry.item.Name || dropEntry.item.name || 'Item #' + dropEntry.item_id }}
-                  </a>
-                  <span v-else class="text-muted">Item #{{ dropEntry.item_id }}</span>
+                  <div class="d-flex align-items-center">
+                    <item-popover v-if="dropEntry.item" :item="dropEntry.item" size="sm" class="mr-2" />
+                    <a v-if="dropEntry.item" :href="'#/item/' + dropEntry.item.id" class="item-link">
+                      {{ dropEntry.item.Name || dropEntry.item.name || 'Item #' + dropEntry.item_id }}
+                    </a>
+                    <span v-else class="text-muted">Item #{{ dropEntry.item_id }}</span>
+                  </div>
                 </td>
                 <td class="text-right" style="padding: 4px 6px;">
-                  <span
-                    class="chance-pill"
-                    :class="getChanceClass(dropEntry.chance)"
-                  >{{ dropEntry.chance }}%</span>
+                  <span class="chance-text" :class="getChanceClass(dropEntry.chance)">{{ dropEntry.chance }}%</span>
                 </td>
                 <td class="text-center" style="padding: 4px 6px;">
                   <span v-if="(dropEntry.multiplier || 1) > 1" class="text-warning">×{{ dropEntry.multiplier }}</span>
-                  <span v-else class="text-muted">1</span>
+                  <span v-else>1</span>
                 </td>
               </tr>
             </tbody>
           </table>
 
-          <!-- Empty lootdrop -->
           <div v-else class="text-center text-muted small py-2" style="background: rgba(0,0,0,0.15); border-radius: 0 0 4px 4px;">
             <i class="fa fa-info-circle mr-1"></i> No items in this lootdrop
           </div>
@@ -125,11 +112,11 @@
       </div>
 
       <!-- Search Bar -->
-      <div class="loot-search-bar" style="flex-shrink: 0;">
+      <div class="search-bar" style="flex-shrink: 0;">
         <div class="input-group input-group-sm">
           <div class="input-group-prepend">
             <span class="input-group-text" style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15);">
-              <i class="fa fa-search text-muted"></i>
+              <i class="fa fa-search" style="color: #aaa;"></i>
             </span>
           </div>
           <input
@@ -138,16 +125,13 @@
             placeholder="Search loot tables by name or ID..."
             v-model="searchQuery"
             @input="debounceSearch"
-            style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15); color: white;"
+            style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15); color: #ddd;"
           >
           <div class="input-group-append" v-if="searchQuery">
-            <button class="btn btn-outline-secondary btn-sm" @click="searchQuery = ''; searchResults = [];">
-              <i class="fa fa-times"></i>
-            </button>
+            <button class="btn btn-outline-secondary btn-sm" @click="searchQuery = ''; searchResults = [];"><i class="fa fa-times"></i></button>
           </div>
         </div>
-
-        <div v-if="searchResults.length > 0" class="search-results mt-2" style="max-height: 20vh; overflow-y: auto;">
+        <div v-if="searchResults.length > 0" class="mt-2" style="max-height: 20vh; overflow-y: auto;">
           <div
             v-for="lt in searchResults"
             :key="lt.id"
@@ -156,7 +140,7 @@
           >
             <div>
               <span class="text-muted mr-2" style="font-size: 0.85em;">#{{ lt.id }}</span>
-              <span>{{ lt.name }}</span>
+              <span style="color: #ddd;">{{ lt.name }}</span>
             </div>
             <button class="btn btn-xs btn-outline-success" @click.stop="selectLoottable(lt)">
               <i class="fa fa-check mr-1"></i> Select
@@ -302,10 +286,18 @@ export default {
 </script>
 
 <style scoped>
-.loot-header {
-  padding: 4px 0;
+/* Info badges (cash, count) - high contrast */
+.info-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 0.8em;
+  color: #ccc;
 }
 
+/* Lootdrop groups */
 .lootdrop-group {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
@@ -313,17 +305,41 @@ export default {
 }
 
 .lootdrop-header {
-  background: rgba(23, 162, 184, 0.1);
-  border-bottom: 1px solid rgba(23, 162, 184, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 6px 10px;
   font-size: 0.85em;
+  color: #ddd;
 }
 
-.lootdrop-badges .badge {
-  font-size: 0.75em;
-  padding: 3px 6px;
+/* Loot badges - high contrast on dark */
+.loot-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 0.8em;
+  font-weight: bold;
 }
 
+.loot-badge-chance {
+  background: rgba(23, 162, 184, 0.25);
+  color: #7dd8e8;
+  border: 1px solid rgba(23, 162, 184, 0.4);
+}
+
+.loot-badge-mult {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffd54f;
+  border: 1px solid rgba(255, 193, 7, 0.35);
+}
+
+.loot-badge-limit {
+  background: rgba(255, 255, 255, 0.06);
+  color: #bbb;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Item table */
 .loot-item-table {
   font-size: 0.85em;
   border-collapse: collapse;
@@ -331,10 +347,10 @@ export default {
 
 .loot-item-table thead th {
   padding: 4px 6px;
-  font-size: 0.75em;
+  font-size: 0.7em;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  opacity: 0.5;
+  color: #999;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-weight: normal;
 }
@@ -353,7 +369,7 @@ export default {
 }
 
 .item-link {
-  color: #e0d6c2;
+  color: #ddd;
   text-decoration: none;
 }
 
@@ -362,32 +378,26 @@ export default {
   text-decoration: underline;
 }
 
-.chance-pill {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 10px;
-  font-size: 0.85em;
+/* Chance text - readable colors */
+.chance-text {
   font-weight: bold;
-  min-width: 42px;
-  text-align: center;
+  font-size: 0.9em;
 }
 
 .chance-high {
-  background: rgba(40, 167, 69, 0.2);
-  color: #5cff5c;
+  color: #81c784; /* softer green, readable on dark */
 }
 
 .chance-med {
-  background: rgba(255, 193, 7, 0.15);
-  color: #ffc107;
+  color: #ffd54f; /* warm yellow */
 }
 
 .chance-low {
-  background: rgba(220, 53, 69, 0.15);
-  color: #ff6b6b;
+  color: #ef9a9a; /* soft red */
 }
 
-.loot-search-bar {
+/* Search */
+.search-bar {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 10px;
   margin-top: 10px;
@@ -403,9 +413,5 @@ export default {
 
 .search-result-row:hover {
   background: rgba(255, 255, 255, 0.06);
-}
-
-.search-result-row:last-child {
-  border-bottom: none;
 }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <div class="faction-sub-editor" style="display: flex; flex-direction: column; height: 85vh;">
-    <eq-window style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+    <eq-window title="NPC Faction" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
 
       <!-- Header -->
       <div style="flex-shrink: 0; padding: 4px 0;">
@@ -11,7 +11,7 @@
               <span v-if="currentFaction" class="text-warning font-weight-bold" style="font-size: 1.1em;">
                 {{ currentFaction.name || 'Faction #' + currentFaction.id }}
               </span>
-              <span v-else class="text-muted" style="font-size: 1.1em;">NPC Faction</span>
+              <span v-else class="text-muted" style="font-size: 1.1em;">No Faction</span>
             </div>
             <div v-if="currentFaction" class="mt-1">
               <span class="badge badge-dark mr-1" style="font-size: 0.8em;">
@@ -200,11 +200,11 @@ export default {
 }
 .value-positive {
   background: rgba(40,167,69,0.15);
-  color: #5cff5c;
+  color: #81c784;
 }
 .value-negative {
   background: rgba(220,53,69,0.15);
-  color: #ff6b6b;
+  color: #ef9a9a;
 }
 .search-bar {
   border-top: 1px solid rgba(255,255,255,0.1);

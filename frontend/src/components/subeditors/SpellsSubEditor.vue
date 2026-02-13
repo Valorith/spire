@@ -1,6 +1,6 @@
 <template>
   <div class="spells-sub-editor" style="display: flex; flex-direction: column; height: 85vh;">
-    <eq-window style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+    <eq-window title="NPC Spells" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
 
       <!-- Header -->
       <div style="flex-shrink: 0; padding: 4px 0;">
@@ -11,7 +11,7 @@
               <span v-if="currentSpellList" class="text-warning font-weight-bold" style="font-size: 1.1em;">
                 {{ currentSpellList.name || 'Spell List #' + currentSpellList.id }}
               </span>
-              <span v-else class="text-muted" style="font-size: 1.1em;">NPC Spells</span>
+              <span v-else class="text-muted" style="font-size: 1.1em;">No Spell List</span>
             </div>
             <div v-if="currentSpellList" class="mt-1">
               <span v-if="currentSpellList.parent_list" class="badge badge-dark mr-1" style="font-size: 0.8em;">
@@ -190,7 +190,7 @@ export default {
   background: rgba(255,255,255,0.04);
 }
 .spell-link {
-  color: #e0d6c2;
+  color: #ddd;
   text-decoration: none;
 }
 .spell-link:hover {
@@ -203,11 +203,11 @@ export default {
   border-radius: 3px;
   font-weight: bold;
 }
-.type-0 { color: #ff6b6b; } /* Nuke */
-.type-1 { color: #5cff5c; } /* Heal */
-.type-2 { color: #5cacff; } /* Buff */
-.type-7 { color: #ff9933; } /* DOT */
-.type-9 { color: #bb66ff; } /* Debuff */
+.type-0 { color: #ef9a9a; } /* Nuke - soft red */
+.type-1 { color: #81c784; } /* Heal - soft green */
+.type-2 { color: #90caf9; } /* Buff - soft blue */
+.type-7 { color: #ffcc80; } /* DOT - soft orange */
+.type-9 { color: #ce93d8; } /* Debuff - soft purple */
 .search-bar {
   border-top: 1px solid rgba(255,255,255,0.1);
   padding-top: 10px;
