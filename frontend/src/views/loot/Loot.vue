@@ -51,11 +51,11 @@
                     class="badge badge-pill"
                     style="background: rgba(255,193,7,0.2); color: #ffd54f;"
                   >{{ getItemCount(lt) }} items</span>
-                  <br v-if="lt.npc_types && lt.npc_types.length > 0">
+                  <br v-if="lt.npc_types && (lt.npc_types || []).length > 0">
                   <small
-                    v-if="lt.npc_types && lt.npc_types.length > 0"
+                    v-if="lt.npc_types && (lt.npc_types || []).length > 0"
                     style="color: #90caf9;"
-                  >{{ lt.npc_types.length }} NPC{{ lt.npc_types.length !== 1 ? 's' : '' }}</small>
+                  >{{ (lt.npc_types || []).length }} NPC{{ (lt.npc_types || []).length !== 1 ? 's' : '' }}</small>
                 </div>
               </div>
               <div v-if="lt.mincash || lt.maxcash" class="mt-1">
@@ -107,10 +107,10 @@
                     style="background: rgba(255,193,7,0.2); color: #ffd54f;"
                   >{{ getItemCount(selectedTable) }} items</span>
                   <span
-                    v-if="selectedTable.npc_types && selectedTable.npc_types.length > 0"
+                    v-if="selectedTable.npc_types && (selectedTable.npc_types || []).length > 0"
                     class="badge"
                     style="background: rgba(144,202,249,0.2); color: #90caf9;"
-                  >{{ selectedTable.npc_types.length }} NPC{{ selectedTable.npc_types.length !== 1 ? 's' : '' }}</span>
+                  >{{ (selectedTable.npc_types || []).length }} NPC{{ (selectedTable.npc_types || []).length !== 1 ? 's' : '' }}</span>
                 </div>
                 <div>
                   <b-button
@@ -173,7 +173,7 @@
               </div>
 
               <!-- Linked NPCs -->
-              <div v-if="selectedTable.npc_types && selectedTable.npc_types.length > 0" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
+              <div v-if="selectedTable.npc_types && (selectedTable.npc_types || []).length > 0" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
                 <div
                   class="npc-section-header"
                   @click="npcsExpanded = !npcsExpanded"
@@ -181,8 +181,8 @@
                   <i class="fa mr-1" :class="npcsExpanded ? 'fa-chevron-down' : 'fa-chevron-right'" style="width:12px; opacity:.5;"></i>
                   <i class="fa fa-users mr-1" style="opacity:.5;"></i>
                   <span style="opacity:.7;">Used by</span>
-                  <span class="ml-1 font-weight-bold" style="color: #90caf9;">{{ selectedTable.npc_types.length }}</span>
-                  <span class="ml-1" style="opacity:.7;">NPC{{ selectedTable.npc_types.length !== 1 ? 's' : '' }}</span>
+                  <span class="ml-1 font-weight-bold" style="color: #90caf9;">{{ (selectedTable.npc_types || []).length }}</span>
+                  <span class="ml-1" style="opacity:.7;">NPC{{ (selectedTable.npc_types || []).length !== 1 ? 's' : '' }}</span>
                 </div>
                 <div v-if="npcsExpanded" class="npc-table-wrap mt-2">
                   <table class="eq-table eq-highlight-rows w-100" style="font-size: 12px;">
@@ -196,7 +196,7 @@
                     </thead>
                     <tbody>
                       <tr
-                        v-for="npc in selectedTable.npc_types.slice(0, 50)"
+                        v-for="npc in (selectedTable.npc_types || []).slice(0, 50)"
                         :key="'npc-' + npc.id"
                         class="npc-row"
                         @click="goToNpc(npc.id)"
@@ -208,8 +208,8 @@
                       </tr>
                     </tbody>
                   </table>
-                  <div v-if="selectedTable.npc_types.length > 50" class="text-center p-1" style="opacity:.4; font-size:.8em;">
-                    +{{ selectedTable.npc_types.length - 50 }} more NPCs
+                  <div v-if="(selectedTable.npc_types || []).length > 50" class="text-center p-1" style="opacity:.4; font-size:.8em;">
+                    +{{ (selectedTable.npc_types || []).length - 50 }} more NPCs
                   </div>
                 </div>
               </div>
