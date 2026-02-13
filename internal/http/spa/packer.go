@@ -108,6 +108,8 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 			// If we find a valid non-index file in the box, continue the request as normal
 			// and let the static asset handler pick up the request later
 			fileRequest := strings.Replace(c.Request().RequestURI, s.config.BasePath, "", -1)
+			// Clean path for filesystem lookups (strip query string)
+			cleanPath := strings.Replace(c.Request().URL.Path, s.config.BasePath, "", -1)
 			_, err = s.box.Find(fileRequest)
 			if err == nil {
 				return next(c)
@@ -115,10 +117,10 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 
 			// Packr box didn't have the file — check local filesystem as fallback
 			// This handles newly built frontend assets that aren't embedded in the binary
-			localPath := filepath.Join(s.config.LocalBasePath, fileRequest)
+			localPath := filepath.Join(s.config.LocalBasePath, cleanPath)
 			if info, statErr := os.Stat(localPath); statErr == nil && !info.IsDir() {
 				// Set cache headers for static assets
-				if contains([]string{".js", ".css", ".png", ".woff", ".ttf", ".jpg", ".gif", ".svg", ".ico"}, fileRequest) {
+				if contains([]string{".js", ".css", ".png", ".woff", ".ttf", ".jpg", ".gif", ".svg", ".ico"}, cleanPath) {
 					c.Response().Header().Set("Vary", "Accept-Encoding")
 					c.Response().Header().Set("Cache-Control", "public, max-age=7776000")
 				}

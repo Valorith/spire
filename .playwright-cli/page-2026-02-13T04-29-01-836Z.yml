@@ -1,0 +1,461 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - text: 
+    - generic [ref=e5]:
+      - link "Spire" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - heading "Spire" [level=1] [ref=e7]
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - heading "Content Tools" [level=6] [ref=e10]
+          - list [ref=e11]:
+            - listitem [ref=e12]:
+              - button " Bots " [ref=e13] [cursor=pointer]:
+                - generic [ref=e14]: 
+                - text: Bots 
+              - text: 
+            - listitem [ref=e15]:
+              - button " Calculators " [ref=e16] [cursor=pointer]:
+                - generic [ref=e17]: 
+                - text: Calculators 
+              - text:        
+            - listitem [ref=e18]:
+              - link " Client File NEW!" [ref=e19] [cursor=pointer]:
+                - /url: /client-files
+                - generic [ref=e20]: 
+                - text: Client File
+                - generic [ref=e21]: NEW!
+            - listitem [ref=e22]:
+              - link " Items NEW!" [ref=e23] [cursor=pointer]:
+                - /url: /items
+                - generic [ref=e24]: 
+                - text: Items
+                - generic [ref=e25]: NEW!
+            - listitem [ref=e26]:
+              - button " NPCs " [expanded] [ref=e27] [cursor=pointer]:
+                - generic [ref=e28]: 
+                - text: NPCs 
+              - list [ref=e30]:
+                - listitem [ref=e31]:
+                  - link " NPC Editor ALPHA NEW!" [ref=e32] [cursor=pointer]:
+                    - /url: /npc
+                    - generic [ref=e33]: 
+                    - text: NPC Editor
+                    - generic [ref=e34]: ALPHA
+                    - generic [ref=e35]: NEW!
+                - listitem [ref=e36]:
+                  - link " Emotes ALPHA" [ref=e37] [cursor=pointer]:
+                    - /url: /npc-emotes
+                    - generic [ref=e38]: 
+                    - text: Emotes
+                    - generic [ref=e39]: ALPHA
+                - listitem [ref=e40]:
+                  - link " Merchants ALPHA" [ref=e41] [cursor=pointer]:
+                    - /url: /merchants
+                    - generic [ref=e42]: 
+                    - text: Merchants
+                    - generic [ref=e43]: ALPHA
+                - listitem [ref=e44]:
+                  - link " Spells ALPHA" [ref=e45] [cursor=pointer]:
+                    - /url: /npc-spells
+                    - generic [ref=e46]: 
+                    - text: Spells
+                    - generic [ref=e47]: ALPHA
+                - listitem [ref=e48]:
+                  - link " Loot" [ref=e49] [cursor=pointer]:
+                    - /url: /loot
+                    - generic [ref=e50]: 
+                    - text: Loot
+            - listitem [ref=e51]:
+              - link " Quest API Explorer" [ref=e52] [cursor=pointer]:
+                - /url: /quest-api-explorer
+                - generic [ref=e53]: 
+                - text: Quest API Explorer
+            - listitem [ref=e54]:
+              - link " Sage NEW!" [ref=e55] [cursor=pointer]:
+                - /url: /sage
+                - generic [ref=e56]: 
+                - text: Sage
+                - generic [ref=e57]: NEW!
+            - listitem [ref=e58]:
+              - link " Strings DB NEW!" [ref=e59] [cursor=pointer]:
+                - /url: /strings-database
+                - generic [ref=e60]: 
+                - text: Strings DB
+                - generic [ref=e61]: NEW!
+            - listitem [ref=e62]:
+              - link " Spells NEW!" [ref=e63] [cursor=pointer]:
+                - /url: /spells
+                - generic [ref=e64]: 
+                - text: Spells
+                - generic [ref=e65]: NEW!
+            - listitem [ref=e66]:
+              - link " Tasks BETA NEW!" [ref=e67] [cursor=pointer]:
+                - /url: /tasks
+                - generic [ref=e68]: 
+                - text: Tasks
+                - generic [ref=e69]: BETA
+                - generic [ref=e70]: NEW!
+            - listitem [ref=e71]:
+              - button " Viewers " [ref=e72] [cursor=pointer]:
+                - generic [ref=e73]: 
+                - text: Viewers 
+              - text:    
+            - listitem [ref=e74]:
+              - link " Zones ALPHA NEW!" [ref=e75] [cursor=pointer]:
+                - /url: /zones
+                - generic [ref=e76]: 
+                - text: Zones
+                - generic [ref=e77]: ALPHA
+                - generic [ref=e78]: NEW!
+          - heading "Spire Docs" [level=6] [ref=e79]
+          - list [ref=e80]:
+            - listitem [ref=e81]:
+              - button " Spire API Docs " [ref=e82] [cursor=pointer]:
+                - generic [ref=e83]: 
+                - text: Spire API Docs 
+              - text:  
+            - listitem [ref=e84]:
+              - button " Components " [ref=e85] [cursor=pointer]:
+                - generic [ref=e86]: 
+                - text: Components 
+        - heading "Version (dev) 4.23.5" [level=6] [ref=e87]
+        - list [ref=e88]:
+          - listitem [ref=e89]:
+            - link " Spire Update Check" [ref=e90] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e91]: 
+              - text: Spire Update Check
+          - listitem [ref=e92]:
+            - link " Nav Search (Ctrl + K)" [ref=e93] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e94]: 
+              - text: Nav Search (Ctrl + K)
+        - generic [ref=e95]:
+          - button "" [ref=e97] [cursor=pointer]:
+            - generic [ref=e99]: 
+          - button "..." [ref=e101] [cursor=pointer]:
+            - img "..." [ref=e103]
+          - link "" [ref=e104] [cursor=pointer]:
+            - /url: javascript:void(0)
+            - generic [ref=e106]: 
+        - 'generic "Host: undefined Status: online" [ref=e108]':
+          - img [ref=e110]
+          - generic [ref=e111]: 
+          - text: Local (Default)
+  - generic [ref=e119]:
+    - generic [ref=e122]:
+      - generic [ref=e123]:
+        - navigation [ref=e124]:
+          - list [ref=e125]:
+            - listitem [ref=e126]: General
+            - listitem [ref=e127] [cursor=pointer]: Weapon
+            - listitem [ref=e128] [cursor=pointer]: Aggro
+            - listitem [ref=e129] [cursor=pointer]: Appearance
+            - listitem [ref=e130] [cursor=pointer]: Armor
+            - listitem [ref=e131] [cursor=pointer]: Face
+            - listitem [ref=e132] [cursor=pointer]: Stats
+            - listitem [ref=e133] [cursor=pointer]: Combat
+            - listitem [ref=e134] [cursor=pointer]: Charm
+            - listitem [ref=e135] [cursor=pointer]: Settings
+            - listitem [ref=e136] [cursor=pointer]: Misc
+        - generic [ref=e137]:
+          - generic [ref=e140]:
+            - generic [ref=e142]:
+              - generic [ref=e143]:
+                - generic [ref=e144]: ID
+                - textbox [ref=e145]: "58021"
+              - generic [ref=e146]:
+                - generic [ref=e147]: Name
+                - textbox [ref=e148]: a_dwarven_slave
+              - generic [ref=e149]:
+                - generic [ref=e150]: Level
+                - textbox [ref=e151]: "2"
+              - generic [ref=e152]:
+                - generic [ref=e153]: Last Name
+                - textbox [ref=e154]
+            - generic [ref=e156]:
+              - generic [ref=e157]:
+                - generic [ref=e158]: Class
+                - combobox [ref=e159]:
+                  - option "0) Warrior"
+                  - option "1) Warrior"
+                  - option "2) Cleric"
+                  - option "3) Paladin" [selected]
+                  - option "4) Ranger"
+                  - option "5) Shadow Knight"
+                  - option "6) Druid"
+                  - option "7) Monk"
+                  - option "8) Bard"
+                  - option "9) Rogue"
+                  - option "10) Shaman"
+                  - option "11) Necromancer"
+                  - option "12) Wizard"
+                  - option "13) Magician"
+                  - option "14) Enchanter"
+                  - option "15) Beastlord"
+                  - option "16) Berserker"
+                  - option "17) Banker"
+                  - option "20) GM Warrior"
+                  - option "21) GM Cleric"
+                  - option "22) GM Paladin"
+                  - option "23) GM Ranger"
+                  - option "24) GM Shadow Knight"
+                  - option "25) GM Druid"
+                  - option "26) GM Monk"
+                  - option "27) GM Bard"
+                  - option "28) GM Rogue"
+                  - option "29) GM Shaman"
+                  - option "30) GM Necromancer"
+                  - option "31) GM Wizard"
+                  - option "32) GM Magician"
+                  - option "33) GM Enchanter"
+                  - option "34) GM Beastlord"
+                  - option "35) GM Berserker"
+                  - option "40) Banker"
+                  - option "41) Shopkeeper"
+                  - option "59) Discord Merchant"
+                  - option "60) Adventure Recruiter"
+                  - option "61) Adventure Merchant"
+                  - option "63) Tribute Master"
+                  - option "64) Guild Tribute Master"
+                  - option "66) Guild Bank"
+                  - option "67) Radiant Crystal Merchant"
+                  - option "68) Ebon Crystal Merchant"
+                  - option "69) Fellowships"
+                  - option "70) Alternate Currency Merchant"
+                  - option "71) Mercenary Merchant"
+              - generic [ref=e160]:
+                - generic [ref=e161]: Bodytype
+                - combobox [ref=e162]:
+                  - option "0) Unknown"
+                  - option "1) Humanoid" [selected]
+                  - option "2) Lycanthrope"
+                  - option "3) Undead"
+                  - option "4) Giant"
+                  - option "5) Construct"
+                  - option "6) Extra planar"
+                  - option "7) Magical"
+                  - option "8) Summoned undead"
+                  - option "9) Raid Kael Giant"
+                  - option "10) Raid Coldain"
+                  - option "11) No target"
+                  - option "12) Vampire"
+                  - option "13) Atenha Ra"
+                  - option "14) Greater Akheva"
+                  - option "15) Khati Sha"
+                  - option "16) Lord Inquisitor Seru"
+                  - option "17) Grieg Veneficus"
+                  - option "18) Draz Nurakk"
+                  - option "19) Zek"
+                  - option "20) Luggald"
+                  - option "21) Animal"
+                  - option "22) Insect"
+                  - option "23) Monster"
+                  - option "24) Summoned"
+                  - option "25) Plant"
+                  - option "26) Dragon"
+                  - option "27) Summoned Elemental"
+                  - option "28) Warder"
+                  - option "29) Dragon v2"
+                  - option "30) Velious Dragon"
+                  - option "31) Familiar"
+                  - option "32) Dragon v3"
+                  - option "33) Boxes"
+                  - option "34) Muramite"
+                  - option "60) No Target v2"
+                  - option "63) Swarm pet"
+                  - option "64) Monster Summon"
+                  - option "65) Invsible Man"
+                  - option "67) Special"
+            - generic [ref=e164]:
+              - generic [ref=e165]:
+                - generic [ref=e166]: Walk Speed
+                - textbox [ref=e167]: "0"
+              - generic [ref=e168]:
+                - generic [ref=e169]: Run Speed
+                - textbox [ref=e170]: "1.25"
+            - generic [ref=e171]:
+              - generic [ref=e172]: Reference IDs
+              - generic [ref=e173]:
+                - generic [ref=e174]:
+                  - generic [ref=e175]: Loottable ID
+                  - textbox [ref=e176]: "103132"
+                - generic [ref=e177]:
+                  - generic [ref=e178]: Merchant ID
+                  - textbox [ref=e179]: "0"
+            - generic [ref=e181]:
+              - generic [ref=e182]:
+                - generic [ref=e183]: Alt Currency ID
+                - textbox [ref=e184]: "0"
+              - generic [ref=e185]:
+                - generic [ref=e186]: NPC Spells ID
+                - textbox [ref=e187]: "8"
+            - generic [ref=e189]:
+              - generic [ref=e190]:
+                - generic [ref=e191]: NPC Spell Effects ID
+                - textbox [ref=e192]: "0"
+              - generic [ref=e193]:
+                - generic [ref=e194]: NPC Faction ID
+                - textbox [ref=e195]: "1417"
+            - generic [ref=e198]:
+              - generic [ref=e199]: Faction Amount
+              - textbox [ref=e200]: "0"
+            - generic [ref=e202]:
+              - generic [ref=e203]:
+                - generic [ref=e204]: Adventure Template
+                - textbox [ref=e205]: "0"
+              - generic [ref=e206]:
+                - generic [ref=e207]: Trap Template
+                - textbox [ref=e208]: "0"
+            - generic [ref=e210]:
+              - generic [ref=e211]:
+                - generic [ref=e212]: Emote ID
+                - textbox [ref=e213]: "0"
+              - generic [ref=e214]:
+                - generic [ref=e215]: Stuck Behavior
+                - combobox [ref=e216]:
+                  - option "0) Run back" [selected]
+                  - option "1) Warp back"
+                  - option "2) Stay"
+                  - option "3) Evade"
+              - generic [ref=e217]:
+                - generic [ref=e218]: Flymode
+                - combobox [ref=e219]:
+                  - option "0) Grounded"
+                  - option "1) Flying"
+                  - option "2) Levitate"
+                  - option "3) Water"
+                  - option "4) Floating"
+                  - option "5) Levitate While Running"
+                  - option "-1) None" [selected]
+            - generic [ref=e222]:
+              - generic [ref=e223]: Experience Modifier
+              - textbox [ref=e224]: "100"
+            - generic [ref=e226]:
+              - generic [ref=e227]:
+                - generic [ref=e228]: 
+                - text: Templates
+              - combobox [ref=e229]:
+                - option "-- Load Template --" [selected]
+                - option "Generic Warrior"
+                - option "Caster Boss"
+                - option "Merchant NPC"
+                - option "Quest NPC"
+              - button "" [disabled] [ref=e230]:
+                - generic [ref=e231]: 
+              - button " Save as Template" [ref=e232] [cursor=pointer]:
+                - generic [ref=e233]: 
+                - text: Save as Template
+          - text:   
+      - button " Save NPC" [ref=e235] [cursor=pointer]:
+        - generic [ref=e236]: 
+        - text: Save NPC
+    - generic [ref=e237]:
+      - generic [ref=e240]:
+        - generic [ref=e242]:
+          - heading "a dwarven slave" [level=6] [ref=e244]
+          - generic [ref=e245]:
+            - generic [ref=e246]:
+              - generic [ref=e247]: ID
+              - generic [ref=e248]: "58021"
+            - generic [ref=e249]:
+              - generic [ref=e250]: Level
+              - generic [ref=e251]: "2"
+            - generic [ref=e252]:
+              - generic [ref=e253]: Class
+              - generic [ref=e254]: Paladin (3)
+            - generic [ref=e256]:
+              - generic [ref=e257]: Race
+              - generic [ref=e258]: Dwarf (8)
+            - generic [ref=e260]:
+              - generic [ref=e261]: Bodytype
+              - generic [ref=e262]: Humanoid (1)
+        - generic [ref=e263]:
+          - generic [ref=e264]:
+            - generic [ref=e266]:
+              - generic [ref=e267]: HP
+              - generic [ref=e269]: "24"
+            - generic [ref=e270]:
+              - generic [ref=e271]:
+                - generic [ref=e272]: Armor Class
+                - generic [ref=e274]: "10"
+              - generic [ref=e275]:
+                - generic [ref=e276]: Agility
+                - generic [ref=e278]: "11"
+              - generic [ref=e279]:
+                - generic [ref=e280]: Dexterity
+                - generic [ref=e282]: "11"
+              - generic [ref=e283]:
+                - generic [ref=e284]: Stamina
+                - generic [ref=e286]: "11"
+              - generic [ref=e287]:
+                - generic [ref=e288]: Strength
+                - generic [ref=e290]: "11"
+              - generic [ref=e291]:
+                - generic [ref=e292]: Charisma
+                - generic [ref=e294]: "11"
+              - generic [ref=e295]:
+                - generic [ref=e296]: Wisdom
+                - generic [ref=e298]: "11"
+              - generic [ref=e299]:
+                - generic [ref=e300]: Intelligence
+                - generic [ref=e302]: "11"
+            - generic [ref=e303]:
+              - generic [ref=e304]:
+                - generic [ref=e305]: Cold Resist
+                - generic [ref=e307]: "1"
+              - generic [ref=e308]:
+                - generic [ref=e309]: Disease Resist
+                - generic [ref=e311]: "1"
+              - generic [ref=e312]:
+                - generic [ref=e313]: Fire Resist
+                - generic [ref=e315]: "1"
+              - generic [ref=e316]:
+                - generic [ref=e317]: Magic Resist
+                - generic [ref=e319]: "1"
+              - generic [ref=e320]:
+                - generic [ref=e321]: Poison Resist
+                - generic [ref=e323]: "1"
+              - generic [ref=e324]:
+                - generic [ref=e325]: Corrup. Resist
+                - generic [ref=e327]: "1"
+              - generic [ref=e328]:
+                - generic [ref=e329]: Physical Resist
+                - generic [ref=e331]: "10"
+          - generic [ref=e332]:
+            - generic [ref=e333]:
+              - generic [ref=e334]:
+                - generic [ref=e335]: See Invis Undead
+                - generic [ref=e336]: "Yes"
+              - generic [ref=e337]:
+                - generic [ref=e338]: Show Name
+                - generic [ref=e339]: "Yes"
+              - generic [ref=e340]:
+                - generic [ref=e341]: Trackable
+                - generic [ref=e342]: "Yes"
+              - generic [ref=e343]:
+                - generic [ref=e344]: Quest NPC
+                - generic [ref=e345]: "Yes"
+            - generic [ref=e347]:
+              - generic [ref=e348]:
+                - generic [ref=e349]: Min Damage
+                - generic [ref=e351]: "1"
+              - generic [ref=e352]:
+                - generic [ref=e353]: Max Damage
+                - generic [ref=e355]: "8"
+              - generic [ref=e356]:
+                - generic [ref=e357]: Attack Delay
+                - generic [ref=e359]: "30"
+              - generic [ref=e360]:
+                - generic [ref=e361]: Attack Speed
+                - generic [ref=e363]: "0"
+      - generic [ref=e367]:
+        - generic [ref=e368]:
+          - generic [ref=e369]: 
+          - text: Where This NPC Spawns
+        - button " Expand" [ref=e370] [cursor=pointer]:
+          - generic [ref=e371]:
+            - generic [ref=e372]: 
+            - text: Expand
+  - text: 
