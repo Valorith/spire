@@ -244,10 +244,10 @@
                         :class="le._expanded ? 'fa-chevron-down' : 'fa-chevron-right'"
                         style="opacity:.5; width: 14px;"
                       ></i>
-                      <span class="lootdrop-name">{{ le.lootdrop.name || 'Lootdrop #' + le.lootdrop_id }}</span>
+                      <span class="lootdrop-name">{{ (le.lootdrop && le.lootdrop.name) || 'Lootdrop #' + le.lootdrop_id }}</span>
                       <span class="badge ml-2" style="background: rgba(255,255,255,0.12); color: #fff;">ID: {{ le.lootdrop_id }}</span>
                       <span class="badge ml-2" style="background: rgba(255,193,7,0.2); color: #ffd54f;">
-                        {{ le.lootdrop.lootdrop_entries ? le.lootdrop.lootdrop_entries.length : 0 }} items
+                        {{ le.lootdrop && le.lootdrop.lootdrop_entries ? le.lootdrop.lootdrop_entries.length : 0 }} items
                       </span>
                     </div>
                     <div class="d-flex align-items-center" @click.stop>
@@ -305,7 +305,7 @@
                 </div>
 
                 <!-- Lootdrop Items -->
-                <div v-if="le._expanded" class="lootdrop-items">
+                <div v-if="le._expanded && le.lootdrop" class="lootdrop-items">
                   <table class="eq-table eq-highlight-rows w-100" style="font-size: 13px;">
                     <thead>
                       <tr>
@@ -319,7 +319,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(lde, ldeIndex) in le.lootdrop.lootdrop_entries" :key="'lde-' + lde.lootdrop_id + '-' + lde.item_id">
+                      <tr v-for="(lde, ldeIndex) in (le.lootdrop.lootdrop_entries || [])" :key="'lde-' + lde.lootdrop_id + '-' + lde.item_id">
                         <td>
                           <item-popover
                             v-if="lde.item"
@@ -415,7 +415,7 @@
                   </table>
 
                   <!-- Chance Distribution Bar -->
-                  <div class="chance-bar mt-2 mb-2 mx-2" v-if="le.lootdrop.lootdrop_entries && le.lootdrop.lootdrop_entries.length > 0">
+                  <div class="chance-bar mt-2 mb-2 mx-2" v-if="le.lootdrop && le.lootdrop.lootdrop_entries && le.lootdrop.lootdrop_entries.length > 0">
                     <div class="chance-bar-label mb-1">
                       <small style="opacity:.5;">Chance Distribution</small>
                       <small
@@ -425,7 +425,7 @@
                     </div>
                     <div class="chance-bar-visual">
                       <div
-                        v-for="(lde, ci) in le.lootdrop.lootdrop_entries"
+                        v-for="(lde, ci) in (le.lootdrop.lootdrop_entries || [])"
                         :key="'cb-' + ci"
                         class="chance-segment"
                         :style="{
