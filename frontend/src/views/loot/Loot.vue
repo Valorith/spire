@@ -969,8 +969,8 @@ export default {
       const le = this.editEntries[index]
       if (!confirm('Remove lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '" from this table?')) return
       try {
-        const lteApi = new LoottableEntryApi(...SpireApi.cfg())
-        await lteApi.deleteLoottableEntry({ id: le.loottable_id })
+        // Direct axios — composite key: loottable_id (path) + lootdrop_id (query)
+        await SpireApi.v1().delete('/loottable_entry/' + le.loottable_id, { params: { lootdrop_id: le.lootdrop_id } })
         this.showNotification('Removed lootdrop')
         await this.refreshCurrentTable()
       } catch (e) {
