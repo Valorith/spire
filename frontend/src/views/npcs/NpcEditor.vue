@@ -161,6 +161,41 @@
                           >{{ index }}) {{ desc }}</option>
                         </select>
 
+                        <!-- color picker (grid) -->
+                        <div v-else-if="gf.fType === 'color_picker' && npc" class="mt-1">
+                          <div class="d-flex align-items-center">
+                            <div
+                              @click="showColorPicker = !showColorPicker; updateArmorTintHex()"
+                              :style="'width:30px;height:30px;border-radius:4px;cursor:pointer;border:2px solid rgba(255,255,255,0.3);background:rgb('+(npc.armortint_red||0)+','+(npc.armortint_green||0)+','+(npc.armortint_blue||0)+');'"
+                              title="Click to toggle color picker"
+                            ></div>
+                            <input
+                              v-model="armorTintHex"
+                              @change="applyHexToArmorTint()"
+                              class="form-control form-control-sm ml-2"
+                              style="width:100px;"
+                              placeholder="#000000"
+                            >
+                          </div>
+                          <chrome-picker
+                            v-if="showColorPicker"
+                            :value="armorTintHex"
+                            @input="onArmorColorPick"
+                            class="mt-2"
+                          />
+                        </div>
+
+                        <!-- textarea (grid) -->
+                        <b-textarea
+                          v-else-if="gf.fType === 'textarea'"
+                          :id="gf.field"
+                          v-model="npc[gf.field]"
+                          size="sm"
+                          rows="2"
+                          max-rows="6"
+                          v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                        />
+
                         <b-form-input
                           v-else
                           :id="gf.field"
