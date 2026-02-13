@@ -202,7 +202,7 @@
                         @click="goToNpc(npc.id)"
                       >
                         <td style="opacity:.5;">{{ npc.id }}</td>
-                        <td style="color: #90caf9;">{{ npc.name }}</td>
+                        <td><npc-popover :npc="npc" /></td>
                         <td class="text-center">{{ npc.level || '—' }}</td>
                         <td class="text-center" style="opacity:.6;">{{ npc.race || '—' }}</td>
                       </tr>
@@ -516,6 +516,7 @@ import EqWindow            from "../../components/eq-ui/EQWindow";
 import EqCheckbox          from "../../components/eq-ui/EQCheckbox";
 import ContentArea         from "../../components/layout/ContentArea";
 import ItemPopover         from "../../components/ItemPopover";
+import NpcPopover          from "../../components/NpcPopover";
 import EqCashDisplay       from "../../components/eq-ui/EqCashDisplay";
 import {ROUTE}             from "../../routes";
 import {LoottableApi, LoottableEntryApi, LootdropApi, LootdropEntryApi} from "../../app/api";
@@ -525,7 +526,7 @@ import {debounce}          from "../../app/utility/debounce";
 
 export default {
   name: "Loot",
-  components: { EqCashDisplay, ItemPopover, EqCheckbox, ContentArea, EqWindow },
+  components: { EqCashDisplay, NpcPopover, ItemPopover, EqCheckbox, ContentArea, EqWindow },
   data() {
     return {
       tableData: [],
