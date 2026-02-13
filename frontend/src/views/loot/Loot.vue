@@ -956,12 +956,11 @@ export default {
 
     startAddItem(leIndex) {
       const le = this.editEntries[leIndex]
-      le._addingItem = true
-      le._itemSearchQuery = ''
-      le._searchResults = []
-      le._highlightIndex = -1
-      le._searching = false
-      this.$forceUpdate()
+      this.$set(le, '_addingItem', true)
+      this.$set(le, '_itemSearchQuery', '')
+      this.$set(le, '_searchResults', [])
+      this.$set(le, '_highlightIndex', -1)
+      this.$set(le, '_searching', false)
       this.$nextTick(() => {
         const ref = this.$refs['itemSearch-' + leIndex]
         if (ref && ref[0]) ref[0].focus()
@@ -972,13 +971,11 @@ export default {
       const le = this.editEntries[leIndex]
       const q = (le._itemSearchQuery || '').trim()
       if (q.length < 2) {
-        le._searchResults = []
-        this.$forceUpdate()
+        this.$set(le, '_searchResults', [])
         return
       }
-      le._searching = true
-      le._highlightIndex = -1
-      this.$forceUpdate()
+      this.$set(le, '_searching', true)
+      this.$set(le, '_highlightIndex', -1)
 
       const builder = new SpireQueryBuilder()
       if (!isNaN(q) && q !== '') {
@@ -991,16 +988,14 @@ export default {
       const api = new ItemApi(...SpireApi.cfg())
       api.listItems(builder.get()).then((r) => {
         if (r.status === 200) {
-          le._searchResults = r.data || []
+          this.$set(le, '_searchResults', r.data || [])
         } else {
-          le._searchResults = []
+          this.$set(le, '_searchResults', [])
         }
-        le._searching = false
-        this.$forceUpdate()
+        this.$set(le, '_searching', false)
       }).catch(() => {
-        le._searchResults = []
-        le._searching = false
-        this.$forceUpdate()
+        this.$set(le, '_searchResults', [])
+        this.$set(le, '_searching', false)
       })
     }, 300),
 
@@ -1031,8 +1026,7 @@ export default {
       const le = this.editEntries[leIndex]
       const q = (le._itemSearchQuery || '').trim()
       if (q.length < 2) return
-      le._searching = true
-      this.$forceUpdate()
+      this.$set(le, '_searching', true)
 
       const builder = new SpireQueryBuilder()
       if (!isNaN(q) && q !== '') {
@@ -1044,14 +1038,12 @@ export default {
 
       const api = new ItemApi(...SpireApi.cfg())
       api.listItems(builder.get()).then((r) => {
-        le._searchResults = (r.status === 200) ? (r.data || []) : []
-        le._highlightIndex = le._searchResults.length > 0 ? 0 : -1
-        le._searching = false
-        this.$forceUpdate()
+        this.$set(le, '_searchResults', (r.status === 200) ? (r.data || []) : [])
+        this.$set(le, '_highlightIndex', le._searchResults.length > 0 ? 0 : -1)
+        this.$set(le, '_searching', false)
       }).catch(() => {
-        le._searchResults = []
-        le._searching = false
-        this.$forceUpdate()
+        this.$set(le, '_searchResults', [])
+        this.$set(le, '_searching', false)
       })
     },
 
