@@ -171,28 +171,30 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Linked NPCs (inline) -->
+              <div v-if="selectedTable.npc_types && selectedTable.npc_types.length > 0" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
+                <label class="small mb-1" style="opacity:.5;">
+                  <i class="fa fa-users mr-1"></i>Used by {{ selectedTable.npc_types.length }} NPC{{ selectedTable.npc_types.length !== 1 ? 's' : '' }}
+                </label>
+                <div class="d-flex flex-wrap" style="gap: 4px;">
+                  <a
+                    v-for="npc in selectedTable.npc_types.slice(0, 30)"
+                    :key="npc.id"
+                    :href="'#/npc/' + npc.id"
+                    class="npc-tag"
+                    :title="'NPC ID: ' + npc.id + ' — Level ' + npc.level"
+                  >
+                    <small style="opacity:.5;" class="mr-1">#{{ npc.id }}</small>{{ npc.name }}
+                    <small v-if="npc.level" class="ml-1" style="opacity:.5;">L{{ npc.level }}</small>
+                  </a>
+                  <span v-if="selectedTable.npc_types.length > 30" class="align-self-center ml-1" style="opacity:.4; font-size: .8em;">
+                    +{{ selectedTable.npc_types.length - 30 }} more
+                  </span>
+                </div>
+              </div>
             </div>
           </eq-window>
-
-          <!-- Linked NPCs -->
-          <div
-            v-if="selectedTable.npc_types && selectedTable.npc_types.length > 0"
-            class="linked-npcs-strip mx-0 mb-2"
-          >
-            <small class="mr-2" style="opacity:.4; white-space: nowrap;">
-              <i class="fa fa-link mr-1"></i>NPCs:
-            </small>
-            <a
-              v-for="npc in selectedTable.npc_types.slice(0, 30)"
-              :key="npc.id"
-              :href="'#/npc/' + npc.id"
-              class="npc-tag"
-              :title="'ID: ' + npc.id"
-            >{{ npc.name }}</a>
-            <span v-if="selectedTable.npc_types.length > 30" class="ml-1" style="opacity:.4; font-size: .8em;">
-              +{{ selectedTable.npc_types.length - 30 }} more
-            </span>
-          </div>
 
           <!-- Lootdrops -->
           <eq-window title="Loot Drops" class="p-0">
@@ -981,29 +983,21 @@ export default {
   padding: 12px 16px;
 }
 
-.linked-npcs-strip {
-  padding: 8px 12px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  background: rgba(30, 40, 60, 0.8);
-  border: 1px solid rgba(144, 202, 249, 0.25);
-  border-radius: 4px;
-}
 .npc-tag {
   display: inline-block;
-  padding: 2px 10px;
-  font-size: 0.82em;
-  background: rgba(144, 202, 249, 0.15);
+  padding: 3px 8px;
+  font-size: 0.78em;
+  background: rgba(255,255,255,0.06);
   color: #90caf9;
-  border: 1px solid rgba(144, 202, 249, 0.2);
-  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
   text-decoration: none;
-  transition: background 0.15s;
+  transition: all 0.15s;
+  line-height: 1.3;
 }
 .npc-tag:hover {
-  background: rgba(144, 202, 249, 0.3);
+  background: rgba(144, 202, 249, 0.15);
+  border-color: rgba(144, 202, 249, 0.3);
   color: #bbdefb;
   text-decoration: none;
 }
