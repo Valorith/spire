@@ -1135,7 +1135,7 @@ export default {
 .map-search-overlay {
   position: absolute;
   top: 18px;
-  left: 18px;
+  left: 60px;
   z-index: 999;
   min-width: 260px;
   max-width: 320px;
