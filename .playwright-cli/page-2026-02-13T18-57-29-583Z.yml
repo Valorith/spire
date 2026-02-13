@@ -1,0 +1,49 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e6]: 
+    - text:                                               
+  - generic [ref=e14]:
+    - generic [ref=e18]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: Loading map...
+        - generic [ref=e23]: 2%
+      - generic [ref=e25]:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - button "Marker" [ref=e27] [cursor=pointer]
+            - button "Marker" [ref=e28] [cursor=pointer]
+            - button "Marker" [ref=e29] [cursor=pointer]
+            - button "Marker" [ref=e30] [cursor=pointer]
+            - button "Marker" [ref=e31] [cursor=pointer]
+            - button "Marker" [ref=e32] [cursor=pointer]
+        - generic:
+          - generic [ref=e33]:
+            - button "Zoom in" [ref=e34] [cursor=pointer]: +
+            - button "Zoom out" [ref=e35] [cursor=pointer]: −
+          - link "Leaflet" [ref=e37] [cursor=pointer]:
+            - /url: https://leafletjs.com
+            - img [ref=e38]
+            - text: Leaflet
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - generic [ref=e44]: The Greater Faydark
+        - button "" [ref=e45] [cursor=pointer]:
+          - generic [ref=e46]: 
+      - generic [ref=e49]:
+        - heading "The Greater Faydark" [level=6] [ref=e50]
+        - generic [ref=e51]:
+          - navigation [ref=e52]:
+            - list [ref=e53]:
+              - listitem [ref=e54]: NPCs
+              - listitem [ref=e55] [cursor=pointer]: Items
+              - listitem [ref=e56] [cursor=pointer]: Tasks
+              - listitem [ref=e57] [cursor=pointer]: Sold
+              - listitem [ref=e58] [cursor=pointer]: Spells
+              - listitem [ref=e59] [cursor=pointer]: Zone Connections
+              - listitem [ref=e60] [cursor=pointer]: Zone
+          - generic [ref=e63]:
+            - text: Loading NPCs...
+            - generic [ref=e65]: 2%
+  - text: 

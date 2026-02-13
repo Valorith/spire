@@ -1,0 +1,98 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:                                                
+  - generic [ref=e12]:
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - generic [ref=e19]: Loading map...
+        - generic [ref=e21]: 3%
+      - generic [ref=e23]:
+        - text:    
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - button "Marker" [ref=e25] [cursor=pointer]
+            - button "Marker" [ref=e26] [cursor=pointer]
+            - button "Marker" [ref=e27] [cursor=pointer]
+            - button "Marker" [ref=e28] [cursor=pointer]
+            - button "Marker" [ref=e29] [cursor=pointer]
+            - button "Marker" [ref=e30] [cursor=pointer]
+            - button "Marker" [ref=e31] [cursor=pointer]
+            - button "Marker" [ref=e32] [cursor=pointer]
+            - button "Marker" [ref=e33] [cursor=pointer]
+            - button "Marker" [ref=e34] [cursor=pointer]
+            - button "Marker" [ref=e35] [cursor=pointer]
+            - button "Marker" [ref=e36] [cursor=pointer]
+            - button "Marker" [ref=e37] [cursor=pointer]
+            - button "Marker" [ref=e38] [cursor=pointer]
+            - button "Marker" [ref=e39] [cursor=pointer]
+            - button "Marker" [ref=e40] [cursor=pointer]
+            - button "Marker" [ref=e41] [cursor=pointer]
+            - button "Marker" [ref=e42] [cursor=pointer]
+            - button "Marker" [ref=e43] [cursor=pointer]
+            - button "Marker" [ref=e44] [cursor=pointer]
+            - button "Marker" [ref=e45] [cursor=pointer]
+            - button "Marker" [ref=e46] [cursor=pointer]
+            - button "Marker" [ref=e47] [cursor=pointer]
+            - button "Marker" [ref=e48] [cursor=pointer]
+            - button "Marker" [ref=e49] [cursor=pointer]
+            - button "Marker" [ref=e50] [cursor=pointer]
+            - button "Marker" [ref=e51] [cursor=pointer]
+            - button "Marker" [ref=e52] [cursor=pointer]
+            - button "Marker" [ref=e53] [cursor=pointer]
+            - button "Marker" [ref=e54] [cursor=pointer]
+            - button "Marker" [ref=e55] [cursor=pointer]
+            - button "Marker" [ref=e56] [cursor=pointer]
+            - button "Marker" [ref=e57] [cursor=pointer]
+            - button "Marker" [ref=e58] [cursor=pointer]
+            - button "Marker" [ref=e59] [cursor=pointer]
+            - button "Marker" [ref=e60] [cursor=pointer]
+            - button "Marker" [ref=e61] [cursor=pointer]
+            - button "Marker" [ref=e62] [cursor=pointer]
+            - button "Marker" [ref=e63] [cursor=pointer]
+            - button "Marker" [ref=e64] [cursor=pointer]
+            - button "Marker" [ref=e65] [cursor=pointer]
+            - button "Marker" [ref=e66] [cursor=pointer]
+            - button "Marker" [ref=e67] [cursor=pointer]
+            - button "Marker" [ref=e68] [cursor=pointer]
+            - button "Marker" [ref=e69] [cursor=pointer]
+            - button "Marker" [ref=e70] [cursor=pointer]
+            - button "Marker" [ref=e71] [cursor=pointer]
+            - button "Marker" [ref=e72] [cursor=pointer]
+            - button "Marker" [ref=e73] [cursor=pointer]
+            - button "Marker" [ref=e74] [cursor=pointer]
+            - button "Marker" [ref=e75] [cursor=pointer]
+            - button "Marker" [ref=e76] [cursor=pointer]
+            - button "Marker" [ref=e77] [cursor=pointer]
+            - button "Marker" [ref=e78] [cursor=pointer]
+            - button "Marker" [ref=e79] [cursor=pointer]
+            - button "Marker" [ref=e80] [cursor=pointer]
+        - generic:
+          - generic [ref=e81]:
+            - button "Zoom in" [ref=e82] [cursor=pointer]: +
+            - button "Zoom out" [ref=e83] [cursor=pointer]: −
+          - link "Leaflet" [ref=e85] [cursor=pointer]:
+            - /url: https://leafletjs.com
+            - img [ref=e86]
+            - text: Leaflet
+    - generic [ref=e90]:
+      - generic [ref=e91]:
+        - generic [ref=e92]: West Commonlands
+        - button "" [ref=e93] [cursor=pointer]:
+          - generic [ref=e94]: 
+      - generic [ref=e97]:
+        - heading "West Commonlands" [level=6] [ref=e98]
+        - generic [ref=e99]:
+          - navigation [ref=e100]:
+            - list [ref=e101]:
+              - listitem [ref=e102]: NPCs
+              - listitem [ref=e103] [cursor=pointer]: Items
+              - listitem [ref=e104] [cursor=pointer]: Tasks
+              - listitem [ref=e105] [cursor=pointer]: Sold
+              - listitem [ref=e106] [cursor=pointer]: Spells
+              - listitem [ref=e107] [cursor=pointer]: Zone Connections
+              - listitem [ref=e108] [cursor=pointer]: Zone
+          - generic [ref=e111]:
+            - text: Loading NPCs...
+            - generic [ref=e113]: 3%
+  - text: 

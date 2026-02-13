@@ -246,4 +246,22 @@ export default {
 .zone-sidebar-toggle-open:hover {
   opacity: 1;
 }
+
+/* Zone sidebar tab styling — fix squished tabs */
+.zone-sidebar >>> .eq-tab-box-fancy ul {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  padding: 0 !important;
+  margin: 0 0 10px 0 !important;
+}
+
+.zone-sidebar >>> .eq-tab-box-fancy ul li {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+}
+
+.zone-sidebar >>> .eq-tab-box-fancy ul li a {
+  font-size: 12px !important;
+  padding: 4px 8px !important;
+}
 </style>

@@ -1,0 +1,1019 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:                                                
+  - generic [ref=e14]:
+    - generic [ref=e18]:
+      - generic [ref=e66]:
+        - generic [ref=e67] [cursor=pointer]:
+          - generic [ref=e68]: Layers
+          - generic [ref=e69]: 
+        - generic [ref=e70]:
+          - generic "NPCs (634)" [ref=e71] [cursor=pointer]:
+            - checkbox " NPCs (634)" [checked] [ref=e72]
+            - generic [ref=e73]: 
+            - generic [ref=e74]: NPCs
+            - generic [ref=e75]: (634)
+          - generic "Doors (102)" [ref=e76] [cursor=pointer]:
+            - checkbox "Doors (102)" [checked] [ref=e77]
+            - generic [ref=e78]: Doors
+            - generic [ref=e79]: (102)
+          - generic "Zone Points (8)" [ref=e80] [cursor=pointer]:
+            - checkbox " Zone Points (8)" [checked] [ref=e81]
+            - generic [ref=e82]: 
+            - generic [ref=e83]: Zone Points
+            - generic [ref=e84]: (8)
+          - generic "Spells (5)" [ref=e85] [cursor=pointer]:
+            - checkbox " Spells (5)" [checked] [ref=e86]
+            - generic [ref=e87]: 
+            - generic [ref=e88]: Spells
+            - generic [ref=e89]: (5)
+          - generic "Safe Coords (1)" [ref=e90] [cursor=pointer]:
+            - checkbox "Safe Coords (1)" [checked] [ref=e91]
+            - generic [ref=e92]: Safe Coords
+            - generic [ref=e93]: (1)
+          - generic "Pathing Grids (0)" [ref=e94] [cursor=pointer]:
+            - checkbox "Pathing Grids (0)" [checked] [ref=e95]
+            - generic [ref=e96]: Pathing Grids
+            - generic [ref=e97]: (0)
+          - generic "Map Lines (2731)" [ref=e98] [cursor=pointer]:
+            - checkbox "Map Lines (2731)" [checked] [ref=e99]
+            - generic [ref=e100]: Map Lines
+            - generic [ref=e101]: (2731)
+      - generic [ref=e103]:
+        - generic [ref=e104]: 
+        - textbox "Search NPCs, doors..." [ref=e105]
+      - generic [ref=e25]:
+        - text:      
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - button "Marker" [ref=e27] [cursor=pointer]
+            - button "Marker" [ref=e28] [cursor=pointer]
+            - button "Marker" [ref=e29] [cursor=pointer]
+            - button "Marker" [ref=e30] [cursor=pointer]
+            - button "Marker" [ref=e31] [cursor=pointer]
+            - button "Marker" [ref=e32] [cursor=pointer]
+            - button "Marker" [ref=e106] [cursor=pointer]
+            - button "Marker" [ref=e107] [cursor=pointer]
+            - button "Marker" [ref=e108] [cursor=pointer]
+            - button "Marker" [ref=e109] [cursor=pointer]
+            - button "Marker" [ref=e110] [cursor=pointer]
+            - button "Marker" [ref=e111] [cursor=pointer]
+            - button "Marker" [ref=e112] [cursor=pointer]
+            - button "Marker" [ref=e113] [cursor=pointer]
+            - button "Marker" [ref=e114] [cursor=pointer]
+            - button "Marker" [ref=e115] [cursor=pointer]
+            - button "Marker" [ref=e116] [cursor=pointer]
+            - button "Marker" [ref=e117] [cursor=pointer]
+            - button "Marker" [ref=e118] [cursor=pointer]
+            - button "Marker" [ref=e119] [cursor=pointer]
+            - button "Marker" [ref=e120] [cursor=pointer]
+            - button "Marker" [ref=e121] [cursor=pointer]
+            - button "Marker" [ref=e122] [cursor=pointer]
+            - button "Marker" [ref=e123] [cursor=pointer]
+            - button "Marker" [ref=e124] [cursor=pointer]
+            - button "Marker" [ref=e125] [cursor=pointer]
+            - button "Marker" [ref=e126] [cursor=pointer]
+            - button "Marker" [ref=e127] [cursor=pointer]
+            - button "Marker" [ref=e128] [cursor=pointer]
+            - button "Marker" [ref=e129] [cursor=pointer]
+            - button "Marker" [ref=e130] [cursor=pointer]
+            - button "Marker" [ref=e131] [cursor=pointer]
+            - button "Marker" [ref=e132] [cursor=pointer]
+            - button "Marker" [ref=e133] [cursor=pointer]
+            - button "Marker" [ref=e134] [cursor=pointer]
+            - button "Marker" [ref=e135] [cursor=pointer]
+            - button "Marker" [ref=e136] [cursor=pointer]
+            - button "Marker" [ref=e137] [cursor=pointer]
+            - button "Marker" [ref=e138] [cursor=pointer]
+            - button "Marker" [ref=e139] [cursor=pointer]
+            - button "Marker" [ref=e140] [cursor=pointer]
+            - button "Marker" [ref=e141] [cursor=pointer]
+            - button "Marker" [ref=e142] [cursor=pointer]
+            - button "Marker" [ref=e143] [cursor=pointer]
+            - button "Marker" [ref=e144] [cursor=pointer]
+            - button "Marker" [ref=e145] [cursor=pointer]
+            - button "Marker" [ref=e146] [cursor=pointer]
+            - button "Marker" [ref=e147] [cursor=pointer]
+            - button "Marker" [ref=e148] [cursor=pointer]
+            - button "Marker" [ref=e149] [cursor=pointer]
+            - button "Marker" [ref=e150] [cursor=pointer]
+            - button "Marker" [ref=e151] [cursor=pointer]
+            - button "Marker" [ref=e152] [cursor=pointer]
+            - button "Marker" [ref=e153] [cursor=pointer]
+            - button "Marker" [ref=e154] [cursor=pointer]
+            - button "Marker" [ref=e155] [cursor=pointer]
+            - button "Marker" [ref=e156] [cursor=pointer]
+            - button "Marker" [ref=e157] [cursor=pointer]
+            - button "Marker" [ref=e158] [cursor=pointer]
+            - button "Marker" [ref=e159] [cursor=pointer]
+            - button "Marker" [ref=e160] [cursor=pointer]
+            - button "Marker" [ref=e161] [cursor=pointer]
+            - button "Marker" [ref=e162] [cursor=pointer]
+            - button "Marker" [ref=e163] [cursor=pointer]
+            - button "Marker" [ref=e164] [cursor=pointer]
+            - button "Marker" [ref=e165] [cursor=pointer]
+            - button "Marker" [ref=e166] [cursor=pointer]
+            - button "Marker" [ref=e167] [cursor=pointer]
+            - button "Marker" [ref=e168] [cursor=pointer]
+            - button "Marker" [ref=e169] [cursor=pointer]
+            - button "Marker" [ref=e170] [cursor=pointer]
+            - button "Marker" [ref=e171] [cursor=pointer]
+            - button "Marker" [ref=e172] [cursor=pointer]
+            - button "Marker" [ref=e173] [cursor=pointer]
+            - button "Marker" [ref=e174] [cursor=pointer]
+            - button "Marker" [ref=e175] [cursor=pointer]
+            - button "Marker" [ref=e176] [cursor=pointer]
+            - button "Marker" [ref=e177] [cursor=pointer]
+            - button "Marker" [ref=e178] [cursor=pointer]
+            - button "Marker" [ref=e179] [cursor=pointer]
+            - button "Marker" [ref=e180] [cursor=pointer]
+            - button "Marker" [ref=e181] [cursor=pointer]
+            - button "Marker" [ref=e182] [cursor=pointer]
+            - button "Marker" [ref=e183] [cursor=pointer]
+            - button "Marker" [ref=e184] [cursor=pointer]
+            - button "Marker" [ref=e185] [cursor=pointer]
+            - button "Marker" [ref=e186] [cursor=pointer]
+            - button "Marker" [ref=e187] [cursor=pointer]
+            - button "Marker" [ref=e188] [cursor=pointer]
+            - button "Marker" [ref=e189] [cursor=pointer]
+            - button "Marker" [ref=e190] [cursor=pointer]
+            - button "Marker" [ref=e191] [cursor=pointer]
+            - button "Marker" [ref=e192] [cursor=pointer]
+            - button "Marker" [ref=e193] [cursor=pointer]
+            - button "Marker" [ref=e194] [cursor=pointer]
+            - button "Marker" [ref=e195] [cursor=pointer]
+            - button "Marker" [ref=e196] [cursor=pointer]
+            - button "Marker" [ref=e197] [cursor=pointer]
+            - button "Marker" [ref=e198] [cursor=pointer]
+            - button "Marker" [ref=e199] [cursor=pointer]
+            - button "Marker" [ref=e200] [cursor=pointer]
+            - button "Marker" [ref=e201] [cursor=pointer]
+            - button "Marker" [ref=e202] [cursor=pointer]
+            - button "Marker" [ref=e203] [cursor=pointer]
+            - button "Marker" [ref=e204] [cursor=pointer]
+            - button "Marker" [ref=e205] [cursor=pointer]
+            - button "Marker" [ref=e206] [cursor=pointer]
+            - button "Marker" [ref=e207] [cursor=pointer]
+            - button "Marker" [ref=e208] [cursor=pointer]
+            - button "Marker" [ref=e209] [cursor=pointer]
+            - button "Marker" [ref=e210] [cursor=pointer]
+            - button "Marker" [ref=e211] [cursor=pointer]
+            - button "Marker" [ref=e212] [cursor=pointer]
+            - button "Marker" [ref=e213] [cursor=pointer]
+            - button "Marker" [ref=e214] [cursor=pointer]
+            - button "Marker" [ref=e215] [cursor=pointer]
+            - button "Marker" [ref=e216] [cursor=pointer]
+            - button "Marker" [ref=e217] [cursor=pointer]
+            - button "Marker" [ref=e218] [cursor=pointer]
+            - button "Marker" [ref=e219] [cursor=pointer]
+            - button "Marker" [ref=e220] [cursor=pointer]
+            - button "Marker" [ref=e221] [cursor=pointer]
+            - button "Marker" [ref=e222] [cursor=pointer]
+            - button "Marker" [ref=e223] [cursor=pointer]
+            - button "Marker" [ref=e224] [cursor=pointer]
+            - button "Marker" [ref=e225] [cursor=pointer]
+            - button "Marker" [ref=e226] [cursor=pointer]
+            - button "Marker" [ref=e227] [cursor=pointer]
+            - button "Marker" [ref=e228] [cursor=pointer]
+            - button "Marker" [ref=e229] [cursor=pointer]
+            - button "Marker" [ref=e230] [cursor=pointer]
+            - button "Marker" [ref=e231] [cursor=pointer]
+            - button "Marker" [ref=e232] [cursor=pointer]
+            - button "Marker" [ref=e233] [cursor=pointer]
+            - button "Marker" [ref=e234] [cursor=pointer]
+            - button "Marker" [ref=e235] [cursor=pointer]
+            - button "Marker" [ref=e236] [cursor=pointer]
+            - button "Marker" [ref=e237] [cursor=pointer]
+            - button "Marker" [ref=e238] [cursor=pointer]
+            - button "Marker" [ref=e239] [cursor=pointer]
+            - button "Marker" [ref=e240] [cursor=pointer]
+            - button "Marker" [ref=e241] [cursor=pointer]
+            - button "Marker" [ref=e242] [cursor=pointer]
+            - button "Marker" [ref=e243] [cursor=pointer]
+            - button "Marker" [ref=e244] [cursor=pointer]
+            - button "Marker" [ref=e245] [cursor=pointer]
+            - button "Marker" [ref=e246] [cursor=pointer]
+            - button "Marker" [ref=e247] [cursor=pointer]
+            - button "Marker" [ref=e248] [cursor=pointer]
+            - button "Marker" [ref=e249] [cursor=pointer]
+            - button "Marker" [ref=e250] [cursor=pointer]
+            - button "Marker" [ref=e251] [cursor=pointer]
+            - button "Marker" [ref=e252] [cursor=pointer]
+            - button "Marker" [ref=e253] [cursor=pointer]
+            - button "Marker" [ref=e254] [cursor=pointer]
+            - button "Marker" [ref=e255] [cursor=pointer]
+            - button "Marker" [ref=e256] [cursor=pointer]
+            - button "Marker" [ref=e257] [cursor=pointer]
+            - button "Marker" [ref=e258] [cursor=pointer]
+            - button "Marker" [ref=e259] [cursor=pointer]
+            - button "Marker" [ref=e260] [cursor=pointer]
+            - button "Marker" [ref=e261] [cursor=pointer]
+            - button "Marker" [ref=e262] [cursor=pointer]
+            - button "Marker" [ref=e263] [cursor=pointer]
+            - button "Marker" [ref=e264] [cursor=pointer]
+            - button "Marker" [ref=e265] [cursor=pointer]
+            - button "Marker" [ref=e266] [cursor=pointer]
+            - button "Marker" [ref=e267] [cursor=pointer]
+            - button "Marker" [ref=e268] [cursor=pointer]
+            - button "Marker" [ref=e269] [cursor=pointer]
+            - button "Marker" [ref=e270] [cursor=pointer]
+            - button "Marker" [ref=e271] [cursor=pointer]
+            - button "Marker" [ref=e272] [cursor=pointer]
+            - button "Marker" [ref=e273] [cursor=pointer]
+            - button "Marker" [ref=e274] [cursor=pointer]
+            - button "Marker" [ref=e275] [cursor=pointer]
+            - button "Marker" [ref=e276] [cursor=pointer]
+            - button "Marker" [ref=e277] [cursor=pointer]
+            - button "Marker" [ref=e278] [cursor=pointer]
+            - button "Marker" [ref=e279] [cursor=pointer]
+            - button "Marker" [ref=e280] [cursor=pointer]
+            - button "Marker" [ref=e281] [cursor=pointer]
+            - button "Marker" [ref=e282] [cursor=pointer]
+            - button "Marker" [ref=e283] [cursor=pointer]
+            - button "Marker" [ref=e284] [cursor=pointer]
+            - button "Marker" [ref=e285] [cursor=pointer]
+            - button "Marker" [ref=e286] [cursor=pointer]
+            - button "Marker" [ref=e287] [cursor=pointer]
+            - button "Marker" [ref=e288] [cursor=pointer]
+            - button "Marker" [ref=e289] [cursor=pointer]
+            - button "Marker" [ref=e290] [cursor=pointer]
+            - button "Marker" [ref=e291] [cursor=pointer]
+            - button "Marker" [ref=e292] [cursor=pointer]
+            - button "Marker" [ref=e293] [cursor=pointer]
+            - button "Marker" [ref=e294] [cursor=pointer]
+            - button "Marker" [ref=e295] [cursor=pointer]
+            - button "Marker" [ref=e296] [cursor=pointer]
+            - button "Marker" [ref=e297] [cursor=pointer]
+            - button "Marker" [ref=e298] [cursor=pointer]
+            - button "Marker" [ref=e299] [cursor=pointer]
+            - button "Marker" [ref=e300] [cursor=pointer]
+            - button "Marker" [ref=e301] [cursor=pointer]
+            - button "Marker" [ref=e302] [cursor=pointer]
+            - button "Marker" [ref=e303] [cursor=pointer]
+            - button "Marker" [ref=e304] [cursor=pointer]
+            - button "Marker" [ref=e305] [cursor=pointer]
+            - button "Marker" [ref=e306] [cursor=pointer]
+            - button "Marker" [ref=e307] [cursor=pointer]
+            - button "Marker" [ref=e308] [cursor=pointer]
+            - button "Marker" [ref=e309] [cursor=pointer]
+            - button "Marker" [ref=e310] [cursor=pointer]
+            - button "Marker" [ref=e311] [cursor=pointer]
+            - button "Marker" [ref=e312] [cursor=pointer]
+            - button "Marker" [ref=e313] [cursor=pointer]
+            - button "Marker" [ref=e314] [cursor=pointer]
+            - button "Marker" [ref=e315] [cursor=pointer]
+            - button "Marker" [ref=e316] [cursor=pointer]
+            - button "Marker" [ref=e317] [cursor=pointer]
+            - button "Marker" [ref=e318] [cursor=pointer]
+            - button "Marker" [ref=e319] [cursor=pointer]
+            - button "Marker" [ref=e320] [cursor=pointer]
+            - button "Marker" [ref=e321] [cursor=pointer]
+            - button "Marker" [ref=e322] [cursor=pointer]
+            - button "Marker" [ref=e323] [cursor=pointer]
+            - button "Marker" [ref=e324] [cursor=pointer]
+            - button "Marker" [ref=e325] [cursor=pointer]
+            - button "Marker" [ref=e326] [cursor=pointer]
+            - button "Marker" [ref=e327] [cursor=pointer]
+            - button "Marker" [ref=e328] [cursor=pointer]
+            - button "Marker" [ref=e329] [cursor=pointer]
+            - button "Marker" [ref=e330] [cursor=pointer]
+            - button "Marker" [ref=e331] [cursor=pointer]
+            - button "Marker" [ref=e332] [cursor=pointer]
+            - button "Marker" [ref=e333] [cursor=pointer]
+            - button "Marker" [ref=e334] [cursor=pointer]
+            - button "Marker" [ref=e335] [cursor=pointer]
+            - button "Marker" [ref=e336] [cursor=pointer]
+            - button "Marker" [ref=e337] [cursor=pointer]
+            - button "Marker" [ref=e338] [cursor=pointer]
+            - button "Marker" [ref=e339] [cursor=pointer]
+            - button "Marker" [ref=e340] [cursor=pointer]
+            - button "Marker" [ref=e341] [cursor=pointer]
+            - button "Marker" [ref=e342] [cursor=pointer]
+            - button "Marker" [ref=e343] [cursor=pointer]
+            - button "Marker" [ref=e344] [cursor=pointer]
+            - button "Marker" [ref=e345] [cursor=pointer]
+            - button "Marker" [ref=e346] [cursor=pointer]
+            - button "Marker" [ref=e347] [cursor=pointer]
+            - button "Marker" [ref=e348] [cursor=pointer]
+            - button "Marker" [ref=e349] [cursor=pointer]
+            - button "Marker" [ref=e350] [cursor=pointer]
+            - button "Marker" [ref=e351] [cursor=pointer]
+            - button "Marker" [ref=e352] [cursor=pointer]
+            - button "Marker" [ref=e353] [cursor=pointer]
+            - button "Marker" [ref=e354] [cursor=pointer]
+            - button "Marker" [ref=e355] [cursor=pointer]
+            - button "Marker" [ref=e356] [cursor=pointer]
+            - button "Marker" [ref=e357] [cursor=pointer]
+            - button "Marker" [ref=e358] [cursor=pointer]
+            - button "Marker" [ref=e359] [cursor=pointer]
+            - button "Marker" [ref=e360] [cursor=pointer]
+            - button "Marker" [ref=e361] [cursor=pointer]
+            - button "Marker" [ref=e362] [cursor=pointer]
+            - button "Marker" [ref=e363] [cursor=pointer]
+            - button "Marker" [ref=e364] [cursor=pointer]
+            - button "Marker" [ref=e365] [cursor=pointer]
+            - button "Marker" [ref=e366] [cursor=pointer]
+            - button "Marker" [ref=e367] [cursor=pointer]
+            - button "Marker" [ref=e368] [cursor=pointer]
+            - button "Marker" [ref=e369] [cursor=pointer]
+            - button "Marker" [ref=e370] [cursor=pointer]
+            - button "Marker" [ref=e371] [cursor=pointer]
+            - button "Marker" [ref=e372] [cursor=pointer]
+            - button "Marker" [ref=e373] [cursor=pointer]
+            - button "Marker" [ref=e374] [cursor=pointer]
+            - button "Marker" [ref=e375] [cursor=pointer]
+            - button "Marker" [ref=e376] [cursor=pointer]
+            - button "Marker" [ref=e377] [cursor=pointer]
+            - button "Marker" [ref=e378] [cursor=pointer]
+            - button "Marker" [ref=e379] [cursor=pointer]
+            - button "Marker" [ref=e380] [cursor=pointer]
+            - button "Marker" [ref=e381] [cursor=pointer]
+            - button "Marker" [ref=e382] [cursor=pointer]
+            - button "Marker" [ref=e383] [cursor=pointer]
+            - button "Marker" [ref=e384] [cursor=pointer]
+            - button "Marker" [ref=e385] [cursor=pointer]
+            - button "Marker" [ref=e386] [cursor=pointer]
+            - button "Marker" [ref=e387] [cursor=pointer]
+            - button "Marker" [ref=e388] [cursor=pointer]
+            - button "Marker" [ref=e389] [cursor=pointer]
+            - button "Marker" [ref=e390] [cursor=pointer]
+            - button "Marker" [ref=e391] [cursor=pointer]
+            - button "Marker" [ref=e392] [cursor=pointer]
+            - button "Marker" [ref=e393] [cursor=pointer]
+            - button "Marker" [ref=e394] [cursor=pointer]
+            - button "Marker" [ref=e395] [cursor=pointer]
+            - button "Marker" [ref=e396] [cursor=pointer]
+            - button "Marker" [ref=e397] [cursor=pointer]
+            - button "Marker" [ref=e398] [cursor=pointer]
+            - button "Marker" [ref=e399] [cursor=pointer]
+            - button "Marker" [ref=e400] [cursor=pointer]
+            - button "Marker" [ref=e401] [cursor=pointer]
+            - button "Marker" [ref=e402] [cursor=pointer]
+            - button "Marker" [ref=e403] [cursor=pointer]
+            - button "Marker" [ref=e404] [cursor=pointer]
+            - button "Marker" [ref=e405] [cursor=pointer]
+            - button "Marker" [ref=e406] [cursor=pointer]
+            - button "Marker" [ref=e407] [cursor=pointer]
+            - button "Marker" [ref=e408] [cursor=pointer]
+            - button "Marker" [ref=e409] [cursor=pointer]
+            - button "Marker" [ref=e410] [cursor=pointer]
+            - button "Marker" [ref=e411] [cursor=pointer]
+            - button "Marker" [ref=e412] [cursor=pointer]
+            - button "Marker" [ref=e413] [cursor=pointer]
+            - button "Marker" [ref=e414] [cursor=pointer]
+            - button "Marker" [ref=e415] [cursor=pointer]
+            - button "Marker" [ref=e416] [cursor=pointer]
+            - button "Marker" [ref=e417] [cursor=pointer]
+            - button "Marker" [ref=e418] [cursor=pointer]
+            - button "Marker" [ref=e419] [cursor=pointer]
+            - button "Marker" [ref=e420] [cursor=pointer]
+            - button "Marker" [ref=e421] [cursor=pointer]
+            - button "Marker" [ref=e422] [cursor=pointer]
+            - button "Marker" [ref=e423] [cursor=pointer]
+            - button "Marker" [ref=e424] [cursor=pointer]
+            - button "Marker" [ref=e425] [cursor=pointer]
+            - button "Marker" [ref=e426] [cursor=pointer]
+            - button "Marker" [ref=e427] [cursor=pointer]
+            - button "Marker" [ref=e428] [cursor=pointer]
+            - button "Marker" [ref=e429] [cursor=pointer]
+            - button "Marker" [ref=e430] [cursor=pointer]
+            - button "Marker" [ref=e431] [cursor=pointer]
+            - button "Marker" [ref=e432] [cursor=pointer]
+            - button "Marker" [ref=e433] [cursor=pointer]
+            - button "Marker" [ref=e434] [cursor=pointer]
+            - button "Marker" [ref=e435] [cursor=pointer]
+            - button "Marker" [ref=e436] [cursor=pointer]
+            - button "Marker" [ref=e437] [cursor=pointer]
+            - button "Marker" [ref=e438] [cursor=pointer]
+            - button "Marker" [ref=e439] [cursor=pointer]
+            - button "Marker" [ref=e440] [cursor=pointer]
+            - button "Marker" [ref=e441] [cursor=pointer]
+            - button "Marker" [ref=e442] [cursor=pointer]
+            - button "Marker" [ref=e443] [cursor=pointer]
+            - button "Marker" [ref=e444] [cursor=pointer]
+            - button "Marker" [ref=e445] [cursor=pointer]
+            - button "Marker" [ref=e446] [cursor=pointer]
+            - button "Marker" [ref=e447] [cursor=pointer]
+            - button "Marker" [ref=e448] [cursor=pointer]
+            - button "Marker" [ref=e449] [cursor=pointer]
+            - button "Marker" [ref=e450] [cursor=pointer]
+            - button "Marker" [ref=e451] [cursor=pointer]
+            - button "Marker" [ref=e452] [cursor=pointer]
+            - button "Marker" [ref=e453] [cursor=pointer]
+            - button "Marker" [ref=e454] [cursor=pointer]
+            - button "Marker" [ref=e455] [cursor=pointer]
+            - button "Marker" [ref=e456] [cursor=pointer]
+            - button "Marker" [ref=e457] [cursor=pointer]
+            - button "Marker" [ref=e458] [cursor=pointer]
+            - button "Marker" [ref=e459] [cursor=pointer]
+            - button "Marker" [ref=e460] [cursor=pointer]
+            - button "Marker" [ref=e461] [cursor=pointer]
+            - button "Marker" [ref=e462] [cursor=pointer]
+            - button "Marker" [ref=e463] [cursor=pointer]
+            - button "Marker" [ref=e464] [cursor=pointer]
+            - button "Marker" [ref=e465] [cursor=pointer]
+            - button "Marker" [ref=e466] [cursor=pointer]
+            - button "Marker" [ref=e467] [cursor=pointer]
+            - button "Marker" [ref=e468] [cursor=pointer]
+            - button "Marker" [ref=e469] [cursor=pointer]
+            - button "Marker" [ref=e470] [cursor=pointer]
+            - button "Marker" [ref=e471] [cursor=pointer]
+            - button "Marker" [ref=e472] [cursor=pointer]
+            - button "Marker" [ref=e473] [cursor=pointer]
+            - button "Marker" [ref=e474] [cursor=pointer]
+            - button "Marker" [ref=e475] [cursor=pointer]
+            - button "Marker" [ref=e476] [cursor=pointer]
+            - button "Marker" [ref=e477] [cursor=pointer]
+            - button "Marker" [ref=e478] [cursor=pointer]
+            - button "Marker" [ref=e479] [cursor=pointer]
+            - button "Marker" [ref=e480] [cursor=pointer]
+            - button "Marker" [ref=e481] [cursor=pointer]
+            - button "Marker" [ref=e482] [cursor=pointer]
+            - button "Marker" [ref=e483] [cursor=pointer]
+            - button "Marker" [ref=e484] [cursor=pointer]
+            - button "Marker" [ref=e485] [cursor=pointer]
+            - button "Marker" [ref=e486] [cursor=pointer]
+            - button "Marker" [ref=e487] [cursor=pointer]
+            - button "Marker" [ref=e488] [cursor=pointer]
+            - button "Marker" [ref=e489] [cursor=pointer]
+            - button "Marker" [ref=e490] [cursor=pointer]
+            - button "Marker" [ref=e491] [cursor=pointer]
+            - button "Marker" [ref=e492] [cursor=pointer]
+            - button "Marker" [ref=e493] [cursor=pointer]
+            - button "Marker" [ref=e494] [cursor=pointer]
+            - button "Marker" [ref=e495] [cursor=pointer]
+            - button "Marker" [ref=e496] [cursor=pointer]
+            - button "Marker" [ref=e497] [cursor=pointer]
+            - button "Marker" [ref=e498] [cursor=pointer]
+            - button "Marker" [ref=e499] [cursor=pointer]
+            - button "Marker" [ref=e500] [cursor=pointer]
+            - button "Marker" [ref=e501] [cursor=pointer]
+            - button "Marker" [ref=e502] [cursor=pointer]
+            - button "Marker" [ref=e503] [cursor=pointer]
+            - button "Marker" [ref=e504] [cursor=pointer]
+            - button "Marker" [ref=e505] [cursor=pointer]
+            - button "Marker" [ref=e506] [cursor=pointer]
+            - button "Marker" [ref=e507] [cursor=pointer]
+            - button "Marker" [ref=e508] [cursor=pointer]
+            - button "Marker" [ref=e509] [cursor=pointer]
+            - button "Marker" [ref=e510] [cursor=pointer]
+            - button "Marker" [ref=e511] [cursor=pointer]
+            - button "Marker" [ref=e512] [cursor=pointer]
+            - button "Marker" [ref=e513] [cursor=pointer]
+            - button "Marker" [ref=e514] [cursor=pointer]
+            - button "Marker" [ref=e515] [cursor=pointer]
+            - button "Marker" [ref=e516] [cursor=pointer]
+            - button "Marker" [ref=e517] [cursor=pointer]
+            - button "Marker" [ref=e518] [cursor=pointer]
+            - button "Marker" [ref=e519] [cursor=pointer]
+            - button "Marker" [ref=e520] [cursor=pointer]
+            - button "Marker" [ref=e521] [cursor=pointer]
+            - button "Marker" [ref=e522] [cursor=pointer]
+            - button "Marker" [ref=e523] [cursor=pointer]
+            - button "Marker" [ref=e524] [cursor=pointer]
+            - button "Marker" [ref=e525] [cursor=pointer]
+            - button "Marker" [ref=e526] [cursor=pointer]
+            - button "Marker" [ref=e527] [cursor=pointer]
+            - button "Marker" [ref=e528] [cursor=pointer]
+            - button "Marker" [ref=e529] [cursor=pointer]
+            - button "Marker" [ref=e530] [cursor=pointer]
+            - button "Marker" [ref=e531] [cursor=pointer]
+            - button "Marker" [ref=e532] [cursor=pointer]
+            - button "Marker" [ref=e533] [cursor=pointer]
+            - button "Marker" [ref=e534] [cursor=pointer]
+            - button "Marker" [ref=e535] [cursor=pointer]
+            - button "Marker" [ref=e536] [cursor=pointer]
+            - button "Marker" [ref=e537] [cursor=pointer]
+            - button "Marker" [ref=e538] [cursor=pointer]
+            - button "Marker" [ref=e539] [cursor=pointer]
+            - button "Marker" [ref=e540] [cursor=pointer]
+            - button "Marker" [ref=e541] [cursor=pointer]
+            - button "Marker" [ref=e542] [cursor=pointer]
+            - button "Marker" [ref=e543] [cursor=pointer]
+            - button "Marker" [ref=e544] [cursor=pointer]
+            - button "Marker" [ref=e545] [cursor=pointer]
+            - button "Marker" [ref=e546] [cursor=pointer]
+            - button "Marker" [ref=e547] [cursor=pointer]
+            - button "Marker" [ref=e548] [cursor=pointer]
+            - button "Marker" [ref=e549] [cursor=pointer]
+            - button "Marker" [ref=e550] [cursor=pointer]
+            - button "Marker" [ref=e551] [cursor=pointer]
+            - button "Marker" [ref=e552] [cursor=pointer]
+            - button "Marker" [ref=e553] [cursor=pointer]
+            - button "Marker" [ref=e554] [cursor=pointer]
+            - button "Marker" [ref=e555] [cursor=pointer]
+            - button "Marker" [ref=e556] [cursor=pointer]
+            - button "Marker" [ref=e557] [cursor=pointer]
+            - button "Marker" [ref=e558] [cursor=pointer]
+            - button "Marker" [ref=e559] [cursor=pointer]
+            - button "Marker" [ref=e560] [cursor=pointer]
+            - button "Marker" [ref=e561] [cursor=pointer]
+            - button "Marker" [ref=e562] [cursor=pointer]
+            - button "Marker" [ref=e563] [cursor=pointer]
+            - button "Marker" [ref=e564] [cursor=pointer]
+            - button "Marker" [ref=e565] [cursor=pointer]
+            - button "Marker" [ref=e566] [cursor=pointer]
+            - button "Marker" [ref=e567] [cursor=pointer]
+            - button "Marker" [ref=e568] [cursor=pointer]
+            - button "Marker" [ref=e569] [cursor=pointer]
+            - button "Marker" [ref=e570] [cursor=pointer]
+            - button "Marker" [ref=e571] [cursor=pointer]
+            - button "Marker" [ref=e572] [cursor=pointer]
+            - button "Marker" [ref=e573] [cursor=pointer]
+            - button "Marker" [ref=e574] [cursor=pointer]
+            - button "Marker" [ref=e575] [cursor=pointer]
+            - button "Marker" [ref=e576] [cursor=pointer]
+            - button "Marker" [ref=e577] [cursor=pointer]
+            - button "Marker" [ref=e578] [cursor=pointer]
+            - button "Marker" [ref=e579] [cursor=pointer]
+            - button "Marker" [ref=e580] [cursor=pointer]
+            - button "Marker" [ref=e581] [cursor=pointer]
+            - button "Marker" [ref=e582] [cursor=pointer]
+            - button "Marker" [ref=e583] [cursor=pointer]
+            - button "Marker" [ref=e584] [cursor=pointer]
+            - button "Marker" [ref=e585] [cursor=pointer]
+            - button "Marker" [ref=e586] [cursor=pointer]
+            - button "Marker" [ref=e587] [cursor=pointer]
+            - button "Marker" [ref=e588] [cursor=pointer]
+            - button "Marker" [ref=e589] [cursor=pointer]
+            - button "Marker" [ref=e590] [cursor=pointer]
+            - button "Marker" [ref=e591] [cursor=pointer]
+            - button "Marker" [ref=e592] [cursor=pointer]
+            - button "Marker" [ref=e593] [cursor=pointer]
+            - button "Marker" [ref=e594] [cursor=pointer]
+            - button "Marker" [ref=e595] [cursor=pointer]
+            - button "Marker" [ref=e596] [cursor=pointer]
+            - button "Marker" [ref=e597] [cursor=pointer]
+            - button "Marker" [ref=e598] [cursor=pointer]
+            - button "Marker" [ref=e599] [cursor=pointer]
+            - button "Marker" [ref=e600] [cursor=pointer]
+            - button "Marker" [ref=e601] [cursor=pointer]
+            - button "Marker" [ref=e602] [cursor=pointer]
+            - button "Marker" [ref=e603] [cursor=pointer]
+            - button "Marker" [ref=e604] [cursor=pointer]
+            - button "Marker" [ref=e605] [cursor=pointer]
+            - button "Marker" [ref=e606] [cursor=pointer]
+            - button "Marker" [ref=e607] [cursor=pointer]
+            - button "Marker" [ref=e608] [cursor=pointer]
+            - button "Marker" [ref=e609] [cursor=pointer]
+            - button "Marker" [ref=e610] [cursor=pointer]
+            - button "Marker" [ref=e611] [cursor=pointer]
+            - button "Marker" [ref=e612] [cursor=pointer]
+            - button "Marker" [ref=e613] [cursor=pointer]
+            - button "Marker" [ref=e614] [cursor=pointer]
+            - button "Marker" [ref=e615] [cursor=pointer]
+            - button "Marker" [ref=e616] [cursor=pointer]
+            - button "Marker" [ref=e617] [cursor=pointer]
+            - button "Marker" [ref=e618] [cursor=pointer]
+            - button "Marker" [ref=e619] [cursor=pointer]
+            - button "Marker" [ref=e620] [cursor=pointer]
+            - button "Marker" [ref=e621] [cursor=pointer]
+            - button "Marker" [ref=e622] [cursor=pointer]
+            - button "Marker" [ref=e623] [cursor=pointer]
+            - button "Marker" [ref=e624] [cursor=pointer]
+            - button "Marker" [ref=e625] [cursor=pointer]
+            - button "Marker" [ref=e626] [cursor=pointer]
+            - button "Marker" [ref=e627] [cursor=pointer]
+            - button "Marker" [ref=e628] [cursor=pointer]
+            - button "Marker" [ref=e629] [cursor=pointer]
+            - button "Marker" [ref=e630] [cursor=pointer]
+            - button "Marker" [ref=e631] [cursor=pointer]
+            - button "Marker" [ref=e632] [cursor=pointer]
+            - button "Marker" [ref=e633] [cursor=pointer]
+            - button "Marker" [ref=e634] [cursor=pointer]
+            - button "Marker" [ref=e635] [cursor=pointer]
+            - button "Marker" [ref=e636] [cursor=pointer]
+            - button "Marker" [ref=e637] [cursor=pointer]
+            - button "Marker" [ref=e638] [cursor=pointer]
+            - button "Marker" [ref=e639] [cursor=pointer]
+            - button "Marker" [ref=e640] [cursor=pointer]
+            - button "Marker" [ref=e641] [cursor=pointer]
+            - button "Marker" [ref=e642] [cursor=pointer]
+            - button "Marker" [ref=e643] [cursor=pointer]
+            - button "Marker" [ref=e644] [cursor=pointer]
+            - button "Marker" [ref=e645] [cursor=pointer]
+            - button "Marker" [ref=e646] [cursor=pointer]
+            - button "Marker" [ref=e647] [cursor=pointer]
+            - button "Marker" [ref=e648] [cursor=pointer]
+            - button "Marker" [ref=e649] [cursor=pointer]
+            - button "Marker" [ref=e650] [cursor=pointer]
+            - button "Marker" [ref=e651] [cursor=pointer]
+            - button "Marker" [ref=e652] [cursor=pointer]
+            - button "Marker" [ref=e653] [cursor=pointer]
+            - button "Marker" [ref=e654] [cursor=pointer]
+            - button "Marker" [ref=e655] [cursor=pointer]
+            - button "Marker" [ref=e656] [cursor=pointer]
+            - button "Marker" [ref=e657] [cursor=pointer]
+            - button "Marker" [ref=e658] [cursor=pointer]
+            - button "Marker" [ref=e659] [cursor=pointer]
+            - button "Marker" [ref=e660] [cursor=pointer]
+            - button "Marker" [ref=e661] [cursor=pointer]
+            - button "Marker" [ref=e662] [cursor=pointer]
+            - button "Marker" [ref=e663] [cursor=pointer]
+            - button "Marker" [ref=e664] [cursor=pointer]
+            - button "Marker" [ref=e665] [cursor=pointer]
+            - button "Marker" [ref=e666] [cursor=pointer]
+            - button "Marker" [ref=e667] [cursor=pointer]
+            - button "Marker" [ref=e668] [cursor=pointer]
+            - button "Marker" [ref=e669] [cursor=pointer]
+            - button "Marker" [ref=e670] [cursor=pointer]
+            - button "Marker" [ref=e671] [cursor=pointer]
+            - button "Marker" [ref=e672] [cursor=pointer]
+            - button "Marker" [ref=e673] [cursor=pointer]
+            - button "Marker" [ref=e674] [cursor=pointer]
+            - button "Marker" [ref=e675] [cursor=pointer]
+            - button "Marker" [ref=e676] [cursor=pointer]
+            - button "Marker" [ref=e677] [cursor=pointer]
+            - button "Marker" [ref=e678] [cursor=pointer]
+            - button "Marker" [ref=e679] [cursor=pointer]
+            - button "Marker" [ref=e680] [cursor=pointer]
+            - button "Marker" [ref=e681] [cursor=pointer]
+            - button "Marker" [ref=e682] [cursor=pointer]
+            - button "Marker" [ref=e683] [cursor=pointer]
+            - button "Marker" [ref=e684] [cursor=pointer]
+            - button "Marker" [ref=e685] [cursor=pointer]
+            - button "Marker" [ref=e686] [cursor=pointer]
+            - button "Marker" [ref=e687] [cursor=pointer]
+            - button "Marker" [ref=e688] [cursor=pointer]
+            - button "Marker" [ref=e689] [cursor=pointer]
+            - button "Marker" [ref=e690] [cursor=pointer]
+            - button "Marker" [ref=e691] [cursor=pointer]
+            - button "Marker" [ref=e692] [cursor=pointer]
+            - button "Marker" [ref=e693] [cursor=pointer]
+            - button "Marker" [ref=e694] [cursor=pointer]
+            - button "Marker" [ref=e695] [cursor=pointer]
+            - button "Marker" [ref=e696] [cursor=pointer]
+            - button "Marker" [ref=e697] [cursor=pointer]
+            - button "Marker" [ref=e698] [cursor=pointer]
+            - button "Marker" [ref=e699] [cursor=pointer]
+            - button "Marker" [ref=e700] [cursor=pointer]
+            - button "Marker" [ref=e701] [cursor=pointer]
+            - button "Marker" [ref=e702] [cursor=pointer]
+            - button "Marker" [ref=e703] [cursor=pointer]
+            - button "Marker" [ref=e704] [cursor=pointer]
+            - button "Marker" [ref=e705] [cursor=pointer]
+            - button "Marker" [ref=e706] [cursor=pointer]
+            - button "Marker" [ref=e707] [cursor=pointer]
+            - button "Marker" [ref=e708] [cursor=pointer]
+            - button "Marker" [ref=e709] [cursor=pointer]
+            - button "Marker" [ref=e710] [cursor=pointer]
+            - button "Marker" [ref=e711] [cursor=pointer]
+            - button "Marker" [ref=e712] [cursor=pointer]
+            - button "Marker" [ref=e713] [cursor=pointer]
+            - button "Marker" [ref=e714] [cursor=pointer]
+            - button "Marker" [ref=e715] [cursor=pointer]
+            - button "Marker" [ref=e716] [cursor=pointer]
+            - button "Marker" [ref=e717] [cursor=pointer]
+            - button "Marker" [ref=e718] [cursor=pointer]
+            - button "Marker" [ref=e719] [cursor=pointer]
+            - button "Marker" [ref=e720] [cursor=pointer]
+            - button "Marker" [ref=e721] [cursor=pointer]
+            - button "Marker" [ref=e722] [cursor=pointer]
+            - button "Marker" [ref=e723] [cursor=pointer]
+            - button "Marker" [ref=e724] [cursor=pointer]
+            - button "Marker" [ref=e725] [cursor=pointer]
+            - button "Marker" [ref=e726] [cursor=pointer]
+            - button "Marker" [ref=e727] [cursor=pointer]
+            - button "Marker" [ref=e728] [cursor=pointer]
+            - button "Marker" [ref=e729] [cursor=pointer]
+            - button "Marker" [ref=e730] [cursor=pointer]
+            - button "Marker" [ref=e731] [cursor=pointer]
+            - button "Marker" [ref=e732] [cursor=pointer]
+            - button "Marker" [ref=e733] [cursor=pointer]
+            - button "Marker" [ref=e734] [cursor=pointer]
+            - button "Marker" [ref=e735] [cursor=pointer]
+            - button "Marker" [ref=e736] [cursor=pointer]
+            - button "Marker" [ref=e737] [cursor=pointer]
+            - button "Marker" [ref=e738] [cursor=pointer]
+            - button "Marker" [ref=e739] [cursor=pointer]
+            - button "Marker" [ref=e740] [cursor=pointer]
+            - button "Marker" [ref=e741] [cursor=pointer]
+            - button "Marker" [ref=e742] [cursor=pointer]
+            - button "Marker" [ref=e743] [cursor=pointer]
+            - button "Marker" [ref=e744] [cursor=pointer]
+            - button "Marker" [ref=e745] [cursor=pointer]
+            - button "Marker" [ref=e746] [cursor=pointer]
+            - button "Marker" [ref=e747] [cursor=pointer]
+            - button "Marker" [ref=e748] [cursor=pointer]
+            - button "Marker" [ref=e749] [cursor=pointer]
+            - button "Marker" [ref=e750] [cursor=pointer]
+            - button "Marker" [ref=e751] [cursor=pointer]
+            - button "Marker" [ref=e752] [cursor=pointer]
+            - button "Marker" [ref=e753] [cursor=pointer]
+            - button "Marker" [ref=e754] [cursor=pointer]
+            - button "Marker" [ref=e755] [cursor=pointer]
+            - button "Marker" [ref=e756] [cursor=pointer]
+            - button "Marker" [ref=e757] [cursor=pointer]
+            - button "Marker" [ref=e758] [cursor=pointer]
+            - button "Marker" [ref=e759] [cursor=pointer]
+            - button "Marker" [ref=e760] [cursor=pointer]
+            - button "Marker" [ref=e761] [cursor=pointer]
+            - button "Marker" [ref=e762] [cursor=pointer]
+            - button "Marker" [ref=e763] [cursor=pointer]
+            - button "Marker" [ref=e764] [cursor=pointer]
+            - button "Marker" [ref=e765] [cursor=pointer]
+            - button "Marker" [ref=e766] [cursor=pointer]
+            - button "Marker" [ref=e767] [cursor=pointer]
+            - button "Marker" [ref=e768] [cursor=pointer]
+            - button "Marker" [ref=e769] [cursor=pointer]
+            - button "Marker" [ref=e770] [cursor=pointer]
+            - button "Marker" [ref=e771] [cursor=pointer]
+            - button "Marker" [ref=e772] [cursor=pointer]
+            - button "Marker" [ref=e773] [cursor=pointer]
+            - button "Marker" [ref=e774] [cursor=pointer]
+            - button "Marker" [ref=e775] [cursor=pointer]
+            - button "Marker" [ref=e776] [cursor=pointer]
+            - button "Marker" [ref=e777] [cursor=pointer]
+            - button "Marker" [ref=e778] [cursor=pointer]
+            - button "Marker" [ref=e779] [cursor=pointer]
+            - button "Marker" [ref=e780] [cursor=pointer]
+            - button "Marker" [ref=e781] [cursor=pointer]
+            - button "Marker" [ref=e782] [cursor=pointer]
+            - button "Marker" [ref=e783] [cursor=pointer]
+            - button "Marker" [ref=e784] [cursor=pointer]
+            - button "Marker" [ref=e785] [cursor=pointer]
+            - button "Marker" [ref=e786] [cursor=pointer]
+            - button "Marker" [ref=e787] [cursor=pointer]
+            - button "Marker" [ref=e788] [cursor=pointer]
+            - button "Marker" [ref=e789] [cursor=pointer]
+            - button "Marker" [ref=e790] [cursor=pointer]
+            - button "Marker" [ref=e791] [cursor=pointer]
+            - button "Marker" [ref=e792] [cursor=pointer]
+            - button "Marker" [ref=e793] [cursor=pointer]
+            - button "Marker" [ref=e794] [cursor=pointer]
+            - button "Marker" [ref=e795] [cursor=pointer]
+            - button "Marker" [ref=e796] [cursor=pointer]
+            - button "Marker" [ref=e797] [cursor=pointer]
+            - button "Marker" [ref=e798] [cursor=pointer]
+            - button "Marker" [ref=e799] [cursor=pointer]
+            - button "Marker" [ref=e800] [cursor=pointer]
+            - button "Marker" [ref=e801] [cursor=pointer]
+            - button "Marker" [ref=e802] [cursor=pointer]
+            - button "Marker" [ref=e803] [cursor=pointer]
+            - button "Marker" [ref=e804] [cursor=pointer]
+            - button "Marker" [ref=e805] [cursor=pointer]
+            - button "Marker" [ref=e806] [cursor=pointer]
+            - button "Marker" [ref=e807] [cursor=pointer]
+            - button "Marker" [ref=e808] [cursor=pointer]
+            - button "Marker" [ref=e809] [cursor=pointer]
+            - button "Marker" [ref=e810] [cursor=pointer]
+            - button "Marker" [ref=e811] [cursor=pointer]
+            - button "Marker" [ref=e812] [cursor=pointer]
+            - button "Marker" [ref=e813] [cursor=pointer]
+            - button "Marker" [ref=e814] [cursor=pointer]
+            - button "Marker" [ref=e815] [cursor=pointer]
+            - button "Marker" [ref=e816] [cursor=pointer]
+            - button "Marker" [ref=e817] [cursor=pointer]
+            - button "Marker" [ref=e818] [cursor=pointer]
+            - button "Marker" [ref=e819] [cursor=pointer]
+            - button "Marker" [ref=e820] [cursor=pointer]
+            - button "Marker" [ref=e821] [cursor=pointer]
+            - button "Marker" [ref=e822] [cursor=pointer]
+            - button "Marker" [ref=e823] [cursor=pointer]
+            - button "Marker" [ref=e824] [cursor=pointer]
+            - button "Marker" [ref=e825] [cursor=pointer]
+            - button "Marker" [ref=e826] [cursor=pointer]
+            - button "Marker" [ref=e827] [cursor=pointer]
+            - button "Marker" [ref=e828] [cursor=pointer]
+            - button "Marker" [ref=e829] [cursor=pointer]
+            - button "Marker" [ref=e830] [cursor=pointer]
+            - button "Marker" [ref=e831] [cursor=pointer]
+            - button "Marker" [ref=e832] [cursor=pointer]
+            - button "Marker" [ref=e833] [cursor=pointer]
+            - button "Marker" [ref=e834] [cursor=pointer]
+            - button "Marker" [ref=e835] [cursor=pointer]
+            - button "Marker" [ref=e836] [cursor=pointer]
+            - button "Marker" [ref=e837] [cursor=pointer]
+            - button "Marker" [ref=e838] [cursor=pointer]
+            - button "Marker" [ref=e839] [cursor=pointer]
+            - button "Marker" [ref=e840] [cursor=pointer]
+            - button "Marker" [ref=e841] [cursor=pointer]
+            - button "Marker" [ref=e842] [cursor=pointer]
+            - button "Marker" [ref=e843] [cursor=pointer]
+            - button "Marker" [ref=e844] [cursor=pointer]
+            - button "Marker" [ref=e845] [cursor=pointer]
+            - button "Marker" [ref=e846] [cursor=pointer]
+            - button "Marker" [ref=e847] [cursor=pointer]
+            - button "Marker" [ref=e848] [cursor=pointer]
+            - button "Marker" [ref=e849] [cursor=pointer]
+        - generic:
+          - generic [ref=e33]:
+            - button "Zoom in" [ref=e34] [cursor=pointer]: +
+            - button "Zoom out" [ref=e35] [cursor=pointer]: −
+          - link "Leaflet" [ref=e37] [cursor=pointer]:
+            - /url: https://leafletjs.com
+            - img [ref=e38]
+            - text: Leaflet
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - generic [ref=e44]: The Greater Faydark
+        - button "" [ref=e45] [cursor=pointer]:
+          - generic [ref=e46]: 
+      - generic [ref=e49]:
+        - heading "The Greater Faydark" [level=6] [ref=e50]
+        - generic [ref=e51]:
+          - navigation [ref=e52]:
+            - list [ref=e53]:
+              - listitem [ref=e54] [cursor=pointer]: NPCs (251)
+              - listitem [ref=e55] [cursor=pointer]: Items
+              - listitem [ref=e56] [cursor=pointer]: Tasks
+              - listitem [ref=e57] [cursor=pointer]: Sold
+              - listitem [ref=e58] [cursor=pointer]: Spells
+              - listitem [ref=e59] [cursor=pointer]: Zone Connections
+              - listitem [ref=e60]: Zone
+          - generic [ref=e61]:
+            - text:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+            - generic [ref=e4372]:
+              - generic [ref=e4373]:
+                - generic [ref=e4374]:
+                  - generic [ref=e4375]:
+                    - generic [ref=e4376]: DB ID
+                    - generic [ref=e4377]: "138"
+                  - generic [ref=e4378]:
+                    - generic [ref=e4379]: Game ID
+                    - generic [ref=e4380]: "54"
+                  - generic [ref=e4381]:
+                    - generic [ref=e4382]: Short Name
+                    - generic [ref=e4383]: gfaydark
+                  - generic [ref=e4384]:
+                    - generic [ref=e4385]: Long Name
+                    - generic [ref=e4386]: The Greater Faydark
+                  - generic [ref=e4387]:
+                    - generic [ref=e4388]: Version
+                    - generic [ref=e4389]: "0"
+                  - generic [ref=e4390]:
+                    - generic [ref=e4391]: Zone Type
+                    - generic [ref=e4392]: "255"
+                  - generic [ref=e4393]:
+                    - generic [ref=e4394]: Fog Density
+                    - generic [ref=e4395]: "0.33"
+                  - generic [ref=e4396]:
+                    - generic [ref=e4397]: Sky Type
+                    - generic [ref=e4398]: "0"
+                  - generic [ref=e4399]:
+                    - generic [ref=e4400]: Sky Lock
+                    - generic [ref=e4401]: "0"
+                  - generic [ref=e4403]: Map File
+                  - generic [ref=e4405]:
+                    - generic [ref=e4406]: Graveyard ID
+                    - generic [ref=e4407]: "0"
+                  - generic [ref=e4408]:
+                    - generic [ref=e4409]: Min. Lvl
+                    - generic [ref=e4410]: "0"
+                  - generic [ref=e4411]:
+                    - generic [ref=e4412]: Min. Status
+                    - generic [ref=e4413]: "0"
+                  - generic [ref=e4414]:
+                    - generic [ref=e4415]: Timezone
+                    - generic [ref=e4416]: "0"
+                  - generic [ref=e4417]:
+                    - generic [ref=e4418]: Time Type
+                    - generic [ref=e4419]: "2"
+                  - generic [ref=e4421]: Note
+                  - generic [ref=e4423]:
+                    - generic [ref=e4424]: Walkspeed
+                    - generic [ref=e4425]: "0.4"
+                  - generic [ref=e4427]: Flag Needed
+                  - generic [ref=e4429]:
+                    - generic [ref=e4430]: Instance Type
+                    - generic [ref=e4431]: "0"
+                  - generic [ref=e4432]:
+                    - generic [ref=e4433]: Shutdown Delay
+                    - generic [ref=e4434]: "3600000"
+                  - generic [ref=e4435]:
+                    - generic [ref=e4436]: Expansion
+                    - generic [ref=e4437]: "0"
+                  - generic [ref=e4438]:
+                    - generic [ref=e4439]: Min Expansion
+                    - generic [ref=e4440]: "-1"
+                  - generic [ref=e4441]:
+                    - generic [ref=e4442]: Max Expansion
+                    - generic [ref=e4443]: "-1"
+                  - generic [ref=e4445]: Content Flags Enabled
+                  - generic [ref=e4448]: Content Flags Disabled
+                - generic [ref=e4450]:
+                  - generic [ref=e4455]: Can Bind
+                  - generic [ref=e4460]: Can Combat
+                  - generic [ref=e4465]: Can Levitate
+                  - generic [ref=e4470]: Can Cast Outdoor
+                  - generic [ref=e4475]: Is Hotzone
+                  - generic [ref=e4480]: Is PEQ Zone Enabled
+                  - generic [ref=e4485]: Suspend Buffs
+                  - generic [ref=e4486]:
+                    - generic [ref=e4488]:
+                      - generic [ref=e4489]: "180"
+                      - generic [ref=e4490]: Fast Regen HP
+                    - generic [ref=e4492]:
+                      - generic [ref=e4493]: "180"
+                      - generic [ref=e4494]: Fast Regen Mana
+                    - generic [ref=e4496]:
+                      - generic [ref=e4497]: "180"
+                      - generic [ref=e4498]: Fast Regen Endurance
+                    - generic [ref=e4500]:
+                      - generic [ref=e4501]: "600"
+                      - generic [ref=e4502]: NPC Max Aggro Dist
+                    - generic [ref=e4504]:
+                      - generic [ref=e4505]: "0"
+                      - generic [ref=e4506]: Underworld Teleport
+                    - generic [ref=e4508]:
+                      - generic [ref=e4509]: "50"
+                      - generic [ref=e4510]: Lava Damage
+                    - generic [ref=e4512]:
+                      - generic [ref=e4513]: "10"
+                      - generic [ref=e4514]: Min. Lava Damage
+                    - generic [ref=e4516]:
+                      - generic [ref=e4517]: "0.4"
+                      - generic [ref=e4518]: Gravity
+                    - generic [ref=e4520]:
+                      - generic [ref=e4521]: "0"
+                      - generic [ref=e4522]: Zone Type
+                    - generic [ref=e4524]:
+                      - generic [ref=e4525]: "1"
+                      - generic [ref=e4526]: Zone EXP Multiplier
+                    - generic [ref=e4528]:
+                      - generic [ref=e4529]: "0"
+                      - generic [ref=e4530]: Max Clients
+                    - generic [ref=e4532]:
+                      - generic [ref=e4533]: "1"
+                      - generic [ref=e4534]: Ruleset
+                    - generic [ref=e4536]:
+                      - generic [ref=e4537]: "-90"
+                      - generic [ref=e4538]: Underworld
+                    - generic [ref=e4540]:
+                      - generic [ref=e4541]: "50"
+                      - generic [ref=e4542]: Min Clip
+                    - generic [ref=e4544]:
+                      - generic [ref=e4545]: "1600"
+                      - generic [ref=e4546]: Max Clip
+                    - generic [ref=e4548]:
+                      - generic [ref=e4549]: "10"
+                      - generic [ref=e4550]: Safe X
+                    - generic [ref=e4552]:
+                      - generic [ref=e4553]: "-20"
+                      - generic [ref=e4554]: Safe Y
+                    - generic [ref=e4556]:
+                      - generic [ref=e4557]: "0"
+                      - generic [ref=e4558]: Safe Z
+                    - generic [ref=e4560]:
+                      - generic [ref=e4561]: "0"
+                      - generic [ref=e4562]: Safe Heading
+              - generic [ref=e4563]:
+                - heading "Fog Colors" [level=6] [ref=e4564]
+                - generic [ref=e4565]:
+                  - generic [ref=e4566]:
+                    - generic "RGB(230, 255, 200)" [ref=e4567]
+                    - generic [ref=e4568]: Default
+                    - generic [ref=e4569]: 10 - 1600
+                  - generic [ref=e4570]:
+                    - generic "RGB(230, 255, 200)" [ref=e4571]
+                    - generic [ref=e4572]: Slot 1
+                    - generic [ref=e4573]: 10 - 300
+                  - generic [ref=e4574]:
+                    - generic "RGB(230, 255, 200)" [ref=e4575]
+                    - generic [ref=e4576]: Slot 2
+                    - generic [ref=e4577]: 10 - 600
+                  - generic [ref=e4578]:
+                    - generic "RGB(230, 255, 200)" [ref=e4579]
+                    - generic [ref=e4580]: Slot 3
+                    - generic [ref=e4581]: 10 - 600
+                  - generic [ref=e4582]:
+                    - generic "RGB(230, 255, 200)" [ref=e4583]
+                    - generic [ref=e4584]: Slot 4
+                    - generic [ref=e4585]: 10 - 600
+              - generic [ref=e4586]:
+                - heading "Weather" [level=6] [ref=e4587]
+                - table [ref=e4588]:
+                  - rowgroup [ref=e4589]:
+                    - row "Slot 1 Slot 2 Slot 3 Slot 4" [ref=e4590]:
+                      - columnheader [ref=e4591]
+                      - columnheader "Slot 1" [ref=e4592]
+                      - columnheader "Slot 2" [ref=e4593]
+                      - columnheader "Slot 3" [ref=e4594]
+                      - columnheader "Slot 4" [ref=e4595]
+                  - rowgroup [ref=e4596]:
+                    - row "Rain % 0 10 0 0" [ref=e4597]:
+                      - cell "Rain %" [ref=e4598]
+                      - cell "0" [ref=e4599]
+                      - cell "10" [ref=e4600]
+                      - cell "0" [ref=e4601]
+                      - cell "0" [ref=e4602]
+                    - row "Rain Dur 0 10 0 0" [ref=e4603]:
+                      - cell "Rain Dur" [ref=e4604]
+                      - cell "0" [ref=e4605]
+                      - cell "10" [ref=e4606]
+                      - cell "0" [ref=e4607]
+                      - cell "0" [ref=e4608]
+                    - row "Snow % 10 0 0 5" [ref=e4609]:
+                      - cell "Snow %" [ref=e4610]
+                      - cell "10" [ref=e4611]
+                      - cell "0" [ref=e4612]
+                      - cell "0" [ref=e4613]
+                      - cell "5" [ref=e4614]
+                    - row "Snow Dur 1 0 0 1" [ref=e4615]:
+                      - cell "Snow Dur" [ref=e4616]
+                      - cell "1" [ref=e4617]
+                      - cell "0" [ref=e4618]
+                      - cell "0" [ref=e4619]
+                      - cell "1" [ref=e4620]
+  - text: 

@@ -1,0 +1,159 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e6]: 
+    - text:                                               
+  - generic [ref=e14]:
+    - generic [ref=e18]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: Loading map...
+        - generic [ref=e23]: 5%
+      - generic [ref=e25]:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - button "Marker" [ref=e27] [cursor=pointer]
+            - button "Marker" [ref=e28] [cursor=pointer]
+            - button "Marker" [ref=e29] [cursor=pointer]
+            - button "Marker" [ref=e30] [cursor=pointer]
+            - button "Marker" [ref=e31] [cursor=pointer]
+            - button "Marker" [ref=e32] [cursor=pointer]
+            - button "Marker" [ref=e33] [cursor=pointer]
+            - button "Marker" [ref=e34] [cursor=pointer]
+            - button "Marker" [ref=e35] [cursor=pointer]
+            - button "Marker" [ref=e36] [cursor=pointer]
+            - button "Marker" [ref=e37] [cursor=pointer]
+            - button "Marker" [ref=e38] [cursor=pointer]
+            - button "Marker" [ref=e39] [cursor=pointer]
+            - button "Marker" [ref=e40] [cursor=pointer]
+            - button "Marker" [ref=e41] [cursor=pointer]
+            - button "Marker" [ref=e42] [cursor=pointer]
+            - button "Marker" [ref=e43] [cursor=pointer]
+            - button "Marker" [ref=e44] [cursor=pointer]
+            - button "Marker" [ref=e45] [cursor=pointer]
+            - button "Marker" [ref=e46] [cursor=pointer]
+            - button "Marker" [ref=e47] [cursor=pointer]
+            - button "Marker" [ref=e48] [cursor=pointer]
+            - button "Marker" [ref=e49] [cursor=pointer]
+            - button "Marker" [ref=e50] [cursor=pointer]
+            - button "Marker" [ref=e51] [cursor=pointer]
+            - button "Marker" [ref=e52] [cursor=pointer]
+            - button "Marker" [ref=e53] [cursor=pointer]
+            - button "Marker" [ref=e54] [cursor=pointer]
+            - button "Marker" [ref=e55] [cursor=pointer]
+            - button "Marker" [ref=e56] [cursor=pointer]
+            - button "Marker" [ref=e57] [cursor=pointer]
+            - button "Marker" [ref=e58] [cursor=pointer]
+            - button "Marker" [ref=e59] [cursor=pointer]
+            - button "Marker" [ref=e60] [cursor=pointer]
+            - button "Marker" [ref=e61] [cursor=pointer]
+            - button "Marker" [ref=e62] [cursor=pointer]
+            - button "Marker" [ref=e63] [cursor=pointer]
+            - button "Marker" [ref=e64] [cursor=pointer]
+            - button "Marker" [ref=e65] [cursor=pointer]
+            - button "Marker" [ref=e66] [cursor=pointer]
+            - button "Marker" [ref=e67] [cursor=pointer]
+            - button "Marker" [ref=e68] [cursor=pointer]
+            - button "Marker" [ref=e69] [cursor=pointer]
+            - button "Marker" [ref=e70] [cursor=pointer]
+            - button "Marker" [ref=e71] [cursor=pointer]
+            - button "Marker" [ref=e72] [cursor=pointer]
+            - button "Marker" [ref=e73] [cursor=pointer]
+            - button "Marker" [ref=e74] [cursor=pointer]
+            - button "Marker" [ref=e75] [cursor=pointer]
+            - button "Marker" [ref=e76] [cursor=pointer]
+            - button "Marker" [ref=e77] [cursor=pointer]
+            - button "Marker" [ref=e78] [cursor=pointer]
+            - button "Marker" [ref=e79] [cursor=pointer]
+            - button "Marker" [ref=e80] [cursor=pointer]
+            - button "Marker" [ref=e81] [cursor=pointer]
+            - button "Marker" [ref=e82] [cursor=pointer]
+            - button "Marker" [ref=e83] [cursor=pointer]
+            - button "Marker" [ref=e84] [cursor=pointer]
+            - button "Marker" [ref=e85] [cursor=pointer]
+            - button "Marker" [ref=e86] [cursor=pointer]
+            - button "Marker" [ref=e87] [cursor=pointer]
+            - button "Marker" [ref=e88] [cursor=pointer]
+            - button "Marker" [ref=e89] [cursor=pointer]
+            - button "Marker" [ref=e90] [cursor=pointer]
+            - button "Marker" [ref=e91] [cursor=pointer]
+            - button "Marker" [ref=e92] [cursor=pointer]
+            - button "Marker" [ref=e93] [cursor=pointer]
+            - button "Marker" [ref=e94] [cursor=pointer]
+            - button "Marker" [ref=e95] [cursor=pointer]
+            - button "Marker" [ref=e96] [cursor=pointer]
+            - button "Marker" [ref=e97] [cursor=pointer]
+            - button "Marker" [ref=e98] [cursor=pointer]
+            - button "Marker" [ref=e99] [cursor=pointer]
+            - button "Marker" [ref=e100] [cursor=pointer]
+            - button "Marker" [ref=e101] [cursor=pointer]
+            - button "Marker" [ref=e102] [cursor=pointer]
+            - button "Marker" [ref=e103] [cursor=pointer]
+            - button "Marker" [ref=e104] [cursor=pointer]
+            - button "Marker" [ref=e105] [cursor=pointer]
+            - button "Marker" [ref=e106] [cursor=pointer]
+            - button "Marker" [ref=e107] [cursor=pointer]
+            - button "Marker" [ref=e108] [cursor=pointer]
+            - button "Marker" [ref=e109] [cursor=pointer]
+            - button "Marker" [ref=e110] [cursor=pointer]
+            - button "Marker" [ref=e111] [cursor=pointer]
+            - button "Marker" [ref=e112] [cursor=pointer]
+            - button "Marker" [ref=e113] [cursor=pointer]
+            - button "Marker" [ref=e114] [cursor=pointer]
+            - button "Marker" [ref=e115] [cursor=pointer]
+            - button "Marker" [ref=e116] [cursor=pointer]
+            - button "Marker" [ref=e117] [cursor=pointer]
+            - button "Marker" [ref=e118] [cursor=pointer]
+            - button "Marker" [ref=e119] [cursor=pointer]
+            - button "Marker" [ref=e120] [cursor=pointer]
+            - button "Marker" [ref=e121] [cursor=pointer]
+            - button "Marker" [ref=e122] [cursor=pointer]
+            - button "Marker" [ref=e123] [cursor=pointer]
+            - button "Marker" [ref=e124] [cursor=pointer]
+            - button "Marker" [ref=e125] [cursor=pointer]
+            - button "Marker" [ref=e126] [cursor=pointer]
+            - button "Marker" [ref=e127] [cursor=pointer]
+            - button "Marker" [ref=e128] [cursor=pointer]
+            - button "Marker" [ref=e129] [cursor=pointer]
+            - button "Marker" [ref=e130] [cursor=pointer]
+            - button "Marker" [ref=e131] [cursor=pointer]
+            - button "Marker" [ref=e132] [cursor=pointer]
+            - button "Marker" [ref=e133] [cursor=pointer]
+            - button "Marker" [ref=e134] [cursor=pointer]
+            - button "Marker" [ref=e135] [cursor=pointer]
+            - button "Marker" [ref=e136] [cursor=pointer]
+            - button "Marker" [ref=e137] [cursor=pointer]
+            - button "Marker" [ref=e138] [cursor=pointer]
+            - button "Marker" [ref=e139] [cursor=pointer]
+            - button "Marker" [ref=e140] [cursor=pointer]
+            - button "Marker" [ref=e141] [cursor=pointer]
+            - button "Marker" [ref=e142] [cursor=pointer]
+        - generic:
+          - generic [ref=e143]:
+            - button "Zoom in" [ref=e144] [cursor=pointer]: +
+            - button "Zoom out" [ref=e145] [cursor=pointer]: −
+          - link "Leaflet" [ref=e147] [cursor=pointer]:
+            - /url: https://leafletjs.com
+            - img [ref=e148]
+            - text: Leaflet
+    - generic [ref=e152]:
+      - generic [ref=e153]:
+        - generic [ref=e154]: The Greater Faydark
+        - button "" [ref=e155] [cursor=pointer]:
+          - generic [ref=e156]: 
+      - generic [ref=e159]:
+        - heading "The Greater Faydark" [level=6] [ref=e160]
+        - generic [ref=e161]:
+          - navigation [ref=e162]:
+            - list [ref=e163]:
+              - listitem [ref=e164]: NPCs
+              - listitem [ref=e165] [cursor=pointer]: Items
+              - listitem [ref=e166] [cursor=pointer]: Tasks
+              - listitem [ref=e167] [cursor=pointer]: Sold
+              - listitem [ref=e168] [cursor=pointer]: Spells
+              - listitem [ref=e169] [cursor=pointer]: Zone Connections
+              - listitem [ref=e170] [cursor=pointer]: Zone
+          - generic [ref=e173]:
+            - text: Loading NPCs...
+            - generic [ref=e175]: 4%
+  - text: 

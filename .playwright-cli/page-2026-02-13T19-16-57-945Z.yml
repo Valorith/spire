@@ -1,0 +1,493 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:                                                
+  - generic [ref=e14]:
+    - generic [ref=e18]:
+      - generic [ref=e116]:
+        - generic [ref=e117] [cursor=pointer]:
+          - generic [ref=e118]: Layers
+          - generic [ref=e119]: 
+        - generic [ref=e120]:
+          - generic "NPCs (205)" [ref=e121] [cursor=pointer]:
+            - checkbox " NPCs (205)" [checked] [ref=e122]
+            - generic [ref=e123]: 
+            - generic [ref=e124]: NPCs
+            - generic [ref=e125]: (205)
+          - generic "Doors (51)" [ref=e126] [cursor=pointer]:
+            - checkbox "Doors (51)" [checked] [ref=e127]
+            - generic [ref=e128]: Doors
+            - generic [ref=e129]: (51)
+          - generic "Zone Points (4)" [ref=e130] [cursor=pointer]:
+            - checkbox " Zone Points (4)" [checked] [ref=e131]
+            - generic [ref=e132]: 
+            - generic [ref=e133]: Zone Points
+            - generic [ref=e134]: (4)
+          - generic "Spells (0)" [ref=e135] [cursor=pointer]:
+            - checkbox " Spells (0)" [checked] [ref=e136]
+            - generic [ref=e137]: 
+            - generic [ref=e138]: Spells
+            - generic [ref=e139]: (0)
+          - generic "Safe Coords (1)" [ref=e140] [cursor=pointer]:
+            - checkbox "Safe Coords (1)" [checked] [ref=e141]
+            - generic [ref=e142]: Safe Coords
+            - generic [ref=e143]: (1)
+          - generic "Pathing Grids (11)" [ref=e2255] [cursor=pointer]:
+            - checkbox "Pathing Grids (11)" [checked] [ref=e2256]
+            - generic [ref=e146]: Pathing Grids
+            - generic [ref=e147]: (11)
+          - generic "Map Lines (1299)" [ref=e148] [cursor=pointer]:
+            - checkbox "Map Lines (1299)" [checked] [ref=e149]
+            - generic [ref=e150]: Map Lines
+            - generic [ref=e151]: (1299)
+      - generic [ref=e152]:
+        - generic [ref=e153]:
+          - generic [ref=e154]: 
+          - textbox "Search NPCs, doors..." [ref=e155]: Guard
+          - generic [ref=e2237] [cursor=pointer]: 
+        - generic [ref=e2238]:
+          - generic [ref=e2239] [cursor=pointer]:
+            - generic [ref=e2240]: 
+            - generic [ref=e2241]: Guard Valon
+            - generic [ref=e2242]: NPC (Lvl 30)
+          - generic [ref=e2243] [cursor=pointer]:
+            - generic [ref=e2244]: 
+            - generic [ref=e2245]: Guard Valon
+            - generic [ref=e2246]: NPC (Lvl 31)
+          - generic [ref=e2247] [cursor=pointer]:
+            - generic [ref=e2248]: 
+            - generic [ref=e2249]: Guard Colin
+            - generic [ref=e2250]: NPC (Lvl 31)
+          - generic [ref=e2251] [cursor=pointer]:
+            - generic [ref=e2252]: 
+            - generic [ref=e2253]: Guard Colin
+            - generic [ref=e2254]: NPC (Lvl 30)
+      - generic [ref=e25]:
+        - text:    
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - button "Marker" [ref=e78] [cursor=pointer]
+            - button "Marker" [ref=e79] [cursor=pointer]
+            - button "Marker" [ref=e80] [cursor=pointer]
+            - button "Marker" [ref=e81] [cursor=pointer]
+            - button "Marker" [ref=e82] [cursor=pointer]
+            - button "Marker" [ref=e1981] [cursor=pointer]
+            - button "Marker" [ref=e1982] [cursor=pointer]
+            - button "Marker" [ref=e1983] [cursor=pointer]
+            - button "Marker" [ref=e1984] [cursor=pointer]
+            - button "Marker" [ref=e1985] [cursor=pointer]
+            - button "Marker" [ref=e1986] [cursor=pointer]
+            - button "Marker" [ref=e1987] [cursor=pointer]
+            - button "Marker" [ref=e1988] [cursor=pointer]
+            - button "Marker" [ref=e1989] [cursor=pointer]
+            - button "Marker" [ref=e1990] [cursor=pointer]
+            - button "Marker" [ref=e1991] [cursor=pointer]
+            - button "Marker" [ref=e1992] [cursor=pointer]
+            - button "Marker" [ref=e1993] [cursor=pointer]
+            - button "Marker" [ref=e1994] [cursor=pointer]
+            - button "Marker" [ref=e1995] [cursor=pointer]
+            - button "Marker" [ref=e1996] [cursor=pointer]
+            - button "Marker" [ref=e1997] [cursor=pointer]
+            - button "Marker" [ref=e1998] [cursor=pointer]
+            - button "Marker" [ref=e1999] [cursor=pointer]
+            - button "Marker" [ref=e2000] [cursor=pointer]
+            - button "Marker" [ref=e2001] [cursor=pointer]
+            - button "Marker" [ref=e2002] [cursor=pointer]
+            - button "Marker" [ref=e2003] [cursor=pointer]
+            - button "Marker" [ref=e2004] [cursor=pointer]
+            - button "Marker" [ref=e2005] [cursor=pointer]
+            - button "Marker" [ref=e2006] [cursor=pointer]
+            - button "Marker" [ref=e2007] [cursor=pointer]
+            - button "Marker" [ref=e2008] [cursor=pointer]
+            - button "Marker" [ref=e2009] [cursor=pointer]
+            - button "Marker" [ref=e2010] [cursor=pointer]
+            - button "Marker" [ref=e2011] [cursor=pointer]
+            - button "Marker" [ref=e2012] [cursor=pointer]
+            - button "Marker" [ref=e2013] [cursor=pointer]
+            - button "Marker" [ref=e2014] [cursor=pointer]
+            - button "Marker" [ref=e2015] [cursor=pointer]
+            - button "Marker" [ref=e2016] [cursor=pointer]
+            - button "Marker" [ref=e2017] [cursor=pointer]
+            - button "Marker" [ref=e2018] [cursor=pointer]
+            - button "Marker" [ref=e2019] [cursor=pointer]
+            - button "Marker" [ref=e2020] [cursor=pointer]
+            - button "Marker" [ref=e2021] [cursor=pointer]
+            - button "Marker" [ref=e2022] [cursor=pointer]
+            - button "Marker" [ref=e2023] [cursor=pointer]
+            - button "Marker" [ref=e2024] [cursor=pointer]
+            - button "Marker" [ref=e2025] [cursor=pointer]
+            - button "Marker" [ref=e2026] [cursor=pointer]
+            - button "Marker" [ref=e2027] [cursor=pointer]
+            - button "Marker" [ref=e2028] [cursor=pointer]
+            - button "Marker" [ref=e2029] [cursor=pointer]
+            - button "Marker" [ref=e2030] [cursor=pointer]
+            - button "Marker" [ref=e2031] [cursor=pointer]
+            - button "Marker" [ref=e2032] [cursor=pointer]
+            - button "Marker" [ref=e2033] [cursor=pointer]
+            - button "Marker" [ref=e2034] [cursor=pointer]
+            - button "Marker" [ref=e2035] [cursor=pointer]
+            - button "Marker" [ref=e2036] [cursor=pointer]
+            - button "Marker" [ref=e2037] [cursor=pointer]
+            - button "Marker" [ref=e2038] [cursor=pointer]
+            - button "Marker" [ref=e2039] [cursor=pointer]
+            - button "Marker" [ref=e2040] [cursor=pointer]
+            - button "Marker" [ref=e2041] [cursor=pointer]
+            - button "Marker" [ref=e2042] [cursor=pointer]
+            - button "Marker" [ref=e2043] [cursor=pointer]
+            - button "Marker" [ref=e2044] [cursor=pointer]
+            - button "Marker" [ref=e2045] [cursor=pointer]
+            - button "Marker" [ref=e2046] [cursor=pointer]
+            - button "Marker" [ref=e2047] [cursor=pointer]
+            - button "Marker" [ref=e2048] [cursor=pointer]
+            - button "Marker" [ref=e2049] [cursor=pointer]
+            - button "Marker" [ref=e2050] [cursor=pointer]
+            - button "Marker" [ref=e2051] [cursor=pointer]
+            - button "Marker" [ref=e2052] [cursor=pointer]
+            - button "Marker" [ref=e2053] [cursor=pointer]
+            - button "Marker" [ref=e2054] [cursor=pointer]
+            - button "Marker" [ref=e2055] [cursor=pointer]
+            - button "Marker" [ref=e2056] [cursor=pointer]
+            - button "Marker" [ref=e2057] [cursor=pointer]
+            - button "Marker" [ref=e2058] [cursor=pointer]
+            - button "Marker" [ref=e2059] [cursor=pointer]
+            - button "Marker" [ref=e2060] [cursor=pointer]
+            - button "Marker" [ref=e2061] [cursor=pointer]
+            - button "Marker" [ref=e2062] [cursor=pointer]
+            - button "Marker" [ref=e2063] [cursor=pointer]
+            - button "Marker" [ref=e2064] [cursor=pointer]
+            - button "Marker" [ref=e2065] [cursor=pointer]
+            - button "Marker" [ref=e2066] [cursor=pointer]
+            - button "Marker" [ref=e2067] [cursor=pointer]
+            - button "Marker" [ref=e2068] [cursor=pointer]
+            - button "Marker" [ref=e2069] [cursor=pointer]
+            - button "Marker" [ref=e2070] [cursor=pointer]
+            - button "Marker" [ref=e2071] [cursor=pointer]
+            - button "Marker" [ref=e2072] [cursor=pointer]
+            - button "Marker" [ref=e2073] [cursor=pointer]
+            - button "Marker" [ref=e2074] [cursor=pointer]
+            - button "Marker" [ref=e2075] [cursor=pointer]
+            - button "Marker" [ref=e2076] [cursor=pointer]
+            - button "Marker" [ref=e2077] [cursor=pointer]
+            - button "Marker" [ref=e2078] [cursor=pointer]
+            - button "Marker" [ref=e2079] [cursor=pointer]
+            - button "Marker" [ref=e2080] [cursor=pointer]
+            - button "Marker" [ref=e2081] [cursor=pointer]
+            - button "Marker" [ref=e2082] [cursor=pointer]
+            - button "Marker" [ref=e2083] [cursor=pointer]
+            - button "Marker" [ref=e2084] [cursor=pointer]
+            - button "Marker" [ref=e2085] [cursor=pointer]
+            - button "Marker" [ref=e2086] [cursor=pointer]
+            - button "Marker" [ref=e2087] [cursor=pointer]
+            - button "Marker" [ref=e2088] [cursor=pointer]
+            - button "Marker" [ref=e2089] [cursor=pointer]
+            - button "Marker" [ref=e2090] [cursor=pointer]
+            - button "Marker" [ref=e2091] [cursor=pointer]
+            - button "Marker" [ref=e2092] [cursor=pointer]
+            - button "Marker" [ref=e2093] [cursor=pointer]
+            - button "Marker" [ref=e2094] [cursor=pointer]
+            - button "Marker" [ref=e2095] [cursor=pointer]
+            - button "Marker" [ref=e2096] [cursor=pointer]
+            - button "Marker" [ref=e2097] [cursor=pointer]
+            - button "Marker" [ref=e2098] [cursor=pointer]
+            - button "Marker" [ref=e2099] [cursor=pointer]
+            - button "Marker" [ref=e2100] [cursor=pointer]
+            - button "Marker" [ref=e2101] [cursor=pointer]
+            - button "Marker" [ref=e2102] [cursor=pointer]
+            - button "Marker" [ref=e2103] [cursor=pointer]
+            - button "Marker" [ref=e2104] [cursor=pointer]
+            - button "Marker" [ref=e2105] [cursor=pointer]
+            - button "Marker" [ref=e2106] [cursor=pointer]
+            - button "Marker" [ref=e2107] [cursor=pointer]
+            - button "Marker" [ref=e2108] [cursor=pointer]
+            - button "Marker" [ref=e2109] [cursor=pointer]
+            - button "Marker" [ref=e2110] [cursor=pointer]
+            - button "Marker" [ref=e2111] [cursor=pointer]
+            - button "Marker" [ref=e2112] [cursor=pointer]
+            - button "Marker" [ref=e2113] [cursor=pointer]
+            - button "Marker" [ref=e2114] [cursor=pointer]
+            - button "Marker" [ref=e2115] [cursor=pointer]
+            - button "Marker" [ref=e2116] [cursor=pointer]
+            - button "Marker" [ref=e2117] [cursor=pointer]
+            - button "Marker" [ref=e2118] [cursor=pointer]
+            - button "Marker" [ref=e2119] [cursor=pointer]
+            - button "Marker" [ref=e2120] [cursor=pointer]
+            - button "Marker" [ref=e2121] [cursor=pointer]
+            - button "Marker" [ref=e2122] [cursor=pointer]
+            - button "Marker" [ref=e2123] [cursor=pointer]
+            - button "Marker" [ref=e2124] [cursor=pointer]
+            - button "Marker" [ref=e2125] [cursor=pointer]
+            - button "Marker" [ref=e2126] [cursor=pointer]
+            - button "Marker" [ref=e2127] [cursor=pointer]
+            - button "Marker" [ref=e2128] [cursor=pointer]
+            - button "Marker" [ref=e2129] [cursor=pointer]
+            - button "Marker" [ref=e2130] [cursor=pointer]
+            - button "Marker" [ref=e2131] [cursor=pointer]
+            - button "Marker" [ref=e2132] [cursor=pointer]
+            - button "Marker" [ref=e2133] [cursor=pointer]
+            - button "Marker" [ref=e2134] [cursor=pointer]
+            - button "Marker" [ref=e2135] [cursor=pointer]
+            - button "Marker" [ref=e2136] [cursor=pointer]
+            - button "Marker" [ref=e2137] [cursor=pointer]
+            - button "Marker" [ref=e2138] [cursor=pointer]
+            - button "Marker" [ref=e2139] [cursor=pointer]
+            - button "Marker" [ref=e2140] [cursor=pointer]
+            - button "Marker" [ref=e2141] [cursor=pointer]
+            - button "Marker" [ref=e2142] [cursor=pointer]
+            - button "Marker" [ref=e2143] [cursor=pointer]
+            - button "Marker" [ref=e2144] [cursor=pointer]
+            - button "Marker" [ref=e2145] [cursor=pointer]
+            - button "Marker" [ref=e2146] [cursor=pointer]
+            - button "Marker" [ref=e2147] [cursor=pointer]
+            - button "Marker" [ref=e2148] [cursor=pointer]
+            - button "Marker" [ref=e2149] [cursor=pointer]
+            - button "Marker" [ref=e2150] [cursor=pointer]
+            - button "Marker" [ref=e2151] [cursor=pointer]
+            - button "Marker" [ref=e2152] [cursor=pointer]
+            - button "Marker" [ref=e2153] [cursor=pointer]
+            - button "Marker" [ref=e2154] [cursor=pointer]
+            - button "Marker" [ref=e2155] [cursor=pointer]
+            - button "Marker" [ref=e2156] [cursor=pointer]
+            - button "Marker" [ref=e2157] [cursor=pointer]
+            - button "Marker" [ref=e2158] [cursor=pointer]
+            - button "Marker" [ref=e2159] [cursor=pointer]
+            - button "Marker" [ref=e2160] [cursor=pointer]
+            - button "Marker" [ref=e2161] [cursor=pointer]
+            - button "Marker" [ref=e2162] [cursor=pointer]
+            - button "Marker" [ref=e2163] [cursor=pointer]
+            - button "Marker" [ref=e2164] [cursor=pointer]
+            - button "Marker" [ref=e2165] [cursor=pointer]
+            - button "Marker" [ref=e2166] [cursor=pointer]
+            - button "Marker" [ref=e2167] [cursor=pointer]
+            - button "Marker" [ref=e2168] [cursor=pointer]
+            - button "Marker" [ref=e2169] [cursor=pointer]
+            - button "Marker" [ref=e2170] [cursor=pointer]
+            - button "Marker" [ref=e2171] [cursor=pointer]
+            - button "Marker" [ref=e2172] [cursor=pointer]
+            - button "Marker" [ref=e2173] [cursor=pointer]
+            - button "Marker" [ref=e2174] [cursor=pointer]
+            - button "Marker" [ref=e2175] [cursor=pointer]
+            - button "Marker" [ref=e2176] [cursor=pointer]
+            - button "Marker" [ref=e2177] [cursor=pointer]
+            - button "Marker" [ref=e2178] [cursor=pointer]
+            - button "Marker" [ref=e2179] [cursor=pointer]
+            - button "Marker" [ref=e2180] [cursor=pointer]
+            - button "Marker" [ref=e2181] [cursor=pointer]
+            - button "Marker" [ref=e2182] [cursor=pointer]
+            - button "Marker" [ref=e2183] [cursor=pointer]
+            - button "Marker" [ref=e2184] [cursor=pointer]
+            - button "Marker" [ref=e2185] [cursor=pointer]
+            - button "Marker" [ref=e2186] [cursor=pointer]
+            - button "Marker" [ref=e2187] [cursor=pointer]
+            - button "Marker" [ref=e2188] [cursor=pointer]
+            - button "Marker" [ref=e2189] [cursor=pointer]
+            - button "Marker" [ref=e2190] [cursor=pointer]
+            - button "Marker" [ref=e2191] [cursor=pointer]
+            - button "Marker" [ref=e2192] [cursor=pointer]
+            - button "Marker" [ref=e2193] [cursor=pointer]
+            - button "Marker" [ref=e2194] [cursor=pointer]
+            - button "Marker" [ref=e2195] [cursor=pointer]
+            - button "Marker" [ref=e2196] [cursor=pointer]
+            - button "Marker" [ref=e2197] [cursor=pointer]
+            - button "Marker" [ref=e2198] [cursor=pointer]
+            - button "Marker" [ref=e2199] [cursor=pointer]
+            - button "Marker" [ref=e2200] [cursor=pointer]
+            - button "Marker" [ref=e2201] [cursor=pointer]
+            - button "Marker" [ref=e2202] [cursor=pointer]
+            - button "Marker" [ref=e2203] [cursor=pointer]
+            - button "Marker" [ref=e2204] [cursor=pointer]
+            - button "Marker" [ref=e2205] [cursor=pointer]
+            - button "Marker" [ref=e2206] [cursor=pointer]
+            - button "Marker" [ref=e2207] [cursor=pointer]
+            - button "Marker" [ref=e2208] [cursor=pointer]
+            - button "Marker" [ref=e2209] [cursor=pointer]
+            - button "Marker" [ref=e2210] [cursor=pointer]
+            - button "Marker" [ref=e2211] [cursor=pointer]
+            - button "Marker" [ref=e2212] [cursor=pointer]
+            - button "Marker" [ref=e2213] [cursor=pointer]
+            - button "Marker" [ref=e2214] [cursor=pointer]
+            - button "Marker" [ref=e2215] [cursor=pointer]
+            - button "Marker" [ref=e2216] [cursor=pointer]
+            - button "Marker" [ref=e2217] [cursor=pointer]
+            - button "Marker" [ref=e2218] [cursor=pointer]
+            - button "Marker" [ref=e2219] [cursor=pointer]
+            - button "Marker" [ref=e2220] [cursor=pointer]
+            - button "Marker" [ref=e2221] [cursor=pointer]
+            - button "Marker" [ref=e2222] [cursor=pointer]
+            - button "Marker" [ref=e2223] [cursor=pointer]
+            - button "Marker" [ref=e2224] [cursor=pointer]
+            - button "Marker" [ref=e2225] [cursor=pointer]
+            - button "Marker" [ref=e2226] [cursor=pointer]
+            - button "Marker" [ref=e2227] [cursor=pointer]
+            - button "Marker" [ref=e2228] [cursor=pointer]
+            - button "Marker" [ref=e2229] [cursor=pointer]
+            - button "Marker" [ref=e2230] [cursor=pointer]
+            - button "Marker" [ref=e2231] [cursor=pointer]
+            - button "Marker" [ref=e2232] [cursor=pointer]
+            - button "Marker" [ref=e2233] [cursor=pointer]
+            - button "Marker" [ref=e2234] [cursor=pointer]
+            - button "Marker" [ref=e2235] [cursor=pointer]
+            - button "Marker" [ref=e2236] [cursor=pointer]
+            - button "Marker" [ref=e2258] [cursor=pointer]
+            - button "Marker" [ref=e2259] [cursor=pointer]
+            - button "Marker" [ref=e2260] [cursor=pointer]
+            - button "Marker" [ref=e2261] [cursor=pointer]
+            - button "Marker" [ref=e2262] [cursor=pointer]
+            - button "Marker" [ref=e2263] [cursor=pointer]
+            - button "Marker" [ref=e2264] [cursor=pointer]
+            - button "Marker" [ref=e2265] [cursor=pointer]
+            - button "Marker" [ref=e2266] [cursor=pointer]
+            - button "Marker" [ref=e2267] [cursor=pointer]
+            - button "Marker" [ref=e2268] [cursor=pointer]
+            - button "Marker" [ref=e2269] [cursor=pointer]
+          - generic:
+            - tooltip "1" [ref=e2270] [cursor=pointer]:
+              - generic [ref=e2271]: "1"
+            - tooltip "2" [ref=e2272] [cursor=pointer]:
+              - generic [ref=e2273]: "2"
+            - tooltip "3" [ref=e2274] [cursor=pointer]:
+              - generic [ref=e2275]: "3"
+            - tooltip "4" [ref=e2276] [cursor=pointer]:
+              - generic [ref=e2277]: "4"
+            - tooltip "5" [ref=e2278] [cursor=pointer]:
+              - generic [ref=e2279]: "5"
+            - tooltip "6" [ref=e2280] [cursor=pointer]:
+              - generic [ref=e2281]: "6"
+            - tooltip "7" [ref=e2282] [cursor=pointer]:
+              - generic [ref=e2283]: "7"
+            - tooltip "8" [ref=e2284] [cursor=pointer]:
+              - generic [ref=e2285]: "8"
+            - tooltip "9" [ref=e2286] [cursor=pointer]:
+              - generic [ref=e2287]: "9"
+            - tooltip "10" [ref=e2288] [cursor=pointer]:
+              - generic [ref=e2289]: "10"
+            - tooltip "11" [ref=e2290] [cursor=pointer]:
+              - generic [ref=e2291]: "11"
+            - tooltip " Guard Valon" [ref=e2292] [cursor=pointer]:
+              - generic [ref=e2295]:
+                - generic [ref=e2296]: 
+                - text: Guard Valon
+        - generic:
+          - generic [ref=e83]:
+            - button "Zoom in" [ref=e84] [cursor=pointer]: +
+            - button "Zoom out" [ref=e85] [cursor=pointer]: −
+          - link "Leaflet" [ref=e87] [cursor=pointer]:
+            - /url: https://leafletjs.com
+            - img [ref=e88]
+            - text: Leaflet
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - generic [ref=e94]: West Commonlands
+        - button "" [ref=e95] [cursor=pointer]:
+          - generic [ref=e96]: 
+      - text:                                                                                                                                                                                                                                                                                                                                                          
+      - button " Return to Zone" [ref=e2299] [cursor=pointer]:
+        - generic [ref=e2300]: 
+        - text: Return to Zone
+      - generic [ref=e2303]:
+        - generic [ref=e2305]:
+          - heading "Guard Valon" [level=6] [ref=e2307]
+          - generic [ref=e2308]:
+            - generic [ref=e2309]:
+              - generic [ref=e2310]: ID
+              - generic [ref=e2311]: "21086"
+            - generic [ref=e2312]:
+              - generic [ref=e2313]: Level
+              - generic [ref=e2314]: "30"
+            - generic [ref=e2315]:
+              - generic [ref=e2316]: Class
+              - generic [ref=e2317]: Warrior (1)
+            - generic [ref=e2319]:
+              - generic [ref=e2320]: Race
+              - generic [ref=e2321]: Guard (44)
+            - generic [ref=e2322]:
+              - generic [ref=e2323]: Bodytype
+              - generic [ref=e2324]: Humanoid (1)
+        - generic [ref=e2325]:
+          - generic [ref=e2326]:
+            - generic [ref=e2327]:
+              - generic [ref=e2328]:
+                - generic [ref=e2329]: HP
+                - generic [ref=e2331]: 1,500
+              - generic [ref=e2332]:
+                - generic [ref=e2333]: (Tic) HP Regen
+                - generic [ref=e2335]: "1"
+            - generic [ref=e2336]:
+              - generic [ref=e2337]:
+                - generic [ref=e2338]: Armor Class
+                - generic [ref=e2340]: "127"
+              - generic [ref=e2341]:
+                - generic [ref=e2342]: Agility
+                - generic [ref=e2344]: "97"
+              - generic [ref=e2345]:
+                - generic [ref=e2346]: Dexterity
+                - generic [ref=e2348]: "97"
+              - generic [ref=e2349]:
+                - generic [ref=e2350]: Stamina
+                - generic [ref=e2352]: "97"
+              - generic [ref=e2353]:
+                - generic [ref=e2354]: Strength
+                - generic [ref=e2356]: "97"
+              - generic [ref=e2357]:
+                - generic [ref=e2358]: Charisma
+                - generic [ref=e2360]: "97"
+              - generic [ref=e2361]:
+                - generic [ref=e2362]: Wisdom
+                - generic [ref=e2364]: "97"
+              - generic [ref=e2365]:
+                - generic [ref=e2366]: Intelligence
+                - generic [ref=e2368]: "97"
+            - generic [ref=e2369]:
+              - generic [ref=e2370]:
+                - generic [ref=e2371]: Cold Resist
+                - generic [ref=e2373]: "12"
+              - generic [ref=e2374]:
+                - generic [ref=e2375]: Disease Resist
+                - generic [ref=e2377]: "12"
+              - generic [ref=e2378]:
+                - generic [ref=e2379]: Fire Resist
+                - generic [ref=e2381]: "12"
+              - generic [ref=e2382]:
+                - generic [ref=e2383]: Magic Resist
+                - generic [ref=e2385]: "75"
+              - generic [ref=e2386]:
+                - generic [ref=e2387]: Poison Resist
+                - generic [ref=e2389]: "12"
+              - generic [ref=e2390]:
+                - generic [ref=e2391]: Corrup. Resist
+                - generic [ref=e2393]: "19"
+              - generic [ref=e2394]:
+                - generic [ref=e2395]: Physical Resist
+                - generic [ref=e2397]: "10"
+          - generic [ref=e2398]:
+            - generic [ref=e2399]:
+              - generic [ref=e2400]:
+                - generic [ref=e2401]: See Invis Undead
+                - generic [ref=e2402]: "Yes"
+              - generic [ref=e2403]:
+                - generic [ref=e2404]: Show Name
+                - generic [ref=e2405]: "Yes"
+              - generic [ref=e2406]:
+                - generic [ref=e2407]: Trackable
+                - generic [ref=e2408]: "Yes"
+              - generic [ref=e2409]:
+                - generic [ref=e2410]: Quest NPC
+                - generic [ref=e2411]: "Yes"
+            - generic [ref=e2413]:
+              - generic [ref=e2414]:
+                - generic [ref=e2415]: Min Damage
+                - generic [ref=e2417]: "12"
+              - generic [ref=e2418]:
+                - generic [ref=e2419]: Max Damage
+                - generic [ref=e2421]: "64"
+              - generic [ref=e2422]:
+                - generic [ref=e2423]: Attack Delay
+                - generic [ref=e2425]: "30"
+              - generic [ref=e2426]:
+                - generic [ref=e2427]: Attack Speed
+                - generic [ref=e2429]: "-7"
+        - generic [ref=e2430]:
+          - generic [ref=e2431]: This NPC has the following special abilities (2)
+          - list [ref=e2432]:
+            - listitem [ref=e2433]: Magical (10)
+            - listitem [ref=e2434]: Uncharmable (14)
+  - text: 
