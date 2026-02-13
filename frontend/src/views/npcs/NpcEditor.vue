@@ -1103,7 +1103,6 @@ export default {
           "npc_spells_id",
           "npc_spells_effects_id",
           "merchant_id",
-          "emoteid",
           "special_abilities",
           "loottable_id",
           "alt_currency_id",
