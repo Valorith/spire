@@ -982,27 +982,28 @@ export default {
 }
 
 .linked-npcs-strip {
-  padding: 6px 12px;
+  padding: 8px 12px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  background: rgba(144, 202, 249, 0.04);
-  border: 1px solid rgba(144, 202, 249, 0.1);
+  gap: 5px;
+  background: rgba(30, 40, 60, 0.8);
+  border: 1px solid rgba(144, 202, 249, 0.25);
   border-radius: 4px;
 }
 .npc-tag {
   display: inline-block;
-  padding: 1px 8px;
-  font-size: 0.78em;
-  background: rgba(144, 202, 249, 0.1);
+  padding: 2px 10px;
+  font-size: 0.82em;
+  background: rgba(144, 202, 249, 0.15);
   color: #90caf9;
+  border: 1px solid rgba(144, 202, 249, 0.2);
   border-radius: 3px;
   text-decoration: none;
   transition: background 0.15s;
 }
 .npc-tag:hover {
-  background: rgba(144, 202, 249, 0.25);
+  background: rgba(144, 202, 249, 0.3);
   color: #bbdefb;
   text-decoration: none;
 }
