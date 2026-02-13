@@ -365,12 +365,12 @@ export default {
             routes: ['npc-spells']
           },
           // {
-          //   title: "Loot",
-          //   to: ROUTE.LOOT,
-          //   icon: "ra ra-sword mr-1",
-          //   isAlpha: true,
-          //   routes: ['loot']
-          // },
+          {
+            title: "Loot",
+            to: ROUTE.LOOT,
+            icon: "fa fa-gem mr-1",
+            routes: ['loot']
+          },
         ]
       },
       adminNavs: [
