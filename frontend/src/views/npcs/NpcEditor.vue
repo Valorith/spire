@@ -172,6 +172,37 @@
                       </div>
                     </div>
                   </div>
+                  <!-- Template controls (General tab only) -->
+                  <div v-if="tab.name === 'General'" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center">
+                      <small class="font-weight-bold text-uppercase mr-2" style="opacity:.6; letter-spacing:1px;">
+                        <i class="fa fa-copy mr-1"></i> Templates
+                      </small>
+                      <select v-model="selectedTemplate" class="form-control form-control-sm" style="max-width: 180px;">
+                        <option value="">-- Load Template --</option>
+                        <optgroup label="Built-in">
+                          <option value="builtin:warrior">Generic Warrior</option>
+                          <option value="builtin:caster">Caster Boss</option>
+                          <option value="builtin:merchant">Merchant NPC</option>
+                          <option value="builtin:quest">Quest NPC</option>
+                        </optgroup>
+                        <optgroup label="Custom" v-if="customTemplates.length > 0">
+                          <option v-for="t in customTemplates" :key="t.name" :value="'custom:'+t.name">{{ t.name }}</option>
+                        </optgroup>
+                      </select>
+                      <b-button size="sm" variant="outline-info" class="ml-2" @click="loadTemplate()" :disabled="!selectedTemplate">
+                        <i class="fa fa-download"></i>
+                      </b-button>
+                      <b-button size="sm" variant="outline-success" class="ml-1" @click="saveAsTemplate()">
+                        <i class="fa fa-save"></i> Save as Template
+                      </b-button>
+                      <b-button size="sm" variant="outline-danger" class="ml-1"
+                        v-if="selectedTemplate && selectedTemplate.startsWith('custom:')"
+                        @click="deleteTemplate()">
+                        <i class="fa fa-trash"></i>
+                      </b-button>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="col-12" v-else>
@@ -327,33 +358,6 @@
           </eq-tabs>
 
           <div class="text-center align-content-center mt-4" v-if="npc && npc.id >= 0">
-
-            <!-- Template System -->
-            <div class="mb-3 d-flex align-items-center justify-content-center">
-              <select v-model="selectedTemplate" class="form-control form-control-sm" style="max-width: 220px;">
-                <option value="">Load Template...</option>
-                <optgroup label="Built-in">
-                  <option value="builtin:warrior">Generic Warrior</option>
-                  <option value="builtin:caster">Caster Boss</option>
-                  <option value="builtin:merchant">Merchant NPC</option>
-                  <option value="builtin:quest">Quest NPC</option>
-                </optgroup>
-                <optgroup label="Custom" v-if="customTemplates.length > 0">
-                  <option v-for="t in customTemplates" :key="t.name" :value="'custom:'+t.name">{{ t.name }}</option>
-                </optgroup>
-              </select>
-              <b-button size="sm" variant="outline-info" class="ml-2" @click="loadTemplate()" :disabled="!selectedTemplate">
-                <i class="fa fa-download"></i> Load
-              </b-button>
-              <b-button size="sm" variant="outline-success" class="ml-1" @click="saveAsTemplate()">
-                <i class="fa fa-save"></i> Save As
-              </b-button>
-              <b-button size="sm" variant="outline-danger" class="ml-1"
-                v-if="selectedTemplate && selectedTemplate.startsWith('custom:')"
-                @click="deleteTemplate()">
-                <i class="fa fa-trash"></i>
-              </b-button>
-            </div>
 
             <!-- Reset to Original -->
             <b-button
@@ -682,6 +686,8 @@ export default {
     this.modifiedFieldInterval = setInterval(() => {
       const els = document.querySelectorAll('.pulsate-highlight-modified');
       this.modifiedFieldCount = els ? els.length : 0;
+      // Update tab dirty state (red tab labels)
+      this.updateTabDirtyState();
     }, 500);
 
     this.loadCustomTemplates();
@@ -830,6 +836,29 @@ export default {
       setTimeout(() => {
         this.notification = ""
       }, 5000)
+    },
+
+    updateTabDirtyState() {
+      const tabContainer = document.querySelector('#npc-edit-card');
+      if (!tabContainer) return;
+      const tabLinks = tabContainer.querySelectorAll('.nav-link, .eq-tab-link, li');
+      tabLinks.forEach(link => {
+        const tabName = (link.textContent || '').trim();
+        const tab = this.tabs.find(t => t.name === tabName);
+        if (!tab) return;
+        const fields = tab.fields || [];
+        const gridFields = (tab.gridRows || []).flatMap(r => r.fields || []);
+        const allFields = [...fields, ...gridFields];
+        const hasModified = allFields.some(f => {
+          const el = document.getElementById(f.field);
+          return el && el.classList.contains('pulsate-highlight-modified');
+        });
+        if (hasModified) {
+          link.style.color = '#dc3545';
+        } else {
+          link.style.color = '';
+        }
+      });
     },
 
     updateArmorTintHex() {
