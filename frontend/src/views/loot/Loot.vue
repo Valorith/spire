@@ -100,7 +100,7 @@
                   <h5 class="mb-0 mr-3" style="color: #ffd54f;">
                     <i class="fa fa-gem mr-2"></i>{{ editTable.name || '(unnamed)' }}
                   </h5>
-                  <span class="badge badge-dark mr-2">ID: {{ editTable.id }}</span>
+                  <span class="badge mr-2" style="background: rgba(255,255,255,0.12); color: #fff;">ID: {{ editTable.id }}</span>
                   <span
                     v-if="getItemCount(selectedTable) > 0"
                     class="badge mr-2"
