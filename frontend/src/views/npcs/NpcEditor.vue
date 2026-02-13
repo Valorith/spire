@@ -112,7 +112,39 @@
                   </div>
                 </div>
 
-                <div class="col-12" v-if="tab.gridRows">
+                <!-- Settings tab: compact panel layout -->
+                <div class="col-12" v-if="tab.name === 'Settings' && tab.settingsPanels">
+                  <div class="row">
+                    <div
+                      v-for="(panel, pi) in tab.settingsPanels"
+                      :key="'sp-'+pi"
+                      :class="panel.col || 'col-6'"
+                      class="mb-2"
+                    >
+                      <div class="settings-panel">
+                        <div class="settings-panel-header">{{ panel.title }}</div>
+                        <div class="settings-panel-body">
+                          <div
+                            v-for="(sf, si) in panel.fields"
+                            :key="'sf-'+pi+'-'+si"
+                            class="settings-field"
+                          >
+                            <eq-checkbox
+                              class="d-inline-block"
+                              :true-value="1"
+                              :false-value="0"
+                              v-model.number="npc[sf.field]"
+                              @input="npc[sf.field] = $event; setFieldModifiedById(sf.field)"
+                            />
+                            <span class="settings-field-label">{{ sf.desc }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12" v-if="tab.gridRows && !tab.settingsPanels">
                   <div v-for="(row, ri) in tab.gridRows" :key="'gr-'+ri">
                     <div v-if="row.header" class="mt-3 mb-1">
                       <small class="font-weight-bold text-uppercase" style="opacity:.6; letter-spacing:1px;">{{ row.header }}</small>
@@ -919,7 +951,8 @@ export default {
         if (!tab) return;
         const fields = tab.fields || [];
         const gridFields = (tab.gridRows || []).flatMap(r => r.fields || []);
-        const allFields = [...fields, ...gridFields];
+        const panelFields = (tab.settingsPanels || []).flatMap(p => p.fields || []);
+        const allFields = [...fields, ...gridFields, ...panelFields];
         const hasModified = allFields.some(f => {
           const el = document.getElementById(f.field);
           return el && el.classList.contains('pulsate-highlight-modified');
@@ -1579,50 +1612,42 @@ export default {
             { desc: "Is Parcel Merchant", field: "is_parcel_merchant", fType: "checkbox" },
             { desc: "Multiquest Enabled", field: "multiquest_enabled", fType: "checkbox" },
           ],
-          gridRows: [
-            // --- Detection ---
-            { header: 'Detection', fields: [
-              { desc: 'See Hide', field: 'see_hide', fType: 'checkbox', col: 'col-3' },
-              { desc: 'See Improved Hide', field: 'see_improved_hide', fType: 'checkbox', col: 'col-3' },
-              { desc: 'See Invisible', field: 'see_invis', fType: 'checkbox', col: 'col-3' },
-              { desc: 'See Invis Undead', field: 'see_invis_undead', fType: 'checkbox', col: 'col-3' },
+          settingsPanels: [
+            { title: 'Perception', col: 'col-6', fields: [
+              { desc: 'See Hide', field: 'see_hide' },
+              { desc: 'See Improved Hide', field: 'see_improved_hide' },
+              { desc: 'See Invisible', field: 'see_invis' },
+              { desc: 'See Invis Undead', field: 'see_invis_undead' },
             ]},
-            // --- Aggro & Combat ---
-            { header: 'Aggro & Combat', fields: [
-              { desc: 'Always Aggro', field: 'always_aggro', fType: 'checkbox', col: 'col-3' },
-              { desc: 'NPC Aggro', field: 'npc_aggro', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Raid Target', field: 'raid_target', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Private Corpse', field: 'private_corpse', fType: 'checkbox', col: 'col-3' },
+            { title: 'Aggro', col: 'col-6', fields: [
+              { desc: 'Always Aggro', field: 'always_aggro' },
+              { desc: 'NPC Aggro', field: 'npc_aggro' },
+              { desc: 'Raid Target', field: 'raid_target' },
+              { desc: 'Private Corpse', field: 'private_corpse' },
             ]},
-            // --- Targeting & Visibility ---
-            { header: 'Targeting & Visibility', fields: [
-              { desc: 'Show Name', field: 'show_name', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Findable', field: 'findable', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Trackable', field: 'trackable', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Untargetable', field: 'untargetable', fType: 'checkbox', col: 'col-3' },
+            { title: 'Targeting', col: 'col-6', fields: [
+              { desc: 'Show Name', field: 'show_name' },
+              { desc: 'Findable', field: 'findable' },
+              { desc: 'Trackable', field: 'trackable' },
+              { desc: 'Untargetable', field: 'untargetable' },
+              { desc: 'No Target Hotkey', field: 'no_target_hotkey' },
             ]},
-            { fields: [
-              { desc: 'No Target Hotkey', field: 'no_target_hotkey', fType: 'checkbox', col: 'col-3' },
+            { title: 'Spawn', col: 'col-6', fields: [
+              { desc: 'Unique Spawn', field: 'unique_spawn_by_name' },
+              { desc: 'Rare Spawn', field: 'rare_spawn' },
+              { desc: 'Ignore Despawn', field: 'ignore_despawn' },
+              { desc: 'Underwater', field: 'underwater' },
             ]},
-            // --- Spawn & Behavior ---
-            { header: 'Spawn & Behavior', fields: [
-              { desc: 'Unique Spawn', field: 'unique_spawn_by_name', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Rare Spawn', field: 'rare_spawn', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Ignore Despawn', field: 'ignore_despawn', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Underwater', field: 'underwater', fType: 'checkbox', col: 'col-3' },
+            { title: 'Quest & Loot', col: 'col-6', fields: [
+              { desc: 'Quest NPC', field: 'isquest' },
+              { desc: 'QGlobal', field: 'qglobal' },
+              { desc: 'Skip Global Loot', field: 'skip_global_loot' },
+              { desc: 'Multiquest Enabled', field: 'multiquest_enabled' },
             ]},
-            // --- Quest & Loot ---
-            { header: 'Quest & Loot', fields: [
-              { desc: 'Quest NPC', field: 'isquest', fType: 'checkbox', col: 'col-3' },
-              { desc: 'QGlobal', field: 'qglobal', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Skip Global Loot', field: 'skip_global_loot', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Multiquest Enabled', field: 'multiquest_enabled', fType: 'checkbox', col: 'col-3' },
-            ]},
-            // --- Merchant ---
-            { header: 'Merchant', fields: [
-              { desc: 'Keeps Sold Items', field: 'keeps_sold_items', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Is Parcel Merchant', field: 'is_parcel_merchant', fType: 'checkbox', col: 'col-3' },
-              { desc: 'Is Bot', field: 'isbot', fType: 'checkbox', col: 'col-3' },
+            { title: 'Merchant & Bot', col: 'col-6', fields: [
+              { desc: 'Keeps Sold Items', field: 'keeps_sold_items' },
+              { desc: 'Is Parcel Merchant', field: 'is_parcel_merchant' },
+              { desc: 'Is Bot', field: 'isbot' },
             ]},
           ],
         },
@@ -1708,5 +1733,39 @@ export default {
 @keyframes save-glow-pulse {
   0%, 100% { box-shadow: 0 0 8px 2px rgba(255, 50, 50, 0.6); }
   50% { box-shadow: 0 0 14px 4px rgba(255, 50, 50, 0.9); }
+}
+
+.settings-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.settings-panel-header {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 5px 10px;
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-panel-body {
+  padding: 6px 10px;
+}
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.settings-field-label {
+  font-size: 0.85em;
+  margin-left: 4px;
+  opacity: 0.8;
 }
 </style>
