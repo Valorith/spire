@@ -1032,7 +1032,7 @@ export default {
 }
 
 .lootdrop-card {
-  border: 1px solid rgba(144, 202, 249, 0.2);
+  border: 2px solid rgba(144, 202, 249, 0.35);
   border-radius: 6px;
   margin: 10px 8px;
   overflow: hidden;
