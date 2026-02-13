@@ -18,15 +18,14 @@
               </span>
             </div>
           </div>
-          <a
-            :href="'#/loot?loottableId=' + currentLoottable.id"
-            target="_blank"
+          <button
+            @click="openFullEditor"
             class="btn btn-sm btn-outline-info ml-2"
             title="Open in full Loot Editor"
             style="white-space: nowrap;"
           >
             <i class="fa fa-external-link-alt mr-1"></i> Full Editor
-          </a>
+          </button>
         </div>
         <hr class="my-2" style="border-color: rgba(255,255,255,0.1);">
       </div>
@@ -190,6 +189,10 @@ export default {
     }
   },
   methods: {
+    openFullEditor() {
+      const url = window.location.origin + window.location.pathname + '#/loot?loottableId=' + this.currentLoottable.id;
+      window.open(url, '_blank');
+    },
     async loadLoottable(id) {
       this.loading = true;
       try {
