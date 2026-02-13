@@ -359,26 +359,26 @@
 
           <div class="text-center align-content-center mt-4" v-if="npc && npc.id >= 0">
 
-            <!-- Reset to Original -->
-            <b-button
-              v-if="modifiedFieldCount > 0"
-              @click="resetToOriginal()"
-              size="sm"
-              variant="outline-secondary"
-              class="mr-2"
-            >
-              <i class="fa fa-undo"></i>
-              Reset to Original
-            </b-button>
-
             <b-button
               @click="saveNpc()"
               size="sm"
               variant="outline-warning"
               :class="{ 'save-btn-glow': modifiedFieldCount > 0 }"
+              class="mr-2"
             >
               <i class="ra ra-book"></i>
               Save NPC
+            </b-button>
+
+            <!-- Reset to Original -->
+            <b-button
+              v-if="modifiedFieldCount > 0"
+              @click="resetToOriginal()"
+              size="sm"
+              variant="outline-danger"
+            >
+              <i class="fa fa-undo"></i>
+              Reset to Original
             </b-button>
 
           </div>
@@ -476,6 +476,28 @@
           :spells-id="npc ? npc.npc_spells_id : 0"
           @input="(val) => { npc.npc_spells_id = val; setFieldModifiedById('npc_spells_id'); }"
         />
+
+        <spells-sub-editor
+          v-if="selectorActive['npc_spells_effects_id']"
+          :spells-id="npc ? npc.npc_spells_effects_id : 0"
+          @input="(val) => { npc.npc_spells_effects_id = val; setFieldModifiedById('npc_spells_effects_id'); }"
+        />
+
+        <eq-window
+          v-if="selectorActive['alt_currency_id']"
+          title="Alternate Currency Selector"
+        >
+          <div class="p-2">
+            <p class="small" style="opacity:.7;">Enter the alternate currency ID this NPC uses for merchant transactions.</p>
+            <b-form-input
+              v-model.number="npc.alt_currency_id"
+              size="sm"
+              type="number"
+              placeholder="Currency ID"
+              @input="setFieldModifiedById('alt_currency_id')"
+            />
+          </div>
+        </eq-window>
 
       </div>
     </div>
@@ -841,9 +863,11 @@ export default {
     updateTabDirtyState() {
       const tabContainer = document.querySelector('#npc-edit-card');
       if (!tabContainer) return;
-      const tabLinks = tabContainer.querySelectorAll('.nav-link, .eq-tab-link, li');
-      tabLinks.forEach(link => {
-        const tabName = (link.textContent || '').trim();
+      const tabListItems = tabContainer.querySelectorAll('.eq-tab-box-fancy li');
+      tabListItems.forEach(li => {
+        const anchor = li.querySelector('a');
+        if (!anchor) return;
+        const tabName = (anchor.textContent || '').trim();
         const tab = this.tabs.find(t => t.name === tabName);
         if (!tab) return;
         const fields = tab.fields || [];
@@ -854,9 +878,9 @@ export default {
           return el && el.classList.contains('pulsate-highlight-modified');
         });
         if (hasModified) {
-          link.style.color = '#dc3545';
+          anchor.style.setProperty('color', '#dc3545', 'important');
         } else {
-          link.style.color = '';
+          anchor.style.setProperty('color', 'white', 'important');
         }
       });
     },
@@ -1096,9 +1120,9 @@ export default {
             { desc: "Run Speed", field: "runspeed", fType: "text" },
             { desc: "Loottable ID", field: "loottable_id", fType: "text", e: { onclick: this.setSelectorActive } },
             { desc: "Merchant ID", field: "merchant_id", fType: "text", e: { onclick: this.setSelectorActive } },
-            { desc: "Alternate Currency ID", field: "alt_currency_id", fType: "text" },
+            { desc: "Alternate Currency ID", field: "alt_currency_id", fType: "text", e: { onclick: this.setSelectorActive } },
             { desc: "NPC Spells ID", field: "npc_spells_id", fType: "text", e: { onclick: this.setSelectorActive } },
-            { desc: "NPC Spell Effects ID", field: "npc_spells_effects_id", fType: "text" },
+            { desc: "NPC Spell Effects ID", field: "npc_spells_effects_id", fType: "text", e: { onclick: this.setSelectorActive } },
             { desc: "NPC Faction ID", field: "npc_faction_id", fType: "text", e: { onclick: this.setSelectorActive } },
             { desc: "Faction Amount", field: "faction_amount", fType: "text" },
             { desc: "Adventure Template Id", field: "adventure_template_id", fType: "text" },
@@ -1128,11 +1152,11 @@ export default {
               { desc: 'Merchant ID', field: 'merchant_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
             ]},
             { fields: [
-              { desc: 'Alt Currency ID', field: 'alt_currency_id', fType: 'text', col: 'col-6' },
+              { desc: 'Alt Currency ID', field: 'alt_currency_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
               { desc: 'NPC Spells ID', field: 'npc_spells_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
             ]},
             { fields: [
-              { desc: 'NPC Spell Effects ID', field: 'npc_spells_effects_id', fType: 'text', col: 'col-6' },
+              { desc: 'NPC Spell Effects ID', field: 'npc_spells_effects_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
               { desc: 'NPC Faction ID', field: 'npc_faction_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
             ]},
             { fields: [
@@ -1171,7 +1195,21 @@ export default {
             { desc: "Secondary Melee Type", field: "sec_melee_type", fType: "select", selectData: DB_SKILLS },
             { desc: "Ranged Melee Type", field: "ranged_type", fType: "select", selectData: DB_SKILLS },
             { desc: "Ammo Weapon Model", field: "ammo_idfile", fType: "text", e: { onclick: this.setSelectorActive } },
-          ]
+          ],
+          gridRows: [
+            { header: 'Primary Weapon', fields: [
+              { desc: 'Model', field: 'd_melee_texture_1', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
+              { desc: 'Melee Type', field: 'prim_melee_type', selectData: DB_SKILLS, col: 'col-6' },
+            ]},
+            { header: 'Secondary Weapon', fields: [
+              { desc: 'Model', field: 'd_melee_texture_2', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
+              { desc: 'Melee Type', field: 'sec_melee_type', selectData: DB_SKILLS, col: 'col-6' },
+            ]},
+            { header: 'Ranged', fields: [
+              { desc: 'Ranged Type', field: 'ranged_type', selectData: DB_SKILLS, col: 'col-6' },
+              { desc: 'Ammo Model', field: 'ammo_idfile', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
+            ]},
+          ],
         },
         {
           name: 'Aggro',
@@ -1181,7 +1219,17 @@ export default {
 
             { desc: "Aggro Radius", field: "aggroradius", fType: "text", rangeSlider: true, e: { onclick: () => this.drawRangeVisualizer("aggroradius") } },
             { desc: "Assist Radius", field: "assistradius", fType: "text", rangeSlider: true, e: { onclick: () => this.drawRangeVisualizer("assistradius") } },
-          ]
+          ],
+          gridRows: [
+            { fields: [
+              { desc: 'Always Aggro', field: 'always_aggro', fType: 'checkbox', col: 'col-6' },
+              { desc: 'NPC Aggro', field: 'npc_aggro', fType: 'checkbox', col: 'col-6' },
+            ]},
+            { fields: [
+              { desc: 'Aggro Radius', field: 'aggroradius', fType: 'text', col: 'col-6' },
+              { desc: 'Assist Radius', field: 'assistradius', fType: 'text', col: 'col-6' },
+            ]},
+          ],
         },
         {
           name: 'Appearance',
@@ -1204,24 +1252,27 @@ export default {
             { desc: "Helm Texture", field: "helmtexture", fType: "select", selectData: DB_ITEM_MATERIAL, e: { onmouseover: this.setSelectorActive } },
             { desc: "Heros Forge Model", field: "herosforgemodel", fType: "text" },
             { desc: "Size", field: "size", fType: "text" },
-            { desc: "Light Level (NPC glow radius)", field: "light", fType: "text", selectData: [
-              { value: 0, text: "0 - None" },
-              { value: 1, text: "1 - Candle" },
-              { value: 2, text: "2 - Torch" },
-              { value: 3, text: "3 - Tiny Glowing Skull" },
-              { value: 4, text: "4 - Small Lantern" },
-              { value: 5, text: "5 - Stein of Moggok" },
-              { value: 6, text: "6 - Large Lantern" },
-              { value: 7, text: "7 - Flameless Lantern" },
-              { value: 8, text: "8 - Globe of Stars" },
-              { value: 9, text: "9 - Light Globe" },
-              { value: 10, text: "10 - Lightstone" },
-              { value: 11, text: "11 - Greater Lightstone" },
-              { value: 12, text: "12 - Fire Beetle Eye" },
-              { value: 13, text: "13 - Large Fire Beetle Eye" },
-            ] },
+            { desc: "Light", field: "light", selectData: {0: "None", 1: "Candle", 2: "Torch", 3: "Tiny Glowing Skull", 4: "Small Lantern", 5: "Stein of Moggok", 6: "Large Lantern", 7: "Flameless Lantern", 8: "Globe of Stars", 9: "Light Globe", 10: "Lightstone", 11: "Greater Lightstone", 12: "Fire Beetle Eye", 13: "Large Fire Beetle Eye"} },
             { desc: "Model?", field: "model", fType: "text" },
-          ]
+          ],
+          gridRows: [
+            { fields: [
+              { desc: 'Race', field: 'race', selectData: DB_RACE_NAMES, col: 'col-6', e: { onmouseover: this.setSelectorActive } },
+              { desc: 'Gender', field: 'gender', selectData: GENDER, col: 'col-6', e: { onmouseover: this.setSelectorActive } },
+            ]},
+            { fields: [
+              { desc: 'Texture', field: 'texture', selectData: DB_ITEM_MATERIAL, col: 'col-6', e: { onmouseover: this.setSelectorActive } },
+              { desc: 'Helm Texture', field: 'helmtexture', selectData: DB_ITEM_MATERIAL, col: 'col-6', e: { onmouseover: this.setSelectorActive } },
+            ]},
+            { fields: [
+              { desc: 'Heros Forge Model', field: 'herosforgemodel', fType: 'text', col: 'col-6' },
+              { desc: 'Size', field: 'size', fType: 'text', col: 'col-6' },
+            ]},
+            { fields: [
+              { desc: 'Light', field: 'light', col: 'col-6', selectData: {0: "None", 1: "Candle", 2: "Torch", 3: "Tiny Glowing Skull", 4: "Small Lantern", 5: "Stein of Moggok", 6: "Large Lantern", 7: "Flameless Lantern", 8: "Globe of Stars", 9: "Light Globe", 10: "Lightstone", 11: "Greater Lightstone", 12: "Fire Beetle Eye", 13: "Large Fire Beetle Eye"} },
+              { desc: 'Model', field: 'model', fType: 'text', col: 'col-6' },
+            ]},
+          ],
         },
         {
           name: 'Armor',
@@ -1238,7 +1289,30 @@ export default {
             { desc: "Hand Texture", field: "handtexture", fType: "text" },
             { desc: "Leg Texture", field: "legtexture", fType: "text" },
             { desc: "Feet Texture", field: "feettexture", fType: "text" },
-          ]
+          ],
+          gridRows: [
+            { header: 'Armor Tint', fields: [
+              { desc: 'Tint ID', field: 'armortint_id', fType: 'text', col: 'col-6' },
+              { desc: 'NPC Tint ID', field: 'npc_tint_id', fType: 'text', col: 'col-6' },
+            ]},
+            { fields: [
+              { desc: 'Red', field: 'armortint_red', fType: 'text', col: 'col-4' },
+              { desc: 'Green', field: 'armortint_green', fType: 'text', col: 'col-4' },
+              { desc: 'Blue', field: 'armortint_blue', fType: 'text', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Color Preview', field: '_armor_color_picker', fType: 'color_picker', col: 'col-12' },
+            ]},
+            { header: 'Textures', fields: [
+              { desc: 'Arm', field: 'armtexture', fType: 'text', col: 'col-4' },
+              { desc: 'Bracer', field: 'bracertexture', fType: 'text', col: 'col-4' },
+              { desc: 'Hand', field: 'handtexture', fType: 'text', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Leg', field: 'legtexture', fType: 'text', col: 'col-4' },
+              { desc: 'Feet', field: 'feettexture', fType: 'text', col: 'col-4' },
+            ]},
+          ],
         },
         {
           name: 'Face',
@@ -1263,7 +1337,27 @@ export default {
             { desc: "(Drakkin) Heritage", field: "drakkin_heritage", fType: "text", showIf: (npc) => npc && npc.race === 522 },
             { desc: "(Drakkin) Tattoo", field: "drakkin_tattoo", fType: "text", showIf: (npc) => npc && npc.race === 522 },
             { desc: "(Drakkin) Details", field: "drakkin_details", fType: "text", showIf: (npc) => npc && npc.race === 522 },
-          ]
+          ],
+          gridRows: [
+            { fields: [
+              { desc: 'Face', field: 'face', fType: 'text', col: 'col-4', e: { onmouseover: this.setSelectorActive } },
+              { desc: 'Hairstyle', field: 'luclin_hairstyle', fType: 'text', col: 'col-4', e: { onmouseover: this.setSelectorActive } },
+              { desc: 'Haircolor', field: 'luclin_haircolor', fType: 'text', col: 'col-4', e: { onmouseover: this.setSelectorActive } },
+            ]},
+            { fields: [
+              { desc: 'Eyecolor 1', field: 'luclin_eyecolor', fType: 'text', col: 'col-4', e: { onmouseover: this.setSelectorActive } },
+              { desc: 'Eyecolor 2', field: 'luclin_eyecolor_2', fType: 'text', col: 'col-4', e: { onmouseover: this.setSelectorActive } },
+            ]},
+            { fields: [
+              { desc: 'Beardcolor', field: 'luclin_beardcolor', fType: 'text', col: 'col-4', e: { onmouseover: this.setSelectorActive } },
+              { desc: 'Beard', field: 'luclin_beard', fType: 'text', col: 'col-4', e: { onmouseover: this.setSelectorActive } },
+            ]},
+            { header: 'Drakkin Only', fields: [
+              { desc: 'Heritage', field: 'drakkin_heritage', fType: 'text', col: 'col-4', showIf: (npc) => npc && npc.race === 522 },
+              { desc: 'Tattoo', field: 'drakkin_tattoo', fType: 'text', col: 'col-4', showIf: (npc) => npc && npc.race === 522 },
+              { desc: 'Details', field: 'drakkin_details', fType: 'text', col: 'col-4', showIf: (npc) => npc && npc.race === 522 },
+            ]},
+          ],
         },
         {
           name: 'Stats',
@@ -1291,7 +1385,7 @@ export default {
             { desc: "Disease Resist", field: "dr", fType: "text", resistColor: "#44cc44" },
             { desc: "Poison Resist", field: "pr", fType: "text", resistColor: "#bb66ff" },
             { desc: "Corruption Resist", field: "corrup", fType: "text", resistColor: "#888888" },
-            { desc: "Physical Resist", field: "ph_r", fType: "text", resistColor: "#ffcc44" },
+            { desc: "Physical", field: "ph_r", fType: "text", resistColor: "#ffcc44" },
           ],
           gridRows: [
             { header: 'Vitals', fields: [
@@ -1332,7 +1426,7 @@ export default {
             { fields: [
               { desc: 'PR', field: 'pr', fType: 'text', col: 'col-3', resistColor: '#bb66ff' },
               { desc: 'Corruption', field: 'corrup', fType: 'text', col: 'col-3', resistColor: '#888888' },
-              { desc: 'PhR', field: 'ph_r', fType: 'text', col: 'col-3', resistColor: '#ffcc44' },
+              { desc: 'Physical', field: 'ph_r', fType: 'text', col: 'col-3', resistColor: '#ffcc44' },
             ]},
           ],
         },
@@ -1358,7 +1452,28 @@ export default {
               col: 'col-12',
               e: { onclick: this.setSelectorActive },
             },
-          ]
+          ],
+          gridRows: [
+            { header: 'Damage', fields: [
+              { desc: 'Min Damage', field: 'mindmg', fType: 'text', col: 'col-4' },
+              { desc: 'Max Damage', field: 'maxdmg', fType: 'text', col: 'col-4' },
+              { desc: 'Attack Count', field: 'attack_count', fType: 'text', col: 'col-4' },
+            ]},
+            { header: 'Speed & Power', fields: [
+              { desc: 'Attack Speed', field: 'attack_speed', fType: 'text', col: 'col-4' },
+              { desc: 'Attack Delay', field: 'attack_delay', fType: 'text', col: 'col-4' },
+              { desc: 'Attack', field: 'atk', fType: 'text', col: 'col-4' },
+            ]},
+            { header: 'Modifiers', fields: [
+              { desc: 'Accuracy', field: 'accuracy', fType: 'text', col: 'col-3' },
+              { desc: 'Avoidance', field: 'avoidance', fType: 'text', col: 'col-3' },
+              { desc: 'Slow Mitigation', field: 'slow_mitigation', fType: 'text', col: 'col-3' },
+              { desc: 'Heroic Strikethrough', field: 'heroic_strikethrough', fType: 'text', col: 'col-3' },
+            ]},
+            { header: 'Special Abilities', fields: [
+              { desc: 'Special Abilities', field: 'special_abilities', fType: 'textarea', col: 'col-12', e: { onclick: this.setSelectorActive } },
+            ]},
+          ],
         },
         {
           name: 'Charm',
@@ -1370,7 +1485,22 @@ export default {
             { desc: "Accuracy Rating", field: "charm_accuracy_rating", fType: "text" },
             { desc: "Avoidance Rating", field: "charm_avoidance_rating", fType: "text" },
             { desc: "Attack", field: "charm_atk", fType: "text" },
-          ]
+          ],
+          gridRows: [
+            { fields: [
+              { desc: 'AC', field: 'charm_ac', fType: 'text', col: 'col-4' },
+              { desc: 'Attack', field: 'charm_atk', fType: 'text', col: 'col-4' },
+              { desc: 'Attack Delay', field: 'charm_attack_delay', fType: 'text', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Min Damage', field: 'charm_min_dmg', fType: 'text', col: 'col-6' },
+              { desc: 'Max Damage', field: 'charm_max_dmg', fType: 'text', col: 'col-6' },
+            ]},
+            { fields: [
+              { desc: 'Accuracy Rating', field: 'charm_accuracy_rating', fType: 'text', col: 'col-6' },
+              { desc: 'Avoidance Rating', field: 'charm_avoidance_rating', fType: 'text', col: 'col-6' },
+            ]},
+          ],
         },
         {
           name: 'Settings',
@@ -1440,6 +1570,35 @@ export default {
               { desc: 'Keeps Sold Items', field: 'keeps_sold_items', fType: 'checkbox', col: 'col-4' },
               { desc: 'Is Parcel Merchant', field: 'is_parcel_merchant', fType: 'checkbox', col: 'col-4' },
               { desc: 'Multiquest Enabled', field: 'multiquest_enabled', fType: 'checkbox', col: 'col-4' },
+            ]},
+          ],
+        },
+        {
+          name: 'Misc',
+          fields: [
+            { desc: "Spawn Limit", field: "spawn_limit", fType: "text" },
+            { desc: "Version", field: "version", fType: "text" },
+            { desc: "Exclude", field: "exclude", fType: "checkbox" },
+            { desc: "Fixed", field: "fixed", fType: "checkbox" },
+            { desc: "Greed", field: "greed", fType: "text" },
+            { desc: "Unique", field: "unique_", fType: "checkbox" },
+            { desc: "NPC Special Attacks (Legacy)", field: "npcspecialattks", fType: "text" },
+            { desc: "PEQ ID", field: "peqid", fType: "text" },
+          ],
+          gridRows: [
+            { fields: [
+              { desc: 'Spawn Limit', field: 'spawn_limit', fType: 'text', col: 'col-4' },
+              { desc: 'Version', field: 'version', fType: 'text', col: 'col-4' },
+              { desc: 'Greed', field: 'greed', fType: 'text', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Exclude', field: 'exclude', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Fixed', field: 'fixed', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Unique', field: 'unique_', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'NPC Special Attacks (Legacy)', field: 'npcspecialattks', fType: 'text', col: 'col-6' },
+              { desc: 'PEQ ID', field: 'peqid', fType: 'text', col: 'col-6' },
             ]},
           ],
         },
