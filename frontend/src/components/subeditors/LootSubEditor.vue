@@ -190,10 +190,9 @@ export default {
   },
   methods: {
     openFullEditor() {
-      const ltId = this.currentLoottable ? this.currentLoottable.id : null;
-      if (!ltId) return;
-      const url = window.location.origin + '/loot?loottableId=' + ltId;
-      window.open(url, '_blank');
+      if (!this.currentLoottable) return;
+      const route = this.$router.resolve({ path: '/loot', query: { loottableId: this.currentLoottable.id } });
+      window.open(route.href, '_blank');
     },
     async loadLoottable(id) {
       this.loading = true;
