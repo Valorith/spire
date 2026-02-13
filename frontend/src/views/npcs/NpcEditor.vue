@@ -1580,45 +1580,49 @@ export default {
             { desc: "Multiquest Enabled", field: "multiquest_enabled", fType: "checkbox" },
           ],
           gridRows: [
-            { fields: [
-              { desc: 'See Hide', field: 'see_hide', fType: 'checkbox', col: 'col-4' },
-              { desc: 'See Improved Hide', field: 'see_improved_hide', fType: 'checkbox', col: 'col-4' },
-              { desc: 'See Invisible', field: 'see_invis', fType: 'checkbox', col: 'col-4' },
+            // --- Detection ---
+            { header: 'Detection', fields: [
+              { desc: 'See Hide', field: 'see_hide', fType: 'checkbox', col: 'col-3' },
+              { desc: 'See Improved Hide', field: 'see_improved_hide', fType: 'checkbox', col: 'col-3' },
+              { desc: 'See Invisible', field: 'see_invis', fType: 'checkbox', col: 'col-3' },
+              { desc: 'See Invis Undead', field: 'see_invis_undead', fType: 'checkbox', col: 'col-3' },
+            ]},
+            // --- Aggro & Combat ---
+            { header: 'Aggro & Combat', fields: [
+              { desc: 'Always Aggro', field: 'always_aggro', fType: 'checkbox', col: 'col-3' },
+              { desc: 'NPC Aggro', field: 'npc_aggro', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Raid Target', field: 'raid_target', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Private Corpse', field: 'private_corpse', fType: 'checkbox', col: 'col-3' },
+            ]},
+            // --- Targeting & Visibility ---
+            { header: 'Targeting & Visibility', fields: [
+              { desc: 'Show Name', field: 'show_name', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Findable', field: 'findable', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Trackable', field: 'trackable', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Untargetable', field: 'untargetable', fType: 'checkbox', col: 'col-3' },
             ]},
             { fields: [
-              { desc: 'See Invis Undead', field: 'see_invis_undead', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Show Name', field: 'show_name', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Trackable', field: 'trackable', fType: 'checkbox', col: 'col-4' },
+              { desc: 'No Target Hotkey', field: 'no_target_hotkey', fType: 'checkbox', col: 'col-3' },
             ]},
-            { fields: [
-              { desc: 'Skip Global Loot', field: 'skip_global_loot', fType: 'checkbox', col: 'col-4' },
-              { desc: 'No Target Hotkey', field: 'no_target_hotkey', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Findable', field: 'findable', fType: 'checkbox', col: 'col-4' },
+            // --- Spawn & Behavior ---
+            { header: 'Spawn & Behavior', fields: [
+              { desc: 'Unique Spawn', field: 'unique_spawn_by_name', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Rare Spawn', field: 'rare_spawn', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Ignore Despawn', field: 'ignore_despawn', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Underwater', field: 'underwater', fType: 'checkbox', col: 'col-3' },
             ]},
-            { fields: [
-              { desc: 'Untargetable', field: 'untargetable', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Underwater', field: 'underwater', fType: 'checkbox', col: 'col-4' },
-              { desc: 'QGlobal', field: 'qglobal', fType: 'checkbox', col: 'col-4' },
+            // --- Quest & Loot ---
+            { header: 'Quest & Loot', fields: [
+              { desc: 'Quest NPC', field: 'isquest', fType: 'checkbox', col: 'col-3' },
+              { desc: 'QGlobal', field: 'qglobal', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Skip Global Loot', field: 'skip_global_loot', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Multiquest Enabled', field: 'multiquest_enabled', fType: 'checkbox', col: 'col-3' },
             ]},
-            { fields: [
-              { desc: 'Ignore Despawn', field: 'ignore_despawn', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Quest NPC', field: 'isquest', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Unique Spawn', field: 'unique_spawn_by_name', fType: 'checkbox', col: 'col-4' },
-            ]},
-            { fields: [
-              { desc: 'Rare Spawn', field: 'rare_spawn', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Always Aggro', field: 'always_aggro', fType: 'checkbox', col: 'col-4' },
-              { desc: 'NPC Aggro', field: 'npc_aggro', fType: 'checkbox', col: 'col-4' },
-            ]},
-            { fields: [
-              { desc: 'Raid Target', field: 'raid_target', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Private Corpse', field: 'private_corpse', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Is Bot', field: 'isbot', fType: 'checkbox', col: 'col-4' },
-            ]},
-            { fields: [
-              { desc: 'Keeps Sold Items', field: 'keeps_sold_items', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Is Parcel Merchant', field: 'is_parcel_merchant', fType: 'checkbox', col: 'col-4' },
-              { desc: 'Multiquest Enabled', field: 'multiquest_enabled', fType: 'checkbox', col: 'col-4' },
+            // --- Merchant ---
+            { header: 'Merchant', fields: [
+              { desc: 'Keeps Sold Items', field: 'keeps_sold_items', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Is Parcel Merchant', field: 'is_parcel_merchant', fType: 'checkbox', col: 'col-3' },
+              { desc: 'Is Bot', field: 'isbot', fType: 'checkbox', col: 'col-3' },
             ]},
           ],
         },
