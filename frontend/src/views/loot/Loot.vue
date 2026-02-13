@@ -1013,9 +1013,43 @@ export default {
 
     selectHighlightedItem(leIndex) {
       const le = this.editEntries[leIndex]
-      if (!le._searchResults || le._searchResults.length === 0) return
+      if (!le._searchResults || le._searchResults.length === 0) {
+        // If user hit enter before debounce fired, trigger search immediately
+        if (le._itemSearchQuery && le._itemSearchQuery.trim().length >= 2) {
+          this.searchItemsImmediate(leIndex)
+        }
+        return
+      }
       const idx = le._highlightIndex >= 0 ? le._highlightIndex : 0
       this.addSearchedItem(leIndex, le._searchResults[idx])
+    },
+
+    searchItemsImmediate(leIndex) {
+      const le = this.editEntries[leIndex]
+      const q = (le._itemSearchQuery || '').trim()
+      if (q.length < 2) return
+      le._searching = true
+      this.$forceUpdate()
+
+      const builder = new SpireQueryBuilder()
+      if (!isNaN(q) && q !== '') {
+        builder.where("id", "=", q)
+      } else {
+        builder.where("name", "like", q)
+      }
+      builder.limit(20)
+
+      const api = new ItemApi(...SpireApi.cfg())
+      api.listItems(builder.get()).then((r) => {
+        le._searchResults = (r.status === 200) ? (r.data || []) : []
+        le._highlightIndex = le._searchResults.length > 0 ? 0 : -1
+        le._searching = false
+        this.$forceUpdate()
+      }).catch(() => {
+        le._searchResults = []
+        le._searching = false
+        this.$forceUpdate()
+      })
     },
 
     async addSearchedItem(leIndex, item) {
