@@ -247,21 +247,175 @@ export default {
   opacity: 1;
 }
 
-/* Zone sidebar tab styling — fix squished tabs */
+/* ============================================
+   Zone Editor Sidebar — Visual Polish
+   All styles scoped via .zone-sidebar >>> deep
+   to avoid touching shared components
+   ============================================ */
+
+/* --- Tabs --- */
 .zone-sidebar >>> .eq-tab-box-fancy ul {
   display: flex !important;
   flex-wrap: wrap !important;
-  padding: 0 !important;
-  margin: 0 0 10px 0 !important;
+  padding: 0 4px !important;
+  margin: 0 0 6px 0 !important;
+  gap: 3px !important;
 }
 
 .zone-sidebar >>> .eq-tab-box-fancy ul li {
   flex: 0 0 auto !important;
   white-space: nowrap !important;
+  border-radius: 3px !important;
+  transition: background 0.15s ease !important;
 }
 
 .zone-sidebar >>> .eq-tab-box-fancy ul li a {
+  font-size: 11.5px !important;
+  padding: 3px 7px !important;
+  display: block !important;
+  border-radius: 3px !important;
+}
+
+.zone-sidebar >>> .eq-tab-box-fancy ul li:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.zone-sidebar >>> .eq-tab-box-fancy ul li.eq-tab-open {
+  background: rgba(255, 200, 50, 0.15) !important;
+}
+
+.zone-sidebar >>> .eq-tab-box-fancy ul li.eq-tab-open a {
+  color: #ffc832 !important;
+  font-weight: 600 !important;
+}
+
+/* --- Zone Title --- */
+.zone-sidebar >>> .eq-header {
+  font-size: 15px !important;
+  margin-bottom: 4px !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* --- NPC Table --- */
+.zone-sidebar >>> #npctable {
+  font-size: 13px !important;
+}
+
+.zone-sidebar >>> #npctable td {
+  padding: 4px 6px !important;
+  vertical-align: middle !important;
+}
+
+.zone-sidebar >>> #npctable .btn-sm {
+  padding: 2px 5px !important;
+  font-size: 11px !important;
+  margin-left: 4px !important;
+}
+
+.zone-sidebar >>> #npctable .btn-sm:first-child {
+  margin-left: 0 !important;
+}
+
+.zone-sidebar >>> #npctable th {
+  padding: 6px !important;
   font-size: 12px !important;
-  padding: 4px 8px !important;
+}
+
+/* --- Zone Tab Properties --- */
+.zone-sidebar >>> .tabs-details .row {
+  margin-bottom: 1px !important;
+  line-height: 1.4 !important;
+}
+
+.zone-sidebar >>> .tabs-details .font-weight-bold {
+  font-size: 11.5px !important;
+  color: #c0c0c0 !important;
+}
+
+.zone-sidebar >>> .tabs-details .col-6.text-right .font-weight-bold {
+  color: #999 !important;
+}
+
+.zone-sidebar >>> .tabs-details .col-6.pl-0 {
+  color: #e0e0e0 !important;
+  font-size: 12px !important;
+}
+
+/* Bool checkboxes section */
+.zone-sidebar >>> .tabs-details .col-11 .font-weight-bold {
+  font-size: 11.5px !important;
+}
+
+/* Right-side numeric values */
+.zone-sidebar >>> .tabs-details .col-1.pl-0 {
+  font-size: 12px !important;
+  color: #ffc832 !important;
+  font-weight: 600 !important;
+}
+
+/* Section spacing in Zone tab */
+.zone-sidebar >>> .tabs-details .mt-3 {
+  margin-top: 8px !important;
+}
+
+/* --- Fog Colors Panel --- */
+.zone-sidebar >>> .fog-slots {
+  display: flex !important;
+  gap: 6px !important;
+  justify-content: center !important;
+}
+
+.zone-sidebar >>> .fog-color-swatch {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.zone-sidebar >>> .fog-slot-label {
+  font-size: 10px !important;
+  text-align: center !important;
+  margin-top: 2px !important;
+}
+
+.zone-sidebar >>> .fog-slot-clip {
+  font-size: 9px !important;
+  text-align: center !important;
+  opacity: 0.6 !important;
+}
+
+/* --- Weather Table --- */
+.zone-sidebar >>> .weather-table {
+  font-size: 11px !important;
+  width: 100% !important;
+}
+
+.zone-sidebar >>> .weather-table th {
+  font-size: 10px !important;
+  padding: 3px 6px !important;
+  opacity: 0.7 !important;
+}
+
+.zone-sidebar >>> .weather-table td {
+  padding: 2px 6px !important;
+  font-size: 11px !important;
+}
+
+/* --- Scrollbar polish --- */
+.zone-sidebar >>> ::-webkit-scrollbar {
+  width: 5px !important;
+}
+
+.zone-sidebar >>> ::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.zone-sidebar >>> ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-radius: 3px !important;
+}
+
+.zone-sidebar >>> ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
 }
 </style>
