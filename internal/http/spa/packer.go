@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -112,9 +113,27 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 				return next(c)
 			}
 
+			// Packr box didn't have the file — check local filesystem as fallback
+			// This handles newly built frontend assets that aren't embedded in the binary
+			localPath := filepath.Join(s.config.LocalBasePath, fileRequest)
+			if info, statErr := os.Stat(localPath); statErr == nil && !info.IsDir() {
+				// Set cache headers for static assets
+				if contains([]string{".js", ".css", ".png", ".woff", ".ttf", ".jpg", ".gif", ".svg", ".ico"}, fileRequest) {
+					c.Response().Header().Set("Vary", "Accept-Encoding")
+					c.Response().Header().Set("Cache-Control", "public, max-age=7776000")
+				}
+				return c.File(localPath)
+			}
+
 			// If we didn't find a non-index asset at this point, we need to return the
 			// spa index when nested SPA route requests are made
 			// eg: /spa/nested/route
+			// Try local index.html first, then fall back to packr box
+			localIndex := filepath.Join(s.config.LocalBasePath, s.config.SpaIndex)
+			if _, statErr := os.Stat(localIndex); statErr == nil {
+				return c.File(localIndex)
+			}
+
 			index, err := s.box.Find(s.config.SpaIndex)
 			if err != nil {
 				s.logger.Error().Err(err).Msg("error finding spa index")
