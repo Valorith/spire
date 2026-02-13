@@ -1059,24 +1059,28 @@ export default {
       const le = this.editEntries[leIndex]
       try {
         const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
-        await ldeApi.createLootdropEntry({
-          lootdrop_id: le.lootdrop_id,
-          item_id: item.id,
-          chance: 10,
-          multiplier: 1,
-          equip_item: 0,
-          item_charges: 1,
-          npc_min_level: 0,
-          npc_max_level: 0,
-          trivial_min_level: 0,
-          trivial_max_level: 0,
+        const result = await ldeApi.createLootdropEntry({
+          lootdropEntry: {
+            lootdrop_id: le.lootdrop_id,
+            item_id: item.id,
+            chance: 10,
+            multiplier: 1,
+            equip_item: 0,
+            item_charges: 1,
+            npc_min_level: 0,
+            npc_max_level: 0,
+            trivial_min_level: 0,
+            trivial_max_level: 0,
+          }
         })
+        console.log('createLootdropEntry result:', result)
         le._addingItem = false
         le._searchResults = []
         this.showNotification('Added ' + (item.Name || item.name || 'item #' + item.id))
         await this.refreshCurrentTable()
       } catch (e) {
-        this.showNotification('Error adding item', 'error')
+        console.error('addSearchedItem error:', e, 'lootdrop_id:', le.lootdrop_id, 'item_id:', item.id)
+        this.showNotification('Error adding item: ' + (e.message || e), 'error')
       }
     },
 
