@@ -583,7 +583,7 @@ export default {
     },
 
     goToNpc(id) {
-      window.open(window.location.origin + window.location.pathname + '#/npc/' + id, '_blank')
+      this.$router.push('/npc/' + id).catch(() => {})
     },
 
     showNotification(message, type = 'success') {
