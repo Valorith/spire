@@ -368,7 +368,7 @@ export default {
           {
             title: "Loot",
             to: ROUTE.LOOT,
-            icon: "fa fa-gem mr-1",
+            icon: "ra ra-knapsack mr-1",
             routes: ['loot']
           },
         ]
