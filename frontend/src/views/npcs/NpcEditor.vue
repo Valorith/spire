@@ -164,7 +164,7 @@
                         </select>
 
                         <!-- color picker (grid) -->
-                        <div v-else-if="gf.fType === 'color_picker' && npc" class="mt-1">
+                        <div v-else-if="gf.fType === 'color_picker' && npc" class="mt-1" style="position: relative;">
                           <div class="d-flex align-items-center">
                             <div
                               @click="showColorPicker = !showColorPicker; updateArmorTintHex()"
@@ -183,8 +183,9 @@
                             v-if="showColorPicker"
                             :value="armorTintHex"
                             @input="onArmorColorPick"
-                            class="mt-2"
+                            style="position: absolute; z-index: 999; top: 40px; left: 0;"
                           />
+                          <div v-if="showColorPicker" @click="showColorPicker = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 998;"></div>
                         </div>
 
                         <!-- textarea (grid) -->
@@ -365,7 +366,7 @@
                       </select>
 
                       <!-- color picker -->
-                      <div v-if="field.fType === 'color_picker' && npc" class="mt-1">
+                      <div v-if="field.fType === 'color_picker' && npc" class="mt-1" style="position: relative;">
                         <div class="d-flex align-items-center">
                           <div
                             @click="showColorPicker = !showColorPicker; updateArmorTintHex()"
@@ -384,8 +385,9 @@
                           v-if="showColorPicker"
                           :value="armorTintHex"
                           @input="onArmorColorPick"
-                          class="mt-2"
+                          style="position: absolute; z-index: 999; top: 40px; left: 0;"
                         />
+                        <div v-if="showColorPicker" @click="showColorPicker = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 998;"></div>
                       </div>
 
                     </div>
