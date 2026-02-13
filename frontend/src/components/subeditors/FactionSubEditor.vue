@@ -14,13 +14,13 @@
               <span v-else class="text-muted" style="font-size: 1.1em;">No Faction</span>
             </div>
             <div v-if="currentFaction" class="mt-1">
-              <span class="badge badge-dark mr-1" style="font-size: 0.8em;">
+              <span class="info-badge mr-1">
                 Primary: {{ currentFaction.primaryfaction || 'None' }}
               </span>
-              <span class="badge badge-dark mr-1" style="font-size: 0.8em;">
+              <span class="info-badge mr-1">
                 {{ entries.length }} entr{{ entries.length !== 1 ? 'ies' : 'y' }}
               </span>
-              <span v-if="currentFaction.ignore_primary_assist" class="badge badge-warning" style="font-size: 0.8em;">
+              <span v-if="currentFaction.ignore_primary_assist" class="info-badge" style="color: #ffd54f;">
                 Ignores Primary Assist
               </span>
             </div>
@@ -175,6 +175,16 @@ export default {
 </script>
 
 <style scoped>
+.info-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 0.8em;
+  color: #ddd;
+}
+
 .faction-entry {
   padding: 8px 10px;
   border-radius: 4px;
