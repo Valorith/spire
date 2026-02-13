@@ -218,7 +218,18 @@
 
           <!-- Lootdrops -->
           <eq-window title="Loot Drops" class="p-0">
-            <div class="lootdrops-container" style="max-height: calc(100vh - 420px); overflow-y: auto;">
+            <div class="d-flex justify-content-end px-2 pt-2">
+              <b-button
+                size="sm"
+                variant="outline-secondary"
+                @click="toggleAllLootdrops"
+                style="font-size: .75em;"
+              >
+                <i class="fa mr-1" :class="allExpanded ? 'fa-compress' : 'fa-expand'"></i>
+                {{ allExpanded ? 'Collapse All' : 'Expand All' }}
+              </b-button>
+            </div>
+            <div class="lootdrops-container" style="max-height: calc(100vh - 450px); overflow-y: auto;">
               <div
                 v-for="(le, leIndex) in editEntries"
                 :key="'le-' + leIndex"
@@ -543,6 +554,7 @@ export default {
       hasUnsavedChanges: false,
       notification: null,
       npcsExpanded: false,
+      allExpanded: true,
     }
   },
 
@@ -580,6 +592,12 @@ export default {
 
     markDirty() {
       this.hasUnsavedChanges = true
+    },
+
+    toggleAllLootdrops() {
+      this.allExpanded = !this.allExpanded
+      this.editEntries.forEach(le => { le._expanded = this.allExpanded })
+      this.$forceUpdate()
     },
 
     goToNpc(id) {
