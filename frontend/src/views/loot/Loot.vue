@@ -866,10 +866,11 @@ export default {
             maxcash: 0,
           }
         })
-        if (r.data && r.data.length > 0) {
-          this.showNotification('Created loot table #' + r.data[0].id)
+        const created_lt = Array.isArray(r.data) ? r.data[0] : r.data
+        if (created_lt && created_lt.id) {
+          this.showNotification('Created loot table #' + created_lt.id)
           await this.listLootTables()
-          const created = this.tableData.find(lt => lt.id === r.data[0].id)
+          const created = this.tableData.find(lt => lt.id === created_lt.id)
           if (created) this.selectLoottable(created)
         }
       } catch (e) {
@@ -890,8 +891,9 @@ export default {
             avgcoin: this.editTable.avgcoin || 0,
           }
         })
-        if (r.data && r.data.length > 0) {
-          const newId = r.data[0].id
+        const cloned_lt = Array.isArray(r.data) ? r.data[0] : r.data
+        if (cloned_lt && cloned_lt.id) {
+          const newId = cloned_lt.id
           // Clone loottable entries (link to same lootdrops)
           const lteApi = new LoottableEntryApi(...SpireApi.cfg())
           for (const le of this.editEntries) {
@@ -940,8 +942,8 @@ export default {
             name: (this.editTable.name || 'Lootdrop') + ' - Drop ' + (this.editEntries.length + 1),
           }
         })
-        if (r.data && r.data.length > 0) {
-          const newDrop = r.data[0]
+        const newDrop = Array.isArray(r.data) ? r.data[0] : r.data
+        if (newDrop && newDrop.id) {
           // Link it to loottable
           const lteApi = new LoottableEntryApi(...SpireApi.cfg())
           await lteApi.createLoottableEntry({
