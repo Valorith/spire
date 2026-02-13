@@ -190,8 +190,9 @@ export default {
   },
   methods: {
     openFullEditor() {
-      const base = window.location.href.split('#')[0];
-      const url = base + '#/loot?loottableId=' + this.currentLoottable.id;
+      const ltId = this.currentLoottable ? this.currentLoottable.id : null;
+      if (!ltId) return;
+      const url = window.location.origin + '/#/loot?loottableId=' + ltId;
       window.open(url, '_blank');
     },
     async loadLoottable(id) {
