@@ -172,25 +172,45 @@
                 </div>
               </div>
 
-              <!-- Linked NPCs (inline) -->
+              <!-- Linked NPCs -->
               <div v-if="selectedTable.npc_types && selectedTable.npc_types.length > 0" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
-                <label class="small mb-1" style="opacity:.5;">
-                  <i class="fa fa-users mr-1"></i>Used by {{ selectedTable.npc_types.length }} NPC{{ selectedTable.npc_types.length !== 1 ? 's' : '' }}
-                </label>
-                <div class="d-flex flex-wrap" style="gap: 4px;">
-                  <a
-                    v-for="npc in selectedTable.npc_types.slice(0, 30)"
-                    :key="npc.id"
-                    :href="'#/npc/' + npc.id"
-                    class="npc-tag"
-                    :title="'NPC ID: ' + npc.id + ' — Level ' + npc.level"
-                  >
-                    <small style="opacity:.5;" class="mr-1">#{{ npc.id }}</small>{{ npc.name }}
-                    <small v-if="npc.level" class="ml-1" style="opacity:.5;">L{{ npc.level }}</small>
-                  </a>
-                  <span v-if="selectedTable.npc_types.length > 30" class="align-self-center ml-1" style="opacity:.4; font-size: .8em;">
-                    +{{ selectedTable.npc_types.length - 30 }} more
-                  </span>
+                <div
+                  class="npc-section-header"
+                  @click="npcsExpanded = !npcsExpanded"
+                >
+                  <i class="fa mr-1" :class="npcsExpanded ? 'fa-chevron-down' : 'fa-chevron-right'" style="width:12px; opacity:.5;"></i>
+                  <i class="fa fa-users mr-1" style="opacity:.5;"></i>
+                  <span style="opacity:.7;">Used by</span>
+                  <span class="ml-1 font-weight-bold" style="color: #90caf9;">{{ selectedTable.npc_types.length }}</span>
+                  <span class="ml-1" style="opacity:.7;">NPC{{ selectedTable.npc_types.length !== 1 ? 's' : '' }}</span>
+                </div>
+                <div v-if="npcsExpanded" class="npc-table-wrap mt-2">
+                  <table class="eq-table eq-highlight-rows w-100" style="font-size: 12px;">
+                    <thead>
+                      <tr>
+                        <th style="width: 15%;">ID</th>
+                        <th style="width: 45%;">Name</th>
+                        <th style="width: 15%;" class="text-center">Level</th>
+                        <th style="width: 25%;" class="text-center">Race</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="npc in selectedTable.npc_types.slice(0, 50)"
+                        :key="'npc-' + npc.id"
+                        class="npc-row"
+                        @click="goToNpc(npc.id)"
+                      >
+                        <td style="opacity:.5;">{{ npc.id }}</td>
+                        <td style="color: #90caf9;">{{ npc.name }}</td>
+                        <td class="text-center">{{ npc.level || '—' }}</td>
+                        <td class="text-center" style="opacity:.6;">{{ npc.race || '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="selectedTable.npc_types.length > 50" class="text-center p-1" style="opacity:.4; font-size:.8em;">
+                    +{{ selectedTable.npc_types.length - 50 }} more NPCs
+                  </div>
                 </div>
               </div>
             </div>
@@ -521,6 +541,7 @@ export default {
       saving: false,
       hasUnsavedChanges: false,
       notification: null,
+      npcsExpanded: false,
     }
   },
 
@@ -558,6 +579,10 @@ export default {
 
     markDirty() {
       this.hasUnsavedChanges = true
+    },
+
+    goToNpc(id) {
+      window.open(window.location.origin + window.location.pathname + '#/npc/' + id, '_blank')
     },
 
     showNotification(message, type = 'success') {
@@ -983,23 +1008,26 @@ export default {
   padding: 12px 16px;
 }
 
-.npc-tag {
-  display: inline-block;
-  padding: 3px 8px;
-  font-size: 0.78em;
-  background: rgba(255,255,255,0.06);
-  color: #90caf9;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 4px;
-  text-decoration: none;
-  transition: all 0.15s;
-  line-height: 1.3;
+.npc-section-header {
+  cursor: pointer;
+  padding: 2px 0;
+  font-size: 0.85em;
+  user-select: none;
 }
-.npc-tag:hover {
-  background: rgba(144, 202, 249, 0.15);
-  border-color: rgba(144, 202, 249, 0.3);
-  color: #bbdefb;
-  text-decoration: none;
+.npc-section-header:hover {
+  opacity: .9;
+}
+.npc-table-wrap {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 4px;
+}
+.npc-row {
+  cursor: pointer;
+}
+.npc-row:hover td {
+  color: #bbdefb !important;
 }
 
 .lootdrop-card {
