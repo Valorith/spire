@@ -98,6 +98,13 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 
 			name := filepath.Join(s.config.BasePath, path.Clean("/"+p))
 			if name == "/" || name == "\\" {
+				// Serve index.html from local filesystem first, with no-cache
+				c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				c.Response().Header().Set("Pragma", "no-cache")
+				localIndex := filepath.Join(s.config.LocalBasePath, s.config.SpaIndex)
+				if _, statErr := os.Stat(localIndex); statErr == nil {
+					return c.File(localIndex)
+				}
 				index, err := s.box.Find(s.config.SpaIndex)
 				if err != nil {
 					s.logger.Error().Err(err).Msg("error finding spa index")
@@ -131,6 +138,8 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 			// spa index when nested SPA route requests are made
 			// eg: /spa/nested/route
 			// Try local index.html first, then fall back to packr box
+			c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			c.Response().Header().Set("Pragma", "no-cache")
 			localIndex := filepath.Join(s.config.LocalBasePath, s.config.SpaIndex)
 			if _, statErr := os.Stat(localIndex); statErr == nil {
 				return c.File(localIndex)
