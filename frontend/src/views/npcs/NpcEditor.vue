@@ -437,17 +437,17 @@
           </div>
         </eq-window>
 
+        <eq-window
+          v-if="rangeVisualizerActive && npc"
+          title="Range Visualizer"
+          class="mt-3"
+        >
+          <range-visualizer :unit-marker="parseInt(npc[activeRangeField]) || 0"/>
+        </eq-window>
       </div>
 
       <!-- Preview / Selector Pane -->
       <div class="col-5">
-
-        <eq-window
-          v-if="rangeVisualizerActive && npc"
-          title="Range Visualizer"
-        >
-          <range-visualizer :unit-marker="parseInt(npc[activeRangeField]) || 0"/>
-        </eq-window>
 
         <eq-window v-if="npc && !isAnySelectorActive()" style="max-height: 95vh; overflow-y: scroll; overflow-x: hidden">
           <eq-npc-card-preview :npc="npc"/>
