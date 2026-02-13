@@ -1128,11 +1128,20 @@ export default {
 
     async refreshCurrentTable() {
       const id = this.editTable.id
+      // Preserve expanded states
+      const expandedMap = {}
+      this.editEntries.forEach(le => { expandedMap[le.lootdrop_id] = le._expanded })
       await this.listLootTables()
       const refreshed = this.tableData.find(lt => lt.id === id)
       if (refreshed) {
         this.selectedTable = refreshed
         this.selectLoottable(refreshed)
+        // Restore expanded states
+        this.editEntries.forEach(le => {
+          if (expandedMap[le.lootdrop_id]) {
+            this.$set(le, '_expanded', true)
+          }
+        })
       }
     },
 
