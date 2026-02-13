@@ -34,9 +34,150 @@
               v-for="(tab, index) in tabs"
             >
               <div class="row">
-                <div class="col-12">
+
+                <!-- ========== DPS CALCULATOR / AUTO-STATS (COMBAT TAB) ========== -->
+                <div v-if="tab.name === 'Combat' && npc" class="col-12">
+                  <div class="dps-calculator-panel mb-3 mt-2">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                      <small class="font-weight-bold text-uppercase" style="opacity: .7; letter-spacing: 1px;">
+                        <i class="fa fa-calculator mr-1"></i> DPS Calculator
+                      </small>
+                      <div>
+                        <b-button
+                          size="sm"
+                          variant="outline-warning"
+                          class="mr-2"
+                          @click="applySuggestedCombatStats()"
+                          title="Apply suggested combat stats (damage/delay/speed/count)"
+                        >
+                          <i class="fa fa-bolt mr-1"></i> Apply Suggested Combat
+                        </b-button>
+                        <b-button
+                          size="sm"
+                          variant="outline-info"
+                          @click="autoFillLevelStats()"
+                          title="Auto-fill core stats (HP/AC/combat) based on NPC level"
+                        >
+                          <i class="fa fa-magic mr-1"></i> Auto-Fill for Lvl {{ npc.level || 1 }}
+                        </b-button>
+                      </div>
+                    </div>
+
+                    <div class="row dps-stats-row">
+                      <div class="col-3 text-center dps-stat-box">
+                        <div class="dps-stat-value text-warning">{{ calcDps }}</div>
+                        <div class="dps-stat-label">Est. DPS</div>
+                      </div>
+                      <div class="col-3 text-center dps-stat-box">
+                        <div class="dps-stat-value">{{ calcAvgHit }}</div>
+                        <div class="dps-stat-label">Avg Hit</div>
+                      </div>
+                      <div class="col-3 text-center dps-stat-box">
+                        <div class="dps-stat-value">{{ calcHitsPerSec }}</div>
+                        <div class="dps-stat-label">Hits/Sec</div>
+                      </div>
+                      <div class="col-3 text-center dps-stat-box">
+                        <div class="dps-stat-value">{{ calcEffectiveDelay }}</div>
+                        <div class="dps-stat-label">Eff. Delay</div>
+                      </div>
+                    </div>
+
+                    <div class="mt-2" v-if="combatSuggestions">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <small class="font-weight-bold" style="opacity: .75;">Suggested (EQEmu-ish) for Level {{ combatSuggestions.level }}</small>
+                        <small style="opacity:.6;">(dmg, delay, count, speed)</small>
+                      </div>
+
+                      <div class="row mt-1">
+                        <div class="col-md-3 col-6">
+                          <small style="opacity:.7;">Min/Max</small>
+                          <div class="suggestion-value">
+                            {{ combatSuggestions.mindmg }} / {{ combatSuggestions.maxdmg }}
+                          </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <small style="opacity:.7;">Delay</small>
+                          <div class="suggestion-value">{{ combatSuggestions.attack_delay }}</div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <small style="opacity:.7;">Speed Mod</small>
+                          <div class="suggestion-value">{{ combatSuggestions.attack_speed }}</div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <small style="opacity:.7;">Atk Count</small>
+                          <div class="suggestion-value">{{ combatSuggestions.attack_count }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12" v-if="tab.gridRows">
+                  <div v-for="(row, ri) in tab.gridRows" :key="'gr-'+ri">
+                    <div v-if="row.header" class="mt-3 mb-1">
+                      <small class="font-weight-bold text-uppercase" style="opacity:.6; letter-spacing:1px;">{{ row.header }}</small>
+                    </div>
+                    <div class="row">
+                      <div
+                        v-for="(gf, gi) in row.fields"
+                        :key="'gf-'+ri+'-'+gi"
+                        :class="gf.col || 'col-6'"
+                        v-if="shouldShowField(gf)"
+                      >
+                        <label
+                          class="small mb-0"
+                          :style="gf.resistColor ? 'color:'+gf.resistColor+';font-weight:bold;' : 'opacity:.7;'"
+                        >{{ gf.desc }}</label>
+
+                        <eq-checkbox
+                          v-if="gf.fType === 'checkbox'"
+                          class="d-inline-block"
+                          :true-value="1"
+                          :false-value="0"
+                          v-model.number="npc[gf.field]"
+                          @input="npc[gf.field] = $event"
+                        />
+
+                        <b-form-input
+                          v-else-if="gf.fType === 'number'"
+                          :id="gf.field"
+                          v-model.number="npc[gf.field]"
+                          size="sm"
+                          v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                          :style="npc[gf.field] === 0 ? 'opacity:.5' : ''"
+                        />
+
+                        <select
+                          v-else-if="gf.selectData"
+                          v-model.number="npc[gf.field]"
+                          :id="gf.field"
+                          class="form-control form-control-sm"
+                          v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                        >
+                          <option
+                            v-for="(desc, index) in gf.selectData"
+                            :key="index"
+                            :value="parseInt(index)"
+                          >{{ index }}) {{ desc }}</option>
+                        </select>
+
+                        <b-form-input
+                          v-else
+                          :id="gf.field"
+                          v-model.number="npc[gf.field]"
+                          size="sm"
+                          v-on="gf.e ? getEventHandlers(gf.e, gf.field) : {}"
+                          :style="npc[gf.field] <= 0 ? 'opacity:.5' : ''"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12" v-else>
                   <div
                     v-for="field in tab.fields"
+                    v-if="shouldShowField(field)"
                     :key="field.field"
                     :class="'row'"
                   >
@@ -52,7 +193,7 @@
                     <div
                       class="col-6 text-right p-0 m-0 mr-3"
                       v-if="field.fType !== 'checkbox'"
-                      style="margin-top: 10px !important"
+                      :style="'margin-top: 10px !important;' + (field.resistColor ? 'color: ' + field.resistColor + '; font-weight: bold;' : '')"
                     >
                       <span v-if="field.category" class="font-weight-bold">{{ field.category }}</span>
                       {{ field.desc }}
@@ -139,6 +280,30 @@
                         </option>
                       </select>
 
+                      <!-- color picker -->
+                      <div v-if="field.fType === 'color_picker' && npc" class="mt-1">
+                        <div class="d-flex align-items-center">
+                          <div
+                            @click="showColorPicker = !showColorPicker; updateArmorTintHex()"
+                            :style="'width:30px;height:30px;border-radius:4px;cursor:pointer;border:2px solid rgba(255,255,255,0.3);background:rgb('+(npc.armortint_red||0)+','+(npc.armortint_green||0)+','+(npc.armortint_blue||0)+');'"
+                            title="Click to toggle color picker"
+                          ></div>
+                          <input
+                            v-model="armorTintHex"
+                            @change="applyHexToArmorTint()"
+                            class="form-control form-control-sm ml-2"
+                            style="width:100px;"
+                            placeholder="#000000"
+                          >
+                        </div>
+                        <chrome-picker
+                          v-if="showColorPicker"
+                          :value="armorTintHex"
+                          @input="onArmorColorPick"
+                          class="mt-2"
+                        />
+                      </div>
+
                     </div>
                     <div class="col-2 p-0" v-if="field.rangeSlider"
                       @click="drawRangeVisualizer(field.field)"
@@ -163,10 +328,50 @@
 
           <div class="text-center align-content-center mt-4" v-if="npc && npc.id >= 0">
 
+            <!-- Template System -->
+            <div class="mb-3 d-flex align-items-center justify-content-center">
+              <select v-model="selectedTemplate" class="form-control form-control-sm" style="max-width: 220px;">
+                <option value="">Load Template...</option>
+                <optgroup label="Built-in">
+                  <option value="builtin:warrior">Generic Warrior</option>
+                  <option value="builtin:caster">Caster Boss</option>
+                  <option value="builtin:merchant">Merchant NPC</option>
+                  <option value="builtin:quest">Quest NPC</option>
+                </optgroup>
+                <optgroup label="Custom" v-if="customTemplates.length > 0">
+                  <option v-for="t in customTemplates" :key="t.name" :value="'custom:'+t.name">{{ t.name }}</option>
+                </optgroup>
+              </select>
+              <b-button size="sm" variant="outline-info" class="ml-2" @click="loadTemplate()" :disabled="!selectedTemplate">
+                <i class="fa fa-download"></i> Load
+              </b-button>
+              <b-button size="sm" variant="outline-success" class="ml-1" @click="saveAsTemplate()">
+                <i class="fa fa-save"></i> Save As
+              </b-button>
+              <b-button size="sm" variant="outline-danger" class="ml-1"
+                v-if="selectedTemplate && selectedTemplate.startsWith('custom:')"
+                @click="deleteTemplate()">
+                <i class="fa fa-trash"></i>
+              </b-button>
+            </div>
+
+            <!-- Reset to Original -->
+            <b-button
+              v-if="modifiedFieldCount > 0"
+              @click="resetToOriginal()"
+              size="sm"
+              variant="outline-secondary"
+              class="mr-2"
+            >
+              <i class="fa fa-undo"></i>
+              Reset to Original
+            </b-button>
+
             <b-button
               @click="saveNpc()"
               size="sm"
               variant="outline-warning"
+              :class="{ 'save-btn-glow': modifiedFieldCount > 0 }"
             >
               <i class="ra ra-book"></i>
               Save NPC
@@ -191,7 +396,9 @@
           <eq-npc-card-preview :npc="npc"/>
         </eq-window>
 
-
+        <eq-window v-if="npc && !isAnySelectorActive()" class="mt-3">
+          <npc-spawn-locations :npc-id="npc.id"/>
+        </eq-window>
 
         <eq-window v-if="selectorActive['special_abilities']">
           <npc-special-abilities
@@ -245,11 +452,25 @@
 
         <loot-sub-editor
           v-if="selectorActive['loottable_id']"
+          :loottable-id="npc ? npc.loottable_id : 0"
+          @input="(val) => { npc.loottable_id = val; setFieldModifiedById('loottable_id'); }"
         />
 
         <merchant-sub-editor
           v-if="selectorActive['merchant_id']"
           @input="npc.merchant_id = $event; setFieldModifiedById('merchant_id')"
+        />
+
+        <faction-sub-editor
+          v-if="selectorActive['npc_faction_id']"
+          :faction-id="npc ? npc.npc_faction_id : 0"
+          @input="(val) => { npc.npc_faction_id = val; setFieldModifiedById('npc_faction_id'); }"
+        />
+
+        <spells-sub-editor
+          v-if="selectorActive['npc_spells_id']"
+          :spells-id="npc ? npc.npc_spells_id : 0"
+          @input="(val) => { npc.npc_spells_id = val; setFieldModifiedById('npc_spells_id'); }"
         />
 
       </div>
@@ -285,6 +506,10 @@ import RaceSelector             from "../../components/selectors/RaceSelector";
 import FacialAppearanceSelector from "../../components/selectors/FacialAppearanceSelector";
 import MerchantSubEditor        from "../../components/subeditors/MerchantSubEditor";
 import LootSubEditor            from "../../components/subeditors/LootSubEditor";
+import NpcSpawnLocations        from "../../components/subeditors/NpcSpawnLocations";
+import FactionSubEditor         from "../../components/subeditors/FactionSubEditor";
+import { Chrome }               from "vue-color";
+import SpellsSubEditor          from "../../components/subeditors/SpellsSubEditor";
 import RangeVisualizer          from "../../components/tools/RangeVisualizer";
 
 const MILLISECONDS_BEFORE_WINDOW_RESET = 10000;
@@ -293,6 +518,10 @@ export default {
   name: "ItemEdit",
   components: {
     LootSubEditor,
+    NpcSpawnLocations,
+    FactionSubEditor,
+    SpellsSubEditor,
+    ChromePicker: Chrome,
     RangeVisualizer,
     MerchantSubEditor,
     FacialAppearanceSelector,
@@ -319,6 +548,8 @@ export default {
       // notifications
       notification: "",
       error: "",
+      showColorPicker: false,
+      armorTintHex: "#000000",
 
       // selectors
       selectorActive: {},
@@ -330,9 +561,87 @@ export default {
       loaded: true,
 
       // tabs / fields
-      tabs: this.getTabs()
+      tabs: this.getTabs(),
+
+      // template system
+      customTemplates: [],
+      selectedTemplate: '',
+
+      // unsaved changes guard
+      modifiedFieldCount: 0,
+      modifiedFieldInterval: null,
     }
   },
+
+  computed: {
+    calcAvgHit() {
+      if (!this.npc) return 0;
+      const min = parseInt(this.npc.mindmg) || 0;
+      const max = parseInt(this.npc.maxdmg) || 0;
+      return Math.round((min + max) / 2);
+    },
+
+    calcEffectiveDelay() {
+      if (!this.npc) return '0.00s';
+      const delay = parseInt(this.npc.attack_delay) || 30;
+      const speed = parseInt(this.npc.attack_speed) || 0;
+      // attack_speed is a % modifier (negative = faster)
+      const effective = delay * (100 + speed) / 100;
+      return Math.max(0.1, effective / 10).toFixed(2) + 's';
+    },
+
+    calcHitsPerSec() {
+      if (!this.npc) return '0.00';
+      const delay = parseInt(this.npc.attack_delay) || 30;
+      const speed = parseInt(this.npc.attack_speed) || 0;
+      const effectiveDelay = delay * (100 + speed) / 100;
+      const count = Math.max(1, parseInt(this.npc.attack_count) || 1);
+      if (effectiveDelay <= 0) return '∞';
+      return (count * 10 / effectiveDelay).toFixed(2);
+    },
+
+    calcDps() {
+      if (!this.npc) return '0';
+      const min = parseInt(this.npc.mindmg) || 0;
+      const max = parseInt(this.npc.maxdmg) || 0;
+      const avgDmg = (min + max) / 2;
+      const delay = parseInt(this.npc.attack_delay) || 30;
+      const speed = parseInt(this.npc.attack_speed) || 0;
+      const effectiveDelay = delay * (100 + speed) / 100;
+      const count = Math.max(1, parseInt(this.npc.attack_count) || 1);
+      if (effectiveDelay <= 0) return '∞';
+      return String(Math.round(avgDmg * count * 10 / effectiveDelay));
+    },
+
+    combatSuggestions() {
+      if (!this.npc) return null;
+      const level = Math.max(1, parseInt(this.npc.level) || 1);
+
+      // Per task spec (simple baseline)
+      const mindmg = Math.max(1, Math.round(level * 1.2));
+      const maxdmg = Math.max(mindmg, Math.round(level * 2.5));
+
+      // attack_delay is delay in tenths of seconds; typical 20-40
+      let attack_delay = Math.round(40 - (level * 0.25));
+      attack_delay = Math.min(40, Math.max(20, attack_delay));
+
+      const attack_speed = 0;
+      const attack_count = level >= 60 ? 2 : 1;
+
+      return { level, mindmg, maxdmg, attack_delay, attack_speed, attack_count };
+    },
+
+    levelStatSuggestions() {
+      if (!this.npc) return null;
+      const level = Math.max(1, parseInt(this.npc.level) || 1);
+
+      const hp = Math.max(1, Math.round(level * level * 0.9));
+      const ac = Math.max(0, Math.round(level * 3.5));
+
+      return { level, hp, ac };
+    }
+  },
+
   watch: {
 
     // reset state vars when we navigate away
@@ -353,7 +662,126 @@ export default {
   async created() {
     this.load()
   },
+  mounted() {
+    this._keydownHandler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        this.saveNpc();
+      }
+    };
+    window.addEventListener('keydown', this._keydownHandler);
+
+    this._beforeUnloadHandler = (e) => {
+      if (this.modifiedFieldCount > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', this._beforeUnloadHandler);
+
+    this.modifiedFieldInterval = setInterval(() => {
+      const els = document.querySelectorAll('.pulsate-highlight-modified');
+      this.modifiedFieldCount = els ? els.length : 0;
+    }, 500);
+
+    this.loadCustomTemplates();
+  },
+  beforeDestroy() {
+    if (this._keydownHandler) window.removeEventListener('keydown', this._keydownHandler);
+    if (this._beforeUnloadHandler) window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+    if (this.modifiedFieldInterval) clearInterval(this.modifiedFieldInterval);
+  },
   methods: {
+
+    /**
+     * Template System
+     */
+    loadCustomTemplates() {
+      try {
+        const raw = localStorage.getItem('spire-npc-templates');
+        this.customTemplates = raw ? JSON.parse(raw) : [];
+      } catch (e) { this.customTemplates = []; }
+    },
+    saveCustomTemplates() {
+      localStorage.setItem('spire-npc-templates', JSON.stringify(this.customTemplates));
+    },
+    getBuiltinTemplates() {
+      return {
+        warrior: { level: 50, class: 1, hp: 32000, ac: 300, mindmg: 80, maxdmg: 200, attack_delay: 25, str: 200, sta: 200, dex: 150, agi: 150 },
+        caster: { level: 55, class: 14, hp: 18000, mana: 20000, ac: 150, mindmg: 30, maxdmg: 60, attack_delay: 35, _int: 250, wis: 200, mr: 100, fr: 50, cr: 50 },
+        merchant: { level: 1, class: 41, hp: 100000, ac: 500, findable: 1, show_name: 1 },
+        quest: { level: 1, class: 1, hp: 100000, ac: 500, isquest: 1, findable: 1, show_name: 1, untargetable: 0 },
+      };
+    },
+    loadTemplate() {
+      if (!this.selectedTemplate || !this.npc) return;
+      let data = null;
+      if (this.selectedTemplate.startsWith('builtin:')) {
+        const key = this.selectedTemplate.replace('builtin:', '');
+        data = this.getBuiltinTemplates()[key];
+      } else if (this.selectedTemplate.startsWith('custom:')) {
+        const name = this.selectedTemplate.replace('custom:', '');
+        const t = this.customTemplates.find(t => t.name === name);
+        if (t) data = t.data;
+      }
+      if (!data) return;
+      const skipFields = ['id', 'name'];
+      for (const [k, v] of Object.entries(data)) {
+        if (skipFields.includes(k)) continue;
+        this.npc[k] = v;
+        this.setFieldModifiedById(k);
+      }
+      this.sendNotification('Template applied: ' + this.selectedTemplate.split(':')[1]);
+    },
+    saveAsTemplate() {
+      if (!this.npc) return;
+      const name = prompt('Enter template name:');
+      if (!name) return;
+      const data = JSON.parse(JSON.stringify(this.npc));
+      delete data.id;
+      delete data.name;
+      const existing = this.customTemplates.findIndex(t => t.name === name);
+      if (existing >= 0) this.customTemplates.splice(existing, 1);
+      this.customTemplates.push({ name, data });
+      this.saveCustomTemplates();
+      this.sendNotification('Template saved: ' + name);
+    },
+    deleteTemplate() {
+      if (!this.selectedTemplate || !this.selectedTemplate.startsWith('custom:')) return;
+      const name = this.selectedTemplate.replace('custom:', '');
+      this.customTemplates = this.customTemplates.filter(t => t.name !== name);
+      this.saveCustomTemplates();
+      this.selectedTemplate = '';
+      this.sendNotification('Template deleted: ' + name);
+    },
+
+    /**
+     * Reset to Original
+     */
+    resetToOriginal() {
+      if (!this.originalNpc || !this.npc) return;
+      const orig = JSON.parse(JSON.stringify(this.originalNpc));
+      for (const [k, v] of Object.entries(orig)) {
+        this.npc[k] = v;
+      }
+      EditFormFieldUtil.resetFieldEditedStatus();
+      this.modifiedFieldCount = 0;
+      this.sendNotification('Reset to original values');
+    },
+
+    /**
+     * Check if a field should be shown based on showIf condition
+     */
+    shouldShowField(field) {
+      if (!field || !field.showIf) {
+        return true
+      }
+      try {
+        return !!field.showIf(this.npc)
+      } catch (e) {
+        return true
+      }
+    },
 
     /**
      * Facial
@@ -404,6 +832,64 @@ export default {
       }, 5000)
     },
 
+    updateArmorTintHex() {
+      if (!this.npc) return;
+      const r = parseInt(this.npc.armortint_red) || 0;
+      const g = parseInt(this.npc.armortint_green) || 0;
+      const b = parseInt(this.npc.armortint_blue) || 0;
+      this.armorTintHex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+    },
+    onArmorColorPick(color) {
+      if (!this.npc || !color || !color.rgba) return;
+      this.npc.armortint_red = color.rgba.r;
+      this.npc.armortint_green = color.rgba.g;
+      this.npc.armortint_blue = color.rgba.b;
+      this.armorTintHex = color.hex;
+      ['armortint_red', 'armortint_green', 'armortint_blue'].forEach(f => this.setFieldModifiedById(f));
+    },
+    applyHexToArmorTint() {
+      if (!this.npc) return;
+      const hex = this.armorTintHex.replace('#', '');
+      if (hex.length !== 6) return;
+      this.npc.armortint_red = parseInt(hex.substr(0, 2), 16);
+      this.npc.armortint_green = parseInt(hex.substr(2, 2), 16);
+      this.npc.armortint_blue = parseInt(hex.substr(4, 2), 16);
+      ['armortint_red', 'armortint_green', 'armortint_blue'].forEach(f => this.setFieldModifiedById(f));
+    },
+
+    applySuggestedCombatStats() {
+      if (!this.npc || !this.combatSuggestions) return;
+      const s = this.combatSuggestions;
+
+      this.npc.mindmg = s.mindmg;
+      this.npc.maxdmg = s.maxdmg;
+      this.npc.attack_delay = s.attack_delay;
+      this.npc.attack_speed = s.attack_speed;
+      this.npc.attack_count = s.attack_count;
+
+      ;['mindmg','maxdmg','attack_delay','attack_speed','attack_count'].forEach(f => this.setFieldModifiedById(f));
+      this.sendNotification(`Applied suggested combat stats for level ${s.level}`);
+    },
+
+    autoFillLevelStats() {
+      if (!this.npc) return;
+
+      const level = Math.max(1, parseInt(this.npc.level) || 1);
+
+      // Core baselines (per task spec)
+      if (this.levelStatSuggestions) {
+        this.npc.hp = this.levelStatSuggestions.hp;
+        this.npc.ac = this.levelStatSuggestions.ac;
+        this.setFieldModifiedById('hp');
+        this.setFieldModifiedById('ac');
+      }
+
+      // Combat baselines
+      this.applySuggestedCombatStats();
+
+      this.sendNotification(`Auto-filled stats for level ${level}`);
+    },
+
     async saveNpc() {
       this.error        = ""
       this.notification = ""
@@ -413,6 +899,8 @@ export default {
         if (result.status === 200) {
           this.sendNotification("NPC updated successfully!")
           EditFormFieldUtil.resetFieldEditedStatus()
+          this.modifiedFieldCount = 0
+          this.originalNpc = JSON.parse(JSON.stringify(this.npc))
         }
       } catch (error) {
         // If the NPC doesn't exist yet (clone), try creating it
@@ -499,6 +987,7 @@ export default {
     async load() {
       this.npc    = await Npcs.getNpc(this.$route.params.npc)
       this.loaded = true
+      this.originalNpc = JSON.parse(JSON.stringify(this.npc))
 
       // if we're cloning this NPC, automatically fetch a free ID
       if (this.$route.query.hasOwnProperty("clone")) {
@@ -573,34 +1062,65 @@ export default {
             { desc: 'Last Name', field: 'lastname', fType: 'text', itemIcon: '6840', },
             { desc: 'Level', field: 'level', fType: 'text', itemIcon: '6840', },
             { desc: 'Class', field: 'class', selectData: DB_CLASSES, },
-
             { desc: 'Bodytype', field: 'bodytype', selectData: BODYTYPES, },
-
             { desc: "Walk Speed", field: "walkspeed", fType: "text" },
             { desc: "Run Speed", field: "runspeed", fType: "text" },
-
             { desc: "Loottable ID", field: "loottable_id", fType: "text", e: { onclick: this.setSelectorActive } },
             { desc: "Merchant ID", field: "merchant_id", fType: "text", e: { onclick: this.setSelectorActive } },
             { desc: "Alternate Currency ID", field: "alt_currency_id", fType: "text" },
-            { desc: "NPC Spells ID", field: "npc_spells_id", fType: "text" },
+            { desc: "NPC Spells ID", field: "npc_spells_id", fType: "text", e: { onclick: this.setSelectorActive } },
             { desc: "NPC Spell Effects ID", field: "npc_spells_effects_id", fType: "text" },
-            { desc: "NPC Faction ID", field: "npc_faction_id", fType: "text" },
+            { desc: "NPC Faction ID", field: "npc_faction_id", fType: "text", e: { onclick: this.setSelectorActive } },
+            { desc: "Faction Amount", field: "faction_amount", fType: "text" },
             { desc: "Adventure Template Id", field: "adventure_template_id", fType: "text" },
             { desc: "Trap Template", field: "trap_template", fType: "text" },
             { desc: "Emote ID", field: "emoteid", fType: "text" },
-
-            // add back later?
-            // { desc: "Spawn Limit", field: "spawn_limit", fType: "text" },
-            // { desc: "Exclude", field: "exclude", fType: "text" },
-
-            // version is not really used outside of the PEQ editor
-            // { desc: "version", field: "version", fType: "text" },
-
-            { desc: "Stuck Behavior", field: "stuck_behavior", fType: "text" },
+            { desc: "Stuck Behavior", field: "stuck_behavior", fType: "text", selectData: {0: "Run back", 1: "Warp back", 2: "Stay", 3: "Evade"} },
             { desc: "Flymode", field: "flymode", fType: "select", selectData: FLYMODE },
-            // { desc: "always_aggro", field: "always_aggro", fType: "text" },
             { desc: "Experience Modifier", field: "exp_mod", fType: "text" },
-
+          ],
+          gridRows: [
+            { fields: [
+              { desc: 'ID', field: 'id', fType: 'text', col: 'col-2' },
+              { desc: 'Name', field: 'name', fType: 'text', col: 'col-5' },
+              { desc: 'Level', field: 'level', fType: 'text', col: 'col-2' },
+              { desc: 'Last Name', field: 'lastname', fType: 'text', col: 'col-3' },
+            ]},
+            { fields: [
+              { desc: 'Class', field: 'class', selectData: DB_CLASSES, col: 'col-4' },
+              { desc: 'Bodytype', field: 'bodytype', selectData: BODYTYPES, col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Walk Speed', field: 'walkspeed', fType: 'text', col: 'col-6' },
+              { desc: 'Run Speed', field: 'runspeed', fType: 'text', col: 'col-6' },
+            ]},
+            { header: 'Reference IDs', fields: [
+              { desc: 'Loottable ID', field: 'loottable_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
+              { desc: 'Merchant ID', field: 'merchant_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
+            ]},
+            { fields: [
+              { desc: 'Alt Currency ID', field: 'alt_currency_id', fType: 'text', col: 'col-6' },
+              { desc: 'NPC Spells ID', field: 'npc_spells_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
+            ]},
+            { fields: [
+              { desc: 'NPC Spell Effects ID', field: 'npc_spells_effects_id', fType: 'text', col: 'col-6' },
+              { desc: 'NPC Faction ID', field: 'npc_faction_id', fType: 'text', col: 'col-6', e: { onclick: this.setSelectorActive } },
+            ]},
+            { fields: [
+              { desc: 'Faction Amount', field: 'faction_amount', fType: 'text', col: 'col-6' },
+            ]},
+            { fields: [
+              { desc: 'Adventure Template', field: 'adventure_template_id', fType: 'text', col: 'col-6' },
+              { desc: 'Trap Template', field: 'trap_template', fType: 'text', col: 'col-6' },
+            ]},
+            { fields: [
+              { desc: 'Emote ID', field: 'emoteid', fType: 'text', col: 'col-4' },
+              { desc: 'Stuck Behavior', field: 'stuck_behavior', selectData: {0: "Run back", 1: "Warp back", 2: "Stay", 3: "Evade"}, col: 'col-4' },
+              { desc: 'Flymode', field: 'flymode', selectData: FLYMODE, col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Experience Modifier', field: 'exp_mod', fType: 'text', col: 'col-12' },
+            ]},
           ],
         },
         {
@@ -652,10 +1172,25 @@ export default {
               selectData: DB_ITEM_MATERIAL,
               e: { onmouseover: this.setSelectorActive }
             },
-            { desc: "Helm Texture", field: "helmtexture", fType: "text", e: { onmouseover: this.setSelectorActive } },
+            { desc: "Helm Texture", field: "helmtexture", fType: "select", selectData: DB_ITEM_MATERIAL, e: { onmouseover: this.setSelectorActive } },
             { desc: "Heros Forge Model", field: "herosforgemodel", fType: "text" },
             { desc: "Size", field: "size", fType: "text" },
-            { desc: "Light", field: "light", fType: "text" },
+            { desc: "Light Level (NPC glow radius)", field: "light", fType: "text", selectData: [
+              { value: 0, text: "0 - None" },
+              { value: 1, text: "1 - Candle" },
+              { value: 2, text: "2 - Torch" },
+              { value: 3, text: "3 - Tiny Glowing Skull" },
+              { value: 4, text: "4 - Small Lantern" },
+              { value: 5, text: "5 - Stein of Moggok" },
+              { value: 6, text: "6 - Large Lantern" },
+              { value: 7, text: "7 - Flameless Lantern" },
+              { value: 8, text: "8 - Globe of Stars" },
+              { value: 9, text: "9 - Light Globe" },
+              { value: 10, text: "10 - Lightstone" },
+              { value: 11, text: "11 - Greater Lightstone" },
+              { value: 12, text: "12 - Fire Beetle Eye" },
+              { value: 13, text: "13 - Large Fire Beetle Eye" },
+            ] },
             { desc: "Model?", field: "model", fType: "text" },
           ]
         },
@@ -666,6 +1201,8 @@ export default {
             { desc: "Armor Tint Red", field: "armortint_red", fType: "text" },
             { desc: "Armor Tint Green", field: "armortint_green", fType: "text" },
             { desc: "Armor Tint Blue", field: "armortint_blue", fType: "text" },
+            { desc: "Color Preview", field: "_armor_color_picker", fType: "color_picker" },
+            { desc: "NPC Tint ID", field: "npc_tint_id", fType: "text" },
 
             { desc: "Arm Texture", field: "armtexture", fType: "text" },
             { desc: "Bracer Texture", field: "bracertexture", fType: "text" },
@@ -694,25 +1231,20 @@ export default {
               e: { onmouseover: this.setSelectorActive }
             },
             { desc: "Beard", field: "luclin_beard", fType: "text", e: { onmouseover: this.setSelectorActive } },
-            { desc: "(Drakkin) Heritage", field: "drakkin_heritage", fType: "text" },
-            { desc: "(Drakkin) Tattoo", field: "drakkin_tattoo", fType: "text" },
-            { desc: "(Drakkin) Details", field: "drakkin_details", fType: "text" },
+            { desc: "(Drakkin) Heritage", field: "drakkin_heritage", fType: "text", showIf: (npc) => npc && npc.race === 522 },
+            { desc: "(Drakkin) Tattoo", field: "drakkin_tattoo", fType: "text", showIf: (npc) => npc && npc.race === 522 },
+            { desc: "(Drakkin) Details", field: "drakkin_details", fType: "text", showIf: (npc) => npc && npc.race === 522 },
           ]
         },
         {
           name: 'Stats',
           fields: [
-
-            // deprecated
-            // { desc: "npcspecialattks", field: "npcspecialattks", fType: "text" },
-
             { desc: "AC", field: "ac", fType: "text" },
             { desc: "HP", field: "hp", fType: "text" },
             { desc: "Mana", field: "mana", fType: "text" },
             { desc: "HP Regen (Tic)", field: "hp_regen_rate", fType: "text" },
             { desc: "HP Regen (Sec)", field: "hp_regen_per_second", fType: "text" },
             { desc: "Mana Regen (Tic)", field: "mana_regen_rate", fType: "text" },
-
             { desc: "Strength", field: "str", fType: "text" },
             { desc: "Stamina", field: "sta", fType: "text" },
             { desc: "Dexterity", field: "dex", fType: "text" },
@@ -720,25 +1252,60 @@ export default {
             { desc: "Intelligence", field: "_int", fType: "text" },
             { desc: "Wisdom", field: "wis", fType: "text" },
             { desc: "Charisma", field: "cha", fType: "text" },
-
             { desc: "Spell Scale", field: "spellscale", fType: "text" },
             { desc: "Heal Scale", field: "healscale", fType: "text" },
-
             { desc: "Scale Rate", field: "scalerate", fType: "text" },
             { desc: "Max Level", field: "maxlevel", fType: "text" },
-          ]
-        },
-        {
-          name: 'Resists',
-          fields: [
-            { desc: "Magic Resist", field: "mr", fType: "text" },
-            { desc: "Cold Resist", field: "cr", fType: "text" },
-            { desc: "Disease Resist", field: "dr", fType: "text" },
-            { desc: "Fire Resist", field: "fr", fType: "text" },
-            { desc: "Poison Resist", field: "pr", fType: "text" },
-            { desc: "Corruption Resist", field: "corrup", fType: "text" },
-            { desc: "Physical Resist", field: "ph_r", fType: "text" },
-          ]
+            { desc: "Magic Resist", field: "mr", fType: "text", resistColor: "#4a9eff" },
+            { desc: "Fire Resist", field: "fr", fType: "text", resistColor: "#ff4444" },
+            { desc: "Cold Resist", field: "cr", fType: "text", resistColor: "#88ccff" },
+            { desc: "Disease Resist", field: "dr", fType: "text", resistColor: "#44cc44" },
+            { desc: "Poison Resist", field: "pr", fType: "text", resistColor: "#bb66ff" },
+            { desc: "Corruption Resist", field: "corrup", fType: "text", resistColor: "#888888" },
+            { desc: "Physical Resist", field: "ph_r", fType: "text", resistColor: "#ffcc44" },
+          ],
+          gridRows: [
+            { header: 'Vitals', fields: [
+              { desc: 'AC', field: 'ac', fType: 'text', col: 'col-4' },
+              { desc: 'HP', field: 'hp', fType: 'text', col: 'col-4' },
+              { desc: 'Mana', field: 'mana', fType: 'text', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'HP Regen (Tic)', field: 'hp_regen_rate', fType: 'text', col: 'col-4' },
+              { desc: 'HP Regen (Sec)', field: 'hp_regen_per_second', fType: 'text', col: 'col-4' },
+              { desc: 'Mana Regen (Tic)', field: 'mana_regen_rate', fType: 'text', col: 'col-4' },
+            ]},
+            { header: 'Base Stats', fields: [
+              { desc: 'STR', field: 'str', fType: 'text', col: 'col-3' },
+              { desc: 'STA', field: 'sta', fType: 'text', col: 'col-3' },
+              { desc: 'DEX', field: 'dex', fType: 'text', col: 'col-3' },
+              { desc: 'AGI', field: 'agi', fType: 'text', col: 'col-3' },
+            ]},
+            { fields: [
+              { desc: 'INT', field: '_int', fType: 'text', col: 'col-3' },
+              { desc: 'WIS', field: 'wis', fType: 'text', col: 'col-3' },
+              { desc: 'CHA', field: 'cha', fType: 'text', col: 'col-3' },
+            ]},
+            { header: 'Scaling', fields: [
+              { desc: 'Spell Scale', field: 'spellscale', fType: 'text', col: 'col-4' },
+              { desc: 'Heal Scale', field: 'healscale', fType: 'text', col: 'col-4' },
+              { desc: 'Scale Rate', field: 'scalerate', fType: 'text', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Max Level', field: 'maxlevel', fType: 'text', col: 'col-12' },
+            ]},
+            { header: 'Resists', fields: [
+              { desc: 'MR', field: 'mr', fType: 'text', col: 'col-3', resistColor: '#4a9eff' },
+              { desc: 'FR', field: 'fr', fType: 'text', col: 'col-3', resistColor: '#ff4444' },
+              { desc: 'CR', field: 'cr', fType: 'text', col: 'col-3', resistColor: '#88ccff' },
+              { desc: 'DR', field: 'dr', fType: 'text', col: 'col-3', resistColor: '#44cc44' },
+            ]},
+            { fields: [
+              { desc: 'PR', field: 'pr', fType: 'text', col: 'col-3', resistColor: '#bb66ff' },
+              { desc: 'Corruption', field: 'corrup', fType: 'text', col: 'col-3', resistColor: '#888888' },
+              { desc: 'PhR', field: 'ph_r', fType: 'text', col: 'col-3', resistColor: '#ffcc44' },
+            ]},
+          ],
         },
         {
           name: 'Combat',
@@ -753,6 +1320,7 @@ export default {
             { desc: "Accuracy", field: "accuracy", fType: "text" },
             { desc: "Avoidance", field: "avoidance", fType: "text" },
             { desc: "Slow Mitigation", field: "slow_mitigation", fType: "text" },
+            { desc: "Heroic Strikethrough", field: "heroic_strikethrough", fType: "text" },
 
             {
               desc: "Special Abilities",
@@ -778,7 +1346,6 @@ export default {
         {
           name: 'Settings',
           fields: [
-            // checkboxes
             { desc: 'See Hide', field: 'see_hide', fType: 'checkbox', },
             { desc: 'See Improved Hide', field: 'see_improved_hide', fType: 'checkbox', },
             { desc: 'See Invisible', field: 'see_invis', fType: 'checkbox', },
@@ -800,7 +1367,52 @@ export default {
             { desc: "Raid Target", field: "raid_target", fType: "checkbox" },
             { desc: "Private Corpse", field: "private_corpse", fType: "checkbox" },
             { desc: "Is Bot", field: "isbot", fType: "checkbox" },
-          ]
+            { desc: "Keeps Sold Items", field: "keeps_sold_items", fType: "checkbox" },
+            { desc: "Is Parcel Merchant", field: "is_parcel_merchant", fType: "checkbox" },
+            { desc: "Multiquest Enabled", field: "multiquest_enabled", fType: "checkbox" },
+          ],
+          gridRows: [
+            { fields: [
+              { desc: 'See Hide', field: 'see_hide', fType: 'checkbox', col: 'col-4' },
+              { desc: 'See Improved Hide', field: 'see_improved_hide', fType: 'checkbox', col: 'col-4' },
+              { desc: 'See Invisible', field: 'see_invis', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'See Invis Undead', field: 'see_invis_undead', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Show Name', field: 'show_name', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Trackable', field: 'trackable', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Skip Global Loot', field: 'skip_global_loot', fType: 'checkbox', col: 'col-4' },
+              { desc: 'No Target Hotkey', field: 'no_target_hotkey', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Findable', field: 'findable', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Untargetable', field: 'untargetable', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Underwater', field: 'underwater', fType: 'checkbox', col: 'col-4' },
+              { desc: 'QGlobal', field: 'qglobal', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Ignore Despawn', field: 'ignore_despawn', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Quest NPC', field: 'isquest', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Unique Spawn', field: 'unique_spawn_by_name', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Rare Spawn', field: 'rare_spawn', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Always Aggro', field: 'always_aggro', fType: 'checkbox', col: 'col-4' },
+              { desc: 'NPC Aggro', field: 'npc_aggro', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Raid Target', field: 'raid_target', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Private Corpse', field: 'private_corpse', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Is Bot', field: 'isbot', fType: 'checkbox', col: 'col-4' },
+            ]},
+            { fields: [
+              { desc: 'Keeps Sold Items', field: 'keeps_sold_items', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Is Parcel Merchant', field: 'is_parcel_merchant', fType: 'checkbox', col: 'col-4' },
+              { desc: 'Multiquest Enabled', field: 'multiquest_enabled', fType: 'checkbox', col: 'col-4' },
+            ]},
+          ],
         },
       ]
     }
@@ -812,5 +1424,48 @@ export default {
 
 .effect-tab input, .effect-tab select {
   margin-bottom: 0;
+}
+
+.dps-calculator-panel {
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: rgba(255, 193, 7, 0.05);
+}
+
+.dps-stats-row {
+  margin: 0;
+}
+
+.dps-stat-box {
+  padding: 6px 4px;
+}
+
+.dps-stat-value {
+  font-size: 1.3em;
+  font-weight: bold;
+  font-family: monospace;
+  line-height: 1.2;
+}
+
+.dps-stat-label {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  letter-spacing: 1px;
+}
+
+.suggestion-value {
+  font-family: monospace;
+}
+
+.save-btn-glow {
+  box-shadow: 0 0 8px 2px rgba(255, 50, 50, 0.6);
+  animation: save-glow-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes save-glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(255, 50, 50, 0.6); }
+  50% { box-shadow: 0 0 14px 4px rgba(255, 50, 50, 0.9); }
 }
 </style>
