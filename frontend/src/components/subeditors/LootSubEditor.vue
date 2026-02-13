@@ -1,6 +1,6 @@
 <template>
-  <div class="loot-sub-editor">
-    <eq-window title="Loot">
+  <div class="loot-sub-editor" style="max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;">
+    <eq-window title="Loot" style="display: flex; flex-direction: column; overflow: hidden;">
 
       <!-- Header Info -->
       <div v-if="currentLoottable" style="flex-shrink: 0;">
@@ -286,6 +286,20 @@ export default {
 </script>
 
 <style scoped>
+/* Force eq-window internals to flex for scroll containment */
+.loot-sub-editor >>> .eq-window-simple {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 85vh;
+}
+.loot-sub-editor >>> .eq-window-simple > div:last-child {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Info badges (cash, count) - high contrast */
 .info-badge {
   display: inline-block;
