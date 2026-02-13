@@ -1,6 +1,6 @@
 <template>
-  <div class="loot-sub-editor" style="display: flex; flex-direction: column; height: 85vh;">
-    <eq-window title="Loot" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+  <div class="loot-sub-editor">
+    <eq-window title="Loot">
 
       <!-- Header Info -->
       <div v-if="currentLoottable" style="flex-shrink: 0;">
@@ -31,7 +31,7 @@
       </div>
 
       <!-- Loot Entries (scrollable) -->
-      <div v-if="loottableEntries.length > 0" style="flex: 1; overflow-y: auto; min-height: 0;">
+      <div v-if="loottableEntries.length > 0" style="max-height: 55vh; overflow-y: auto;">
         <div
           v-for="(entry, ei) in loottableEntries"
           :key="'entry-' + ei"
@@ -94,20 +94,20 @@
       </div>
 
       <!-- No loot assigned -->
-      <div v-else-if="!loading && !currentLoottable" class="text-center text-muted py-5" style="flex: 1;">
+      <div v-else-if="!loading && !currentLoottable" class="text-center text-muted py-5">
         <i class="fa fa-box-open fa-3x mb-3 d-block" style="opacity: 0.3;"></i>
         <div>No loot table assigned.</div>
         <small>Search below to assign one.</small>
       </div>
 
       <!-- Loading -->
-      <div v-else-if="loading" class="text-center py-4" style="flex: 1;">
+      <div v-else-if="loading" class="text-center py-4">
         <i class="fa fa-spinner fa-spin fa-2x text-warning"></i>
         <div class="mt-2 small text-muted">Loading loot data...</div>
       </div>
 
       <!-- Search Bar -->
-      <div class="search-bar" style="flex-shrink: 0;">
+      <div class="search-bar">
         <div class="input-group input-group-sm">
           <div class="input-group-prepend">
             <span class="input-group-text" style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15);">
