@@ -241,7 +241,7 @@
                     <div class="d-flex align-items-center">
                       <i
                         class="fa mr-2"
-                        :class="le._expanded !== false ? 'fa-chevron-down' : 'fa-chevron-right'"
+                        :class="le._expanded ? 'fa-chevron-down' : 'fa-chevron-right'"
                         style="opacity:.5; width: 14px;"
                       ></i>
                       <span class="lootdrop-name">{{ le.lootdrop.name || 'Lootdrop #' + le.lootdrop_id }}</span>
@@ -305,7 +305,7 @@
                 </div>
 
                 <!-- Lootdrop Items -->
-                <div v-if="le._expanded !== false" class="lootdrop-items">
+                <div v-if="le._expanded" class="lootdrop-items">
                   <table class="eq-table eq-highlight-rows w-100" style="font-size: 13px;">
                     <thead>
                       <tr>
@@ -554,7 +554,7 @@ export default {
       hasUnsavedChanges: false,
       notification: null,
       npcsExpanded: false,
-      allExpanded: true,
+      allExpanded: false,
     }
   },
 
@@ -727,7 +727,7 @@ export default {
       }
       this.editEntries = (lt.loottable_entries || []).map(le => ({
         ...le,
-        _expanded: true,
+        _expanded: false,
         _addingItem: false,
         _newItemId: null,
         _newItemChance: 10,
