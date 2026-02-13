@@ -1032,20 +1032,21 @@ export default {
 }
 
 .lootdrop-card {
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(144, 202, 249, 0.2);
   border-radius: 6px;
-  margin: 8px;
+  margin: 10px 8px;
   overflow: hidden;
-  background: rgba(0,0,0,0.15);
+  background: rgba(0,0,0,0.2);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 .lootdrop-header {
-  padding: 8px 12px;
-  background: rgba(255,255,255,0.04);
+  padding: 10px 12px;
+  background: rgba(144, 202, 249, 0.06);
   cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(144, 202, 249, 0.12);
 }
 .lootdrop-header:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(144, 202, 249, 0.1);
 }
 .lootdrop-name {
   font-weight: 600;
