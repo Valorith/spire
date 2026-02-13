@@ -1032,12 +1032,15 @@ export default {
 }
 
 .lootdrop-card {
-  border: 2px solid rgba(144, 202, 249, 0.35);
+  border: 2px solid rgba(255, 193, 7, 0.3);
   border-radius: 6px;
   margin: 10px 8px;
   overflow: hidden;
   background: rgba(0,0,0,0.2);
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.lootdrop-card:first-child {
+  margin-top: 16px;
 }
 .lootdrop-header {
   padding: 10px 12px;
