@@ -175,24 +175,24 @@
           </eq-window>
 
           <!-- Linked NPCs -->
-          <eq-window
+          <div
             v-if="selectedTable.npc_types && selectedTable.npc_types.length > 0"
-            title="Linked NPCs"
-            class="p-0"
+            class="linked-npcs-strip mx-0 mb-2"
           >
-            <div class="linked-npcs-bar">
-              <span
-                v-for="npc in selectedTable.npc_types.slice(0, 20)"
-                :key="npc.id"
-                class="npc-chip"
-              >
-                <npc-popover :npc="npc" />
-              </span>
-              <span v-if="selectedTable.npc_types.length > 20" class="ml-2" style="opacity:.5;">
-                +{{ selectedTable.npc_types.length - 20 }} more
-              </span>
-            </div>
-          </eq-window>
+            <small class="mr-2" style="opacity:.4; white-space: nowrap;">
+              <i class="fa fa-link mr-1"></i>NPCs:
+            </small>
+            <a
+              v-for="npc in selectedTable.npc_types.slice(0, 30)"
+              :key="npc.id"
+              :href="'#/npc/' + npc.id"
+              class="npc-tag"
+              :title="'ID: ' + npc.id"
+            >{{ npc.name }}</a>
+            <span v-if="selectedTable.npc_types.length > 30" class="ml-1" style="opacity:.4; font-size: .8em;">
+              +{{ selectedTable.npc_types.length - 30 }} more
+            </span>
+          </div>
 
           <!-- Lootdrops -->
           <eq-window title="Loot Drops" class="p-0">
@@ -494,7 +494,6 @@ import EqWindow            from "../../components/eq-ui/EQWindow";
 import EqCheckbox          from "../../components/eq-ui/EQCheckbox";
 import ContentArea         from "../../components/layout/ContentArea";
 import ItemPopover         from "../../components/ItemPopover";
-import NpcPopover          from "../../components/NpcPopover";
 import EqCashDisplay       from "../../components/eq-ui/EqCashDisplay";
 import {ROUTE}             from "../../routes";
 import {LoottableApi, LoottableEntryApi, LootdropApi, LootdropEntryApi} from "../../app/api";
@@ -504,7 +503,7 @@ import {debounce}          from "../../app/utility/debounce";
 
 export default {
   name: "Loot",
-  components: { EqCashDisplay, NpcPopover, ItemPopover, EqCheckbox, ContentArea, EqWindow },
+  components: { EqCashDisplay, ItemPopover, EqCheckbox, ContentArea, EqWindow },
   data() {
     return {
       tableData: [],
@@ -982,16 +981,30 @@ export default {
   padding: 12px 16px;
 }
 
-.linked-npcs-bar {
-  padding: 8px 12px;
+.linked-npcs-strip {
+  padding: 6px 12px;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
   align-items: center;
+  gap: 4px;
+  background: rgba(144, 202, 249, 0.04);
+  border: 1px solid rgba(144, 202, 249, 0.1);
+  border-radius: 4px;
 }
-.npc-chip {
+.npc-tag {
   display: inline-block;
-  font-size: 0.85em;
+  padding: 1px 8px;
+  font-size: 0.78em;
+  background: rgba(144, 202, 249, 0.1);
+  color: #90caf9;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.npc-tag:hover {
+  background: rgba(144, 202, 249, 0.25);
+  color: #bbdefb;
+  text-decoration: none;
 }
 
 .lootdrop-card {
