@@ -192,7 +192,7 @@ export default {
     openFullEditor() {
       const ltId = this.currentLoottable ? this.currentLoottable.id : null;
       if (!ltId) return;
-      const url = window.location.origin + '/#/loot?loottableId=' + ltId;
+      const url = window.location.origin + '/loot?loottableId=' + ltId;
       window.open(url, '_blank');
     },
     async loadLoottable(id) {

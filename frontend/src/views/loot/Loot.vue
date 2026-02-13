@@ -601,7 +601,7 @@ export default {
     },
 
     goToNpc(id) {
-      window.open(window.location.origin + window.location.pathname + '#/npc/' + id, '_blank')
+      window.open(window.location.origin + '/npc/' + id, '_blank')
     },
 
     showNotification(message, type = 'success') {
