@@ -1,6 +1,6 @@
 <template>
   <div class="alt-currency-sub-editor" style="display: flex; flex-direction: column; height: 85vh;">
-    <eq-window title="Alternate Currency" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+    <eq-window title="Alternate Currency" style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
 
       <!-- Current Selection -->
       <div v-if="selectedCurrency" style="flex-shrink: 0; padding: 4px 0;">
@@ -38,11 +38,9 @@
           @click="selectCurrency(c)"
         >
           <div class="d-flex align-items-center" style="min-width: 0;">
-            <item-popover v-if="c.item" :item="c.item" size="sm" class="mr-2" />
-            <div style="min-width: 0;">
-              <div class="currency-name">{{ c.itemName || 'Unknown' }}</div>
-              <small class="text-muted">ID: {{ c.id }} · Item: {{ c.item_id }}</small>
-            </div>
+            <item-popover v-if="c.item" :item="c.item" size="sm" />
+            <span v-else class="currency-name">{{ c.itemName || 'Unknown' }}</span>
+            <small class="text-muted ml-2">ID: {{ c.id }}</small>
           </div>
           <div v-if="currencyId == c.id" class="text-success">
             <i class="fa fa-check"></i>
