@@ -778,28 +778,34 @@ export default {
       try {
         // 1. Save loottable itself
         const ltApi = new LoottableApi(...SpireApi.cfg())
-        await ltApi.updateLoottable(this.editTable.id, {
-          name: this.editTable.name,
-          mincash: this.editTable.mincash || 0,
-          maxcash: this.editTable.maxcash || 0,
-          avgcoin: this.editTable.avgcoin || 0,
-          min_expansion: this.editTable.min_expansion || -1,
-          max_expansion: this.editTable.max_expansion || -1,
-          content_flags: this.editTable.content_flags || '',
-          content_flags_disabled: this.editTable.content_flags_disabled || '',
-          done: this.editTable.done || 0,
+        await ltApi.updateLoottable({
+          id: this.editTable.id,
+          loottable: {
+            name: this.editTable.name,
+            mincash: this.editTable.mincash || 0,
+            maxcash: this.editTable.maxcash || 0,
+            avgcoin: this.editTable.avgcoin || 0,
+            min_expansion: this.editTable.min_expansion || -1,
+            max_expansion: this.editTable.max_expansion || -1,
+            content_flags: this.editTable.content_flags || '',
+            content_flags_disabled: this.editTable.content_flags_disabled || '',
+            done: this.editTable.done || 0,
+          }
         })
 
         // 2. Save loottable entries (probability, multiplier, etc.)
         const lteApi = new LoottableEntryApi(...SpireApi.cfg())
         for (const le of this.editEntries) {
-          await lteApi.updateLoottableEntry(le.loottable_id, {
-            loottable_id: le.loottable_id,
-            lootdrop_id: le.lootdrop_id,
-            multiplier: le.multiplier || 1,
-            droplimit: le.droplimit || 0,
-            mindrop: le.mindrop || 0,
-            probability: le.probability || 100,
+          await lteApi.updateLoottableEntry({
+            id: le.loottable_id,
+            loottableEntry: {
+              loottable_id: le.loottable_id,
+              lootdrop_id: le.lootdrop_id,
+              multiplier: le.multiplier || 1,
+              droplimit: le.droplimit || 0,
+              mindrop: le.mindrop || 0,
+              probability: le.probability || 100,
+            }
           })
         }
 
@@ -807,22 +813,25 @@ export default {
         const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
         for (const le of this.editEntries) {
           for (const lde of le.lootdrop.lootdrop_entries) {
-            await ldeApi.updateLootdropEntry(lde.lootdrop_id, {
-              lootdrop_id: lde.lootdrop_id,
-              item_id: lde.item_id,
-              item_charges: lde.item_charges || 0,
-              equip_item: lde.equip_item || 0,
-              chance: lde.chance || 0,
-              disabled_chance: lde.disabled_chance || 0,
-              trivial_min_level: lde.trivial_min_level || 0,
-              trivial_max_level: lde.trivial_max_level || 0,
-              multiplier: lde.multiplier || 1,
-              npc_min_level: lde.npc_min_level || 0,
-              npc_max_level: lde.npc_max_level || 0,
-              min_expansion: lde.min_expansion || -1,
-              max_expansion: lde.max_expansion || -1,
-              content_flags: lde.content_flags || '',
-              content_flags_disabled: lde.content_flags_disabled || '',
+            await ldeApi.updateLootdropEntry({
+              id: lde.lootdrop_id,
+              lootdropEntry: {
+                lootdrop_id: lde.lootdrop_id,
+                item_id: lde.item_id,
+                item_charges: lde.item_charges || 0,
+                equip_item: lde.equip_item || 0,
+                chance: lde.chance || 0,
+                disabled_chance: lde.disabled_chance || 0,
+                trivial_min_level: lde.trivial_min_level || 0,
+                trivial_max_level: lde.trivial_max_level || 0,
+                multiplier: lde.multiplier || 1,
+                npc_min_level: lde.npc_min_level || 0,
+                npc_max_level: lde.npc_max_level || 0,
+                min_expansion: lde.min_expansion || -1,
+                max_expansion: lde.max_expansion || -1,
+                content_flags: lde.content_flags || '',
+                content_flags_disabled: lde.content_flags_disabled || '',
+              }
             })
           }
         }
@@ -848,9 +857,11 @@ export default {
       try {
         const ltApi = new LoottableApi(...SpireApi.cfg())
         const r = await ltApi.createLoottable({
-          name: 'New Loot Table',
-          mincash: 0,
-          maxcash: 0,
+          loottable: {
+            name: 'New Loot Table',
+            mincash: 0,
+            maxcash: 0,
+          }
         })
         if (r.data && r.data.length > 0) {
           this.showNotification('Created loot table #' + r.data[0].id)
@@ -869,10 +880,12 @@ export default {
         // Create new loottable with same settings
         const ltApi = new LoottableApi(...SpireApi.cfg())
         const r = await ltApi.createLoottable({
-          name: (this.editTable.name || '') + ' (Clone)',
-          mincash: this.editTable.mincash || 0,
-          maxcash: this.editTable.maxcash || 0,
-          avgcoin: this.editTable.avgcoin || 0,
+          loottable: {
+            name: (this.editTable.name || '') + ' (Clone)',
+            mincash: this.editTable.mincash || 0,
+            maxcash: this.editTable.maxcash || 0,
+            avgcoin: this.editTable.avgcoin || 0,
+          }
         })
         if (r.data && r.data.length > 0) {
           const newId = r.data[0].id
@@ -880,12 +893,14 @@ export default {
           const lteApi = new LoottableEntryApi(...SpireApi.cfg())
           for (const le of this.editEntries) {
             await lteApi.createLoottableEntry({
-              loottable_id: newId,
-              lootdrop_id: le.lootdrop_id,
-              multiplier: le.multiplier || 1,
-              droplimit: le.droplimit || 0,
-              mindrop: le.mindrop || 0,
-              probability: le.probability || 100,
+              loottableEntry: {
+                loottable_id: newId,
+                lootdrop_id: le.lootdrop_id,
+                multiplier: le.multiplier || 1,
+                droplimit: le.droplimit || 0,
+                mindrop: le.mindrop || 0,
+                probability: le.probability || 100,
+              }
             })
           }
           this.showNotification('Cloned as loot table #' + newId)
@@ -903,7 +918,7 @@ export default {
       if (!confirm('Delete loot table #' + this.editTable.id + '? This cannot be undone.')) return
       try {
         const ltApi = new LoottableApi(...SpireApi.cfg())
-        await ltApi.deleteLoottable(this.editTable.id)
+        await ltApi.deleteLoottable({ id: this.editTable.id })
         this.showNotification('Deleted loot table #' + this.editTable.id)
         this.selectedTable = null
         this.hasUnsavedChanges = false
@@ -918,19 +933,23 @@ export default {
         // Create a new lootdrop
         const ldApi = new LootdropApi(...SpireApi.cfg())
         const r = await ldApi.createLootdrop({
-          name: (this.editTable.name || 'Lootdrop') + ' - Drop ' + (this.editEntries.length + 1),
+          lootdrop: {
+            name: (this.editTable.name || 'Lootdrop') + ' - Drop ' + (this.editEntries.length + 1),
+          }
         })
         if (r.data && r.data.length > 0) {
           const newDrop = r.data[0]
           // Link it to loottable
           const lteApi = new LoottableEntryApi(...SpireApi.cfg())
           await lteApi.createLoottableEntry({
-            loottable_id: this.editTable.id,
-            lootdrop_id: newDrop.id,
-            multiplier: 1,
-            droplimit: 0,
-            mindrop: 0,
-            probability: 100,
+            loottableEntry: {
+              loottable_id: this.editTable.id,
+              lootdrop_id: newDrop.id,
+              multiplier: 1,
+              droplimit: 0,
+              mindrop: 0,
+              probability: 100,
+            }
           })
           // Refresh
           this.showNotification('Added new lootdrop #' + newDrop.id)
@@ -946,7 +965,7 @@ export default {
       if (!confirm('Remove lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '" from this table?')) return
       try {
         const lteApi = new LoottableEntryApi(...SpireApi.cfg())
-        await lteApi.deleteLoottableEntry(le.loottable_id)
+        await lteApi.deleteLoottableEntry({ id: le.loottable_id })
         this.showNotification('Removed lootdrop')
         await this.refreshCurrentTable()
       } catch (e) {
@@ -1081,7 +1100,7 @@ export default {
       if (!confirm('Remove ' + (lde.item ? lde.item.Name : 'item #' + lde.item_id) + '?')) return
       try {
         const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
-        await ldeApi.deleteLootdropEntry(lde.lootdrop_id)
+        await ldeApi.deleteLootdropEntry({ id: lde.lootdrop_id })
         this.showNotification('Removed item')
         await this.refreshCurrentTable()
       } catch (e) {
