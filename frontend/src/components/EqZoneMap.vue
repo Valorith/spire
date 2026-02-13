@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="zone-map-container">
     <eq-window class="p-2" style="height: 96vh">
 
       <!-- Loader -->
@@ -15,9 +15,78 @@
         <eq-progress-bar :percent="100" v-if="isDataLoaded()"/>
       </eq-window>
 
+      <!-- Layer Controls (floating top-right) -->
+      <div class="layer-controls" v-if="isDataLoaded()">
+        <div class="layer-controls-header" @click="layerPanelOpen = !layerPanelOpen">
+          <i class="fa fa-layer-group"></i>
+          <span v-if="layerPanelOpen"> Layers</span>
+          <i :class="layerPanelOpen ? 'fa fa-chevron-up' : 'fa fa-chevron-down'" class="ml-1"></i>
+        </div>
+        <div v-if="layerPanelOpen" class="layer-controls-body">
+          <label
+            v-for="layer in layerDefs"
+            :key="layer.key"
+            class="layer-toggle"
+            :title="layer.label + ' (' + getLayerCount(layer.key) + ')'"
+          >
+            <input
+              type="checkbox"
+              :checked="layers[layer.key]"
+              @change="toggleLayer(layer.key)"
+            />
+            <i :class="layer.icon" :style="{ color: layer.color }"></i>
+            <span>{{ layer.label }}</span>
+            <span class="layer-count">({{ getLayerCount(layer.key) }})</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Map Search Overlay (floating top-left) -->
+      <div class="map-search-overlay" v-if="isDataLoaded()">
+        <div class="map-search-input-wrap">
+          <i class="fa fa-search"></i>
+          <input
+            type="text"
+            class="map-search-input"
+            placeholder="Search NPCs, doors..."
+            v-model="mapSearchText"
+            @input="onMapSearch"
+            @keyup.escape="clearMapSearch"
+          />
+          <i
+            v-if="mapSearchText"
+            class="fa fa-times map-search-clear"
+            @click="clearMapSearch"
+          ></i>
+        </div>
+        <div class="map-search-results" v-if="mapSearchResults.length > 0">
+          <div
+            v-for="(r, i) in mapSearchResults.slice(0, 20)"
+            :key="i"
+            class="map-search-result-item"
+            @click="zoomToSearchResult(r)"
+          >
+            <i :class="r.icon" :style="{ color: r.color }"></i>
+            <span>{{ r.label }}</span>
+            <span class="map-search-result-type">{{ r.type }}</span>
+          </div>
+          <div v-if="mapSearchResults.length > 20" class="map-search-more">
+            ... and {{ mapSearchResults.length - 20 }} more
+          </div>
+        </div>
+      </div>
+
+      <!-- Coordinate Display (floating bottom-left) -->
+      <div class="coord-display" v-if="isDataLoaded() && mouseCoords">
+        <span class="coord-label">X:</span> {{ mouseCoords.x.toFixed(1) }}
+        <span class="coord-label ml-2">Y:</span> {{ mouseCoords.y.toFixed(1) }}
+        <span class="coord-label ml-2">Z:</span> {{ zoomLevel.toFixed(0) }}
+      </div>
+
       <div class="card">
         <l-map
           v-if="center"
+          ref="leafletMap"
           :crs="crs"
           style="height: 94vh"
           class="map-tiles"
@@ -28,11 +97,12 @@
           :zoom-animation="true"
           :zoom-animation-threshold="10"
           @update:zoom="zoomUpdate"
+          @mousemove="onMapMouseMove"
         >
 
           <!-- Draw map lines -->
           <l-polyline
-            v-if="lines"
+            v-if="lines && layers.mapLines"
             :lat-lngs="lines"
             color="gray"
             :weight="1"
@@ -41,9 +111,9 @@
           <!-- grid points -->
           <l-marker
             v-for="(m, index) in pathingGridMarkers"
-            :key="index + '-' + m.point.lat + '-' + m.point.lng"
+            :key="'grid-' + index + '-' + m.point.lat + '-' + m.point.lng"
             :lat-lng="m.point"
-            v-if="markers && markers.length > 0"
+            v-if="markers && markers.length > 0 && layers.pathing"
           >
             <l-tooltip :options="{ permanent: true, interactive: true }">
               {{ m.label }}
@@ -52,7 +122,7 @@
 
           <!-- Draw pathing grid lines -->
           <l-polyline
-            v-if="pathingGridLines"
+            v-if="pathingGridLines && layers.pathing"
             :lat-lngs="pathingGridLines"
             color="blue"
             dashArray="5, 10"
@@ -60,29 +130,21 @@
             :weight="2"
           />
 
-          <!--          &lt;!&ndash; markers from map &ndash;&gt;-->
-          <!--          <l-marker-->
-          <!--            v-for="(marker, index) in markers"-->
-          <!--            :key="index"-->
-          <!--            :lat-lng="marker.point"-->
-          <!--            v-if="markers && markers.length > 0"-->
-          <!--          >-->
-          <!--            <l-tooltip>-->
-          <!--              <eq-window>{{ marker.label }}-->
-          <!--              </eq-window>-->
-          <!--            </l-tooltip>-->
-          <!--          </l-marker>-->
-
           <!-- zone points -->
           <l-marker
             v-for="(m, index) in zonelineMarkers"
-            :key="index"
+            :key="'zp-' + index"
             :lat-lng="m.point"
-            v-if="markers && markers.length > 0"
+            v-if="markers && markers.length > 0 && layers.zonePoints"
             @click="navigateToZone(m.zone.short_name, m.zone.version)"
           >
             <l-tooltip>
-              <eq-window>{{ m.label }}
+              <eq-window class="zone-point-tooltip">
+                <div class="zone-point-direction">
+                  <i class="fa fa-arrow-right" style="color: #60a5fa"></i>
+                  <span>{{ m.zone.long_name || m.zone.short_name }}</span>
+                </div>
+                <div class="zone-point-type">Zone Line (click to travel)</div>
               </eq-window>
             </l-tooltip>
           </l-marker>
@@ -90,13 +152,18 @@
           <!-- door zone points -->
           <l-marker
             v-for="(m, index) in doorZonePoints"
-            :key="index + '-' + m.destName + '-' + m.destInstance"
+            :key="'dzp-' + index + '-' + m.destName + '-' + m.destInstance"
             :lat-lng="m.point"
-            v-if="markers && markers.length > 0"
+            v-if="markers && markers.length > 0 && layers.zonePoints"
             @click="navigateToZone(m.destName, m.destInstance)"
           >
             <l-tooltip>
-              <eq-window>{{ m.label }}
+              <eq-window class="zone-point-tooltip">
+                <div class="zone-point-direction">
+                  <i class="fa fa-door-open" style="color: #fb923c"></i>
+                  <span>{{ m.label }}</span>
+                </div>
+                <div class="zone-point-type">Door Teleport (click to travel)</div>
               </eq-window>
             </l-tooltip>
           </l-marker>
@@ -104,16 +171,20 @@
           <!-- NPC markers -->
           <l-marker
             v-for="(marker, index) in npcMarkers"
-            :key="index + '-' + marker.npc.id"
+            :key="'npc-' + index + '-' + marker.npc.id"
             :lat-lng="marker.point"
             :opacity="getNpcOpacity(index + '-' + marker.npc.id, marker.npc.id)"
             @mouseover="npcMarkerHover(marker, index + '-' + marker.npc.id)"
-            v-if="npcMarkers && npcMarkers.length > 0"
+            v-if="npcMarkers && npcMarkers.length > 0 && layers.npcs && isNpcVisible(marker)"
           >
-
             <l-tooltip>
-              <eq-window>
-                {{ getCleanName(marker.npc.name) }}
+              <eq-window class="npc-tooltip-enhanced">
+                <div class="npc-tooltip-name">{{ getCleanName(marker.npc.name) }}</div>
+                <div class="npc-tooltip-info">
+                  <span>Lvl {{ marker.npc.level }}{{ marker.npc.maxlevel && marker.npc.maxlevel > marker.npc.level ? '-' + marker.npc.maxlevel : '' }}</span>
+                  <span :style="{ color: getNpcLevelColor(marker.npc.level) }" class="npc-tooltip-dot">●</span>
+                  <span v-if="marker.npc.hp">HP: {{ marker.npc.hp.toLocaleString() }}</span>
+                </div>
               </eq-window>
             </l-tooltip>
 
@@ -129,11 +200,10 @@
           <!-- Door markers -->
           <l-marker
             v-for="(marker, index) in doorMarkers"
-            :key="index + '-' + marker.name"
+            :key="'door-' + index + '-' + marker.name"
             :lat-lng="marker.point"
-            v-if="doorMarkers && doorMarkers.length > 0"
+            v-if="doorMarkers && doorMarkers.length > 0 && layers.doors"
           >
-
             <l-tooltip>
               <eq-window>
                 {{ marker.label }}
@@ -151,10 +221,10 @@
           <!-- Translocate markers -->
           <l-marker
             v-for="(m, index) in translocatePoints"
-            :key="index + '-' + m.label"
+            :key="'spell-' + index + '-' + m.label"
             :lat-lng="m.point"
             @mouseover="spellMarkerHover(m.spell)"
-            v-if="translocatePoints && translocatePoints.length > 0"
+            v-if="translocatePoints && translocatePoints.length > 0 && layers.spells"
             style="border-radius: 10px"
           >
             <l-tooltip>
@@ -174,9 +244,9 @@
           <!-- Safe coordinate markers -->
           <l-marker
             v-for="(m, index) in safeCoordinateMarker"
-            :key="index + '-' + m.label"
+            :key="'safe-' + index + '-' + m.label"
             :lat-lng="m.point"
-            v-if="safeCoordinateMarker && safeCoordinateMarker.length > 0"
+            v-if="safeCoordinateMarker && safeCoordinateMarker.length > 0 && layers.safeCoords"
             style="border-radius: 10px"
           >
             <l-tooltip>
@@ -191,6 +261,19 @@
               :iconSize="m.iconSize"
             >
             </l-icon>
+          </l-marker>
+
+          <!-- Search highlight marker -->
+          <l-marker
+            v-if="searchHighlight"
+            :lat-lng="searchHighlight.point"
+            :z-index-offset="9999"
+          >
+            <l-tooltip :options="{ permanent: true, interactive: true }">
+              <eq-window class="search-highlight-tooltip">
+                <i class="fa fa-crosshairs"></i> {{ searchHighlight.label }}
+              </eq-window>
+            </l-tooltip>
           </l-marker>
 
         </l-map>
@@ -216,6 +299,18 @@ import {Zones}                                               from "../app/zones"
 import {DoorApi}                                             from "../app/api/api/door-api";
 import {EventBus}                                            from "../app/event-bus/event-bus";
 import {Spawn}                                               from "../app/spawn";
+
+// NPC level color thresholds
+const LEVEL_COLORS = [
+  { max: 10, color: '#4ade80' },   // green - low level
+  { max: 20, color: '#a3e635' },   // lime
+  { max: 30, color: '#facc15' },   // yellow
+  { max: 40, color: '#fb923c' },   // orange
+  { max: 50, color: '#f87171' },   // red
+  { max: 60, color: '#c084fc' },   // purple
+  { max: 70, color: '#818cf8' },   // indigo
+  { max: 255, color: '#f472b6' },  // pink - raid
+];
 
 export default {
   name: "EqZoneMap",
@@ -243,6 +338,54 @@ export default {
     LTileLayer,
     LPolyline
   },
+  data() {
+    return {
+      zoom: 0,
+      center: null,
+      hoveredNpc: "",
+      zoomedNpcId: 0,
+      starterZoomLevel: -100,
+      zoomLevel: 0,
+      bounds: null,
+      crs: L.CRS.Simple,
+      icon: L.icon({
+        iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        className: this.zoomLevel >= 2 ? 'item-4472' : 'item-4472-sm'
+      }),
+      map: "",
+      markers: null,
+      raceIconSizes: {},
+
+      // Layer visibility
+      layers: {
+        npcs: true,
+        doors: true,
+        zonePoints: true,
+        spells: true,
+        safeCoords: true,
+        pathing: true,
+        mapLines: true,
+      },
+      layerPanelOpen: true,
+      layerDefs: [
+        { key: 'npcs',       label: 'NPCs',         icon: 'fa fa-users',      color: '#4ade80' },
+        { key: 'doors',      label: 'Doors',         icon: 'fa fa-door-open',  color: '#fb923c' },
+        { key: 'zonePoints', label: 'Zone Points',   icon: 'fa fa-map-signs',  color: '#60a5fa' },
+        { key: 'spells',     label: 'Spells',        icon: 'fa fa-magic',      color: '#c084fc' },
+        { key: 'safeCoords', label: 'Safe Coords',   icon: 'fa fa-shield-alt', color: '#facc15' },
+        { key: 'pathing',    label: 'Pathing Grids',  icon: 'fa fa-route',      color: '#38bdf8' },
+        { key: 'mapLines',   label: 'Map Lines',      icon: 'fa fa-draw-polygon', color: '#94a3b8' },
+      ],
+
+      // Coordinate display
+      mouseCoords: null,
+
+      // Map search
+      mapSearchText: '',
+      mapSearchResults: [],
+      searchHighlight: null,
+    }
+  },
   watch: {
     zone: {
       handler(newVal) {
@@ -254,25 +397,183 @@ export default {
 
   methods: {
 
-    handleNpcZoomEvent(e) {
-      console.log("[EqZoneMap] Handling Zoom event")
-      console.log(e)
+    // --- Layer controls ---
+    toggleLayer(key) {
+      this.$set(this.layers, key, !this.layers[key])
+      // Persist to localStorage
+      try {
+        localStorage.setItem('zone-editor-layers', JSON.stringify(this.layers))
+      } catch (e) {}
+    },
 
+    loadLayerState() {
+      try {
+        const saved = localStorage.getItem('zone-editor-layers')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          for (const k of Object.keys(this.layers)) {
+            if (typeof parsed[k] === 'boolean') {
+              this.$set(this.layers, k, parsed[k])
+            }
+          }
+        }
+      } catch (e) {}
+    },
+
+    getLayerCount(key) {
+      switch (key) {
+        case 'npcs': return (this.npcMarkers || []).length
+        case 'doors': return (this.doorMarkers || []).length
+        case 'zonePoints': return (this.zonelineMarkers || []).length + (this.doorZonePoints || []).length
+        case 'spells': return (this.translocatePoints || []).length
+        case 'safeCoords': return (this.safeCoordinateMarker || []).length
+        case 'pathing': return (this.pathingGridMarkers || []).length
+        case 'mapLines': return (this.lines || []).length
+        default: return 0
+      }
+    },
+
+    // --- Coordinate display ---
+    onMapMouseMove(e) {
+      if (e && e.latlng) {
+        // EQ coords: x = -lng, y = -lat (map uses negated coords)
+        this.mouseCoords = {
+          x: -e.latlng.lng,
+          y: -e.latlng.lat
+        }
+      }
+    },
+
+    // --- NPC level color coding ---
+    getNpcLevelColor(level) {
+      for (const t of LEVEL_COLORS) {
+        if (level <= t.max) return t.color
+      }
+      return '#94a3b8'
+    },
+
+    isNpcVisible(marker) {
+      // For future filtering — currently all visible
+      if (this.mapSearchText && this.searchHighlight) {
+        // When search is active, still show all NPCs but the search result is highlighted
+        return true
+      }
+      return true
+    },
+
+    // --- Map Search ---
+    onMapSearch() {
+      const q = (this.mapSearchText || '').toLowerCase().trim()
+      if (!q) {
+        this.mapSearchResults = []
+        this.searchHighlight = null
+        return
+      }
+
+      let results = []
+
+      // Search NPCs
+      if (this.npcMarkers) {
+        for (const m of this.npcMarkers) {
+          const name = Npcs.getCleanName(m.npc.name || '').toLowerCase()
+          if (name.includes(q)) {
+            results.push({
+              label: Npcs.getCleanName(m.npc.name),
+              type: 'NPC (Lvl ' + m.npc.level + ')',
+              icon: 'fa fa-users',
+              color: this.getNpcLevelColor(m.npc.level),
+              point: m.point,
+              npc: m.npc,
+              marker: m,
+            })
+          }
+        }
+      }
+
+      // Search Doors
+      if (this.doorMarkers) {
+        for (const m of this.doorMarkers) {
+          if ((m.label || '').toLowerCase().includes(q)) {
+            results.push({
+              label: m.label,
+              type: 'Door',
+              icon: 'fa fa-door-open',
+              color: '#fb923c',
+              point: m.point,
+            })
+          }
+        }
+      }
+
+      // Search Zone Points
+      if (this.zonelineMarkers) {
+        for (const m of this.zonelineMarkers) {
+          if ((m.label || '').toLowerCase().includes(q)) {
+            results.push({
+              label: m.label,
+              type: 'Zone Point',
+              icon: 'fa fa-map-signs',
+              color: '#60a5fa',
+              point: m.point,
+            })
+          }
+        }
+      }
+
+      // Search Spells
+      if (this.translocatePoints) {
+        for (const m of this.translocatePoints) {
+          if ((m.label || '').toLowerCase().includes(q)) {
+            results.push({
+              label: m.label,
+              type: 'Spell',
+              icon: 'fa fa-magic',
+              color: '#c084fc',
+              point: m.point,
+            })
+          }
+        }
+      }
+
+      this.mapSearchResults = results
+    },
+
+    clearMapSearch() {
+      this.mapSearchText = ''
+      this.mapSearchResults = []
+      this.searchHighlight = null
+    },
+
+    zoomToSearchResult(result) {
+      this.searchHighlight = result
+
+      // Zoom to the result
+      this.center = result.point
+
+      // Zoom in
+      setTimeout(() => {
+        this.zoom = 1
+      }, 300)
+
+      // If it's an NPC, trigger the hover
+      if (result.npc && result.marker) {
+        this.npcMarkerHover(result.marker, 'search-' + result.npc.id)
+      }
+    },
+
+    // --- Original methods ---
+
+    handleNpcZoomEvent(e) {
       this.zoomedNpcId = e.id
 
       for (let n of this.npcMarkers) {
         if (n.npc.id === e.id) {
-          console.log("found NPC marker at ", n)
-
-          // zoom out first
           this.zoom = this.starterZoomLevel
 
-          // center on target
           setTimeout(() => {
             this.center = n.point
           }, 600)
 
-          // zoom in
           setTimeout(() => {
             this.zoom = 1
           }, 1000)
@@ -280,7 +581,6 @@ export default {
           break;
         }
       }
-
     },
 
     getNpcOpacity(elementKey, npcId) {
@@ -303,7 +603,6 @@ export default {
       return 1;
     },
 
-    // this is not a computed property because the dependencies are not reactive
     isDataLoaded() {
       return this.npcMarkers
     },
@@ -322,9 +621,6 @@ export default {
     },
 
     npcMarkerHover(e, elementKey) {
-      // console.log(e)
-
-      // reset
       this.hoveredNpc  = ""
       this.zoomedNpcId = 0
       if (this.pathingGridLines.length > 0) {
@@ -334,7 +630,6 @@ export default {
       }
 
       if (e.grid > 0) {
-        // transform grid entries into poly lines
         let polyLines   = []
         let gridMarkers = []
         for (const [id, g] of this.pathingGridData.entries()) {
@@ -342,11 +637,7 @@ export default {
             this.hoveredNpc = elementKey
 
             for (const [i, e] of g.entries()) {
-
-              // make sure we have a valid entry as well as
-              // a valid next point so we can draw a complete line
               if (e && e.x && g[i + 1]) {
-                // console.log(i, e)
                 const current = e
                 const next    = g[i + 1]
                 polyLines.push(
@@ -358,7 +649,6 @@ export default {
               }
 
               if (e && e.x) {
-                // console.log(i, e)
                 gridMarkers.push(
                   {
                     point: this.createPoint(-e.x, -e.y),
@@ -382,9 +672,6 @@ export default {
     },
 
     calcSmallIcons(xy) {
-      // console.log("small icon")
-      // console.log(xy)
-
       return [
         xy[0] / 2,
         xy[1] / 2,
@@ -396,25 +683,26 @@ export default {
     },
 
     zoomUpdate(e) {
-      console.log("zoom level [%s]", e)
-
       if (this.starterZoomLevel === -100) {
         this.starterZoomLevel = e
       }
-
       this.zoomLevel = e
     },
+
     createPoint(x, y) {
       return L.latLng(
         (typeof (y) === "string" ? -parseFloat(y) : -y),
         (typeof (x) === "string" ? parseFloat(x) : x));
     },
+
     iconClass() {
       return this.zoomLevel >= 2 ? 'item-4472' : 'item-4472-sm'
     },
+
     iconSize() {
       return this.zoomLevel >= 2 ? [40, 40] : [12, 12]
     },
+
     async getMapContents() {
       const postfix = ["", "_1", "_3"]
       let contents  = ""
@@ -423,30 +711,25 @@ export default {
           const r = await axios.get(
             `/eq-asset-preview-master/assets/eq-maps/${this.zone}${p}.txt`
           )
-
           if (r.status === 200) {
             if (r.data.length > 0) {
               contents += r.data
             }
           }
-
         } catch (err) {
-          // console.log("items.ts %s", err)
         }
       }
       return contents
     },
-    async parseRaceIconSizes() {
 
+    async parseRaceIconSizes() {
       console.time("[EqZoneMap] parseRaceIconSizes");
 
-      // parse CSS sheet to pull sizes
       let raceIconSizes = {}
       try {
         const r = await axios.get(
           `/eq-asset-preview-master/assets/sprites/race-models.css`
         )
-
         if (r.status === 200) {
           if (r.data.length > 0) {
             for (let line of r.data.split("\n")) {
@@ -454,21 +737,15 @@ export default {
               const raceClassKey = line.split(" ")[0].trim()
               const height       = line.split("height: ")[1].split(";")[0].replace("px", "").trim()
               const width        = line.split("width: ")[1].split(";")[0].replace("px", "").trim()
-              // console.log(raceClassKey)
-              // console.log(height)
-              // console.log(width)
-
               raceIconSizes[raceClassKey] = [width, height]
             }
           }
         }
-
       } catch (err) {
         console.log("map.vue %s", err)
       }
 
       this.raceIconSizes = raceIconSizes
-
       console.timeEnd("[EqZoneMap] parseRaceIconSizes");
     },
 
@@ -482,7 +759,6 @@ export default {
           iconSize: [40, 40]
         }
       )
-
       this.safeCoordinateMarker = safeCoordinates
     },
 
@@ -497,9 +773,7 @@ export default {
         )
 
         if (r.status === 200) {
-          // used as a mechanism to stagger multiple markers on the same coordinate
           let sameCoord = {}
-
           let translocatePoints = []
           for (const s of r.data) {
             if (typeof sameCoord[s.effect_base_value_2 + s.effect_base_value_1] === "undefined") {
@@ -515,14 +789,12 @@ export default {
                 iconSize: [40, 40]
               }
             )
-
             sameCoord[s.effect_base_value_2 + s.effect_base_value_1]++
           }
 
           this.translocatePoints = translocatePoints
           this.$forceUpdate()
         }
-
       } catch (err) {
         console.log("map.vue %s", err)
       }
@@ -538,7 +810,6 @@ export default {
       for (let line of map.split("\n")) {
         const cols = line.replaceAll(",", "").split(/\s+/)
 
-        // lines
         if (cols[0].trim() === "L") {
           const x  = cols[1].trim()
           const y  = cols[2].trim()
@@ -554,16 +825,13 @@ export default {
             Math.max(bounds[2], p[0].lat, p[1].lat),
             Math.max(bounds[3], p[0].lng, p[1].lng),
           ];
-
           mapLines.push(p)
         }
 
-        // points
         if (cols[0].trim() === "P") {
           const x     = cols[1].trim()
           const y     = cols[2].trim()
           const label = cols[8].trim()
-
           mapMarkers.push(
             {
               point: this.createPoint(x, y),
@@ -579,14 +847,12 @@ export default {
         [bounds[0], bounds[1]],
         [bounds[2], bounds[3]]
       ]
-
       this.center = [
         (bounds[0] + bounds[2]) / 2,
         (bounds[3] + bounds[1]) / 2
       ];
 
       this.$forceUpdate()
-
       console.timeEnd("[EqZoneMap] loadMapLines");
     },
 
@@ -605,9 +871,7 @@ export default {
         )
 
         if (r.status === 200) {
-
           let doorZonePoints = []
-
           for (let d of r.data) {
             doorMarkers.push(
               {
@@ -618,12 +882,8 @@ export default {
               }
             )
 
-            // zone teleport linked door
             if (d.dest_zone !== "NONE") {
               const z = (await Zones.getZoneLongNameByShortName(d.dest_zone))
-
-              // console.log(z)
-
               if (z !== "") {
                 doorZonePoints.push(
                   {
@@ -633,17 +893,13 @@ export default {
                     destInstance: d.dest_instance,
                   }
                 )
-
-                // console.log(d)
               }
-
             }
           }
 
           this.doorMarkers    = doorMarkers
           this.doorZonePoints = doorZonePoints
         }
-
       } catch (err) {
         console.log("map.vue %s", err)
       }
@@ -657,7 +913,6 @@ export default {
       try {
         console.time("[EqZoneMap] loadMapSpawns");
 
-        // grids
         const zone = (await Zones.getZoneByShortName(this.zone))
         const r    = await gridEntriesApi.listGridEntries(
           (new SpireQueryBuilder())
@@ -674,7 +929,6 @@ export default {
             if (typeof gridEntries[e.gridid][e.number] === "undefined") {
               gridEntries[e.gridid][e.number] = []
             }
-
             gridEntries[e.gridid][e.number] =
               {
                 x: e.x,
@@ -690,18 +944,9 @@ export default {
             if (spawn2.spawnentries) {
               for (let spawnentry of spawn2.spawnentries) {
                 if (spawnentry.npc_type) {
-
-                  // if (spawn.pathgrid > 0) {
-                  //   console.log(spawn)
-                  // }
-
-                  // make sure we have a npc associated to spawn
                   let npcName = ""
-
                   const n = spawnentry.npc_type
                   npcName = n.name + (n.lastname ? ` (${n.lastname})` : '')
-
-                  // console.log(this.raceIconSizes[this.getNpcIcon(n)])
 
                   npcMarkers.push(
                     {
@@ -719,9 +964,7 @@ export default {
           }
 
           this.npcMarkers = npcMarkers
-
           this.$forceUpdate()
-
           console.timeEnd("[EqZoneMap] loadMapSpawns");
         }
       } catch (err) {
@@ -740,10 +983,8 @@ export default {
           .get()
       ).then(async (r) => {
         if (r.status === 200) {
-          console.log(r.data)
           for (let point of r.data) {
             const z = (await Zones.getZoneById(point.target_zone_id))
-
             zonePoints.push({
                 point: this.createPoint(-point.x, -point.y),
                 label: "Zone Point to: " + z.long_name,
@@ -753,10 +994,7 @@ export default {
           }
 
           this.zonelineMarkers = zonePoints
-
           this.$forceUpdate()
-
-          // console.log(this.zonelineMarkers)
           console.timeEnd("[EqZoneMap] loadZonePoints");
         }
       })
@@ -775,6 +1013,9 @@ export default {
       this.pathingGridLines     = []
       this.pathingGridMarkers   = null
       this.pathingGridData      = []
+      this.searchHighlight      = null
+      this.mapSearchText        = ''
+      this.mapSearchResults     = []
 
       // load
       await this.parseRaceIconSizes()
@@ -787,14 +1028,17 @@ export default {
 
       this.$forceUpdate()
     }
-
   },
+
   async mounted() {
+    this.loadLayerState()
     this.loadMap()
   },
+
   beforeDestroy() {
     EventBus.$off("NPC_ZOOM", this.handleNpcZoomEvent);
   },
+
   created() {
     this.zonelineMarkers      = null
     this.doorZonePoints       = null
@@ -809,35 +1053,6 @@ export default {
 
     EventBus.$on("NPC_ZOOM", this.handleNpcZoomEvent);
   },
-  data() {
-    return {
-      zoom: 0,
-      center: null,
-
-      hoveredNpc: "",
-
-      zoomedNpcId: 0,
-      starterZoomLevel: -100,
-
-      zoomLevel: 0,
-
-      bounds: null,
-      crs: L.CRS.Simple,
-
-      icon: L.icon({
-        iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        // iconSize: [32, 37],
-        // iconAnchor: [16, 37],
-        className: this.zoomLevel >= 2 ? 'item-4472' : 'item-4472-sm'
-      }),
-
-      map: "",
-
-      markers: null,
-
-      raceIconSizes: {}
-    };
-  }
 }
 </script>
 
@@ -848,5 +1063,235 @@ export default {
   -webkit-box-shadow: none;
   box-shadow: none;
 }
+</style>
 
+<style scoped>
+.zone-map-container {
+  position: relative;
+}
+
+/* Layer Controls */
+.layer-controls {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 999;
+  background: rgba(20, 20, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  font-size: 12px;
+  min-width: 160px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+.layer-controls-header {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #e0e0e0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  user-select: none;
+}
+
+.layer-controls-body {
+  padding: 4px 0;
+}
+
+.layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  color: #ccc;
+  margin: 0;
+  transition: background 0.15s;
+}
+
+.layer-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.layer-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.layer-toggle i {
+  width: 14px;
+  text-align: center;
+}
+
+.layer-count {
+  margin-left: auto;
+  color: #888;
+  font-size: 11px;
+}
+
+/* Map Search */
+.map-search-overlay {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 999;
+  min-width: 260px;
+  max-width: 320px;
+}
+
+.map-search-input-wrap {
+  display: flex;
+  align-items: center;
+  background: rgba(20, 20, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 5px 10px;
+  gap: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+.map-search-input-wrap > i {
+  color: #888;
+  font-size: 12px;
+}
+
+.map-search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e0e0e0;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.map-search-input::placeholder {
+  color: #666;
+}
+
+.map-search-clear {
+  cursor: pointer;
+  color: #888;
+  transition: color 0.15s;
+}
+
+.map-search-clear:hover {
+  color: #fff;
+}
+
+.map-search-results {
+  margin-top: 4px;
+  background: rgba(20, 20, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+.map-search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+
+.map-search-result-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.map-search-result-item i {
+  width: 14px;
+  text-align: center;
+}
+
+.map-search-result-type {
+  margin-left: auto;
+  color: #888;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.map-search-more {
+  padding: 4px 10px;
+  color: #666;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Coordinate display */
+.coord-display {
+  position: absolute;
+  bottom: 18px;
+  left: 18px;
+  z-index: 999;
+  background: rgba(20, 20, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #aaa;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+}
+
+.coord-label {
+  color: #888;
+  font-weight: 600;
+}
+
+/* NPC enhanced tooltip */
+.npc-tooltip-enhanced {
+  text-align: center;
+}
+
+.npc-tooltip-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.npc-tooltip-info {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 2px;
+}
+
+.npc-tooltip-info span {
+  margin: 0 3px;
+}
+
+.npc-tooltip-dot {
+  font-size: 14px;
+}
+
+/* Search highlight */
+.search-highlight-tooltip {
+  background: rgba(59, 130, 246, 0.2) !important;
+  border: 1px solid rgba(59, 130, 246, 0.5) !important;
+}
+
+/* Zone point tooltips */
+.zone-point-tooltip {
+  text-align: left;
+}
+
+.zone-point-direction {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.zone-point-type {
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
 </style>

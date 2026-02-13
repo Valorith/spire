@@ -1,7 +1,8 @@
 <template>
   <div>
-    <div class="row">
-      <div class="col-7">
+    <div class="row no-gutters">
+      <!-- Map Column — expands when sidebar is collapsed -->
+      <div :class="sidebarCollapsed ? 'col-12' : 'col-9'" style="transition: all 0.3s ease;">
         <eq-zone-map
           v-if="zone && version"
           :zone="zone"
@@ -9,12 +10,40 @@
           @npc-marker-hover="processNpcMarkerHover"
           @spell-marker-hover="processSpellMarkerHover"
         />
+
+        <!-- Sidebar toggle (when collapsed) -->
+        <b-button
+          v-if="sidebarCollapsed"
+          class="zone-sidebar-toggle-open btn-dark btn-sm"
+          @click="sidebarCollapsed = false"
+          title="Show sidebar"
+        >
+          <i class="fa fa-chevron-left"></i>
+        </b-button>
       </div>
-      <div class="col-5">
+
+      <!-- Sidebar Column -->
+      <div
+        v-show="!sidebarCollapsed"
+        class="col-3 zone-sidebar"
+      >
+        <!-- Sidebar header with collapse button -->
+        <div class="zone-sidebar-header">
+          <span class="zone-sidebar-title" v-if="zoneData">
+            {{ zoneData.long_name || zone }}
+          </span>
+          <b-button
+            class="btn-dark btn-sm ml-auto"
+            @click="sidebarCollapsed = true"
+            title="Collapse sidebar"
+          >
+            <i class="fa fa-chevron-right"></i>
+          </b-button>
+        </div>
 
         <!-- Zone Card -->
         <eq-zone-card-preview
-          style="height: 96vh"
+          style="height: 92vh; overflow-y: auto;"
           v-show="selectorActive['zone-preview'] && zoneData"
           :zone="zoneData"
         />
@@ -31,11 +60,11 @@
           </b-button>
         </eq-window>
 
-        <!-- NPC -->
+        <!-- NPC Preview -->
         <eq-window
           class="fade-in"
           id="preview-pane"
-          :style="'max-height: ' + (isZoneCardActive() ? '95' : '87') + 'vh; overflow-y: scroll; overflow-x: hidden'"
+          :style="'max-height: ' + (isZoneCardActive() ? '91' : '83') + 'vh; overflow-y: scroll; overflow-x: hidden'"
           v-if="selectorActive['npc-hover'] && npc"
         >
           <eq-npc-card-preview
@@ -43,18 +72,17 @@
           />
         </eq-window>
 
-        <!-- Spell -->
+        <!-- Spell Preview -->
         <eq-window
           class="fade-in"
           id="preview-pane"
-          :style="'max-height: ' + (isZoneCardActive() ? '95' : '87') + 'vh; overflow-y: scroll; overflow-x: hidden'"
+          :style="'max-height: ' + (isZoneCardActive() ? '91' : '83') + 'vh; overflow-y: scroll; overflow-x: hidden'"
           v-if="selectorActive['spell-hover'] && spell"
         >
           <eq-spell-preview
             :spell-data="spell"
           />
         </eq-window>
-
       </div>
     </div>
   </div>
@@ -80,32 +108,22 @@ export default {
     return {
       zone: "",
       version: "",
-
       zoneData: {},
-
       selectorActive: {},
+      sidebarCollapsed: false,
     }
   },
   beforeDestroy() {
     Navbar.expand()
-
-    // if (this.zonePreviewInterval) {
-    //   clearInterval(this.zonePreviewInterval)
-    // }
-
     EventBus.$off("NPC_SHOW_CARD", this.handleNpcShowCardEvent);
   },
   created() {
     this.npc           = {}
     this.lastResetTime = Date.now()
-
-    // this.zonePreviewInterval = setInterval(this.previewZone, 1000)
-
     EventBus.$on("NPC_SHOW_CARD", this.handleNpcShowCardEvent);
   },
   watch: {
     '$route'() {
-      console.log("route trigger")
       this.init()
     },
   },
@@ -120,13 +138,11 @@ export default {
       return Object.keys(this.selectorActive).length > 0 && this.selectorActive['zone-preview']
     },
 
-    // from zone preview card -> zone
     handleNpcShowCardEvent(e) {
       this.processNpcMarkerHover(e)
     },
 
     previewZone() {
-      console.log("[Zone] previewZone trigger")
       this.setSelectorActive('zone-preview')
     },
 
@@ -135,14 +151,11 @@ export default {
       this.spell = {}
       this.resetSelectors()
 
-
       Navbar.collapse()
 
-      // pull from router
       this.zone    = this.$route.params.zone
       this.version = this.$route.query.v
 
-      // get zone data
       this.zoneData = (await Zones.getZoneByShortName(this.zone))
 
       this.setSelectorActive('zone-preview', true)
@@ -160,10 +173,6 @@ export default {
 
     setSelectorActive(selector, force = false) {
       if (this.selectorActive[selector] && !force) {
-        // console.log(
-        //   "[Zone] setSelectorActive. Selector [%s] is already active",
-        //   selector
-        // )
         return
       }
 
@@ -174,14 +183,6 @@ export default {
         this.$forceUpdate()
         return
       }
-
-      console.log(
-        "[Zone] Tried to set selector [%s] but reset time was not met (%s) ms remaining",
-        selector,
-        MILLISECONDS_BEFORE_WINDOW_RESET - (Date.now() - this.lastResetTime)
-      )
-
-      // EditFormFieldUtil.setFieldSubEditorHighlightedById(selector)
     },
 
     processSpellMarkerHover(s) {
@@ -189,7 +190,6 @@ export default {
       this.setSelectorActive("spell-hover", true)
       this.spell = s
 
-      // reset preview pane scroll to top
       const t = document.getElementById("preview-pane");
       if (t) {
         t.scrollTop = 0;
@@ -201,7 +201,6 @@ export default {
       this.setSelectorActive("npc-hover", true)
       this.npc = n
 
-      // reset preview pane scroll to top
       const t = document.getElementById("preview-pane");
       if (t) {
         t.scrollTop = 0;
@@ -211,26 +210,40 @@ export default {
 }
 </script>
 
-<style>
+<style scoped>
+.zone-sidebar {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
 
+.zone-sidebar-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
 
-/*.map-tiles::after {*/
-/*  content: "";*/
-/*  background-size: cover !important;*/
-/*  background-repeat: no-repeat !important;*/
-/*  position: absolute;*/
-/*  z-index: 1;*/
-/*  top: 0;*/
-/*  right: 0;*/
-/*  bottom: 0;*/
-/*  left: 0;*/
-/*  background: var(--zone-background) !important;*/
-/*  opacity: .1;*/
+.zone-sidebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-/*  --webkit-transition: background-image 3s ease-in-out;*/
-/*  transition: background-image 3s ease-in-out;*/
+.zone-sidebar-toggle-open {
+  position: fixed;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 999;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
 
-/*  !*animation: fadeIn 3s;*!*/
-/*}*/
-
+.zone-sidebar-toggle-open:hover {
+  opacity: 1;
+}
 </style>

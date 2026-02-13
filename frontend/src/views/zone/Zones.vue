@@ -4,9 +4,10 @@
       <div class="col-12">
         <eq-window-simple title="Zones">
 
+          <!-- Search Row -->
           <div class="row" style="justify-content: center">
             <div class='col-4'>
-              <div>Showing ({{ resultCount }}) results</div>
+              <div class="zone-result-count">Showing ({{ resultCount }}) results</div>
               <input
                 type="text"
                 class="form-control"
@@ -18,7 +19,6 @@
               >
             </div>
             <div class="col-8">
-
               <img
                 v-for="(expansion, expansionId) in EXPANSIONS_FULL"
                 v-if="!getExpansionIcon(expansionId).includes('base64')"
@@ -28,7 +28,40 @@
                 :style="'width: 56px; opacity: .7; ' + (isExpansionSelected(expansionId) ? 'border: 2px solid #dadada; border-radius: 7px;' : 'border: 2px solid rgb(218 218 218 / 30%); border-radius: 7px;')"
                 class="mr-2 p-1 hover-highlight-inner"
               >
+            </div>
+          </div>
 
+          <!-- Filter Bar -->
+          <div class="zone-filter-bar mt-2">
+            <div class="zone-filter-group">
+              <label class="zone-filter-label">Zone Type:</label>
+              <select class="form-control form-control-sm zone-filter-select" v-model="filterZoneType" @change="triggerSearch">
+                <option value="">All</option>
+                <option :value="0">Standard (0)</option>
+                <option :value="1">Instanced (1)</option>
+                <option :value="2">Hybrid (2)</option>
+                <option :value="3">Raid (3)</option>
+                <option :value="4">City (4)</option>
+                <option :value="5">Ocean/Water (5)</option>
+              </select>
+            </div>
+            <div class="zone-filter-group">
+              <label class="zone-filter-label">Min Level:</label>
+              <input type="number" class="form-control form-control-sm zone-filter-input" v-model.number="filterMinLevel" @input="triggerSearch" min="0" max="255" placeholder="0">
+            </div>
+            <div class="zone-filter-group">
+              <label class="zone-filter-label">Flags:</label>
+              <div class="zone-filter-toggles">
+                <span class="zone-flag-toggle" :class="{ active: filterBind }" @click="filterBind = !filterBind; triggerSearch()" title="Can Bind">Bind</span>
+                <span class="zone-flag-toggle" :class="{ active: filterCombat }" @click="filterCombat = !filterCombat; triggerSearch()" title="Can Combat">Combat</span>
+                <span class="zone-flag-toggle" :class="{ active: filterOutdoor }" @click="filterOutdoor = !filterOutdoor; triggerSearch()" title="Cast Outdoor">Outdoor</span>
+                <span class="zone-flag-toggle" :class="{ active: filterHotzone }" @click="filterHotzone = !filterHotzone; triggerSearch()" title="Is Hotzone">Hotzone</span>
+              </div>
+            </div>
+            <div class="zone-filter-group" v-if="hasActiveFilters">
+              <b-button class="btn-dark btn-sm" @click="clearFilters">
+                <i class="fa fa-times"></i> Clear Filters
+              </b-button>
             </div>
           </div>
 
@@ -46,15 +79,22 @@
           >
             <thead>
             <tr>
-
               <th style="width: 60px; white-space: nowrap;"></th>
-              <th style="width: 200px; text-align: center; white-space: nowrap;">Expansion</th>
-              <th style="width: 100px; white-space: nowrap;">Short Name</th>
-
-              <th style="width: 350px">Long Name</th>
-
-              <th style="width: 50px">Zone ID</th>
-              <th style="width: 50px">Version</th>
+              <th class="zone-sortable-header" style="width: 200px; text-align: center; white-space: nowrap;" @click="toggleSort('expansion')">
+                Expansion <i :class="getSortIcon('expansion')"></i>
+              </th>
+              <th class="zone-sortable-header" style="width: 100px; white-space: nowrap;" @click="toggleSort('short_name')">
+                Short Name <i :class="getSortIcon('short_name')"></i>
+              </th>
+              <th class="zone-sortable-header" style="width: 350px" @click="toggleSort('long_name')">
+                Long Name <i :class="getSortIcon('long_name')"></i>
+              </th>
+              <th class="zone-sortable-header" style="width: 50px" @click="toggleSort('zoneidnumber')">
+                Zone ID <i :class="getSortIcon('zoneidnumber')"></i>
+              </th>
+              <th class="zone-sortable-header" style="width: 50px" @click="toggleSort('version')">
+                Version <i :class="getSortIcon('version')"></i>
+              </th>
               <th style="text-align: center">Bind</th>
               <th style="text-align: center">Combat</th>
               <th style="text-align: center">Levitate</th>
@@ -63,38 +103,23 @@
             </thead>
             <tbody>
             <tr v-for="(zone, index) in filteredZones" :key="zone.id" @click="clickZoneRow(zone)">
-
               <td style="text-align: center"><img :src="getExpansionIcon(zone.expansion)"></td>
               <td style="text-align: center">{{ getExpansionName(zone.expansion) }}</td>
               <td style="text-align: right">{{ zone.short_name }}</td>
-
               <td>{{ zone.long_name }}</td>
-
               <td style="text-align: center">{{ zone.zoneidnumber }}</td>
               <td style="text-align: center">{{ zone.version }}</td>
               <td style="text-align: center">
-                <eq-checkbox
-                  :disabled="true"
-                  :value="zone.canbind"
-                />
+                <eq-checkbox :disabled="true" :value="zone.canbind" />
               </td>
               <td style="text-align: center">
-                <eq-checkbox
-                  :disabled="true"
-                  :value="zone.cancombat"
-                />
+                <eq-checkbox :disabled="true" :value="zone.cancombat" />
               </td>
               <td style="text-align: center">
-                <eq-checkbox
-                  :disabled="true"
-                  :value="zone.canlevitate"
-                />
+                <eq-checkbox :disabled="true" :value="zone.canlevitate" />
               </td>
               <td style="text-align: center">
-                <eq-checkbox
-                  :disabled="true"
-                  :value="zone.castoutdoor"
-                />
+                <eq-checkbox :disabled="true" :value="zone.castoutdoor" />
               </td>
             </tr>
             </tbody>
@@ -139,6 +164,18 @@ export default {
       selectedExpansion: -1,
       zoneSearchText: "",
 
+      // Filters
+      filterZoneType: "",
+      filterMinLevel: null,
+      filterBind: false,
+      filterCombat: false,
+      filterOutdoor: false,
+      filterHotzone: false,
+
+      // Sorting
+      sortField: 'expansion',
+      sortDirection: 'asc', // 'asc' or 'desc'
+
       // route watcher
       routeWatcher: null,
 
@@ -146,6 +183,16 @@ export default {
       loaded: false,
 
       EXPANSIONS_FULL: EXPANSIONS_FULL,
+    }
+  },
+  computed: {
+    hasActiveFilters() {
+      return this.filterZoneType !== "" ||
+        this.filterMinLevel > 0 ||
+        this.filterBind ||
+        this.filterCombat ||
+        this.filterOutdoor ||
+        this.filterHotzone;
     }
   },
   watch: {
@@ -174,8 +221,6 @@ export default {
       this.updateQueryState()
     }, 300),
 
-
-    // when inputs are triggered and state is updated
     updateQueryState: function () {
       let queryState = {};
 
@@ -195,7 +240,6 @@ export default {
       })
     },
 
-    // usually from loading initial state
     loadQueryState: function () {
       if (this.$route.query.expansion) {
         this.selectedExpansion = this.$route.query.expansion;
@@ -205,26 +249,103 @@ export default {
       }
     },
 
+    // --- Sorting ---
+    toggleSort(field) {
+      if (this.sortField === field) {
+        this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        this.sortField = field;
+        this.sortDirection = 'asc';
+      }
+      this.triggerSearch();
+    },
+
+    getSortIcon(field) {
+      if (this.sortField !== field) return 'fa fa-sort zone-sort-inactive';
+      return this.sortDirection === 'asc' ? 'fa fa-sort-up' : 'fa fa-sort-down';
+    },
+
+    // --- Filtering ---
+    clearFilters() {
+      this.filterZoneType = "";
+      this.filterMinLevel = null;
+      this.filterBind = false;
+      this.filterCombat = false;
+      this.filterOutdoor = false;
+      this.filterHotzone = false;
+      this.triggerSearch();
+    },
+
     triggerSearch: function () {
+      let result = this.zones;
 
-      this.filteredZones = this.zones.filter((e) => {
-        const searchString = this.zoneSearchText.toLowerCase()
-
-        // console.log(searchString)
-        // console.log(e.short_name.toLowerCase())
-        const expansion = e.expansion - 1 // zone table is offset by 1
-
-        return e.short_name.toLowerCase().includes(searchString)
-          || Expansions.getExpansionName(expansion).toLowerCase().includes(searchString)
-          || e.long_name.toLowerCase().includes(searchString)
-      });
-
-      if (this.filteredZones.length === 0) {
-        this.filteredZones = this.zones
+      // Text search
+      if (this.zoneSearchText) {
+        const searchString = this.zoneSearchText.toLowerCase();
+        result = result.filter((e) => {
+          const expansion = e.expansion - 1;
+          return e.short_name.toLowerCase().includes(searchString)
+            || Expansions.getExpansionName(expansion).toLowerCase().includes(searchString)
+            || e.long_name.toLowerCase().includes(searchString);
+        });
       }
 
-      this.resultCount = this.filteredZones.length
+      // Zone type filter
+      if (this.filterZoneType !== "" && this.filterZoneType !== null) {
+        const zt = parseInt(this.filterZoneType);
+        result = result.filter(e => e.ztype === zt);
+      }
+
+      // Min level filter
+      if (this.filterMinLevel && this.filterMinLevel > 0) {
+        result = result.filter(e => e.min_level >= this.filterMinLevel);
+      }
+
+      // Boolean flag filters
+      if (this.filterBind) {
+        result = result.filter(e => e.canbind === 1);
+      }
+      if (this.filterCombat) {
+        result = result.filter(e => e.cancombat === 1);
+      }
+      if (this.filterOutdoor) {
+        result = result.filter(e => e.castoutdoor === 1);
+      }
+      if (this.filterHotzone) {
+        result = result.filter(e => e.hotzone === 1);
+      }
+
+      // Sort
+      if (this.sortField) {
+        result = [...result].sort((a, b) => {
+          let va = a[this.sortField];
+          let vb = b[this.sortField];
+
+          // Handle string comparison
+          if (typeof va === 'string') {
+            va = va.toLowerCase();
+            vb = (vb || '').toLowerCase();
+            if (va < vb) return this.sortDirection === 'asc' ? -1 : 1;
+            if (va > vb) return this.sortDirection === 'asc' ? 1 : -1;
+            return 0;
+          }
+
+          // Numeric
+          va = va || 0;
+          vb = vb || 0;
+          return this.sortDirection === 'asc' ? va - vb : vb - va;
+        });
+      }
+
+      // If no results from text search, show all (original behavior)
+      if (result.length === 0 && this.zoneSearchText && !this.hasActiveFilters) {
+        result = this.zones;
+      }
+
+      this.filteredZones = result;
+      this.resultCount = result.length;
     },
+
     getExpansionIcon(expansion) {
       return Expansions.getExpansionIconUrlSmall(expansion)
     },
@@ -243,7 +364,6 @@ export default {
 
       const builder   = (new SpireQueryBuilder())
       const expansion = parseInt(this.selectedExpansion)
-      console.log(expansion)
       if (expansion > -1) {
         builder.where("expansion", "=", expansion)
       }
@@ -278,5 +398,100 @@ export default {
   padding-bottom: 5px;
   border-right: .1px solid #ffffff1c;
   border-left: .1px solid #ffffff1c;
+}
+</style>
+
+<style scoped>
+/* Filter bar */
+.zone-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+
+.zone-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zone-filter-label {
+  font-size: 12px;
+  color: #aaa;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.zone-filter-select {
+  width: auto;
+  min-width: 120px;
+  background: rgba(20, 20, 30, 0.8);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #e0e0e0;
+  font-size: 12px;
+}
+
+.zone-filter-input {
+  width: 70px;
+  background: rgba(20, 20, 30, 0.8);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #e0e0e0;
+  font-size: 12px;
+}
+
+.zone-filter-toggles {
+  display: flex;
+  gap: 4px;
+}
+
+.zone-flag-toggle {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #888;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.zone-flag-toggle:hover {
+  background: rgba(255,255,255,0.1);
+  color: #ccc;
+}
+
+.zone-flag-toggle.active {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #93c5fd;
+}
+
+.zone-result-count {
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+
+/* Sortable headers */
+.zone-sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.zone-sortable-header:hover {
+  color: #93c5fd;
+}
+
+.zone-sortable-header i {
+  font-size: 10px;
+  margin-left: 3px;
+}
+
+.zone-sort-inactive {
+  opacity: 0.3;
 }
 </style>

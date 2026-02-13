@@ -107,55 +107,14 @@
 
               { field: 'ztype', description: 'Zone Type', break: true },
 
-              // fog
-              // { field: 'fog_minclip', description: 'Fog Min Clip' },
-              // { field: 'fog_maxclip', description: 'Fog Max Clip' },
-              // { field: 'fog_blue', description: 'Fog Blue' },
-              // { field: 'fog_red', description: 'Fog Red' },
-              // { field: 'fog_green', description: 'Fog Green' },
-              // { field: 'fog_red_1', description: 'fog_red_1' },
-              // { field: 'fog_green_1', description: 'fog_green_1' },
-              // { field: 'fog_blue_1', description: 'fog_blue_1' },
-              // { field: 'fog_minclip_1', description: 'fog_minclip_1' },
-              // { field: 'fog_maxclip_1', description: 'fog_maxclip_1' },
-              // { field: 'fog_red_2', description: 'fog_red_2' },
-              // { field: 'fog_green_2', description: 'fog_green_2' },
-              // { field: 'fog_blue_2', description: 'fog_blue_2' },
-              // { field: 'fog_minclip_2', description: 'fog_minclip_2' },
-              // { field: 'fog_maxclip_2', description: 'fog_maxclip_2' },
-              // { field: 'fog_red_3', description: 'fog_red_3' },
-              // { field: 'fog_green_3', description: 'fog_green_3' },
-              // { field: 'fog_blue_3', description: 'fog_blue_3' },
-              // { field: 'fog_minclip_3', description: 'fog_minclip_3' },
-              // { field: 'fog_maxclip_3', description: 'fog_maxclip_3' },
-              // { field: 'fog_red_4', description: 'fog_red_4' },
-              // { field: 'fog_green_4', description: 'fog_green_4' },
-              // { field: 'fog_blue_4', description: 'fog_blue_4' },
-              // { field: 'fog_minclip_4', description: 'fog_minclip_4' },
-              // { field: 'fog_maxclip_4', description: 'fog_maxclip_4' },
-              // { field: 'fog_density', description: 'fog_density' },
+              // fog — see dedicated fog panel below
+              { field: 'fog_density', description: 'Fog Density' },
 
               // sky
               { field: 'sky', description: 'Sky Type' },
               { field: 'skylock', description: 'Sky Lock' },
 
-              // weather
-              // { field: 'rain_chance_1', description: 'rain_chance_1' },
-              // { field: 'rain_chance_2', description: 'rain_chance_2' },
-              // { field: 'rain_chance_3', description: 'rain_chance_3' },
-              // { field: 'rain_chance_4', description: 'rain_chance_4' },
-              // { field: 'rain_duration_1', description: 'rain_duration_1' },
-              // { field: 'rain_duration_2', description: 'rain_duration_2' },
-              // { field: 'rain_duration_3', description: 'rain_duration_3' },
-              // { field: 'rain_duration_4', description: 'rain_duration_4' },
-              // { field: 'snow_chance_1', description: 'snow_chance_1' },
-              // { field: 'snow_chance_2', description: 'snow_chance_2' },
-              // { field: 'snow_chance_3', description: 'snow_chance_3' },
-              // { field: 'snow_chance_4', description: 'snow_chance_4' },
-              // { field: 'snow_duration_1', description: 'snow_duration_1' },
-              // { field: 'snow_duration_2', description: 'snow_duration_2' },
-              // { field: 'snow_duration_3', description: 'snow_duration_3' },
-              // { field: 'snow_duration_4', description: 'snow_duration_4' },
+              // weather — see dedicated weather panel below
 
               // { field: 'file_name', description: 'File Name' },
               { field: 'map_file_name', description: 'Map File', break: true },
@@ -285,6 +244,53 @@
 
             </div>
           </div>
+
+          <!-- Fog Color Preview -->
+          <div class="mt-3 ml-2 mr-2" v-if="zone">
+            <h6 class="eq-header" style="font-size: 13px;">Fog Colors</h6>
+            <div class="fog-slots">
+              <div class="fog-slot" v-for="slot in fogSlots" :key="slot.label">
+                <div
+                  class="fog-color-swatch"
+                  :style="{ backgroundColor: getFogColor(slot.suffix) }"
+                  :title="'RGB(' + (zone['fog_red' + slot.suffix] || 0) + ', ' + (zone['fog_green' + slot.suffix] || 0) + ', ' + (zone['fog_blue' + slot.suffix] || 0) + ')'"
+                ></div>
+                <div class="fog-slot-label">{{ slot.label }}</div>
+                <div class="fog-slot-clip">
+                  {{ zone['fog_minclip' + slot.suffix] || 0 }} - {{ zone['fog_maxclip' + slot.suffix] || 0 }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Weather Preview -->
+          <div class="mt-3 ml-2 mr-2" v-if="zone">
+            <h6 class="eq-header" style="font-size: 13px;">Weather</h6>
+            <table class="weather-table">
+              <thead>
+                <tr><th></th><th>Slot 1</th><th>Slot 2</th><th>Slot 3</th><th>Slot 4</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="font-weight-bold">Rain %</td>
+                  <td v-for="i in 4" :key="'rc'+i">{{ zone['rain_chance_' + i] || 0 }}</td>
+                </tr>
+                <tr>
+                  <td class="font-weight-bold">Rain Dur</td>
+                  <td v-for="i in 4" :key="'rd'+i">{{ zone['rain_duration_' + i] || 0 }}</td>
+                </tr>
+                <tr>
+                  <td class="font-weight-bold">Snow %</td>
+                  <td v-for="i in 4" :key="'sc'+i">{{ zone['snow_chance_' + i] || 0 }}</td>
+                </tr>
+                <tr>
+                  <td class="font-weight-bold">Snow Dur</td>
+                  <td v-for="i in 4" :key="'sd'+i">{{ zone['snow_duration_' + i] || 0 }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
         </eq-tab>
       </eq-tabs>
 
@@ -318,6 +324,17 @@ export default {
     required: true,
   },
 
+  data() {
+    return {
+      fogSlots: [
+        { label: 'Default', suffix: '' },
+        { label: 'Slot 1', suffix: '_1' },
+        { label: 'Slot 2', suffix: '_2' },
+        { label: 'Slot 3', suffix: '_3' },
+        { label: 'Slot 4', suffix: '_4' },
+      ],
+    }
+  },
   created() {
     this.backgroundImages  = []
     this.currentImageIndex = 0
@@ -344,6 +361,13 @@ export default {
     },
   },
   methods: {
+    getFogColor(suffix) {
+      if (!this.zone) return 'rgb(0,0,0)';
+      const r = this.zone['fog_red' + suffix] || 0;
+      const g = this.zone['fog_green' + suffix] || 0;
+      const b = this.zone['fog_blue' + suffix] || 0;
+      return `rgb(${r}, ${g}, ${b})`;
+    },
     npcGridEditor() {
       this.$router.push(
         {
@@ -549,5 +573,61 @@ export default {
   vertical-align: middle;
   padding: 10px;
   height: 60px;
+}
+
+/* Fog color swatches */
+.fog-slots {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fog-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.fog-color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: default;
+}
+
+.fog-slot-label {
+  font-size: 10px;
+  color: #aaa;
+  font-weight: 600;
+}
+
+.fog-slot-clip {
+  font-size: 9px;
+  color: #666;
+}
+
+/* Weather table */
+.weather-table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+}
+
+.weather-table th, .weather-table td {
+  padding: 2px 6px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.weather-table th {
+  color: #888;
+  font-weight: 600;
+}
+
+.weather-table td:first-child, .weather-table th:first-child {
+  text-align: right;
+  width: 70px;
 }
 </style>
