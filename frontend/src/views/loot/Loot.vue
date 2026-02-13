@@ -439,44 +439,73 @@
 
                   <!-- Add Item -->
                   <div class="p-2">
-                    <div v-if="le._addingItem" class="add-item-row">
-                      <input
-                        type="number"
-                        class="form-control form-control-sm"
-                        v-model.number="le._newItemId"
-                        placeholder="Item ID"
-                        @keyup.enter="addItemToLootdrop(leIndex)"
-                        style="width: 120px;"
-                      >
-                      <input
-                        type="number"
-                        class="form-control form-control-sm ml-2"
-                        v-model.number="le._newItemChance"
-                        placeholder="Chance %"
-                        style="width: 100px;"
-                      >
-                      <b-button
-                        size="sm"
-                        variant="outline-success"
-                        class="ml-2"
-                        @click="addItemToLootdrop(leIndex)"
-                      >
-                        <i class="fa fa-check"></i>
-                      </b-button>
-                      <b-button
-                        size="sm"
-                        variant="outline-secondary"
-                        class="ml-1"
-                        @click="le._addingItem = false; $forceUpdate()"
-                      >
-                        <i class="fa fa-times"></i>
-                      </b-button>
+                    <div v-if="le._addingItem" class="add-item-search-wrap">
+                      <div class="d-flex align-items-center">
+                        <div class="position-relative flex-grow-1">
+                          <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            v-model="le._itemSearchQuery"
+                            :placeholder="'Search items by name or ID...'"
+                            @input="searchItems(leIndex)"
+                            @keydown.down.prevent="navigateResults(leIndex, 1)"
+                            @keydown.up.prevent="navigateResults(leIndex, -1)"
+                            @keydown.enter.prevent="selectHighlightedItem(leIndex)"
+                            @keydown.escape="le._addingItem = false; $forceUpdate()"
+                            :ref="'itemSearch-' + leIndex"
+                            autocomplete="off"
+                          >
+                          <!-- Search Results Dropdown -->
+                          <div
+                            v-if="le._searchResults && le._searchResults.length > 0"
+                            class="item-search-dropdown"
+                          >
+                            <div
+                              v-for="(item, ri) in le._searchResults"
+                              :key="'sr-' + item.id"
+                              class="item-search-result"
+                              :class="{ 'highlighted': le._highlightIndex === ri }"
+                              @click="addSearchedItem(leIndex, item)"
+                              @mouseenter="le._highlightIndex = ri; $forceUpdate()"
+                            >
+                              <div class="d-flex align-items-center">
+                                <item-popover :item="item" size="sm" class="d-inline-block mr-2" />
+                                <small style="opacity:.4; margin-left: auto;">ID: {{ item.id }}</small>
+                              </div>
+                            </div>
+                            <div v-if="le._searchResults.length >= 20" class="text-center p-1" style="opacity:.3; font-size:.75em;">
+                              Showing first 20 results — refine your search
+                            </div>
+                          </div>
+                          <div
+                            v-if="le._itemSearchQuery && le._itemSearchQuery.length >= 2 && le._searchResults && le._searchResults.length === 0 && !le._searching"
+                            class="item-search-dropdown"
+                          >
+                            <div class="text-center p-2" style="opacity:.4; font-size:.85em;">No items found</div>
+                          </div>
+                          <div
+                            v-if="le._searching"
+                            class="item-search-dropdown"
+                          >
+                            <div class="text-center p-2" style="opacity:.5;"><i class="fa fa-spinner fa-spin mr-1"></i> Searching...</div>
+                          </div>
+                        </div>
+                        <b-button
+                          size="sm"
+                          variant="outline-secondary"
+                          class="ml-2"
+                          @click="le._addingItem = false; le._searchResults = []; $forceUpdate()"
+                          title="Cancel"
+                        >
+                          <i class="fa fa-times"></i>
+                        </b-button>
+                      </div>
                     </div>
                     <b-button
                       v-else
                       size="sm"
                       variant="outline-success"
-                      @click="le._addingItem = true; le._newItemId = null; le._newItemChance = 10; $forceUpdate()"
+                      @click="startAddItem(leIndex)"
                     >
                       <i class="fa fa-plus mr-1"></i> Add Item
                     </b-button>
@@ -530,7 +559,7 @@ import ItemPopover         from "../../components/ItemPopover";
 import NpcPopover          from "../../components/NpcPopover";
 import EqCashDisplay       from "../../components/eq-ui/EqCashDisplay";
 import {ROUTE}             from "../../routes";
-import {LoottableApi, LoottableEntryApi, LootdropApi, LootdropEntryApi} from "../../app/api";
+import {LoottableApi, LoottableEntryApi, LootdropApi, LootdropEntryApi, ItemApi} from "../../app/api";
 import {SpireApi}          from "../../app/api/spire-api";
 import {SpireQueryBuilder} from "../../app/api/spire-query-builder";
 import {debounce}          from "../../app/utility/debounce";
@@ -922,15 +951,81 @@ export default {
       }
     },
 
-    async addItemToLootdrop(leIndex) {
+    startAddItem(leIndex) {
       const le = this.editEntries[leIndex]
-      if (!le._newItemId) return
+      le._addingItem = true
+      le._itemSearchQuery = ''
+      le._searchResults = []
+      le._highlightIndex = -1
+      le._searching = false
+      this.$forceUpdate()
+      this.$nextTick(() => {
+        const ref = this.$refs['itemSearch-' + leIndex]
+        if (ref && ref[0]) ref[0].focus()
+      })
+    },
+
+    searchItems: debounce(function(leIndex) {
+      const le = this.editEntries[leIndex]
+      const q = (le._itemSearchQuery || '').trim()
+      if (q.length < 2) {
+        le._searchResults = []
+        this.$forceUpdate()
+        return
+      }
+      le._searching = true
+      le._highlightIndex = -1
+      this.$forceUpdate()
+
+      const builder = new SpireQueryBuilder()
+      if (!isNaN(q) && q !== '') {
+        builder.where("id", "=", q)
+      } else {
+        builder.where("name", "like", q)
+      }
+      builder.limit(20)
+
+      const api = new ItemApi(...SpireApi.cfg())
+      api.listItems(builder.get()).then((r) => {
+        if (r.status === 200) {
+          le._searchResults = r.data || []
+        } else {
+          le._searchResults = []
+        }
+        le._searching = false
+        this.$forceUpdate()
+      }).catch(() => {
+        le._searchResults = []
+        le._searching = false
+        this.$forceUpdate()
+      })
+    }, 300),
+
+    navigateResults(leIndex, direction) {
+      const le = this.editEntries[leIndex]
+      if (!le._searchResults || le._searchResults.length === 0) return
+      let idx = (le._highlightIndex || 0) + direction
+      if (idx < 0) idx = le._searchResults.length - 1
+      if (idx >= le._searchResults.length) idx = 0
+      le._highlightIndex = idx
+      this.$forceUpdate()
+    },
+
+    selectHighlightedItem(leIndex) {
+      const le = this.editEntries[leIndex]
+      if (!le._searchResults || le._searchResults.length === 0) return
+      const idx = le._highlightIndex >= 0 ? le._highlightIndex : 0
+      this.addSearchedItem(leIndex, le._searchResults[idx])
+    },
+
+    async addSearchedItem(leIndex, item) {
+      const le = this.editEntries[leIndex]
       try {
         const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
         await ldeApi.createLootdropEntry({
           lootdrop_id: le.lootdrop_id,
-          item_id: le._newItemId,
-          chance: le._newItemChance || 10,
+          item_id: item.id,
+          chance: 10,
           multiplier: 1,
           equip_item: 0,
           item_charges: 1,
@@ -940,7 +1035,8 @@ export default {
           trivial_max_level: 0,
         })
         le._addingItem = false
-        this.showNotification('Added item #' + le._newItemId)
+        le._searchResults = []
+        this.showNotification('Added ' + (item.Name || item.name || 'item #' + item.id))
         await this.refreshCurrentTable()
       } catch (e) {
         this.showNotification('Error adding item', 'error')
@@ -1109,9 +1205,34 @@ export default {
   transition: width 0.3s;
 }
 
-.add-item-row {
-  display: flex;
-  align-items: center;
+.add-item-search-wrap {
+  position: relative;
+}
+.item-search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 40px;
+  z-index: 1000;
+  background: #1a1a2e;
+  border: 1px solid rgba(255,193,7,0.3);
+  border-radius: 0 0 6px 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+.item-search-result {
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s;
+}
+.item-search-result:hover,
+.item-search-result.highlighted {
+  background: rgba(255,193,7,0.12);
+}
+.item-search-result:last-child {
+  border-bottom: none;
 }
 
 .save-btn-glow {
