@@ -154,7 +154,7 @@ export default {
       Navbar.collapse()
 
       this.zone    = this.$route.params.zone
-      this.version = this.$route.query.v
+      this.version = this.$route.query.v || "0"
 
       this.zoneData = (await Zones.getZoneByShortName(this.zone))
 

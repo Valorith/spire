@@ -43,7 +43,7 @@
               <i class="fa fa-map mr-1"></i>
               <router-link
                 v-if="hasZoneRoute"
-                :to="'/zone/' + loc.zone"
+                :to="'/zone/' + loc.zone + '?v=' + (loc.version || 0)"
                 style="color: inherit; text-decoration: underline;"
               >
                 {{ loc.zone }}
