@@ -3517,10 +3517,9 @@ export default {
           try {
             const q = (this.bsSpellSearchQuery || '').trim()
             const isNum = /^\d+$/.test(q)
-            const safeQ = q.replace(/'/g, "''")
             const params = isNum
-              ? { where: `id = ${Number(q)}`, limit: 20 }
-              : { where: `name like '%${safeQ}%'`, limit: 20 }
+              ? { where: `id__${q}`, limit: 20 }
+              : { where: `name_like_${q}`, limit: 20 }
             const r = await SpireApi.v1().get(`/spells_news`, { params })
             this.bsSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
           } catch (e) {
