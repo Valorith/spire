@@ -483,8 +483,10 @@
       <!-- Preview / Selector Pane -->
       <div class="col-5">
 
-        <eq-window v-if="npc && !isAnySelectorActive()" style="max-height: 95vh; overflow-y: scroll; overflow-x: hidden">
-          <eq-npc-card-preview :npc="npc"/>
+        <eq-window v-if="npc && !isAnySelectorActive()">
+          <div style="max-height: 90vh; overflow-y: auto; overflow-x: hidden">
+            <eq-npc-card-preview :npc="npc"/>
+          </div>
         </eq-window>
 
         <eq-window v-if="npc && !isAnySelectorActive()" class="mt-3">

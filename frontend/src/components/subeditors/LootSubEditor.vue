@@ -1,6 +1,6 @@
 <template>
-  <div class="loot-sub-editor" style="max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;">
-    <eq-window title="Loot" style="display: flex; flex-direction: column; overflow: hidden;">
+  <div class="loot-sub-editor" style="max-height: 85vh; display: flex; flex-direction: column; padding-top: 20px;">
+    <eq-window title="Loot" class="loot-eq-window" style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: visible !important;">
 
       <!-- Header Info -->
       <div v-if="currentLoottable" style="flex-shrink: 0;">

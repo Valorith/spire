@@ -123,8 +123,18 @@
                     <i class="fa fa-copy mr-1"></i> Clone
                   </b-button>
                   <b-button
+                    v-if="hasUnsavedChanges"
                     size="sm"
-                    :variant="hasUnsavedChanges ? 'warning' : 'outline-warning'"
+                    variant="outline-secondary"
+                    @click="confirmReset"
+                    :disabled="saving"
+                    class="mr-1"
+                  >
+                    <i class="fa fa-undo mr-1"></i> Reset
+                  </b-button>
+                  <b-button
+                    size="sm"
+                    :variant="hasUnsavedChanges ? 'outline-danger' : 'outline-warning'"
                     :class="{ 'save-btn-glow': hasUnsavedChanges }"
                     @click="saveLoottable"
                     :disabled="saving"
@@ -141,7 +151,8 @@
                   <input
                     class="form-control form-control-sm"
                     v-model="editTable.name"
-                    @input="markDirty"
+                    @input="trackFieldEdit('table-name', originalValues.table?.name || '', editTable.name)"
+                    :class="{ 'pending-edit': isFieldEdited('table-name') }"
                   >
                 </div>
                 <div class="col-2">
@@ -150,7 +161,8 @@
                     type="number"
                     class="form-control form-control-sm"
                     v-model.number="editTable.mincash"
-                    @input="markDirty"
+                    @input="trackFieldEdit('table-mincash', originalValues.table?.mincash || 0, editTable.mincash)"
+                    :class="{ 'pending-edit': isFieldEdited('table-mincash') }"
                   >
                 </div>
                 <div class="col-2">
@@ -159,7 +171,8 @@
                     type="number"
                     class="form-control form-control-sm"
                     v-model.number="editTable.maxcash"
-                    @input="markDirty"
+                    @input="trackFieldEdit('table-maxcash', originalValues.table?.maxcash || 0, editTable.maxcash)"
+                    :class="{ 'pending-edit': isFieldEdited('table-maxcash') }"
                   >
                 </div>
                 <div class="col-2">
@@ -234,6 +247,7 @@
                 v-for="(le, leIndex) in editEntries"
                 :key="'le-' + leIndex"
                 class="lootdrop-card"
+                :class="{ 'pending-add': le._pendingAdd, 'pending-delete': le._pendingDelete }"
               >
                 <!-- Lootdrop Header -->
                 <div class="lootdrop-header" @click="le._expanded = !le._expanded; $forceUpdate()">
@@ -257,7 +271,9 @@
                           type="number"
                           class="form-control form-control-sm lootdrop-input"
                           v-model.number="le.probability"
-                          @input="markDirty"
+                          @input="trackFieldEdit('le-' + leIndex + '-probability', originalValues.entries?.[leIndex]?.probability || 100, le.probability)"
+                          :class="{ 'pending-edit': isFieldEdited('le-' + leIndex + '-probability') }"
+                          :disabled="le._pendingDelete"
                           min="0" max="100" step="1"
                         >
                       </div>
@@ -267,7 +283,9 @@
                           type="number"
                           class="form-control form-control-sm lootdrop-input"
                           v-model.number="le.multiplier"
-                          @input="markDirty"
+                          @input="trackFieldEdit('le-' + leIndex + '-multiplier', originalValues.entries?.[leIndex]?.multiplier || 1, le.multiplier)"
+                          :class="{ 'pending-edit': isFieldEdited('le-' + leIndex + '-multiplier') }"
+                          :disabled="le._pendingDelete"
                           min="0" step="1"
                         >
                       </div>
@@ -277,7 +295,9 @@
                           type="number"
                           class="form-control form-control-sm lootdrop-input"
                           v-model.number="le.droplimit"
-                          @input="markDirty"
+                          @input="trackFieldEdit('le-' + leIndex + '-droplimit', originalValues.entries?.[leIndex]?.droplimit || 0, le.droplimit)"
+                          :class="{ 'pending-edit': isFieldEdited('le-' + leIndex + '-droplimit') }"
+                          :disabled="le._pendingDelete"
                           min="0" step="1"
                         >
                       </div>
@@ -287,11 +307,14 @@
                           type="number"
                           class="form-control form-control-sm lootdrop-input"
                           v-model.number="le.mindrop"
-                          @input="markDirty"
+                          @input="trackFieldEdit('le-' + leIndex + '-mindrop', originalValues.entries?.[leIndex]?.mindrop || 0, le.mindrop)"
+                          :class="{ 'pending-edit': isFieldEdited('le-' + leIndex + '-mindrop') }"
+                          :disabled="le._pendingDelete"
                           min="0" step="1"
                         >
                       </div>
                       <b-button
+                        v-if="!le._pendingDelete"
                         size="sm"
                         variant="outline-danger"
                         @click.stop="removeLootdrop(leIndex)"
@@ -299,6 +322,16 @@
                         class="ml-1"
                       >
                         <i class="fa fa-trash"></i>
+                      </b-button>
+                      <b-button
+                        v-else
+                        size="sm"
+                        variant="outline-success"
+                        @click.stop="undoRemoveLootdrop(leIndex)"
+                        title="Undo removal"
+                        class="ml-1"
+                      >
+                        <i class="fa fa-undo"></i> Undo
                       </b-button>
                     </div>
                   </div>
@@ -319,7 +352,11 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(lde, ldeIndex) in (le.lootdrop.lootdrop_entries || [])" :key="'lde-' + lde.lootdrop_id + '-' + lde.item_id">
+                      <tr 
+                        v-for="(lde, ldeIndex) in (le.lootdrop.lootdrop_entries || [])" 
+                        :key="'lde-' + lde.lootdrop_id + '-' + lde.item_id"
+                        :class="{ 'pending-add': lde._pendingAdd, 'pending-delete': lde._pendingDelete }"
+                      >
                         <td>
                           <item-popover
                             v-if="lde.item"
@@ -334,7 +371,9 @@
                             type="number"
                             class="form-control form-control-sm text-center entry-input"
                             v-model.number="lde.chance"
-                            @input="markDirty"
+                            @input="trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-chance', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.chance || 0, lde.chance)"
+                            :class="{ 'pending-edit': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-chance') }"
+                            :disabled="lde._pendingDelete"
                             min="0" max="100" step="0.1"
                           >
                         </td>
@@ -343,7 +382,9 @@
                             type="number"
                             class="form-control form-control-sm text-center entry-input"
                             v-model.number="lde.multiplier"
-                            @input="markDirty"
+                            @input="trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-multiplier', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.multiplier || 1, lde.multiplier)"
+                            :class="{ 'pending-edit': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-multiplier') }"
+                            :disabled="lde._pendingDelete"
                             min="1" step="1"
                           >
                         </td>
@@ -353,7 +394,9 @@
                             :true-value="1"
                             :false-value="0"
                             v-model.number="lde.equip_item"
-                            @input="lde.equip_item = $event; markDirty()"
+                            @input="lde.equip_item = $event; trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-equip_item', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.equip_item || 0, lde.equip_item)"
+                            :class="{ 'pending-edit': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-equip_item') }"
+                            :disabled="lde._pendingDelete"
                           />
                         </td>
                         <td class="text-center">
@@ -362,7 +405,9 @@
                               type="number"
                               class="form-control form-control-sm text-center entry-input"
                               v-model.number="lde.npc_min_level"
-                              @input="markDirty"
+                              @input="trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-npc_min_level', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.npc_min_level || 0, lde.npc_min_level)"
+                              :class="{ 'pending-edit': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-npc_min_level') }"
+                              :disabled="lde._pendingDelete"
                               placeholder="min"
                               min="0" step="1"
                               style="width: 50%;"
@@ -371,7 +416,9 @@
                               type="number"
                               class="form-control form-control-sm text-center entry-input ml-1"
                               v-model.number="lde.npc_max_level"
-                              @input="markDirty"
+                              @input="trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-npc_max_level', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.npc_max_level || 0, lde.npc_max_level)"
+                              :class="{ 'pending-edit': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-npc_max_level') }"
+                              :disabled="lde._pendingDelete"
                               placeholder="max"
                               min="0" step="1"
                               style="width: 50%;"
@@ -384,7 +431,9 @@
                               type="number"
                               class="form-control form-control-sm text-center entry-input"
                               v-model.number="lde.trivial_min_level"
-                              @input="markDirty"
+                              @input="trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-trivial_min_level', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.trivial_min_level || 0, lde.trivial_min_level)"
+                              :class="{ 'pending-edit': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-trivial_min_level') }"
+                              :disabled="lde._pendingDelete"
                               placeholder="min"
                               min="0" step="1"
                               style="width: 50%;"
@@ -393,7 +442,9 @@
                               type="number"
                               class="form-control form-control-sm text-center entry-input ml-1"
                               v-model.number="lde.trivial_max_level"
-                              @input="markDirty"
+                              @input="trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-trivial_max_level', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.trivial_max_level || 0, lde.trivial_max_level)"
+                              :class="{ 'pending-edit': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-trivial_max_level') }"
+                              :disabled="lde._pendingDelete"
                               placeholder="max"
                               min="0" step="1"
                               style="width: 50%;"
@@ -402,12 +453,22 @@
                         </td>
                         <td class="text-center">
                           <b-button
+                            v-if="!lde._pendingDelete"
                             size="sm"
                             variant="outline-danger"
                             @click="removeItem(leIndex, ldeIndex)"
                             title="Remove item"
                           >
                             <i class="fa fa-times"></i>
+                          </b-button>
+                          <b-button
+                            v-else
+                            size="sm"
+                            variant="outline-success"
+                            @click="undoRemoveItem(leIndex, ldeIndex)"
+                            title="Undo removal"
+                          >
+                            <i class="fa fa-undo"></i> Undo
                           </b-button>
                         </td>
                       </tr>
@@ -580,6 +641,16 @@ export default {
       editTable: {},
       editEntries: [],
       originalSnapshot: null,
+      originalValues: {},
+
+      pendingChanges: {
+        tableFields: {},        // { fieldName: { old, new } } for loottable fields
+        addedLootdrops: [],     // newly added lootdrop entries (full objects, not yet saved)
+        deletedLootdrops: [],   // indices/ids of lootdrops marked for deletion
+        addedItems: {},         // { lootdropIndex: [{ item, lde }] } items added to existing lootdrops
+        deletedItems: {},       // { lootdropIndex: [ldeIndex] } items marked for deletion
+        editedFields: {},       // { 'le-{leIdx}-{field}': { old, new }, 'lde-{leIdx}-{ldeIdx}-{field}': { old, new } }
+      },
 
       search: "",
       currentPage: 1,
@@ -627,6 +698,55 @@ export default {
 
     markDirty() {
       this.hasUnsavedChanges = true
+    },
+
+    isFieldEdited(key) {
+      return !!this.pendingChanges.editedFields[key]
+    },
+
+    trackFieldEdit(key, oldVal, newVal) {
+      // Coerce to same type for comparison (v-model.number can return string or number)
+      const oldNum = Number(oldVal)
+      const newNum = Number(newVal)
+      const isNumeric = !isNaN(oldNum) && !isNaN(newNum)
+      const same = isNumeric ? oldNum === newNum : String(oldVal) === String(newVal)
+      if (same) {
+        this.$delete(this.pendingChanges.editedFields, key)
+      } else {
+        this.$set(this.pendingChanges.editedFields, key, { old: oldVal, new: newVal })
+      }
+      // Also track table-level fields separately for the save guard
+      if (key.startsWith('table-')) {
+        if (same) {
+          this.$delete(this.pendingChanges.tableFields, key)
+        } else {
+          this.$set(this.pendingChanges.tableFields, key, { old: oldVal, new: newVal })
+        }
+      }
+      this.updateHasChanges()
+    },
+
+    updateHasChanges() {
+      this.hasUnsavedChanges = (
+        Object.keys(this.pendingChanges.tableFields).length > 0 ||
+        this.pendingChanges.addedLootdrops.length > 0 ||
+        this.pendingChanges.deletedLootdrops.length > 0 ||
+        Object.keys(this.pendingChanges.addedItems).length > 0 ||
+        Object.keys(this.pendingChanges.deletedItems).length > 0 ||
+        Object.keys(this.pendingChanges.editedFields).length > 0
+      )
+    },
+
+    resetPendingChanges() {
+      this.pendingChanges = {
+        tableFields: {},
+        addedLootdrops: [],
+        deletedLootdrops: [],
+        addedItems: {},
+        deletedItems: {},
+        editedFields: {},
+      }
+      this.hasUnsavedChanges = false
     },
 
     toggleAllLootdrops() {
@@ -771,6 +891,28 @@ export default {
           lootdrop_entries: le.lootdrop.lootdrop_entries ? [...le.lootdrop.lootdrop_entries] : [],
         },
       }))
+      
+      // Store original values for change tracking
+      this.originalValues = {
+        table: { ...this.editTable },
+        entries: JSON.parse(JSON.stringify(this.editEntries.map(le => ({
+          probability: le.probability,
+          multiplier: le.multiplier,
+          droplimit: le.droplimit,
+          mindrop: le.mindrop,
+          lootdrop_entries: (le.lootdrop?.lootdrop_entries || []).map(lde => ({
+            chance: lde.chance,
+            multiplier: lde.multiplier,
+            equip_item: lde.equip_item,
+            npc_min_level: lde.npc_min_level,
+            npc_max_level: lde.npc_max_level,
+            trivial_min_level: lde.trivial_min_level,
+            trivial_max_level: lde.trivial_max_level,
+          }))
+        }))))
+      }
+      
+      this.resetPendingChanges()
       this.originalSnapshot = JSON.stringify({ editTable: this.editTable, editEntries: this.editEntries })
       this.hasUnsavedChanges = false
     },
@@ -779,67 +921,194 @@ export default {
     async saveLoottable() {
       this.saving = true
       try {
-        // 1. Save loottable itself
-        const ltApi = new LoottableApi(...SpireApi.cfg())
-        await ltApi.updateLoottable({
-          id: this.editTable.id,
-          loottable: {
-            name: this.editTable.name,
-            mincash: this.editTable.mincash || 0,
-            maxcash: this.editTable.maxcash || 0,
-            avgcoin: this.editTable.avgcoin || 0,
-            min_expansion: this.editTable.min_expansion || -1,
-            max_expansion: this.editTable.max_expansion || -1,
-            content_flags: this.editTable.content_flags || '',
-            content_flags_disabled: this.editTable.content_flags_disabled || '',
-            done: this.editTable.done || 0,
-          }
-        })
-
-        // 2. Save loottable entries (probability, multiplier, etc.)
+        // Process in order: create new lootdrops → create new items → update edited fields → delete items → delete lootdrops → update loottable fields
+        
+        // 1. Create new lootdrops and get their IDs
+        const ldApi = new LootdropApi(...SpireApi.cfg())
         const lteApi = new LoottableEntryApi(...SpireApi.cfg())
-        for (const le of this.editEntries) {
-          await lteApi.updateLoottableEntry({
-            id: le.loottable_id,
-            loottableEntry: {
-              loottable_id: le.loottable_id,
-              lootdrop_id: le.lootdrop_id,
-              multiplier: le.multiplier || 1,
-              droplimit: le.droplimit || 0,
-              mindrop: le.mindrop || 0,
-              probability: le.probability || 100,
+        
+        for (const newLe of this.pendingChanges.addedLootdrops) {
+          try {
+            // Create lootdrop
+            const r = await ldApi.createLootdrop({
+              lootdrop: { name: newLe.lootdrop.name }
+            })
+            const createdDrop = Array.isArray(r.data) ? r.data[0] : r.data
+            
+            if (createdDrop && createdDrop.id) {
+              // Update the local object with the new ID
+              newLe.lootdrop_id = createdDrop.id
+              newLe.lootdrop.id = createdDrop.id
+              
+              // Create loottable entry linking it
+              await lteApi.createLoottableEntry({
+                loottableEntry: {
+                  loottable_id: this.editTable.id,
+                  lootdrop_id: createdDrop.id,
+                  multiplier: newLe.multiplier || 1,
+                  droplimit: newLe.droplimit || 0,
+                  mindrop: newLe.mindrop || 0,
+                  probability: newLe.probability || 100,
+                }
+              })
+              
+              // Remove pending add marker
+              delete newLe._pendingAdd
+            }
+          } catch (e) {
+            console.error('Error creating lootdrop:', e)
+            this.showNotification('Error creating lootdrop: ' + (e.message || e), 'error')
+          }
+        }
+
+        // 2. Create new items
+        const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
+        
+        for (const [leIndex, addedItems] of Object.entries(this.pendingChanges.addedItems)) {
+          const le = this.editEntries[leIndex]
+          for (const addedItem of addedItems) {
+            try {
+              await ldeApi.createLootdropEntry({
+                lootdropEntry: {
+                  lootdrop_id: le.lootdrop_id,
+                  item_id: addedItem.item.id,
+                  chance: addedItem.lde.chance || 10,
+                  multiplier: addedItem.lde.multiplier || 1,
+                  equip_item: addedItem.lde.equip_item || 0,
+                  item_charges: addedItem.lde.item_charges || 1,
+                  npc_min_level: addedItem.lde.npc_min_level || 0,
+                  npc_max_level: addedItem.lde.npc_max_level || 0,
+                  trivial_min_level: addedItem.lde.trivial_min_level || 0,
+                  trivial_max_level: addedItem.lde.trivial_max_level || 0,
+                }
+              })
+              
+              // Remove pending add marker from the corresponding lde
+              const correspondingLde = le.lootdrop.lootdrop_entries.find(
+                lde => lde.item_id === addedItem.item.id && lde._pendingAdd
+              )
+              if (correspondingLde) {
+                delete correspondingLde._pendingAdd
+              }
+            } catch (e) {
+              console.error('Error creating item:', e)
+              this.showNotification('Error adding item: ' + (e.message || e), 'error')
+            }
+          }
+        }
+
+        // 3. Update edited fields
+        // Loottable fields
+        if (Object.keys(this.pendingChanges.tableFields).length > 0) {
+          const ltApi = new LoottableApi(...SpireApi.cfg())
+          await ltApi.updateLoottable({
+            id: this.editTable.id,
+            loottable: {
+              name: this.editTable.name,
+              mincash: this.editTable.mincash || 0,
+              maxcash: this.editTable.maxcash || 0,
+              avgcoin: this.editTable.avgcoin || 0,
+              min_expansion: this.editTable.min_expansion || -1,
+              max_expansion: this.editTable.max_expansion || -1,
+              content_flags: this.editTable.content_flags || '',
+              content_flags_disabled: this.editTable.content_flags_disabled || '',
+              done: this.editTable.done || 0,
             }
           })
         }
 
-        // 3. Save lootdrop entries (chance, level ranges, etc.)
-        const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
-        for (const le of this.editEntries) {
-          for (const lde of le.lootdrop.lootdrop_entries) {
-            await ldeApi.updateLootdropEntry({
-              id: lde.lootdrop_id,
-              lootdropEntry: {
-                lootdrop_id: lde.lootdrop_id,
-                item_id: lde.item_id,
-                item_charges: lde.item_charges || 0,
-                equip_item: lde.equip_item || 0,
-                chance: lde.chance || 0,
-                disabled_chance: lde.disabled_chance || 0,
-                trivial_min_level: lde.trivial_min_level || 0,
-                trivial_max_level: lde.trivial_max_level || 0,
-                multiplier: lde.multiplier || 1,
-                npc_min_level: lde.npc_min_level || 0,
-                npc_max_level: lde.npc_max_level || 0,
-                min_expansion: lde.min_expansion || -1,
-                max_expansion: lde.max_expansion || -1,
-                content_flags: lde.content_flags || '',
-                content_flags_disabled: lde.content_flags_disabled || '',
+        // Loottable entry fields (probability, multiplier, etc.)
+        const leUpdated = new Set()
+        for (const [fieldKey, change] of Object.entries(this.pendingChanges.editedFields)) {
+          if (fieldKey.startsWith('le-') && !fieldKey.startsWith('lde-')) {
+            const parts = fieldKey.split('-')
+            const leIndex = parseInt(parts[1])
+            const le = this.editEntries[leIndex]
+            if (le && !le._pendingAdd && !le._pendingDelete && !leUpdated.has(leIndex)) {
+              leUpdated.add(leIndex)
+              
+              try {
+                // Composite key table — pass lootdrop_id as query param AND include key fields in body
+                await SpireApi.v1().patch('/loottable_entry/' + le.loottable_id, {
+                    loottable_id: le.loottable_id,
+                    lootdrop_id: le.lootdrop_id,
+                    multiplier: le.multiplier || 1,
+                    droplimit: le.droplimit || 0,
+                    mindrop: le.mindrop || 0,
+                    probability: le.probability || 100,
+                  }, { params: { lootdrop_id: le.lootdrop_id } })
+              } catch (e) {
+                console.error('Error updating loottable entry:', e)
               }
-            })
+            }
           }
         }
 
-        this.hasUnsavedChanges = false
+        // Lootdrop entry fields (chance, levels, etc.)
+        // Deduplicate: only update each unique lootdrop_id+item_id combo once
+        const ldeUpdated = new Set()
+        for (const [fieldKey, change] of Object.entries(this.pendingChanges.editedFields)) {
+          if (fieldKey.startsWith('lde-')) {
+            const parts = fieldKey.split('-')
+            const leIndex = parseInt(parts[1])
+            const ldeIndex = parseInt(parts[2])
+            const le = this.editEntries[leIndex]
+            const lde = le && le.lootdrop && le.lootdrop.lootdrop_entries ? le.lootdrop.lootdrop_entries[ldeIndex] : null
+            const dedupeKey = lde ? lde.lootdrop_id + '-' + lde.item_id : null
+            if (lde && !lde._pendingAdd && !lde._pendingDelete && dedupeKey && !ldeUpdated.has(dedupeKey)) {
+              ldeUpdated.add(dedupeKey)
+              
+              try {
+                // Composite key table — pass item_id as query param AND include key fields in body
+                await SpireApi.v1().patch('/lootdrop_entry/' + lde.lootdrop_id, {
+                    lootdrop_id: lde.lootdrop_id,
+                    item_id: lde.item_id,
+                    item_charges: lde.item_charges || 0,
+                    equip_item: lde.equip_item || 0,
+                    chance: lde.chance || 0,
+                    disabled_chance: lde.disabled_chance || 0,
+                    trivial_min_level: lde.trivial_min_level || 0,
+                    trivial_max_level: lde.trivial_max_level || 0,
+                    multiplier: lde.multiplier || 1,
+                    npc_min_level: lde.npc_min_level || 0,
+                    npc_max_level: lde.npc_max_level || 0,
+                  }, { params: { item_id: lde.item_id } })
+              } catch (e) {
+                console.error('Error updating lootdrop entry:', e)
+              }
+            }
+          }
+        }
+
+        // 4. Delete items
+        for (const [leIndex, ldeIndices] of Object.entries(this.pendingChanges.deletedItems)) {
+          const le = this.editEntries[leIndex]
+          for (const ldeIndex of ldeIndices) {
+            const lde = le.lootdrop.lootdrop_entries[ldeIndex]
+            if (lde && !lde._pendingAdd) {
+              try {
+                await SpireApi.v1().delete('/lootdrop_entry/' + lde.lootdrop_id, { params: { item_id: lde.item_id } })
+              } catch (e) {
+                console.error('Error deleting item:', e)
+              }
+            }
+          }
+        }
+
+        // 5. Delete lootdrops
+        for (const leIndex of this.pendingChanges.deletedLootdrops) {
+          const le = this.editEntries[leIndex]
+          if (le && !le._pendingAdd) {
+            try {
+              await SpireApi.v1().delete('/loottable_entry/' + le.loottable_id, { params: { lootdrop_id: le.lootdrop_id } })
+            } catch (e) {
+              console.error('Error deleting lootdrop:', e)
+            }
+          }
+        }
+
+        // Clear pending changes and refresh
+        this.resetPendingChanges()
         this.showNotification('Loot table saved successfully!')
 
         // Refresh data
@@ -919,8 +1188,15 @@ export default {
       }
     },
 
+    confirmReset() {
+      if (confirm('Discard ALL pending changes? This will revert every add, delete, and edit back to the last saved state.')) {
+        this.selectLoottable(this.selectedTable)
+        this.showNotification('All pending changes discarded')
+      }
+    },
+
     async deleteLoottable() {
-      if (!confirm('Delete loot table #' + this.editTable.id + '? This cannot be undone.')) return
+      if (!confirm('⚠️ PERMANENTLY DELETE loot table "' + (this.editTable.name || '#' + this.editTable.id) + '" (ID: ' + this.editTable.id + ')?\n\nThis will destroy the loot table and ALL associated loot drops and item entries. This action is IRREVERSIBLE and cannot be undone.\n\nAre you absolutely sure?')) return
       try {
         const ltApi = new LoottableApi(...SpireApi.cfg())
         await ltApi.deleteLoottable({ id: this.editTable.id })
@@ -933,49 +1209,61 @@ export default {
       }
     },
 
-    async addLootdrop() {
-      try {
-        // Create a new lootdrop
-        const ldApi = new LootdropApi(...SpireApi.cfg())
-        const r = await ldApi.createLootdrop({
-          lootdrop: {
-            name: (this.editTable.name || 'Lootdrop') + ' - Drop ' + (this.editEntries.length + 1),
-          }
-        })
-        const newDrop = Array.isArray(r.data) ? r.data[0] : r.data
-        if (newDrop && newDrop.id) {
-          // Link it to loottable
-          const lteApi = new LoottableEntryApi(...SpireApi.cfg())
-          await lteApi.createLoottableEntry({
-            loottableEntry: {
-              loottable_id: this.editTable.id,
-              lootdrop_id: newDrop.id,
-              multiplier: 1,
-              droplimit: 0,
-              mindrop: 0,
-              probability: 100,
-            }
-          })
-          // Refresh
-          this.showNotification('Added new lootdrop #' + newDrop.id)
-          await this.refreshCurrentTable()
+    addLootdrop() {
+      // Create placeholder lootdrop entry
+      const newLe = {
+        loottable_id: this.editTable.id,
+        lootdrop_id: null, // Will be assigned when saved
+        probability: 100,
+        multiplier: 1,
+        droplimit: 0,
+        mindrop: 0,
+        _expanded: false,
+        _addingItem: false,
+        _pendingAdd: true,
+        lootdrop: {
+          id: null,
+          name: (this.editTable.name || 'Lootdrop') + ' - Drop ' + (this.editEntries.length + 1),
+          lootdrop_entries: []
         }
-      } catch (e) {
-        this.showNotification('Error adding lootdrop', 'error')
       }
+      
+      // Add to display
+      this.editEntries.push(newLe)
+      
+      // Track in pending changes
+      this.pendingChanges.addedLootdrops.push(newLe)
+      
+      this.showNotification('Queued new lootdrop for creation')
+      this.updateHasChanges()
     },
 
-    async removeLootdrop(index) {
+    removeLootdrop(index) {
       const le = this.editEntries[index]
-      if (!confirm('Remove lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '" from this table?')) return
-      try {
-        // Direct axios — composite key: loottable_id (path) + lootdrop_id (query)
-        await SpireApi.v1().delete('/loottable_entry/' + le.loottable_id, { params: { lootdrop_id: le.lootdrop_id } })
-        this.showNotification('Removed lootdrop')
-        await this.refreshCurrentTable()
-      } catch (e) {
-        this.showNotification('Error removing lootdrop', 'error')
+      
+      if (le._pendingAdd) {
+        // If this was a pending add, just remove it from the queue and display
+        this.editEntries.splice(index, 1)
+        
+        // Remove from pending adds
+        this.pendingChanges.addedLootdrops = this.pendingChanges.addedLootdrops.filter(
+          addedLe => addedLe !== le
+        )
+        
+        this.showNotification('Cancelled addition of ' + (le.lootdrop.name || 'lootdrop'))
+      } else {
+        // Mark existing lootdrop for deletion
+        if (!confirm('Remove lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '" from this table?')) return
+        
+        this.$set(le, '_pendingDelete', true)
+        
+        // Track in pending changes
+        this.pendingChanges.deletedLootdrops.push(index)
+        
+        this.showNotification('Queued lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '" for deletion')
       }
+      
+      this.updateHasChanges()
     },
 
     getDropdownPosition(leIndex) {
@@ -1085,47 +1373,109 @@ export default {
       })
     },
 
-    async addSearchedItem(leIndex, item) {
+    addSearchedItem(leIndex, item) {
       const le = this.editEntries[leIndex]
-      try {
-        const ldeApi = new LootdropEntryApi(...SpireApi.cfg())
-        const result = await ldeApi.createLootdropEntry({
-          lootdropEntry: {
-            lootdrop_id: le.lootdrop_id,
-            item_id: item.id,
-            chance: 10,
-            multiplier: 1,
-            equip_item: 0,
-            item_charges: 1,
-            npc_min_level: 0,
-            npc_max_level: 0,
-            trivial_min_level: 0,
-            trivial_max_level: 0,
-          }
-        })
-        console.log('createLootdropEntry result:', result)
-        le._addingItem = false
-        le._searchResults = []
-        this.showNotification('Added ' + (item.Name || item.name || 'item #' + item.id))
-        await this.refreshCurrentTable()
-      } catch (e) {
-        console.error('addSearchedItem error:', e, 'lootdrop_id:', le.lootdrop_id, 'item_id:', item.id)
-        this.showNotification('Error adding item: ' + (e.message || e), 'error')
+      
+      // Create new lootdrop entry object
+      const newLde = {
+        lootdrop_id: le.lootdrop_id,
+        item_id: item.id,
+        chance: 10,
+        multiplier: 1,
+        equip_item: 0,
+        item_charges: 1,
+        npc_min_level: 0,
+        npc_max_level: 0,
+        trivial_min_level: 0,
+        trivial_max_level: 0,
+        item: item,
+        _pendingAdd: true
       }
+      
+      // Add to local display
+      le.lootdrop.lootdrop_entries.push(newLde)
+      
+      // Track in pending changes
+      if (!this.pendingChanges.addedItems[leIndex]) {
+        this.$set(this.pendingChanges.addedItems, leIndex, [])
+      }
+      this.pendingChanges.addedItems[leIndex].push({ item, lde: newLde })
+      
+      le._addingItem = false
+      le._searchResults = []
+      this.showNotification('Queued ' + (item.Name || item.name || 'item #' + item.id) + ' for addition')
+      this.updateHasChanges()
     },
 
-    async removeItem(leIndex, ldeIndex) {
+    removeItem(leIndex, ldeIndex) {
       const lde = this.editEntries[leIndex].lootdrop.lootdrop_entries[ldeIndex]
-      if (!confirm('Remove ' + (lde.item ? lde.item.Name || lde.item.name : 'item #' + lde.item_id) + '?')) return
-      try {
-        // Direct axios call — generated client doesn't reliably pass item_id query param
-        // Composite key: lootdrop_id (path) + item_id (query) both required
-        await SpireApi.v1().delete('/lootdrop_entry/' + lde.lootdrop_id, { params: { item_id: lde.item_id } })
-        this.showNotification('Removed item')
-        await this.refreshCurrentTable()
-      } catch (e) {
-        this.showNotification('Error removing item', 'error')
+      
+      if (lde._pendingAdd) {
+        // If this was a pending add, just remove it from the queue and display
+        this.editEntries[leIndex].lootdrop.lootdrop_entries.splice(ldeIndex, 1)
+        
+        // Remove from pending adds
+        if (this.pendingChanges.addedItems[leIndex]) {
+          this.pendingChanges.addedItems[leIndex] = this.pendingChanges.addedItems[leIndex].filter(
+            addedItem => addedItem.lde.item_id !== lde.item_id
+          )
+          if (this.pendingChanges.addedItems[leIndex].length === 0) {
+            this.$delete(this.pendingChanges.addedItems, leIndex)
+          }
+        }
+        
+        this.showNotification('Cancelled addition of ' + (lde.item ? lde.item.Name || lde.item.name : 'item #' + lde.item_id))
+      } else {
+        // Mark existing item for deletion
+        if (!confirm('Remove ' + (lde.item ? lde.item.Name || lde.item.name : 'item #' + lde.item_id) + '?')) return
+        
+        this.$set(lde, '_pendingDelete', true)
+        
+        // Track in pending changes
+        if (!this.pendingChanges.deletedItems[leIndex]) {
+          this.$set(this.pendingChanges.deletedItems, leIndex, [])
+        }
+        this.pendingChanges.deletedItems[leIndex].push(ldeIndex)
+        
+        this.showNotification('Queued ' + (lde.item ? lde.item.Name || lde.item.name : 'item #' + lde.item_id) + ' for deletion')
       }
+      
+      this.updateHasChanges()
+    },
+
+    undoRemoveItem(leIndex, ldeIndex) {
+      const lde = this.editEntries[leIndex].lootdrop.lootdrop_entries[ldeIndex]
+      
+      // Remove pending delete marker
+      this.$delete(lde, '_pendingDelete')
+      
+      // Remove from pending deletes
+      if (this.pendingChanges.deletedItems[leIndex]) {
+        this.pendingChanges.deletedItems[leIndex] = this.pendingChanges.deletedItems[leIndex].filter(
+          idx => idx !== ldeIndex
+        )
+        if (this.pendingChanges.deletedItems[leIndex].length === 0) {
+          this.$delete(this.pendingChanges.deletedItems, leIndex)
+        }
+      }
+      
+      this.showNotification('Cancelled removal of ' + (lde.item ? lde.item.Name || lde.item.name : 'item #' + lde.item_id))
+      this.updateHasChanges()
+    },
+
+    undoRemoveLootdrop(leIndex) {
+      const le = this.editEntries[leIndex]
+      
+      // Remove pending delete marker
+      this.$delete(le, '_pendingDelete')
+      
+      // Remove from pending deletes
+      this.pendingChanges.deletedLootdrops = this.pendingChanges.deletedLootdrops.filter(
+        idx => idx !== leIndex
+      )
+      
+      this.showNotification('Cancelled removal of lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '"')
+      this.updateHasChanges()
     },
 
     async refreshCurrentTable() {
@@ -1314,12 +1664,12 @@ export default {
 }
 
 .save-btn-glow {
-  box-shadow: 0 0 8px 2px rgba(255, 193, 7, 0.5);
-  animation: loot-save-pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 8px 2px rgba(244, 67, 54, 0.6) !important;
+  animation: loot-save-pulse 1.5s ease-in-out infinite !important;
 }
 @keyframes loot-save-pulse {
-  0%, 100% { box-shadow: 0 0 8px 2px rgba(255, 193, 7, 0.5); }
-  50% { box-shadow: 0 0 14px 4px rgba(255, 193, 7, 0.8); }
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(244, 67, 54, 0.6); }
+  50% { box-shadow: 0 0 14px 4px rgba(244, 67, 54, 0.9); }
 }
 
 .loot-notification {
@@ -1343,5 +1693,32 @@ export default {
 @keyframes slide-up {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* Pending Add — green theme */
+.pending-add {
+  background: rgba(76, 175, 80, 0.15) !important;
+  border-left: 3px solid #4caf50;
+}
+.pending-add td {
+  color: #81c784 !important;
+}
+
+/* Pending Delete — red theme + strikethrough */
+.pending-delete {
+  background: rgba(244, 67, 54, 0.15) !important;
+  border-left: 3px solid #f44336;
+  opacity: 0.7;
+}
+.pending-delete td {
+  text-decoration: line-through;
+  color: #ef9a9a !important;
+}
+
+/* Pending Edit — orange highlight on individual fields */
+.pending-edit {
+  background: rgba(255, 152, 0, 0.2) !important;
+  border-color: #ff9800 !important;
+  box-shadow: 0 0 4px rgba(255, 152, 0, 0.3);
 }
 </style>

@@ -414,7 +414,7 @@
                   </td>
                   <td class="text-center">{{ task.minlevel || '—' }}</td>
                   <td class="text-center">
-                    <a :href="'/tasks/' + task.id" target="_blank"
+                    <a :href="'/tasks/' + task.id + '?activity=0'" target="_blank"
                        class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;" title="Edit Task">
                       <i class="fa fa-edit"></i>
                     </a>
@@ -1441,7 +1441,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="lt in ldonTrapEntries" :key="'ldon-' + lt.id">
+                  <tr v-for="(lt, ltIdx) in ldonTrapEntries" :key="'ldon-' + lt.id + '-' + ltIdx">
                     <td class="text-muted">{{ lt.id }}</td>
                     <template v-if="editingLdonTrapId !== lt.id">
                       <td class="text-center text-muted">{{ lt.trap_id || '—' }}</td>
@@ -1897,22 +1897,67 @@
             </div>
           </div>
 
-          <!-- Fog Color Preview -->
+          <!-- Fog Color Settings -->
           <div class="mt-3 ml-2 mr-2" v-if="zone">
-            <h6 class="eq-header" style="font-size: 13px;">Fog Colors</h6>
-            <div class="fog-slots">
-              <div class="fog-slot" v-for="slot in fogSlots" :key="slot.label">
-                <div
-                  class="fog-color-swatch"
-                  :style="{ backgroundColor: getFogColor(slot.suffix) }"
-                  :title="'RGB(' + (zone['fog_red' + slot.suffix] || 0) + ', ' + (zone['fog_green' + slot.suffix] || 0) + ', ' + (zone['fog_blue' + slot.suffix] || 0) + ')'"
-                ></div>
-                <div class="fog-slot-label">{{ slot.label }}</div>
-                <div class="fog-slot-clip">
-                  {{ zone['fog_minclip' + slot.suffix] || 0 }} - {{ zone['fog_maxclip' + slot.suffix] || 0 }}
-                </div>
-              </div>
+            <h6 class="eq-header" style="font-size: 13px;">Fog Settings</h6>
+
+            <!-- Fog Density -->
+            <div class="fog-density-row mb-2">
+              <label class="fog-field-label">Density</label>
+              <input
+                type="number"
+                class="fog-input"
+                step="0.01"
+                :value="zone.fog_density || 0"
+                @change="updateFogField('fog_density', parseFloat($event.target.value))"
+              />
             </div>
+
+            <!-- Fog Slots Table -->
+            <table class="fog-table">
+              <thead>
+                <tr>
+                  <th>Slot</th>
+                  <th>Color</th>
+                  <th>Min Clip</th>
+                  <th>Max Clip</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="slot in fogSlots" :key="slot.label">
+                  <td class="fog-slot-name">{{ slot.label }}</td>
+                  <td class="fog-swatch-cell" style="position: relative;">
+                    <div
+                      class="fog-swatch"
+                      :style="{ background: getFogColor(slot.suffix) }"
+                      @click="activeFogPicker = activeFogPicker === slot.suffix ? null : slot.suffix"
+                    ></div>
+                    <span class="fog-hex-label">{{ getFogHex(slot.suffix) }}</span>
+                    <!-- Popup Color Picker -->
+                    <div class="fog-picker-popup" v-if="activeFogPicker === slot.suffix" @click.stop>
+                      <div class="fog-picker-overlay" @click="activeFogPicker = null"></div>
+                      <chrome-picker
+                        :value="getFogHex(slot.suffix)"
+                        @input="onFogPickerChange(slot.suffix, $event)"
+                        :disableAlpha="true"
+                      />
+                    </div>
+                  </td>
+                  <td>
+                    <input type="number" class="fog-input"
+                      :value="zone['fog_minclip' + slot.suffix] || 0"
+                      @change="updateFogField('fog_minclip' + slot.suffix, parseFloat($event.target.value))"
+                    />
+                  </td>
+                  <td>
+                    <input type="number" class="fog-input"
+                      :value="zone['fog_maxclip' + slot.suffix] || 0"
+                      @change="updateFogField('fog_maxclip' + slot.suffix, parseFloat($event.target.value))"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <!-- Weather Preview -->
@@ -1972,10 +2017,11 @@ import {Zones}             from "../../app/zones";
 import util                from "util";
 import {ROUTE}             from "../../routes";
 import {Spawn}             from "../../app/spawn";
+import {Chrome}            from "vue-color";
 
 export default {
   name: "EqZoneCardPreview",
-  components: { LoaderFakeProgress, NpcPopover, ItemPopover, SpellPopover, EqCheckbox, EqTab, EqTabs, EqWindow },
+  components: { LoaderFakeProgress, NpcPopover, ItemPopover, SpellPopover, EqCheckbox, EqTab, EqTabs, EqWindow, 'chrome-picker': Chrome },
   props: {
     zone: Object,
     required: true,
@@ -1991,6 +2037,7 @@ export default {
         { label: 'Slot 3', suffix: '_3' },
         { label: 'Slot 4', suffix: '_4' },
       ],
+      activeFogPicker: null,
       groundSpawns: [],
       showAddGroundSpawn: false,
       gsPlacementMode: 'point', // 'point' or 'area'
@@ -2114,6 +2161,17 @@ export default {
     // cycle background images
     this.interval = setInterval(this.setBackgroundImage, 3 * 1000)
 
+    // Debounced fog save to avoid spamming API while dragging color picker
+    this.debouncedFogSave = debounce(async (suffix, r, g, b) => {
+      const payload = {};
+      payload['fog_red' + suffix] = r;
+      payload['fog_green' + suffix] = g;
+      payload['fog_blue' + suffix] = b;
+      try {
+        await SpireApi.v1().patch(`/zone/${this.zone.id}`, payload);
+      } catch (e) { console.error('Fog save error:', e); }
+    }, 300);
+
     // Listen for map location picks
     EventBus.$on('GS_LOCATION_PICKED', this.handleLocationPicked)
     EventBus.$on('GS_DATA_CHANGED', this.loadGroundSpawns)
@@ -2216,6 +2274,38 @@ export default {
       const g = this.zone['fog_green' + suffix] || 0;
       const b = this.zone['fog_blue' + suffix] || 0;
       return `rgb(${r}, ${g}, ${b})`;
+    },
+    getFogHex(suffix) {
+      if (!this.zone) return '#000000';
+      const r = this.zone['fog_red' + suffix] || 0;
+      const g = this.zone['fog_green' + suffix] || 0;
+      const b = this.zone['fog_blue' + suffix] || 0;
+      return '#' + [r, g, b].map(c => Math.max(0, Math.min(255, c)).toString(16).padStart(2, '0')).join('');
+    },
+    onFogColorPick(suffix, hex) {
+      const r = parseInt(hex.substr(1, 2), 16);
+      const g = parseInt(hex.substr(3, 2), 16);
+      const b = parseInt(hex.substr(5, 2), 16);
+      this.updateFogField('fog_red' + suffix, r);
+      this.updateFogField('fog_green' + suffix, g);
+      this.updateFogField('fog_blue' + suffix, b);
+    },
+    onFogPickerChange(suffix, color) {
+      const { r, g, b } = color.rgba;
+      this.$set(this.zone, 'fog_red' + suffix, r);
+      this.$set(this.zone, 'fog_green' + suffix, g);
+      this.$set(this.zone, 'fog_blue' + suffix, b);
+      this.debouncedFogSave(suffix, r, g, b);
+    },
+    async updateFogField(field, value) {
+      try {
+        this.$set(this.zone, field, value);
+        const payload = {};
+        payload[field] = value;
+        await SpireApi.v1().patch(`/zone/${this.zone.id}`, payload);
+      } catch (e) {
+        console.error('Failed to update fog field:', field, e);
+      }
     },
     npcGridEditor() {
       this.$router.push(
@@ -3755,38 +3845,91 @@ export default {
   height: 60px;
 }
 
-/* Fog color swatches */
-.fog-slots {
+/* Fog settings */
+.fog-density-row {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.fog-slot {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
 }
-
-.fog-color-swatch {
-  width: 36px;
-  height: 36px;
-  border-radius: 4px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  cursor: default;
-}
-
-.fog-slot-label {
-  font-size: 10px;
+.fog-field-label {
+  font-size: 11px;
   color: #aaa;
   font-weight: 600;
+  min-width: 50px;
 }
-
-.fog-slot-clip {
-  font-size: 9px;
-  color: #666;
+.fog-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
 }
+.fog-table th {
+  color: #999;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+}
+.fog-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+}
+.fog-slot-name {
+  color: #ccc;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fog-swatch-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fog-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+.fog-swatch:hover {
+  border-color: rgba(218, 165, 32, 0.6);
+}
+.fog-hex-label {
+  color: #888;
+  font-size: 10px;
+  font-family: monospace;
+}
+.fog-picker-popup {
+  position: absolute;
+  z-index: 1000;
+  top: 34px;
+  left: 0;
+}
+.fog-picker-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: -1;
+}
+.fog-input {
+  width: 100%;
+  max-width: 70px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  color: #ddd;
+  font-size: 11px;
+  padding: 2px 4px;
+  text-align: center;
+}
+.fog-input:focus {
+  outline: none;
+  border-color: rgba(218, 165, 32, 0.5);
+}
+.fog-input::-webkit-inner-spin-button { opacity: 0.3; }
 
 /* Weather table */
 .weather-table {
