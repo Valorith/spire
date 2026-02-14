@@ -3671,9 +3671,9 @@ export default {
   line-height: 1;
 }
 .zt {
-  font-size: 10px;
+  font-size: 11.5px;
   color: #777;
-  padding: 2px 5px;
+  padding: 3px 6px;
   cursor: pointer;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
@@ -3687,7 +3687,7 @@ export default {
 }
 .zt-sep {
   color: #333;
-  font-size: 10px;
+  font-size: 11.5px;
   padding: 0 1px;
   user-select: none;
 }
