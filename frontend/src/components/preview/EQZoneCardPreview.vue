@@ -3515,11 +3515,12 @@ export default {
         this.bsSearching = true
         timeout = setTimeout(async () => {
           try {
-            const q = this.bsSpellSearchQuery
+            const q = (this.bsSpellSearchQuery || '').trim()
             const isNum = /^\d+$/.test(q)
+            const safeQ = q.replace(/'/g, "''")
             const params = isNum
-              ? { where: `id__${q}`, limit: 20 }
-              : { where: `name__like__${q}`, limit: 20 }
+              ? { where: `id = ${Number(q)}`, limit: 20 }
+              : { where: `name like '%${safeQ}%'`, limit: 20 }
             const r = await SpireApi.v1().get(`/spells_news`, { params })
             this.bsSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
           } catch (e) {
@@ -3671,9 +3672,9 @@ export default {
   line-height: 1;
 }
 .zt {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: #777;
-  padding: 3px 6px;
+  padding: 3px 7px;
   cursor: pointer;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
@@ -3687,7 +3688,7 @@ export default {
 }
 .zt-sep {
   color: #333;
-  font-size: 11.5px;
+  font-size: 12.5px;
   padding: 0 1px;
   user-select: none;
 }
