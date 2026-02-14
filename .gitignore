@@ -41,4 +41,4 @@ cpu.prof
 eqemu-server-installer-linux-amd64
 eqemu-server-installer-windows-amd64.exe
 
-*.old
+*.old.playwright-cli/
