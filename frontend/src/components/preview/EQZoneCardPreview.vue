@@ -6,64 +6,25 @@
   >
     <div class="p-3 pt-1">
       <div>
-        <div class="zone-tab-nav">
-          <div class="zone-tab-group">
-            <span class="zone-tab-label">Entities</span>
-            <button :class="['zone-tab-pill', activeZoneTab === 'npcs' && 'active']" @click="activeZoneTab = 'npcs'">
-              NPCs<span v-if="npcTypes && npcTypes.length" class="zone-tab-count">{{ npcTypes.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'doors' && 'active']" @click="activeZoneTab = 'doors'">
-              Doors<span v-if="doorEntries.length" class="zone-tab-count">{{ doorEntries.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'objects' && 'active']" @click="activeZoneTab = 'objects'">
-              Objects<span v-if="objectEntries.length" class="zone-tab-count">{{ objectEntries.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'traps' && 'active']" @click="activeZoneTab = 'traps'">
-              Traps<span v-if="trapEntries.length" class="zone-tab-count">{{ trapEntries.length }}</span>
-            </button>
-          </div>
-          <div class="zone-tab-group">
-            <span class="zone-tab-label">Items</span>
-            <button :class="['zone-tab-pill', activeZoneTab === 'ground_spawns' && 'active']" @click="activeZoneTab = 'ground_spawns'">
-              Ground Spawns<span v-if="groundSpawns.length" class="zone-tab-count">{{ groundSpawns.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'forage' && 'active']" @click="activeZoneTab = 'forage'">
-              Forage<span v-if="forageItems.length" class="zone-tab-count">{{ forageItems.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'fishing' && 'active']" @click="activeZoneTab = 'fishing'">
-              Fishing<span v-if="fishingEntries.length" class="zone-tab-count">{{ fishingEntries.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'sold' && 'active']" @click="activeZoneTab = 'sold'">
-              Sold<span v-if="zoneMerchants.length" class="zone-tab-count">{{ zoneMerchants.length }}</span>
-            </button>
-          </div>
-          <div class="zone-tab-group">
-            <span class="zone-tab-label">Magic</span>
-            <button :class="['zone-tab-pill', activeZoneTab === 'spells' && 'active']" @click="activeZoneTab = 'spells'">
-              Spells<span v-if="zoneSpells.length" class="zone-tab-count">{{ zoneSpells.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'blocked_spells' && 'active']" @click="activeZoneTab = 'blocked_spells'">
-              Blocked<span v-if="blockedSpellEntries.length" class="zone-tab-count">{{ blockedSpellEntries.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'ldon_traps' && 'active']" @click="activeZoneTab = 'ldon_traps'">
-              LDoN<span v-if="ldonTrapEntries.length" class="zone-tab-count">{{ ldonTrapEntries.length }}</span>
-            </button>
-          </div>
-          <div class="zone-tab-group">
-            <span class="zone-tab-label">Zone</span>
-            <button :class="['zone-tab-pill', activeZoneTab === 'tasks' && 'active']" @click="activeZoneTab = 'tasks'">
-              Tasks<span v-if="zoneTasks.length" class="zone-tab-count">{{ zoneTasks.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'graveyards' && 'active']" @click="activeZoneTab = 'graveyards'">
-              Graves<span v-if="graveyardEntries.length" class="zone-tab-count">{{ graveyardEntries.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'zone_connections' && 'active']" @click="activeZoneTab = 'zone_connections'">
-              Connections<span v-if="zoneConnections.length" class="zone-tab-count">{{ zoneConnections.length }}</span>
-            </button>
-            <button :class="['zone-tab-pill', activeZoneTab === 'zone' && 'active']" @click="activeZoneTab = 'zone'">
-              Settings
-            </button>
-          </div>
+        <div class="zt-bar">
+          <a :class="['zt', activeZoneTab === 'npcs' && 'zt-on']" @click="activeZoneTab = 'npcs'">NPCs</a>
+          <a :class="['zt', activeZoneTab === 'doors' && 'zt-on']" @click="activeZoneTab = 'doors'">Doors</a>
+          <a :class="['zt', activeZoneTab === 'objects' && 'zt-on']" @click="activeZoneTab = 'objects'">Obj</a>
+          <a :class="['zt', activeZoneTab === 'traps' && 'zt-on']" @click="activeZoneTab = 'traps'">Traps</a>
+          <span class="zt-sep">│</span>
+          <a :class="['zt', activeZoneTab === 'ground_spawns' && 'zt-on']" @click="activeZoneTab = 'ground_spawns'">GSpawns</a>
+          <a :class="['zt', activeZoneTab === 'forage' && 'zt-on']" @click="activeZoneTab = 'forage'">Forage</a>
+          <a :class="['zt', activeZoneTab === 'fishing' && 'zt-on']" @click="activeZoneTab = 'fishing'">Fish</a>
+          <a :class="['zt', activeZoneTab === 'sold' && 'zt-on']" @click="activeZoneTab = 'sold'">Sold</a>
+          <span class="zt-sep">│</span>
+          <a :class="['zt', activeZoneTab === 'spells' && 'zt-on']" @click="activeZoneTab = 'spells'">Spells</a>
+          <a :class="['zt', activeZoneTab === 'blocked_spells' && 'zt-on']" @click="activeZoneTab = 'blocked_spells'">Blocked</a>
+          <a :class="['zt', activeZoneTab === 'ldon_traps' && 'zt-on']" @click="activeZoneTab = 'ldon_traps'">LDoN</a>
+          <span class="zt-sep">│</span>
+          <a :class="['zt', activeZoneTab === 'tasks' && 'zt-on']" @click="activeZoneTab = 'tasks'">Tasks</a>
+          <a :class="['zt', activeZoneTab === 'graveyards' && 'zt-on']" @click="activeZoneTab = 'graveyards'">Graves</a>
+          <a :class="['zt', activeZoneTab === 'zone_connections' && 'zt-on']" @click="activeZoneTab = 'zone_connections'">Conns</a>
+          <a :class="['zt', activeZoneTab === 'zone' && 'zt-on']" @click="activeZoneTab = 'zone'">Zone</a>
         </div>
         <div v-show="activeZoneTab === 'npcs'">
 
@@ -3699,56 +3660,36 @@ export default {
 
 <style>
 /* Zone Editor Tab Navigation */
-.zone-tab-nav {
+.zt-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 8px;
-  margin-bottom: 8px;
-  padding: 4px 0;
-}
-.zone-tab-group {
-  display: flex;
   align-items: center;
-  gap: 2px;
-  flex-wrap: wrap;
+  gap: 0;
+  padding: 3px 0 4px;
+  border-bottom: 1px solid #333;
+  margin-bottom: 6px;
+  line-height: 1;
 }
-.zone-tab-label {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #7a7a7a;
-  margin-right: 2px;
-  user-select: none;
-}
-.zone-tab-pill {
-  background: transparent;
-  border: 1px solid #40434e;
-  border-radius: 3px;
-  color: #999;
+.zt {
   font-size: 10px;
-  padding: 1px 5px;
+  color: #777;
+  padding: 2px 5px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s ease;
-  line-height: 16px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+  user-select: none;
 }
-.zone-tab-pill:hover {
-  color: #fff;
-  border-color: #858996;
-  background: rgba(255,255,255,0.08);
-}
-.zone-tab-pill.active {
+.zt:hover { color: #ccc; }
+.zt-on {
   color: #f0e6c0;
-  border-color: #8a7d4a;
-  background: rgba(138,125,74,0.2);
+  border-bottom-color: #8a7d4a;
 }
-.zone-tab-count {
-  font-size: 9px;
-  color: #666;
-  margin-left: 2px;
-}
-.zone-tab-pill.active .zone-tab-count {
-  color: #b8a870;
+.zt-sep {
+  color: #333;
+  font-size: 10px;
+  padding: 0 1px;
+  user-select: none;
 }
 
 .gs-item-search-dropdown {
