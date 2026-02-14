@@ -1535,7 +1535,6 @@
                     <th style="width: 50px">ID</th>
                     <th style="width: 40px"></th>
                     <th class="text-center">Position (X / Y / Z)</th>
-                    <th class="text-center" style="width: 80px">Heading</th>
                     <th class="text-center" style="width: 60px"></th>
                   </tr>
                 </thead>
@@ -1555,7 +1554,6 @@
                       <td class="text-center text-muted" style="font-size: 12px;">
                         {{ Number(gy.x).toFixed(1) }}, {{ Number(gy.y).toFixed(1) }}, {{ Number(gy.z).toFixed(1) }}
                       </td>
-                      <td class="text-center text-muted">{{ Number(gy.heading).toFixed(1) }}</td>
                       <td class="text-center" style="white-space: nowrap;">
                         <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
                                 @click="startEditGraveyard(gy)" title="Edit">
@@ -1577,10 +1575,6 @@
                           <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
                                  style="width: 70px; font-size: 10px; padding: 1px 4px; height: 22px;" v-model.number="graveyardEditData.z" />
                         </div>
-                      </td>
-                      <td class="text-center">
-                        <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
-                               style="width: 60px; display: inline-block; font-size: 11px;" v-model.number="graveyardEditData.heading" />
                       </td>
                       <td class="text-center" style="white-space: nowrap;">
                         <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
@@ -1653,20 +1647,7 @@
                   <i class="fa fa-times"></i>
                 </button>
               </div>
-              <div class="row mb-2">
-                <div class="col-4">
-                  <label style="font-size: 11px; opacity: 0.6;">Type</label>
-                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newBlockedSpell.type" />
-                </div>
-                <div class="col-4">
-                  <label style="font-size: 11px; opacity: 0.6;">Description</label>
-                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newBlockedSpell.description" />
-                </div>
-                <div class="col-4">
-                  <label style="font-size: 11px; opacity: 0.6;">Message</label>
-                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newBlockedSpell.message" />
-                </div>
-              </div>
+              <!-- Type defaults to 1, description/message left empty -->
               <div class="d-flex">
                 <button class="btn btn-sm btn-success mr-2" @click="addBlockedSpell()" :disabled="!newBlockedSpell.spellid">
                   <i class="fa fa-plus mr-1"></i> Add
@@ -1684,10 +1665,7 @@
                   <tr>
                     <th style="width: 40px">ID</th>
                     <th>Spell</th>
-                    <th class="text-center" style="width: 50px">Type</th>
-                    <th>Description</th>
-                    <th>Message</th>
-                    <th class="text-center" style="width: 60px"></th>
+                    <th class="text-center" style="width: 50px"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1698,53 +1676,16 @@
                         v-if="bs.spellDetail && bs.spellDetail.new_icon !== undefined"
                         :spell="bs.spellDetail"
                         :size="20"
-                        :spell-name-length="25"
+                        :spell-name-length="40"
                       />
                       <span v-else class="text-muted">Spell #{{ bs.spellid }}</span>
                     </td>
-                    <template v-if="editingBlockedSpellId !== bs.id">
-                      <td class="text-center text-muted">{{ bs.type }}</td>
-                      <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.description">
-                        {{ bs.description || '—' }}
-                      </td>
-                      <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.message">
-                        {{ bs.message || '—' }}
-                      </td>
-                      <td class="text-center" style="white-space: nowrap;">
-                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
-                                @click="startEditBlockedSpell(bs)" title="Edit">
-                          <i class="fa fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
-                                @click="removeBlockedSpell(bs)" title="Remove">
-                          <i class="fa fa-trash"></i>
-                        </button>
-                      </td>
-                    </template>
-                    <template v-else>
-                      <td class="text-center">
-                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
-                               style="width: 40px; display: inline-block; font-size: 11px;" v-model.number="blockedSpellEditData.type" />
-                      </td>
-                      <td>
-                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                               style="font-size: 10px; height: 22px;" v-model="blockedSpellEditData.description" />
-                      </td>
-                      <td>
-                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                               style="font-size: 10px; height: 22px;" v-model="blockedSpellEditData.message" />
-                      </td>
-                      <td class="text-center" style="white-space: nowrap;">
-                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
-                                @click="saveEditBlockedSpell(bs)" title="Save">
-                          <i class="fa fa-check"></i>
-                        </button>
-                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
-                                @click="editingBlockedSpellId = null" title="Cancel">
-                          <i class="fa fa-times"></i>
-                        </button>
-                      </td>
-                    </template>
+                    <td class="text-center" style="white-space: nowrap;">
+                      <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                              @click="removeBlockedSpell(bs)" title="Remove">
+                        <i class="fa fa-trash"></i>
+                      </button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
