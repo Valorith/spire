@@ -519,7 +519,7 @@
           <div style="height: 85vh; overflow-y: scroll;" v-else>
             <div class="d-flex align-items-center mb-2">
               <span style="opacity: 0.5; font-size: 13px;">{{ forageItems.length }} forage item(s) in zone</span>
-              <button class="btn btn-sm btn-success ml-auto" @click="showAddForage = !showAddForage">
+              <button class="btn btn-sm btn-outline-success ml-auto" @click="showAddForage = !showAddForage">
                 <i class="fa fa-plus mr-1"></i> Add Forage Item
               </button>
             </div>
@@ -720,7 +720,7 @@
             </div>
 
             <div v-if="fishingEntries.length === 0 && !showAddFishing" class="mt-3 text-center" style="opacity: 0.5">
-              <i class="fa fa-fish"></i> No fishing entries found in this zone
+              <i class="fa fa-tint"></i> No fishing entries found in this zone
             </div>
             <div style="height: 75vh; overflow-y: scroll;" v-if="fishingEntries.length > 0">
               <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
@@ -1068,7 +1068,7 @@
             </div>
 
             <div v-if="doorEntries.length === 0 && !showAddDoor" class="mt-3 text-center" style="opacity: 0.5">
-              <i class="fa fa-door-open"></i> No doors found in this zone
+              <i class="fa fa-columns"></i> No doors found in this zone
             </div>
             <div style="height: 75vh; overflow-y: scroll;" v-if="doorEntries.length > 0">
               <div class="d-flex align-items-center mb-2 px-1">
@@ -1396,7 +1396,11 @@
               </div>
               <div class="row mb-2">
                 <div class="col-6">
-                  <label style="font-size: 11px; opacity: 0.6;">Trap ID</label>
+                  <label style="font-size: 11px; opacity: 0.6;">Entry ID (Adventure Template)</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newLdonTrap.id" />
+                </div>
+                <div class="col-6">
+                  <label style="font-size: 11px; opacity: 0.6;">Trap ID (Trap Template)</label>
                   <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newLdonTrap.trap_id" />
                 </div>
               </div>
@@ -1522,7 +1526,7 @@
             </div>
 
             <div v-if="graveyardEntries.length === 0 && !showAddGraveyard" class="mt-3 text-center" style="opacity: 0.5">
-              <i class="fa fa-skull"></i> No graveyards found in this zone
+              <i class="fa fa-crosshairs"></i> No graveyards found in this zone
             </div>
             <div style="height: 75vh; overflow-y: scroll;" v-if="graveyardEntries.length > 0">
               <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
@@ -2121,7 +2125,7 @@ export default {
       ldonTrapTemplates: [],
       loadingLdonTraps: false,
       showAddLdonTrap: false,
-      newLdonTrap: { trap_id: 0 },
+      newLdonTrap: { id: 0, trap_id: 0 },
       editingLdonTrapId: null,
       ldonTrapEditData: {},
 
@@ -3451,12 +3455,13 @@ export default {
     async addLdonTrap() {
       try {
         const payload = {
+          id: this.newLdonTrap.id || 0,
           trap_id: this.newLdonTrap.trap_id || 0
         }
         const r = await SpireApi.v1().put(`/ldon_trap_entry`, payload)
         if (r.status === 200 || r.status === 201) {
           this.showAddLdonTrap = false
-          this.newLdonTrap = { trap_id: 0 }
+          this.newLdonTrap = { id: 0, trap_id: 0 }
           await this.loadLdonTraps()
         }
       } catch (e) {
