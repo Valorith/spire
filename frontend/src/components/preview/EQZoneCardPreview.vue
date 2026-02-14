@@ -5,11 +5,26 @@
     class="p-0"
   >
     <div class="p-3 pt-1">
-      <eq-tabs>
-        <eq-tab
-          :selected="true"
-          :name="'NPCs' + (npcTypes && npcTypes.length > 0 ? ` (${npcTypes.length})` : '')"
-        >
+      <div>
+        <select class="form-control form-control-sm bg-dark text-white border-secondary mb-2"
+                v-model="activeZoneTab" style="max-width: 220px; font-size: 12px; cursor: pointer;">
+          <option value="npcs">NPCs{{ npcTypes && npcTypes.length > 0 ? ` (${npcTypes.length})` : '' }}</option>
+          <option value="ground_spawns">Ground Spawns{{ groundSpawns.length > 0 ? ` (${groundSpawns.length})` : '' }}</option>
+          <option value="tasks">Tasks{{ zoneTasks.length > 0 ? ` (${zoneTasks.length})` : '' }}</option>
+          <option value="sold">Sold{{ zoneMerchants.length > 0 ? ` (${zoneMerchants.length})` : '' }}</option>
+          <option value="spells">Spells{{ zoneSpells.length > 0 ? ` (${zoneSpells.length})` : '' }}</option>
+          <option value="forage">Forage{{ forageItems.length > 0 ? ` (${forageItems.length})` : '' }}</option>
+          <option value="fishing">Fishing{{ fishingEntries.length > 0 ? ` (${fishingEntries.length})` : '' }}</option>
+          <option value="traps">Traps{{ trapEntries.length > 0 ? ` (${trapEntries.length})` : '' }}</option>
+          <option value="doors">Doors{{ doorEntries.length > 0 ? ` (${doorEntries.length})` : '' }}</option>
+          <option value="objects">Objects{{ objectEntries.length > 0 ? ` (${objectEntries.length})` : '' }}</option>
+          <option value="ldon_traps">LDoN Traps{{ ldonTrapEntries.length > 0 ? ` (${ldonTrapEntries.length})` : '' }}</option>
+          <option value="graveyards">Graveyards{{ graveyardEntries.length > 0 ? ` (${graveyardEntries.length})` : '' }}</option>
+          <option value="blocked_spells">Blocked Spells{{ blockedSpellEntries.length > 0 ? ` (${blockedSpellEntries.length})` : '' }}</option>
+          <option value="zone_connections">Zone Connections{{ zoneConnections.length > 0 ? ` (${zoneConnections.length})` : '' }}</option>
+          <option value="zone">Zone</option>
+        </select>
+        <div v-show="activeZoneTab === 'npcs'">
 
           <!-- Fake Loader -->
           <div v-if="npcTypes.length === 0" class="mt-3 text-center">
@@ -101,9 +116,9 @@
           </div>
 
 
-        </eq-tab>
+        </div>
         <!-- Ground Spawns Tab -->
-        <eq-tab :name="'Ground Spawns' + (groundSpawns.length > 0 ? ` (${groundSpawns.length})` : '')">
+        <div v-show="activeZoneTab === 'ground_spawns'">
           <div v-if="loadingGroundSpawns" class="mt-3 text-center">
             Loading Ground Spawns...
             <loader-fake-progress class="mt-3"/>
@@ -365,10 +380,10 @@
               </table>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Tasks Tab -->
-        <eq-tab :name="'Tasks' + (zoneTasks.length > 0 ? ` (${zoneTasks.length})` : '')">
+                <div v-show="activeZoneTab === 'tasks'">
           <div v-if="loadingTasks" class="mt-3 text-center">
             Loading Tasks...
             <loader-fake-progress class="mt-3"/>
@@ -406,10 +421,10 @@
               </tbody>
             </table>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Sold (Merchants) Tab -->
-        <eq-tab :name="'Sold' + (zoneMerchants.length > 0 ? ` (${zoneMerchants.length})` : '')">
+                <div v-show="activeZoneTab === 'sold'">
           <div v-if="loadingMerchants" class="mt-3 text-center">
             Loading Merchants...
             <loader-fake-progress class="mt-3"/>
@@ -456,10 +471,10 @@
               </div>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Spells Tab -->
-        <eq-tab :name="'Spells' + (zoneSpells.length > 0 ? ` (${zoneSpells.length})` : '')">
+                <div v-show="activeZoneTab === 'spells'">
           <div v-if="loadingSpells" class="mt-3 text-center">
             Loading Spells...
             <loader-fake-progress class="mt-3"/>
@@ -505,10 +520,10 @@
               <button class="btn btn-sm btn-dark" :disabled="spellPage >= spellTotalPages" @click="spellPage++">Next &raquo;</button>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Forage Tab -->
-        <eq-tab :name="'Forage' + (forageItems.length > 0 ? ` (${forageItems.length})` : '')">
+                <div v-show="activeZoneTab === 'forage'">
           <div v-if="loadingForage" class="mt-3 text-center">
             Loading Forage Items...
             <loader-fake-progress class="mt-3"/>
@@ -636,10 +651,10 @@
               </tbody>
             </table>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Fishing Tab -->
-        <eq-tab :name="'Fishing' + (fishingEntries.length > 0 ? ` (${fishingEntries.length})` : '')">
+                <div v-show="activeZoneTab === 'fishing'">
           <div v-if="loadingFishing" class="mt-3 text-center">
             Loading Fishing...
             <loader-fake-progress class="mt-3"/>
@@ -795,10 +810,10 @@
               </table>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Traps Tab -->
-        <eq-tab :name="'Traps' + (trapEntries.length > 0 ? ` (${trapEntries.length})` : '')">
+                <div v-show="activeZoneTab === 'traps'">
           <div v-if="loadingTraps" class="mt-3 text-center">
             Loading Traps...
             <loader-fake-progress class="mt-3"/>
@@ -988,10 +1003,10 @@
               </table>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Doors Tab -->
-        <eq-tab :name="'Doors' + (doorEntries.length > 0 ? ` (${doorEntries.length})` : '')">
+                <div v-show="activeZoneTab === 'doors'">
           <div v-if="loadingDoors" class="mt-3 text-center">
             Loading Doors...
             <loader-fake-progress class="mt-3"/>
@@ -1181,10 +1196,10 @@
               </div>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Objects Tab -->
-        <eq-tab :name="'Objects' + (objectEntries.length > 0 ? ` (${objectEntries.length})` : '')">
+                <div v-show="activeZoneTab === 'objects'">
           <div v-if="loadingObjects" class="mt-3 text-center">
             Loading Objects...
             <loader-fake-progress class="mt-3"/>
@@ -1290,9 +1305,8 @@
                 <thead class="eq-table-floating-header">
                   <tr>
                     <th style="width: 40px">ID</th>
-                    <th style="width: 40px"></th>
                     <th>Object Name</th>
-                    <th class="text-center" style="width: 110px">Position</th>
+                    <th class="text-center" style="width: 140px">Position</th>
                     <th class="text-center" style="width: 45px">Type</th>
                     <th>Item</th>
                     <th class="text-center" style="width: 60px"></th>
@@ -1304,15 +1318,11 @@
                       @mouseleave="clearSidebarArrow()"
                   >
                     <td class="text-muted">{{ o.id }}</td>
-                    <td class="text-center">
-                      <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
-                              @click="showObjectOnMap(o)" title="Show on Map">
-                        <i class="fa fa-map-marker"></i>
-                      </button>
-                    </td>
                     <template v-if="editingObjectId !== o.id">
                       <td style="font-size: 11px;">{{ o.objectname || '—' }}</td>
-                      <td class="text-center text-muted" style="font-size: 11px;">
+                      <td class="text-center text-muted" style="font-size: 11px; cursor: pointer;"
+                          @click="showObjectOnMap(o)" title="Show on Map">
+                        <i class="fa fa-map-marker mr-1" style="color: #d4a843;"></i>
                         {{ Number(o.xpos).toFixed(0) }}, {{ Number(o.ypos).toFixed(0) }}, {{ Number(o.zpos).toFixed(0) }}
                       </td>
                       <td class="text-center text-muted">{{ o.type }}</td>
@@ -1373,10 +1383,10 @@
               </div>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- LDoN Traps Tab -->
-        <eq-tab :name="'LDoN Traps' + (ldonTrapEntries.length > 0 ? ` (${ldonTrapEntries.length})` : '')">
+                <div v-show="activeZoneTab === 'traps'">
           <div v-if="loadingLdonTraps" class="mt-3 text-center">
             Loading LDoN Traps...
             <loader-fake-progress class="mt-3"/>
@@ -1478,10 +1488,10 @@
               </table>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Graveyards Tab -->
-        <eq-tab :name="'Graveyards' + (graveyardEntries.length > 0 ? ` (${graveyardEntries.length})` : '')">
+                <div v-show="activeZoneTab === 'graveyards'">
           <div v-if="loadingGraveyards" class="mt-3 text-center">
             Loading Graveyards...
             <loader-fake-progress class="mt-3"/>
@@ -1592,10 +1602,10 @@
               </table>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Blocked Spells Tab -->
-        <eq-tab :name="'Blocked Spells' + (blockedSpellEntries.length > 0 ? ` (${blockedSpellEntries.length})` : '')">
+                <div v-show="activeZoneTab === 'spells'">
           <div v-if="loadingBlockedSpells" class="mt-3 text-center">
             Loading Blocked Spells...
             <loader-fake-progress class="mt-3"/>
@@ -1691,10 +1701,10 @@
               </table>
             </div>
           </div>
-        </eq-tab>
+        </div>
 
         <!-- Zone Connections Tab -->
-        <eq-tab :name="'Zone Connections' + (zoneConnections.length > 0 ? ` (${zoneConnections.length})` : '')">
+                <div v-show="activeZoneTab === 'zone_connections'">
           <div v-if="loadingConnections" class="mt-3 text-center">
             Loading Zone Connections...
             <loader-fake-progress class="mt-3"/>
@@ -1732,8 +1742,8 @@
               </tbody>
             </table>
           </div>
-        </eq-tab>
-        <eq-tab name="Zone">
+        </div>
+                <div v-show="activeZoneTab === 'zone'">
           <div class="row mr-4">
             <div class="col-6">
               <div
@@ -1931,8 +1941,8 @@
             </table>
           </div>
 
-        </eq-tab>
-      </eq-tabs>
+        </div>
+      </div>
 
     </div>
 
@@ -1971,6 +1981,7 @@ export default {
 
   data() {
     return {
+      activeZoneTab: 'npcs',
       fogSlots: [
         { label: 'Default', suffix: '' },
         { label: 'Slot 1', suffix: '_1' },

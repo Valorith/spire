@@ -510,3 +510,6 @@
 [63163263ms] [ERROR] WebSocket connection to 'wss://spire.vaylebot.com/api/v1/websocket?jwt=' failed: Error during WebSocket handshake: Unexpected response code: 502 @ https://spire.vaylebot.com/app.1a2298dd0414e8c6fa5b.js:0
 [63164336ms] [ERROR] WebSocket connection to 'wss://spire.vaylebot.com/api/v1/websocket?jwt=' failed: Error during WebSocket handshake: Unexpected response code: 502 @ https://spire.vaylebot.com/app.1a2298dd0414e8c6fa5b.js:0
 [63165422ms] [ERROR] WebSocket connection to 'wss://spire.vaylebot.com/api/v1/websocket?jwt=' failed: Error during WebSocket handshake: Unexpected response code: 502 @ https://spire.vaylebot.com/app.1a2298dd0414e8c6fa5b.js:0
+[63570464ms] [ERROR] WebSocket connection to 'wss://spire.vaylebot.com/api/v1/websocket?jwt=' failed: Error during WebSocket handshake: Unexpected response code: 502 @ https://spire.vaylebot.com/app.1a2298dd0414e8c6fa5b.js:0
+[63571574ms] [ERROR] WebSocket connection to 'wss://spire.vaylebot.com/api/v1/websocket?jwt=' failed: Error during WebSocket handshake: Unexpected response code: 502 @ https://spire.vaylebot.com/app.1a2298dd0414e8c6fa5b.js:0
+[63572797ms] [ERROR] WebSocket connection to 'wss://spire.vaylebot.com/api/v1/websocket?jwt=' failed: Error during WebSocket handshake: Unexpected response code: 502 @ https://spire.vaylebot.com/app.1a2298dd0414e8c6fa5b.js:0
