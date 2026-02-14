@@ -1386,7 +1386,7 @@
         </div>
 
         <!-- LDoN Traps Tab -->
-                <div v-show="activeZoneTab === 'traps'">
+                <div v-show="activeZoneTab === 'ldon_traps'">
           <div v-if="loadingLdonTraps" class="mt-3 text-center">
             Loading LDoN Traps...
             <loader-fake-progress class="mt-3"/>
@@ -1605,7 +1605,7 @@
         </div>
 
         <!-- Blocked Spells Tab -->
-                <div v-show="activeZoneTab === 'spells'">
+                <div v-show="activeZoneTab === 'blocked_spells'">
           <div v-if="loadingBlockedSpells" class="mt-3 text-center">
             Loading Blocked Spells...
             <loader-fake-progress class="mt-3"/>
