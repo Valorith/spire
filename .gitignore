@@ -42,3 +42,7 @@ eqemu-server-installer-linux-amd64
 eqemu-server-installer-windows-amd64.exe
 
 *.old.playwright-cli/
+
+# Integration planning docs
+EQSAGE-SPIRE-INTEGRATION.md
+PROGRESS.md
