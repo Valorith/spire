@@ -638,6 +638,359 @@
           </div>
         </eq-tab>
 
+        <!-- Fishing Tab -->
+        <eq-tab :name="'Fishing' + (fishingEntries.length > 0 ? ` (${fishingEntries.length})` : '')">
+          <div v-if="loadingFishing" class="mt-3 text-center">
+            Loading Fishing...
+            <loader-fake-progress class="mt-3"/>
+          </div>
+          <div v-else-if="fishingEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
+            <i class="fa fa-fish"></i> No fishing entries found in this zone
+          </div>
+          <div style="height: 85vh; overflow-y: scroll;" v-else>
+            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
+              <thead class="eq-table-floating-header">
+                <tr>
+                  <th style="width: 40px">ID</th>
+                  <th>Item</th>
+                  <th class="text-center" style="width: 80px">Skill Lvl</th>
+                  <th class="text-center" style="width: 70px">Chance</th>
+                  <th class="text-center" style="width: 70px">NPC ID</th>
+                  <th class="text-center" style="width: 70px">NPC %</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="f in fishingEntries" :key="'fish-' + f.id">
+                  <td class="text-muted">{{ f.id }}</td>
+                  <td>
+                    <item-popover v-if="f.itemDetail" :item="f.itemDetail" />
+                    <span v-else>Item #{{ f.itemid }}</span>
+                  </td>
+                  <td class="text-center text-muted">{{ f.skill_level || 0 }}</td>
+                  <td class="text-center text-muted">{{ f.chance || 0 }}%</td>
+                  <td class="text-center text-muted">{{ f.npc_id && f.npc_id > 0 ? f.npc_id : '—' }}</td>
+                  <td class="text-center text-muted">{{ f.npc_id && f.npc_id > 0 ? (f.npc_chance || 0) + '%' : '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </eq-tab>
+
+        <!-- Traps Tab -->
+        <eq-tab :name="'Traps' + (trapEntries.length > 0 ? ` (${trapEntries.length})` : '')">
+          <div v-if="loadingTraps" class="mt-3 text-center">
+            Loading Traps...
+            <loader-fake-progress class="mt-3"/>
+          </div>
+          <div v-else-if="trapEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
+            <i class="fa fa-exclamation-triangle"></i> No traps found in this zone
+          </div>
+          <div style="height: 85vh; overflow-y: scroll;" v-else>
+            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+              <thead class="eq-table-floating-header">
+                <tr>
+                  <th style="width: 40px">ID</th>
+                  <th class="text-center" style="width: 50px"></th>
+                  <th class="text-center" style="width: 120px">Position</th>
+                  <th class="text-center" style="width: 40px">Lvl</th>
+                  <th class="text-center" style="width: 50px">Skill</th>
+                  <th class="text-center" style="width: 55px">Chance</th>
+                  <th class="text-center" style="width: 55px">Effect</th>
+                  <th class="text-center" style="width: 65px">Respawn</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="t in trapEntries" :key="'trap-' + t.id"
+                    @mouseenter="emitSidebarArrowTrap($event, t)"
+                    @mouseleave="clearSidebarArrow()"
+                >
+                  <td class="text-muted">{{ t.id }}</td>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                            @click="showTrapOnMap(t)" title="Show on Map">
+                      <i class="fa fa-map-marker"></i>
+                    </button>
+                  </td>
+                  <td class="text-center text-muted" style="font-size: 11px;">
+                    {{ Number(t.x).toFixed(0) }}, {{ Number(t.y).toFixed(0) }}, {{ Number(t.z).toFixed(0) }}
+                  </td>
+                  <td class="text-center text-muted">{{ t.level || '—' }}</td>
+                  <td class="text-center text-muted">{{ t.skill || '—' }}</td>
+                  <td class="text-center text-muted">{{ t.chance || 0 }}%</td>
+                  <td class="text-center text-muted">{{ t.effect || '—' }}</td>
+                  <td class="text-center text-muted" style="font-size: 11px;">{{ t.respawn_time || 0 }}s</td>
+                  <td class="text-muted" style="font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="t.message">
+                    {{ t.message || '—' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </eq-tab>
+
+        <!-- Doors Tab -->
+        <eq-tab :name="'Doors' + (doorEntries.length > 0 ? ` (${doorEntries.length})` : '')">
+          <div v-if="loadingDoors" class="mt-3 text-center">
+            Loading Doors...
+            <loader-fake-progress class="mt-3"/>
+          </div>
+          <div v-else-if="doorEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
+            <i class="fa fa-door-open"></i> No doors found in this zone
+          </div>
+          <div style="height: 85vh; overflow-y: scroll;" v-else>
+            <div class="d-flex align-items-center mb-2 px-1">
+              <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                     v-model="doorSearchQuery" placeholder="Search doors..." style="max-width: 250px;"
+                     @input="doorPage = 1" />
+              <span class="ml-auto text-muted" style="font-size: 11px;">
+                {{ filteredDoors.length }} results
+                <template v-if="doorTotalPages > 1"> · Page {{ doorPage }}/{{ doorTotalPages }}</template>
+              </span>
+            </div>
+            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+              <thead class="eq-table-floating-header">
+                <tr>
+                  <th style="width: 45px">Door</th>
+                  <th style="width: 40px"></th>
+                  <th>Name</th>
+                  <th class="text-center" style="width: 110px">Position</th>
+                  <th class="text-center" style="width: 55px">Type</th>
+                  <th class="text-center" style="width: 80px">Dest Zone</th>
+                  <th class="text-center" style="width: 70px">Lock</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="d in paginatedDoors" :key="'door-' + d.id"
+                    @mouseenter="emitSidebarArrowDoor($event, d)"
+                    @mouseleave="clearSidebarArrow()"
+                >
+                  <td class="text-muted">{{ d.doorid }}</td>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                            @click="showDoorOnMap(d)" title="Show on Map">
+                      <i class="fa fa-map-marker"></i>
+                    </button>
+                  </td>
+                  <td style="font-size: 11px;">{{ d.name || '—' }}</td>
+                  <td class="text-center text-muted" style="font-size: 11px;">
+                    {{ Number(d.pos_x).toFixed(0) }}, {{ Number(d.pos_y).toFixed(0) }}, {{ Number(d.pos_z).toFixed(0) }}
+                  </td>
+                  <td class="text-center text-muted">{{ d.opentype }}</td>
+                  <td class="text-center" style="font-size: 11px;">
+                    <span v-if="d.dest_zone && d.dest_zone !== '' && d.dest_zone !== 'NONE'" style="color: #4fc3f7;">
+                      {{ d.dest_zone }}
+                    </span>
+                    <span v-else class="text-muted">—</span>
+                  </td>
+                  <td class="text-center text-muted" style="font-size: 11px;">
+                    <span v-if="d.lockpick > 0 || d.keyitem > 0">
+                      <i class="fa fa-lock" style="color: #ffc832;" title="Locked"></i>
+                      <span v-if="d.lockpick > 0" :title="'Lockpick: ' + d.lockpick"> LP:{{ d.lockpick }}</span>
+                      <span v-if="d.keyitem > 0" :title="'Key Item: ' + d.keyitem"> K:{{ d.keyitem }}</span>
+                    </span>
+                    <span v-else>—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="d-flex justify-content-center align-items-center mt-2 mb-1" v-if="doorTotalPages > 1">
+              <button class="btn btn-sm btn-dark" :disabled="doorPage <= 1" @click="doorPage--">&laquo; Prev</button>
+              <span class="mx-3 text-muted" style="font-size: 12px;">{{ doorPage }} / {{ doorTotalPages }}</span>
+              <button class="btn btn-sm btn-dark" :disabled="doorPage >= doorTotalPages" @click="doorPage++">Next &raquo;</button>
+            </div>
+          </div>
+        </eq-tab>
+
+        <!-- Objects Tab -->
+        <eq-tab :name="'Objects' + (objectEntries.length > 0 ? ` (${objectEntries.length})` : '')">
+          <div v-if="loadingObjects" class="mt-3 text-center">
+            Loading Objects...
+            <loader-fake-progress class="mt-3"/>
+          </div>
+          <div v-else-if="objectEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
+            <i class="fa fa-cube"></i> No objects found in this zone
+          </div>
+          <div style="height: 85vh; overflow-y: scroll;" v-else>
+            <div class="d-flex align-items-center mb-2 px-1">
+              <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                     v-model="objectSearchQuery" placeholder="Search objects..." style="max-width: 250px;"
+                     @input="objectPage = 1" />
+              <span class="ml-auto text-muted" style="font-size: 11px;">
+                {{ filteredObjects.length }} results
+                <template v-if="objectTotalPages > 1"> · Page {{ objectPage }}/{{ objectTotalPages }}</template>
+              </span>
+            </div>
+            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+              <thead class="eq-table-floating-header">
+                <tr>
+                  <th style="width: 40px">ID</th>
+                  <th style="width: 40px"></th>
+                  <th>Object Name</th>
+                  <th class="text-center" style="width: 110px">Position</th>
+                  <th class="text-center" style="width: 45px">Type</th>
+                  <th>Item</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="o in paginatedObjects" :key="'obj-' + o.id"
+                    @mouseenter="emitSidebarArrowObject($event, o)"
+                    @mouseleave="clearSidebarArrow()"
+                >
+                  <td class="text-muted">{{ o.id }}</td>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                            @click="showObjectOnMap(o)" title="Show on Map">
+                      <i class="fa fa-map-marker"></i>
+                    </button>
+                  </td>
+                  <td style="font-size: 11px;">{{ o.objectname || '—' }}</td>
+                  <td class="text-center text-muted" style="font-size: 11px;">
+                    {{ Number(o.xpos).toFixed(0) }}, {{ Number(o.ypos).toFixed(0) }}, {{ Number(o.zpos).toFixed(0) }}
+                  </td>
+                  <td class="text-center text-muted">{{ o.type }}</td>
+                  <td>
+                    <item-popover v-if="o.itemDetail" :item="o.itemDetail" />
+                    <span v-else-if="o.itemid && o.itemid > 0" class="text-muted" style="font-size: 11px;">Item #{{ o.itemid }}</span>
+                    <span v-else class="text-muted">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="d-flex justify-content-center align-items-center mt-2 mb-1" v-if="objectTotalPages > 1">
+              <button class="btn btn-sm btn-dark" :disabled="objectPage <= 1" @click="objectPage--">&laquo; Prev</button>
+              <span class="mx-3 text-muted" style="font-size: 12px;">{{ objectPage }} / {{ objectTotalPages }}</span>
+              <button class="btn btn-sm btn-dark" :disabled="objectPage >= objectTotalPages" @click="objectPage++">Next &raquo;</button>
+            </div>
+          </div>
+        </eq-tab>
+
+        <!-- LDoN Traps Tab -->
+        <eq-tab :name="'LDoN Traps' + (ldonTrapEntries.length > 0 ? ` (${ldonTrapEntries.length})` : '')">
+          <div v-if="loadingLdonTraps" class="mt-3 text-center">
+            Loading LDoN Traps...
+            <loader-fake-progress class="mt-3"/>
+          </div>
+          <div v-else-if="ldonTrapEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
+            <i class="fa fa-exclamation-circle"></i> No LDoN trap entries found
+          </div>
+          <div style="height: 85vh; overflow-y: scroll;" v-else>
+            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
+              <thead class="eq-table-floating-header">
+                <tr>
+                  <th style="width: 50px">ID</th>
+                  <th class="text-center" style="width: 80px">Trap ID</th>
+                  <th>Type</th>
+                  <th class="text-center" style="width: 80px">Spell ID</th>
+                  <th class="text-center" style="width: 70px">Skill</th>
+                  <th class="text-center" style="width: 70px">Locked</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="lt in ldonTrapEntries" :key="'ldon-' + lt.id">
+                  <td class="text-muted">{{ lt.id }}</td>
+                  <td class="text-center text-muted">{{ lt.trap_id || '—' }}</td>
+                  <td>{{ getLdonTemplateName(lt.trap_id) }}</td>
+                  <td class="text-center text-muted">{{ lt.spell_id || '—' }}</td>
+                  <td class="text-center text-muted">{{ lt.skill || '—' }}</td>
+                  <td class="text-center">
+                    <span v-if="lt.locked" style="color: #ffc832;">
+                      <i class="fa fa-lock"></i> Yes
+                    </span>
+                    <span v-else class="text-muted">No</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </eq-tab>
+
+        <!-- Graveyards Tab -->
+        <eq-tab :name="'Graveyards' + (graveyardEntries.length > 0 ? ` (${graveyardEntries.length})` : '')">
+          <div v-if="loadingGraveyards" class="mt-3 text-center">
+            Loading Graveyards...
+            <loader-fake-progress class="mt-3"/>
+          </div>
+          <div v-else-if="graveyardEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
+            <i class="fa fa-skull"></i> No graveyards found in this zone
+          </div>
+          <div style="height: 85vh; overflow-y: scroll;" v-else>
+            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
+              <thead class="eq-table-floating-header">
+                <tr>
+                  <th style="width: 50px">ID</th>
+                  <th style="width: 40px"></th>
+                  <th class="text-center">Position (X / Y / Z)</th>
+                  <th class="text-center" style="width: 80px">Heading</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="gy in graveyardEntries" :key="'gy-' + gy.id"
+                    @mouseenter="emitSidebarArrowGraveyard($event, gy)"
+                    @mouseleave="clearSidebarArrow()"
+                >
+                  <td class="text-muted">{{ gy.id }}</td>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                            @click="showGraveyardOnMap(gy)" title="Show on Map">
+                      <i class="fa fa-map-marker"></i>
+                    </button>
+                  </td>
+                  <td class="text-center text-muted" style="font-size: 12px;">
+                    {{ Number(gy.x).toFixed(1) }}, {{ Number(gy.y).toFixed(1) }}, {{ Number(gy.z).toFixed(1) }}
+                  </td>
+                  <td class="text-center text-muted">{{ Number(gy.heading).toFixed(1) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </eq-tab>
+
+        <!-- Blocked Spells Tab -->
+        <eq-tab :name="'Blocked Spells' + (blockedSpellEntries.length > 0 ? ` (${blockedSpellEntries.length})` : '')">
+          <div v-if="loadingBlockedSpells" class="mt-3 text-center">
+            Loading Blocked Spells...
+            <loader-fake-progress class="mt-3"/>
+          </div>
+          <div v-else-if="blockedSpellEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
+            <i class="fa fa-ban"></i> No blocked spells found in this zone
+          </div>
+          <div style="height: 85vh; overflow-y: scroll;" v-else>
+            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+              <thead class="eq-table-floating-header">
+                <tr>
+                  <th style="width: 40px">ID</th>
+                  <th>Spell</th>
+                  <th class="text-center" style="width: 50px">Type</th>
+                  <th>Description</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="bs in blockedSpellEntries" :key="'bs-' + bs.id">
+                  <td class="text-muted">{{ bs.id }}</td>
+                  <td>
+                    <spell-popover
+                      v-if="bs.spellDetail && bs.spellDetail.new_icon !== undefined"
+                      :spell="bs.spellDetail"
+                      :size="20"
+                      :spell-name-length="25"
+                    />
+                    <span v-else class="text-muted">Spell #{{ bs.spellid }}</span>
+                  </td>
+                  <td class="text-center text-muted">{{ bs.type }}</td>
+                  <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.description">
+                    {{ bs.description || '—' }}
+                  </td>
+                  <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.message">
+                    {{ bs.message || '—' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </eq-tab>
+
         <!-- Zone Connections Tab -->
         <eq-tab :name="'Zone Connections' + (zoneConnections.length > 0 ? ` (${zoneConnections.length})` : '')">
           <div v-if="loadingConnections" class="mt-3 text-center">
@@ -986,6 +1339,14 @@ export default {
       ldonTrapEntries: [],
       ldonTrapTemplates: [],
       loadingLdonTraps: false,
+
+      // Graveyards tab
+      graveyardEntries: [],
+      loadingGraveyards: false,
+
+      // Blocked Spells tab
+      blockedSpellEntries: [],
+      loadingBlockedSpells: false,
     }
   },
   created() {
@@ -1153,6 +1514,8 @@ export default {
         this.loadForageItems()
         this.loadFishing()
         this.loadObjects()
+        this.loadGraveyards()
+        this.loadBlockedSpells()
       }
       this.loadZoneMerchants()
       this.loadZoneSpells()
@@ -1926,6 +2289,65 @@ export default {
     getLdonTemplateName(trapTypeId) {
       const tmpl = this.ldonTrapTemplates.find(t => t.id === trapTypeId)
       return tmpl ? (tmpl.type || 'Type ' + trapTypeId) : ('Type ' + trapTypeId)
+    },
+
+    async loadGraveyards() {
+      this.loadingGraveyards = true
+      this.graveyardEntries = []
+      try {
+        const r = await SpireApi.v1().get(`/graveyards`, {
+          params: { where: `zone_id__${this.zone.zoneidnumber}`, limit: 500 }
+        })
+        if (r.status === 200 && Array.isArray(r.data)) {
+          this.graveyardEntries = r.data.sort((a, b) => (a.id || 0) - (b.id || 0))
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to load graveyards', e)
+      }
+      this.loadingGraveyards = false
+      this.$forceUpdate()
+    },
+
+    emitSidebarArrowGraveyard(el, gy) {
+      if (!gy.x && !gy.y) return
+      EventBus.$emit('SIDEBAR_HOVER_ARROW', {
+        sourceEl: el.currentTarget,
+        lat: gy.y,
+        lng: -gy.x
+      })
+    },
+
+    showGraveyardOnMap(gy) {
+      EventBus.$emit('GS_ZOOM', { lat: gy.y, lng: -gy.x, id: 'gy-' + gy.id })
+    },
+
+    async loadBlockedSpells() {
+      this.loadingBlockedSpells = true
+      this.blockedSpellEntries = []
+      try {
+        const r = await SpireApi.v1().get(`/blocked_spells`, {
+          params: { where: `zoneid__${this.zone.zoneidnumber}`, limit: 500 }
+        })
+        if (r.status === 200 && Array.isArray(r.data)) {
+          const entries = r.data
+          // Resolve spell details
+          const spellIds = [...new Set(entries.map(e => e.spellid).filter(Boolean))]
+          let spellMap = {}
+          for (const spellId of spellIds) {
+            try {
+              const sr = await SpireApi.v1().get(`/spells_new/${spellId}`)
+              if (sr.status === 200 && sr.data) {
+                spellMap[spellId] = sr.data
+              }
+            } catch (e) {}
+          }
+          this.blockedSpellEntries = entries.map(e => ({ ...e, spellDetail: spellMap[e.spellid] || null })).sort((a, b) => (a.id || 0) - (b.id || 0))
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to load blocked spells', e)
+      }
+      this.loadingBlockedSpells = false
+      this.$forceUpdate()
     },
 
     async loadZoneSpells() {
