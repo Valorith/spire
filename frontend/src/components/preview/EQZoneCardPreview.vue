@@ -644,35 +644,156 @@
             Loading Fishing...
             <loader-fake-progress class="mt-3"/>
           </div>
-          <div v-else-if="fishingEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
-            <i class="fa fa-fish"></i> No fishing entries found in this zone
-          </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
-            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
-              <thead class="eq-table-floating-header">
-                <tr>
-                  <th style="width: 40px">ID</th>
-                  <th>Item</th>
-                  <th class="text-center" style="width: 80px">Skill Lvl</th>
-                  <th class="text-center" style="width: 70px">Chance</th>
-                  <th class="text-center" style="width: 70px">NPC ID</th>
-                  <th class="text-center" style="width: 70px">NPC %</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="f in fishingEntries" :key="'fish-' + f.id">
-                  <td class="text-muted">{{ f.id }}</td>
-                  <td>
-                    <item-popover v-if="f.itemDetail" :item="f.itemDetail" />
-                    <span v-else>Item #{{ f.itemid }}</span>
-                  </td>
-                  <td class="text-center text-muted">{{ f.skill_level || 0 }}</td>
-                  <td class="text-center text-muted">{{ f.chance || 0 }}%</td>
-                  <td class="text-center text-muted">{{ f.npc_id && f.npc_id > 0 ? f.npc_id : '—' }}</td>
-                  <td class="text-center text-muted">{{ f.npc_id && f.npc_id > 0 ? (f.npc_chance || 0) + '%' : '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else>
+            <div class="mt-2 mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted" style="font-size: 12px;">{{ fishingEntries.length }} fishing entry(s) in zone</span>
+              <button class="btn btn-sm btn-outline-success" @click="showAddFishing = true">
+                <i class="fa fa-plus"></i> Add Fishing Entry
+              </button>
+            </div>
+
+            <!-- Add Fishing Form -->
+            <div v-if="showAddFishing" class="p-2 mb-3" style="background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="font-weight-bold mb-2" style="font-size: 13px; color: #ffc832;">
+                <i class="fa fa-plus-circle mr-1"></i> Add Fishing Entry
+              </div>
+              <div class="mb-2">
+                <label style="font-size: 11px; opacity: 0.6;">Item</label>
+                <div class="position-relative">
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                         v-model="fishingItemSearchQuery" placeholder="Search items by name or ID..."
+                         @input="searchFishingItems" autocomplete="off"
+                         @keydown.down.prevent="fishingHighlightIndex = Math.min(fishingHighlightIndex + 1, (fishingSearchResults.length || 1) - 1)"
+                         @keydown.up.prevent="fishingHighlightIndex = Math.max(fishingHighlightIndex - 1, 0)"
+                         @keydown.enter.prevent="selectFishingItem(fishingSearchResults[fishingHighlightIndex])"
+                         @keydown.escape="showAddFishing = false" />
+                  <div v-if="fishingSearchResults.length > 0" class="gs-item-search-dropdown">
+                    <div v-for="(item, ri) in fishingSearchResults" :key="'fi-sr-' + item.id"
+                         class="gs-item-search-result" :class="{ 'highlighted': fishingHighlightIndex === ri }"
+                         @click="selectFishingItem(item)" @mouseenter="fishingHighlightIndex = ri">
+                      <div class="d-flex align-items-center">
+                        <item-popover :item="item" size="sm" class="d-inline-block mr-2" />
+                        <small style="opacity:.4; margin-left: auto;">ID: {{ item.id }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="fishingItemSearchQuery && fishingItemSearchQuery.length >= 2 && fishingSearchResults.length === 0 && !fishingSearching"
+                       class="gs-item-search-dropdown">
+                    <div class="text-center p-2" style="opacity:.4; font-size:.85em;">No items found</div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="newFishing._selectedItem" class="mb-2 p-1" style="background: rgba(255,200,50,0.1); border-radius: 4px;">
+                <item-popover :item="newFishing._selectedItem" />
+                <button class="btn btn-sm btn-outline-secondary ml-2" @click="newFishing.itemid = null; newFishing._selectedItem = null; fishingItemSearchQuery = ''">
+                  <i class="fa fa-times"></i>
+                </button>
+              </div>
+              <div class="row mb-2">
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Skill Level</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary"
+                         v-model.number="newFishing.skill_level" placeholder="0" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Chance</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary"
+                         v-model.number="newFishing.chance" placeholder="0" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">NPC ID</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary"
+                         v-model.number="newFishing.npc_id" placeholder="0" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">NPC Chance</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary"
+                         v-model.number="newFishing.npc_chance" placeholder="0" />
+                </div>
+              </div>
+              <div class="d-flex">
+                <button class="btn btn-sm btn-success mr-2" @click="addFishing()" :disabled="!newFishing.itemid">
+                  <i class="fa fa-plus mr-1"></i> Add
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="showAddFishing = false">Cancel</button>
+              </div>
+            </div>
+
+            <div v-if="fishingEntries.length === 0 && !showAddFishing" class="mt-3 text-center" style="opacity: 0.5">
+              <i class="fa fa-fish"></i> No fishing entries found in this zone
+            </div>
+            <div style="height: 75vh; overflow-y: scroll;" v-if="fishingEntries.length > 0">
+              <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
+                <thead class="eq-table-floating-header">
+                  <tr>
+                    <th style="width: 40px">ID</th>
+                    <th>Item</th>
+                    <th class="text-center" style="width: 80px">Skill Lvl</th>
+                    <th class="text-center" style="width: 70px">Chance</th>
+                    <th class="text-center" style="width: 70px">NPC ID</th>
+                    <th class="text-center" style="width: 70px">NPC %</th>
+                    <th class="text-center" style="width: 60px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="f in fishingEntries" :key="'fish-' + f.id">
+                    <td class="text-muted">{{ f.id }}</td>
+                    <td>
+                      <item-popover v-if="f.itemDetail" :item="f.itemDetail" />
+                      <span v-else>Item #{{ f.itemid }}</span>
+                    </td>
+                    <template v-if="editingFishingId !== f.id">
+                      <td class="text-center text-muted">{{ f.skill_level || 0 }}</td>
+                      <td class="text-center text-muted">{{ f.chance || 0 }}%</td>
+                      <td class="text-center text-muted">{{ f.npc_id && f.npc_id > 0 ? f.npc_id : '—' }}</td>
+                      <td class="text-center text-muted">{{ f.npc_id && f.npc_id > 0 ? (f.npc_chance || 0) + '%' : '—' }}</td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="startEditFishing(f)" title="Edit">
+                          <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                                @click="removeFishing(f)" title="Remove">
+                          <i class="fa fa-trash"></i>
+                        </button>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 55px; display: inline-block; font-size: 11px;"
+                               v-model.number="fishingEditData.skill_level" />
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 55px; display: inline-block; font-size: 11px;"
+                               v-model.number="fishingEditData.chance" />
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 55px; display: inline-block; font-size: 11px;"
+                               v-model.number="fishingEditData.npc_id" />
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 55px; display: inline-block; font-size: 11px;"
+                               v-model.number="fishingEditData.npc_chance" />
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="saveEditFishing(f)" title="Save">
+                          <i class="fa fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
+                                @click="editingFishingId = null" title="Cancel">
+                          <i class="fa fa-times"></i>
+                        </button>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </eq-tab>
 
@@ -682,50 +803,190 @@
             Loading Traps...
             <loader-fake-progress class="mt-3"/>
           </div>
-          <div v-else-if="trapEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
-            <i class="fa fa-exclamation-triangle"></i> No traps found in this zone
-          </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
-            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
-              <thead class="eq-table-floating-header">
-                <tr>
-                  <th style="width: 40px">ID</th>
-                  <th class="text-center" style="width: 50px"></th>
-                  <th class="text-center" style="width: 120px">Position</th>
-                  <th class="text-center" style="width: 40px">Lvl</th>
-                  <th class="text-center" style="width: 50px">Skill</th>
-                  <th class="text-center" style="width: 55px">Chance</th>
-                  <th class="text-center" style="width: 55px">Effect</th>
-                  <th class="text-center" style="width: 65px">Respawn</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="t in trapEntries" :key="'trap-' + t.id"
-                    @mouseenter="emitSidebarArrowTrap($event, t)"
-                    @mouseleave="clearSidebarArrow()"
-                >
-                  <td class="text-muted">{{ t.id }}</td>
-                  <td class="text-center">
-                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
-                            @click="showTrapOnMap(t)" title="Show on Map">
-                      <i class="fa fa-map-marker"></i>
-                    </button>
-                  </td>
-                  <td class="text-center text-muted" style="font-size: 11px;">
-                    {{ Number(t.x).toFixed(0) }}, {{ Number(t.y).toFixed(0) }}, {{ Number(t.z).toFixed(0) }}
-                  </td>
-                  <td class="text-center text-muted">{{ t.level || '—' }}</td>
-                  <td class="text-center text-muted">{{ t.skill || '—' }}</td>
-                  <td class="text-center text-muted">{{ t.chance || 0 }}%</td>
-                  <td class="text-center text-muted">{{ t.effect || '—' }}</td>
-                  <td class="text-center text-muted" style="font-size: 11px;">{{ t.respawn_time || 0 }}s</td>
-                  <td class="text-muted" style="font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="t.message">
-                    {{ t.message || '—' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else>
+            <div class="mt-2 mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted" style="font-size: 12px;">{{ trapEntries.length }} trap(s) in zone</span>
+              <button class="btn btn-sm btn-outline-success" @click="showAddTrap = true">
+                <i class="fa fa-plus"></i> Add Trap
+              </button>
+            </div>
+
+            <!-- Add Trap Form -->
+            <div v-if="showAddTrap" class="p-2 mb-3" style="background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="font-weight-bold mb-2" style="font-size: 13px; color: #ffc832;">
+                <i class="fa fa-plus-circle mr-1"></i> Add Trap
+              </div>
+              <div class="row mb-2">
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">X</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.x" />
+                </div>
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Y</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.y" />
+                </div>
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Z</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.z" />
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Level</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.level" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Skill</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.skill" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Chance</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.chance" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Respawn (s)</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.respawn_time" />
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Effect</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.effect" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Effect Value</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.effectvalue" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Radius</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.radius" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Max Z Diff</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newTrap.maxzdiff" />
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-12">
+                  <label style="font-size: 11px; opacity: 0.6;">Message</label>
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newTrap.message" placeholder="Trap message..." />
+                </div>
+              </div>
+              <div class="d-flex">
+                <button class="btn btn-sm btn-success mr-2" @click="addTrap()">
+                  <i class="fa fa-plus mr-1"></i> Add
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="showAddTrap = false">Cancel</button>
+              </div>
+            </div>
+
+            <div v-if="trapEntries.length === 0 && !showAddTrap" class="mt-3 text-center" style="opacity: 0.5">
+              <i class="fa fa-exclamation-triangle"></i> No traps found in this zone
+            </div>
+            <div style="height: 75vh; overflow-y: scroll;" v-if="trapEntries.length > 0">
+              <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+                <thead class="eq-table-floating-header">
+                  <tr>
+                    <th style="width: 40px">ID</th>
+                    <th class="text-center" style="width: 50px"></th>
+                    <th class="text-center" style="width: 120px">Position</th>
+                    <th class="text-center" style="width: 40px">Lvl</th>
+                    <th class="text-center" style="width: 50px">Skill</th>
+                    <th class="text-center" style="width: 55px">Chance</th>
+                    <th class="text-center" style="width: 55px">Effect</th>
+                    <th class="text-center" style="width: 65px">Respawn</th>
+                    <th>Message</th>
+                    <th class="text-center" style="width: 60px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="t in trapEntries" :key="'trap-' + t.id"
+                      @mouseenter="emitSidebarArrowTrap($event, t)"
+                      @mouseleave="clearSidebarArrow()"
+                  >
+                    <td class="text-muted">{{ t.id }}</td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                              @click="showTrapOnMap(t)" title="Show on Map">
+                        <i class="fa fa-map-marker"></i>
+                      </button>
+                    </td>
+                    <template v-if="editingTrapId !== t.id">
+                      <td class="text-center text-muted" style="font-size: 11px;">
+                        {{ Number(t.x).toFixed(0) }}, {{ Number(t.y).toFixed(0) }}, {{ Number(t.z).toFixed(0) }}
+                      </td>
+                      <td class="text-center text-muted">{{ t.level || '—' }}</td>
+                      <td class="text-center text-muted">{{ t.skill || '—' }}</td>
+                      <td class="text-center text-muted">{{ t.chance || 0 }}%</td>
+                      <td class="text-center text-muted">{{ t.effect || '—' }}</td>
+                      <td class="text-center text-muted" style="font-size: 11px;">{{ t.respawn_time || 0 }}s</td>
+                      <td class="text-muted" style="font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="t.message">
+                        {{ t.message || '—' }}
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="startEditTrap(t)" title="Edit">
+                          <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                                @click="removeTrap(t)" title="Remove">
+                          <i class="fa fa-trash"></i>
+                        </button>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td style="font-size: 10px;">
+                        <div class="d-flex align-items-center mb-1">
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary"
+                                 style="width: 70px; font-size: 10px; padding: 1px 4px; height: 22px;"
+                                 v-model.number="trapEditData.x" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 70px; font-size: 10px; padding: 1px 4px; height: 22px;"
+                                 v-model.number="trapEditData.y" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 70px; font-size: 10px; padding: 1px 4px; height: 22px;"
+                                 v-model.number="trapEditData.z" />
+                        </div>
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 40px; display: inline-block; font-size: 11px;" v-model.number="trapEditData.level" />
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 45px; display: inline-block; font-size: 11px;" v-model.number="trapEditData.skill" />
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 45px; display: inline-block; font-size: 11px;" v-model.number="trapEditData.chance" />
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 45px; display: inline-block; font-size: 11px;" v-model.number="trapEditData.effect" />
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 50px; display: inline-block; font-size: 11px;" v-model.number="trapEditData.respawn_time" />
+                      </td>
+                      <td>
+                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                               style="font-size: 10px; height: 22px;" v-model="trapEditData.message" />
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="saveEditTrap(t)" title="Save">
+                          <i class="fa fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
+                                @click="editingTrapId = null" title="Cancel">
+                          <i class="fa fa-times"></i>
+                        </button>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </eq-tab>
 
@@ -735,69 +996,189 @@
             Loading Doors...
             <loader-fake-progress class="mt-3"/>
           </div>
-          <div v-else-if="doorEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
-            <i class="fa fa-door-open"></i> No doors found in this zone
-          </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
-            <div class="d-flex align-items-center mb-2 px-1">
-              <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                     v-model="doorSearchQuery" placeholder="Search doors..." style="max-width: 250px;"
-                     @input="doorPage = 1" />
-              <span class="ml-auto text-muted" style="font-size: 11px;">
-                {{ filteredDoors.length }} results
-                <template v-if="doorTotalPages > 1"> · Page {{ doorPage }}/{{ doorTotalPages }}</template>
-              </span>
+          <div v-else>
+            <div class="mt-2 mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted" style="font-size: 12px;">{{ doorEntries.length }} door(s) in zone</span>
+              <button class="btn btn-sm btn-outline-success" @click="showAddDoor = true">
+                <i class="fa fa-plus"></i> Add Door
+              </button>
             </div>
-            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
-              <thead class="eq-table-floating-header">
-                <tr>
-                  <th style="width: 45px">Door</th>
-                  <th style="width: 40px"></th>
-                  <th>Name</th>
-                  <th class="text-center" style="width: 110px">Position</th>
-                  <th class="text-center" style="width: 55px">Type</th>
-                  <th class="text-center" style="width: 80px">Dest Zone</th>
-                  <th class="text-center" style="width: 70px">Lock</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="d in paginatedDoors" :key="'door-' + d.id"
-                    @mouseenter="emitSidebarArrowDoor($event, d)"
-                    @mouseleave="clearSidebarArrow()"
-                >
-                  <td class="text-muted">{{ d.doorid }}</td>
-                  <td class="text-center">
-                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
-                            @click="showDoorOnMap(d)" title="Show on Map">
-                      <i class="fa fa-map-marker"></i>
-                    </button>
-                  </td>
-                  <td style="font-size: 11px;">{{ d.name || '—' }}</td>
-                  <td class="text-center text-muted" style="font-size: 11px;">
-                    {{ Number(d.pos_x).toFixed(0) }}, {{ Number(d.pos_y).toFixed(0) }}, {{ Number(d.pos_z).toFixed(0) }}
-                  </td>
-                  <td class="text-center text-muted">{{ d.opentype }}</td>
-                  <td class="text-center" style="font-size: 11px;">
-                    <span v-if="d.dest_zone && d.dest_zone !== '' && d.dest_zone !== 'NONE'" style="color: #4fc3f7;">
-                      {{ d.dest_zone }}
-                    </span>
-                    <span v-else class="text-muted">—</span>
-                  </td>
-                  <td class="text-center text-muted" style="font-size: 11px;">
-                    <span v-if="d.lockpick > 0 || d.keyitem > 0">
-                      <i class="fa fa-lock" style="color: #ffc832;" title="Locked"></i>
-                      <span v-if="d.lockpick > 0" :title="'Lockpick: ' + d.lockpick"> LP:{{ d.lockpick }}</span>
-                      <span v-if="d.keyitem > 0" :title="'Key Item: ' + d.keyitem"> K:{{ d.keyitem }}</span>
-                    </span>
-                    <span v-else>—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div class="d-flex justify-content-center align-items-center mt-2 mb-1" v-if="doorTotalPages > 1">
-              <button class="btn btn-sm btn-dark" :disabled="doorPage <= 1" @click="doorPage--">&laquo; Prev</button>
-              <span class="mx-3 text-muted" style="font-size: 12px;">{{ doorPage }} / {{ doorTotalPages }}</span>
-              <button class="btn btn-sm btn-dark" :disabled="doorPage >= doorTotalPages" @click="doorPage++">Next &raquo;</button>
+
+            <!-- Add Door Form -->
+            <div v-if="showAddDoor" class="p-2 mb-3" style="background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="font-weight-bold mb-2" style="font-size: 13px; color: #ffc832;">
+                <i class="fa fa-plus-circle mr-1"></i> Add Door
+              </div>
+              <div class="row mb-2">
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Door ID</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.doorid" />
+                </div>
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Name</label>
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newDoor.name" placeholder="Door name" />
+                </div>
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Open Type</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.opentype" />
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Pos X</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.pos_x" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Pos Y</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.pos_y" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Pos Z</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.pos_z" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Heading</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.heading" />
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Dest Zone</label>
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newDoor.dest_zone" placeholder="short_name" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Dest X</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.dest_x" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Dest Y</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.dest_y" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Dest Z</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newDoor.dest_z" />
+                </div>
+              </div>
+              <div class="d-flex">
+                <button class="btn btn-sm btn-success mr-2" @click="addDoor()">
+                  <i class="fa fa-plus mr-1"></i> Add
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="showAddDoor = false">Cancel</button>
+              </div>
+            </div>
+
+            <div v-if="doorEntries.length === 0 && !showAddDoor" class="mt-3 text-center" style="opacity: 0.5">
+              <i class="fa fa-door-open"></i> No doors found in this zone
+            </div>
+            <div style="height: 75vh; overflow-y: scroll;" v-if="doorEntries.length > 0">
+              <div class="d-flex align-items-center mb-2 px-1">
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                       v-model="doorSearchQuery" placeholder="Search doors..." style="max-width: 250px;"
+                       @input="doorPage = 1" />
+                <span class="ml-auto text-muted" style="font-size: 11px;">
+                  {{ filteredDoors.length }} results
+                  <template v-if="doorTotalPages > 1"> · Page {{ doorPage }}/{{ doorTotalPages }}</template>
+                </span>
+              </div>
+              <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+                <thead class="eq-table-floating-header">
+                  <tr>
+                    <th style="width: 45px">Door</th>
+                    <th style="width: 40px"></th>
+                    <th>Name</th>
+                    <th class="text-center" style="width: 110px">Position</th>
+                    <th class="text-center" style="width: 55px">Type</th>
+                    <th class="text-center" style="width: 80px">Dest Zone</th>
+                    <th class="text-center" style="width: 70px">Lock</th>
+                    <th class="text-center" style="width: 60px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="d in paginatedDoors" :key="'door-' + d.id"
+                      @mouseenter="emitSidebarArrowDoor($event, d)"
+                      @mouseleave="clearSidebarArrow()"
+                  >
+                    <td class="text-muted">{{ d.doorid }}</td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                              @click="showDoorOnMap(d)" title="Show on Map">
+                        <i class="fa fa-map-marker"></i>
+                      </button>
+                    </td>
+                    <template v-if="editingDoorId !== d.id">
+                      <td style="font-size: 11px;">{{ d.name || '—' }}</td>
+                      <td class="text-center text-muted" style="font-size: 11px;">
+                        {{ Number(d.pos_x).toFixed(0) }}, {{ Number(d.pos_y).toFixed(0) }}, {{ Number(d.pos_z).toFixed(0) }}
+                      </td>
+                      <td class="text-center text-muted">{{ d.opentype }}</td>
+                      <td class="text-center" style="font-size: 11px;">
+                        <span v-if="d.dest_zone && d.dest_zone !== '' && d.dest_zone !== 'NONE'" style="color: #4fc3f7;">
+                          {{ d.dest_zone }}
+                        </span>
+                        <span v-else class="text-muted">—</span>
+                      </td>
+                      <td class="text-center text-muted" style="font-size: 11px;">
+                        <span v-if="d.lockpick > 0 || d.keyitem > 0">
+                          <i class="fa fa-lock" style="color: #ffc832;" title="Locked"></i>
+                          <span v-if="d.lockpick > 0" :title="'Lockpick: ' + d.lockpick"> LP:{{ d.lockpick }}</span>
+                          <span v-if="d.keyitem > 0" :title="'Key Item: ' + d.keyitem"> K:{{ d.keyitem }}</span>
+                        </span>
+                        <span v-else>—</span>
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="startEditDoor(d)" title="Edit">
+                          <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                                @click="removeDoor(d)" title="Remove">
+                          <i class="fa fa-trash"></i>
+                        </button>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td>
+                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                               style="font-size: 10px; height: 22px;" v-model="doorEditData.name" />
+                      </td>
+                      <td style="font-size: 10px;">
+                        <div class="d-flex">
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary"
+                                 style="width: 55px; font-size: 10px; padding: 1px 3px; height: 22px;" v-model.number="doorEditData.pos_x" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 55px; font-size: 10px; padding: 1px 3px; height: 22px;" v-model.number="doorEditData.pos_y" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 55px; font-size: 10px; padding: 1px 3px; height: 22px;" v-model.number="doorEditData.pos_z" />
+                        </div>
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 45px; display: inline-block; font-size: 11px;" v-model.number="doorEditData.opentype" />
+                      </td>
+                      <td class="text-center">
+                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 65px; display: inline-block; font-size: 10px;" v-model="doorEditData.dest_zone" />
+                      </td>
+                      <td></td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="saveEditDoor(d)" title="Save">
+                          <i class="fa fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
+                                @click="editingDoorId = null" title="Cancel">
+                          <i class="fa fa-times"></i>
+                        </button>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="d-flex justify-content-center align-items-center mt-2 mb-1" v-if="doorTotalPages > 1">
+                <button class="btn btn-sm btn-dark" :disabled="doorPage <= 1" @click="doorPage--">&laquo; Prev</button>
+                <span class="mx-3 text-muted" style="font-size: 12px;">{{ doorPage }} / {{ doorTotalPages }}</span>
+                <button class="btn btn-sm btn-dark" :disabled="doorPage >= doorTotalPages" @click="doorPage++">Next &raquo;</button>
+              </div>
             </div>
           </div>
         </eq-tab>
@@ -808,59 +1189,188 @@
             Loading Objects...
             <loader-fake-progress class="mt-3"/>
           </div>
-          <div v-else-if="objectEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
-            <i class="fa fa-cube"></i> No objects found in this zone
-          </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
-            <div class="d-flex align-items-center mb-2 px-1">
-              <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
-                     v-model="objectSearchQuery" placeholder="Search objects..." style="max-width: 250px;"
-                     @input="objectPage = 1" />
-              <span class="ml-auto text-muted" style="font-size: 11px;">
-                {{ filteredObjects.length }} results
-                <template v-if="objectTotalPages > 1"> · Page {{ objectPage }}/{{ objectTotalPages }}</template>
-              </span>
+          <div v-else>
+            <div class="mt-2 mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted" style="font-size: 12px;">{{ objectEntries.length }} object(s) in zone</span>
+              <button class="btn btn-sm btn-outline-success" @click="showAddObject = true">
+                <i class="fa fa-plus"></i> Add Object
+              </button>
             </div>
-            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
-              <thead class="eq-table-floating-header">
-                <tr>
-                  <th style="width: 40px">ID</th>
-                  <th style="width: 40px"></th>
-                  <th>Object Name</th>
-                  <th class="text-center" style="width: 110px">Position</th>
-                  <th class="text-center" style="width: 45px">Type</th>
-                  <th>Item</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="o in paginatedObjects" :key="'obj-' + o.id"
-                    @mouseenter="emitSidebarArrowObject($event, o)"
-                    @mouseleave="clearSidebarArrow()"
-                >
-                  <td class="text-muted">{{ o.id }}</td>
-                  <td class="text-center">
-                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
-                            @click="showObjectOnMap(o)" title="Show on Map">
-                      <i class="fa fa-map-marker"></i>
-                    </button>
-                  </td>
-                  <td style="font-size: 11px;">{{ o.objectname || '—' }}</td>
-                  <td class="text-center text-muted" style="font-size: 11px;">
-                    {{ Number(o.xpos).toFixed(0) }}, {{ Number(o.ypos).toFixed(0) }}, {{ Number(o.zpos).toFixed(0) }}
-                  </td>
-                  <td class="text-center text-muted">{{ o.type }}</td>
-                  <td>
-                    <item-popover v-if="o.itemDetail" :item="o.itemDetail" />
-                    <span v-else-if="o.itemid && o.itemid > 0" class="text-muted" style="font-size: 11px;">Item #{{ o.itemid }}</span>
-                    <span v-else class="text-muted">—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div class="d-flex justify-content-center align-items-center mt-2 mb-1" v-if="objectTotalPages > 1">
-              <button class="btn btn-sm btn-dark" :disabled="objectPage <= 1" @click="objectPage--">&laquo; Prev</button>
-              <span class="mx-3 text-muted" style="font-size: 12px;">{{ objectPage }} / {{ objectTotalPages }}</span>
-              <button class="btn btn-sm btn-dark" :disabled="objectPage >= objectTotalPages" @click="objectPage++">Next &raquo;</button>
+
+            <!-- Add Object Form -->
+            <div v-if="showAddObject" class="p-2 mb-3" style="background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="font-weight-bold mb-2" style="font-size: 13px; color: #ffc832;">
+                <i class="fa fa-plus-circle mr-1"></i> Add Object
+              </div>
+              <div class="row mb-2">
+                <div class="col-6">
+                  <label style="font-size: 11px; opacity: 0.6;">Object Name</label>
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newObject.objectname" placeholder="Object name" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Type</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newObject.type" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Size</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newObject.size" />
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">X</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newObject.xpos" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Y</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newObject.ypos" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Z</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newObject.zpos" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Heading</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newObject.heading" />
+                </div>
+              </div>
+              <div class="mb-2">
+                <label style="font-size: 11px; opacity: 0.6;">Item (optional)</label>
+                <div class="position-relative">
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                         v-model="objectItemSearchQuery" placeholder="Search items by name or ID..."
+                         @input="searchObjectItems" autocomplete="off"
+                         @keydown.down.prevent="objectHighlightIndex = Math.min(objectHighlightIndex + 1, (objectSearchResults.length || 1) - 1)"
+                         @keydown.up.prevent="objectHighlightIndex = Math.max(objectHighlightIndex - 1, 0)"
+                         @keydown.enter.prevent="selectObjectItem(objectSearchResults[objectHighlightIndex])" />
+                  <div v-if="objectSearchResults.length > 0" class="gs-item-search-dropdown">
+                    <div v-for="(item, ri) in objectSearchResults" :key="'oi-sr-' + item.id"
+                         class="gs-item-search-result" :class="{ 'highlighted': objectHighlightIndex === ri }"
+                         @click="selectObjectItem(item)" @mouseenter="objectHighlightIndex = ri">
+                      <div class="d-flex align-items-center">
+                        <item-popover :item="item" size="sm" class="d-inline-block mr-2" />
+                        <small style="opacity:.4; margin-left: auto;">ID: {{ item.id }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="objectItemSearchQuery && objectItemSearchQuery.length >= 2 && objectSearchResults.length === 0 && !objectSearching"
+                       class="gs-item-search-dropdown">
+                    <div class="text-center p-2" style="opacity:.4; font-size:.85em;">No items found</div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="newObject._selectedItem" class="mb-2 p-1" style="background: rgba(255,200,50,0.1); border-radius: 4px;">
+                <item-popover :item="newObject._selectedItem" />
+                <button class="btn btn-sm btn-outline-secondary ml-2" @click="newObject.itemid = null; newObject._selectedItem = null; objectItemSearchQuery = ''">
+                  <i class="fa fa-times"></i>
+                </button>
+              </div>
+              <div class="d-flex">
+                <button class="btn btn-sm btn-success mr-2" @click="addObject()">
+                  <i class="fa fa-plus mr-1"></i> Add
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="showAddObject = false">Cancel</button>
+              </div>
+            </div>
+
+            <div v-if="objectEntries.length === 0 && !showAddObject" class="mt-3 text-center" style="opacity: 0.5">
+              <i class="fa fa-cube"></i> No objects found in this zone
+            </div>
+            <div style="height: 75vh; overflow-y: scroll;" v-if="objectEntries.length > 0">
+              <div class="d-flex align-items-center mb-2 px-1">
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                       v-model="objectSearchQuery" placeholder="Search objects..." style="max-width: 250px;"
+                       @input="objectPage = 1" />
+                <span class="ml-auto text-muted" style="font-size: 11px;">
+                  {{ filteredObjects.length }} results
+                  <template v-if="objectTotalPages > 1"> · Page {{ objectPage }}/{{ objectTotalPages }}</template>
+                </span>
+              </div>
+              <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+                <thead class="eq-table-floating-header">
+                  <tr>
+                    <th style="width: 40px">ID</th>
+                    <th style="width: 40px"></th>
+                    <th>Object Name</th>
+                    <th class="text-center" style="width: 110px">Position</th>
+                    <th class="text-center" style="width: 45px">Type</th>
+                    <th>Item</th>
+                    <th class="text-center" style="width: 60px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="o in paginatedObjects" :key="'obj-' + o.id"
+                      @mouseenter="emitSidebarArrowObject($event, o)"
+                      @mouseleave="clearSidebarArrow()"
+                  >
+                    <td class="text-muted">{{ o.id }}</td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                              @click="showObjectOnMap(o)" title="Show on Map">
+                        <i class="fa fa-map-marker"></i>
+                      </button>
+                    </td>
+                    <template v-if="editingObjectId !== o.id">
+                      <td style="font-size: 11px;">{{ o.objectname || '—' }}</td>
+                      <td class="text-center text-muted" style="font-size: 11px;">
+                        {{ Number(o.xpos).toFixed(0) }}, {{ Number(o.ypos).toFixed(0) }}, {{ Number(o.zpos).toFixed(0) }}
+                      </td>
+                      <td class="text-center text-muted">{{ o.type }}</td>
+                      <td>
+                        <item-popover v-if="o.itemDetail" :item="o.itemDetail" />
+                        <span v-else-if="o.itemid && o.itemid > 0" class="text-muted" style="font-size: 11px;">Item #{{ o.itemid }}</span>
+                        <span v-else class="text-muted">—</span>
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="startEditObject(o)" title="Edit">
+                          <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                                @click="removeObject(o)" title="Remove">
+                          <i class="fa fa-trash"></i>
+                        </button>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td>
+                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                               style="font-size: 10px; height: 22px;" v-model="objectEditData.objectname" />
+                      </td>
+                      <td style="font-size: 10px;">
+                        <div class="d-flex">
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary"
+                                 style="width: 55px; font-size: 10px; padding: 1px 3px; height: 22px;" v-model.number="objectEditData.xpos" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 55px; font-size: 10px; padding: 1px 3px; height: 22px;" v-model.number="objectEditData.ypos" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 55px; font-size: 10px; padding: 1px 3px; height: 22px;" v-model.number="objectEditData.zpos" />
+                        </div>
+                      </td>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 40px; display: inline-block; font-size: 11px;" v-model.number="objectEditData.type" />
+                      </td>
+                      <td></td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="saveEditObject(o)" title="Save">
+                          <i class="fa fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
+                                @click="editingObjectId = null" title="Cancel">
+                          <i class="fa fa-times"></i>
+                        </button>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="d-flex justify-content-center align-items-center mt-2 mb-1" v-if="objectTotalPages > 1">
+                <button class="btn btn-sm btn-dark" :disabled="objectPage <= 1" @click="objectPage--">&laquo; Prev</button>
+                <span class="mx-3 text-muted" style="font-size: 12px;">{{ objectPage }} / {{ objectTotalPages }}</span>
+                <button class="btn btn-sm btn-dark" :disabled="objectPage >= objectTotalPages" @click="objectPage++">Next &raquo;</button>
+              </div>
             </div>
           </div>
         </eq-tab>
@@ -871,37 +1381,98 @@
             Loading LDoN Traps...
             <loader-fake-progress class="mt-3"/>
           </div>
-          <div v-else-if="ldonTrapEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
-            <i class="fa fa-exclamation-circle"></i> No LDoN trap entries found
-          </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
-            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
-              <thead class="eq-table-floating-header">
-                <tr>
-                  <th style="width: 50px">ID</th>
-                  <th class="text-center" style="width: 80px">Trap ID</th>
-                  <th>Type</th>
-                  <th class="text-center" style="width: 80px">Spell ID</th>
-                  <th class="text-center" style="width: 70px">Skill</th>
-                  <th class="text-center" style="width: 70px">Locked</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="lt in ldonTrapEntries" :key="'ldon-' + lt.id">
-                  <td class="text-muted">{{ lt.id }}</td>
-                  <td class="text-center text-muted">{{ lt.trap_id || '—' }}</td>
-                  <td>{{ getLdonTemplateName(lt.trap_id) }}</td>
-                  <td class="text-center text-muted">{{ lt.spell_id || '—' }}</td>
-                  <td class="text-center text-muted">{{ lt.skill || '—' }}</td>
-                  <td class="text-center">
-                    <span v-if="lt.locked" style="color: #ffc832;">
-                      <i class="fa fa-lock"></i> Yes
-                    </span>
-                    <span v-else class="text-muted">No</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else>
+            <div class="mt-2 mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted" style="font-size: 12px;">{{ ldonTrapEntries.length }} LDoN trap(s)</span>
+              <button class="btn btn-sm btn-outline-success" @click="showAddLdonTrap = true">
+                <i class="fa fa-plus"></i> Add LDoN Trap
+              </button>
+            </div>
+
+            <!-- Add LDoN Trap Form -->
+            <div v-if="showAddLdonTrap" class="p-2 mb-3" style="background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="font-weight-bold mb-2" style="font-size: 13px; color: #ffc832;">
+                <i class="fa fa-plus-circle mr-1"></i> Add LDoN Trap Entry
+              </div>
+              <div class="row mb-2">
+                <div class="col-6">
+                  <label style="font-size: 11px; opacity: 0.6;">Trap ID</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newLdonTrap.trap_id" />
+                </div>
+              </div>
+              <div class="d-flex">
+                <button class="btn btn-sm btn-success mr-2" @click="addLdonTrap()">
+                  <i class="fa fa-plus mr-1"></i> Add
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="showAddLdonTrap = false">Cancel</button>
+              </div>
+            </div>
+
+            <div v-if="ldonTrapEntries.length === 0 && !showAddLdonTrap" class="mt-3 text-center" style="opacity: 0.5">
+              <i class="fa fa-exclamation-circle"></i> No LDoN trap entries found
+            </div>
+            <div style="height: 75vh; overflow-y: scroll;" v-if="ldonTrapEntries.length > 0">
+              <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
+                <thead class="eq-table-floating-header">
+                  <tr>
+                    <th style="width: 50px">ID</th>
+                    <th class="text-center" style="width: 80px">Trap ID</th>
+                    <th>Type</th>
+                    <th class="text-center" style="width: 80px">Spell ID</th>
+                    <th class="text-center" style="width: 70px">Skill</th>
+                    <th class="text-center" style="width: 70px">Locked</th>
+                    <th class="text-center" style="width: 60px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="lt in ldonTrapEntries" :key="'ldon-' + lt.id">
+                    <td class="text-muted">{{ lt.id }}</td>
+                    <template v-if="editingLdonTrapId !== lt.id">
+                      <td class="text-center text-muted">{{ lt.trap_id || '—' }}</td>
+                      <td>{{ getLdonTemplateName(lt.trap_id) }}</td>
+                      <td class="text-center text-muted">{{ lt.spell_id || '—' }}</td>
+                      <td class="text-center text-muted">{{ lt.skill || '—' }}</td>
+                      <td class="text-center">
+                        <span v-if="lt.locked" style="color: #ffc832;">
+                          <i class="fa fa-lock"></i> Yes
+                        </span>
+                        <span v-else class="text-muted">No</span>
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="startEditLdonTrap(lt)" title="Edit">
+                          <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                                @click="removeLdonTrap(lt)" title="Remove">
+                          <i class="fa fa-trash"></i>
+                        </button>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 60px; display: inline-block; font-size: 11px;" v-model.number="ldonTrapEditData.trap_id" />
+                      </td>
+                      <td>{{ getLdonTemplateName(ldonTrapEditData.trap_id) }}</td>
+                      <td class="text-center text-muted">{{ lt.spell_id || '—' }}</td>
+                      <td class="text-center text-muted">{{ lt.skill || '—' }}</td>
+                      <td class="text-center text-muted">{{ lt.locked ? 'Yes' : 'No' }}</td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="saveEditLdonTrap(lt)" title="Save">
+                          <i class="fa fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
+                                @click="editingLdonTrapId = null" title="Cancel">
+                          <i class="fa fa-times"></i>
+                        </button>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </eq-tab>
 
@@ -911,38 +1482,117 @@
             Loading Graveyards...
             <loader-fake-progress class="mt-3"/>
           </div>
-          <div v-else-if="graveyardEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
-            <i class="fa fa-skull"></i> No graveyards found in this zone
-          </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
-            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
-              <thead class="eq-table-floating-header">
-                <tr>
-                  <th style="width: 50px">ID</th>
-                  <th style="width: 40px"></th>
-                  <th class="text-center">Position (X / Y / Z)</th>
-                  <th class="text-center" style="width: 80px">Heading</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="gy in graveyardEntries" :key="'gy-' + gy.id"
-                    @mouseenter="emitSidebarArrowGraveyard($event, gy)"
-                    @mouseleave="clearSidebarArrow()"
-                >
-                  <td class="text-muted">{{ gy.id }}</td>
-                  <td class="text-center">
-                    <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
-                            @click="showGraveyardOnMap(gy)" title="Show on Map">
-                      <i class="fa fa-map-marker"></i>
-                    </button>
-                  </td>
-                  <td class="text-center text-muted" style="font-size: 12px;">
-                    {{ Number(gy.x).toFixed(1) }}, {{ Number(gy.y).toFixed(1) }}, {{ Number(gy.z).toFixed(1) }}
-                  </td>
-                  <td class="text-center text-muted">{{ Number(gy.heading).toFixed(1) }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else>
+            <div class="mt-2 mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted" style="font-size: 12px;">{{ graveyardEntries.length }} graveyard(s) in zone</span>
+              <button class="btn btn-sm btn-outline-success" @click="showAddGraveyard = true">
+                <i class="fa fa-plus"></i> Add Graveyard
+              </button>
+            </div>
+
+            <!-- Add Graveyard Form -->
+            <div v-if="showAddGraveyard" class="p-2 mb-3" style="background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="font-weight-bold mb-2" style="font-size: 13px; color: #ffc832;">
+                <i class="fa fa-plus-circle mr-1"></i> Add Graveyard
+              </div>
+              <div class="row mb-2">
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">X</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newGraveyard.x" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Y</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newGraveyard.y" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Z</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newGraveyard.z" />
+                </div>
+                <div class="col-3">
+                  <label style="font-size: 11px; opacity: 0.6;">Heading</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newGraveyard.heading" />
+                </div>
+              </div>
+              <div class="d-flex">
+                <button class="btn btn-sm btn-success mr-2" @click="addGraveyard()">
+                  <i class="fa fa-plus mr-1"></i> Add
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="showAddGraveyard = false">Cancel</button>
+              </div>
+            </div>
+
+            <div v-if="graveyardEntries.length === 0 && !showAddGraveyard" class="mt-3 text-center" style="opacity: 0.5">
+              <i class="fa fa-skull"></i> No graveyards found in this zone
+            </div>
+            <div style="height: 75vh; overflow-y: scroll;" v-if="graveyardEntries.length > 0">
+              <table class="eq-table eq-highlight-rows" style="display: table; font-size: 13px;">
+                <thead class="eq-table-floating-header">
+                  <tr>
+                    <th style="width: 50px">ID</th>
+                    <th style="width: 40px"></th>
+                    <th class="text-center">Position (X / Y / Z)</th>
+                    <th class="text-center" style="width: 80px">Heading</th>
+                    <th class="text-center" style="width: 60px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="gy in graveyardEntries" :key="'gy-' + gy.id"
+                      @mouseenter="emitSidebarArrowGraveyard($event, gy)"
+                      @mouseleave="clearSidebarArrow()"
+                  >
+                    <td class="text-muted">{{ gy.id }}</td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-dark py-0 px-1" style="font-size: 11px;"
+                              @click="showGraveyardOnMap(gy)" title="Show on Map">
+                        <i class="fa fa-map-marker"></i>
+                      </button>
+                    </td>
+                    <template v-if="editingGraveyardId !== gy.id">
+                      <td class="text-center text-muted" style="font-size: 12px;">
+                        {{ Number(gy.x).toFixed(1) }}, {{ Number(gy.y).toFixed(1) }}, {{ Number(gy.z).toFixed(1) }}
+                      </td>
+                      <td class="text-center text-muted">{{ Number(gy.heading).toFixed(1) }}</td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="startEditGraveyard(gy)" title="Edit">
+                          <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                                @click="removeGraveyard(gy)" title="Remove">
+                          <i class="fa fa-trash"></i>
+                        </button>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td style="font-size: 10px;">
+                        <div class="d-flex justify-content-center">
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary"
+                                 style="width: 70px; font-size: 10px; padding: 1px 4px; height: 22px;" v-model.number="graveyardEditData.x" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 70px; font-size: 10px; padding: 1px 4px; height: 22px;" v-model.number="graveyardEditData.y" />
+                          <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary ml-1"
+                                 style="width: 70px; font-size: 10px; padding: 1px 4px; height: 22px;" v-model.number="graveyardEditData.z" />
+                        </div>
+                      </td>
+                      <td class="text-center">
+                        <input type="number" step="0.01" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 60px; display: inline-block; font-size: 11px;" v-model.number="graveyardEditData.heading" />
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="saveEditGraveyard(gy)" title="Save">
+                          <i class="fa fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
+                                @click="editingGraveyardId = null" title="Cancel">
+                          <i class="fa fa-times"></i>
+                        </button>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </eq-tab>
 
@@ -952,42 +1602,149 @@
             Loading Blocked Spells...
             <loader-fake-progress class="mt-3"/>
           </div>
-          <div v-else-if="blockedSpellEntries.length === 0" class="mt-3 text-center" style="opacity: 0.5">
-            <i class="fa fa-ban"></i> No blocked spells found in this zone
-          </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
-            <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
-              <thead class="eq-table-floating-header">
-                <tr>
-                  <th style="width: 40px">ID</th>
-                  <th>Spell</th>
-                  <th class="text-center" style="width: 50px">Type</th>
-                  <th>Description</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="bs in blockedSpellEntries" :key="'bs-' + bs.id">
-                  <td class="text-muted">{{ bs.id }}</td>
-                  <td>
-                    <spell-popover
-                      v-if="bs.spellDetail && bs.spellDetail.new_icon !== undefined"
-                      :spell="bs.spellDetail"
-                      :size="20"
-                      :spell-name-length="25"
-                    />
-                    <span v-else class="text-muted">Spell #{{ bs.spellid }}</span>
-                  </td>
-                  <td class="text-center text-muted">{{ bs.type }}</td>
-                  <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.description">
-                    {{ bs.description || '—' }}
-                  </td>
-                  <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.message">
-                    {{ bs.message || '—' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else>
+            <div class="mt-2 mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted" style="font-size: 12px;">{{ blockedSpellEntries.length }} blocked spell(s) in zone</span>
+              <button class="btn btn-sm btn-outline-success" @click="showAddBlockedSpell = true">
+                <i class="fa fa-plus"></i> Add Blocked Spell
+              </button>
+            </div>
+
+            <!-- Add Blocked Spell Form -->
+            <div v-if="showAddBlockedSpell" class="p-2 mb-3" style="background: rgba(255,255,255,0.05); border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="font-weight-bold mb-2" style="font-size: 13px; color: #ffc832;">
+                <i class="fa fa-plus-circle mr-1"></i> Add Blocked Spell
+              </div>
+              <div class="mb-2">
+                <label style="font-size: 11px; opacity: 0.6;">Spell</label>
+                <div class="position-relative">
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                         v-model="bsSpellSearchQuery" placeholder="Search spells by name or ID..."
+                         @input="searchBlockedSpells" autocomplete="off"
+                         @keydown.down.prevent="bsHighlightIndex = Math.min(bsHighlightIndex + 1, (bsSearchResults.length || 1) - 1)"
+                         @keydown.up.prevent="bsHighlightIndex = Math.max(bsHighlightIndex - 1, 0)"
+                         @keydown.enter.prevent="selectBlockedSpell(bsSearchResults[bsHighlightIndex])"
+                         @keydown.escape="showAddBlockedSpell = false" />
+                  <div v-if="bsSearchResults.length > 0" class="gs-item-search-dropdown">
+                    <div v-for="(spell, ri) in bsSearchResults" :key="'bs-sr-' + spell.id"
+                         class="gs-item-search-result" :class="{ 'highlighted': bsHighlightIndex === ri }"
+                         @click="selectBlockedSpell(spell)" @mouseenter="bsHighlightIndex = ri">
+                      <div class="d-flex align-items-center">
+                        <spell-popover v-if="spell.new_icon !== undefined" :spell="spell" :size="18" :spell-name-length="30" class="d-inline-block mr-2" />
+                        <span v-else>{{ spell.name }}</span>
+                        <small style="opacity:.4; margin-left: auto;">ID: {{ spell.id }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="bsSpellSearchQuery && bsSpellSearchQuery.length >= 2 && bsSearchResults.length === 0 && !bsSearching"
+                       class="gs-item-search-dropdown">
+                    <div class="text-center p-2" style="opacity:.4; font-size:.85em;">No spells found</div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="newBlockedSpell._selectedSpell" class="mb-2 p-1" style="background: rgba(255,200,50,0.1); border-radius: 4px;">
+                <spell-popover v-if="newBlockedSpell._selectedSpell.new_icon !== undefined" :spell="newBlockedSpell._selectedSpell" :size="20" :spell-name-length="30" />
+                <span v-else>{{ newBlockedSpell._selectedSpell.name }} (ID: {{ newBlockedSpell._selectedSpell.id }})</span>
+                <button class="btn btn-sm btn-outline-secondary ml-2" @click="newBlockedSpell.spellid = null; newBlockedSpell._selectedSpell = null; bsSpellSearchQuery = ''">
+                  <i class="fa fa-times"></i>
+                </button>
+              </div>
+              <div class="row mb-2">
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Type</label>
+                  <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" v-model.number="newBlockedSpell.type" />
+                </div>
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Description</label>
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newBlockedSpell.description" />
+                </div>
+                <div class="col-4">
+                  <label style="font-size: 11px; opacity: 0.6;">Message</label>
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" v-model="newBlockedSpell.message" />
+                </div>
+              </div>
+              <div class="d-flex">
+                <button class="btn btn-sm btn-success mr-2" @click="addBlockedSpell()" :disabled="!newBlockedSpell.spellid">
+                  <i class="fa fa-plus mr-1"></i> Add
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="showAddBlockedSpell = false">Cancel</button>
+              </div>
+            </div>
+
+            <div v-if="blockedSpellEntries.length === 0 && !showAddBlockedSpell" class="mt-3 text-center" style="opacity: 0.5">
+              <i class="fa fa-ban"></i> No blocked spells found in this zone
+            </div>
+            <div style="height: 75vh; overflow-y: scroll;" v-if="blockedSpellEntries.length > 0">
+              <table class="eq-table eq-highlight-rows" style="display: table; font-size: 12px;">
+                <thead class="eq-table-floating-header">
+                  <tr>
+                    <th style="width: 40px">ID</th>
+                    <th>Spell</th>
+                    <th class="text-center" style="width: 50px">Type</th>
+                    <th>Description</th>
+                    <th>Message</th>
+                    <th class="text-center" style="width: 60px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="bs in blockedSpellEntries" :key="'bs-' + bs.id">
+                    <td class="text-muted">{{ bs.id }}</td>
+                    <td>
+                      <spell-popover
+                        v-if="bs.spellDetail && bs.spellDetail.new_icon !== undefined"
+                        :spell="bs.spellDetail"
+                        :size="20"
+                        :spell-name-length="25"
+                      />
+                      <span v-else class="text-muted">Spell #{{ bs.spellid }}</span>
+                    </td>
+                    <template v-if="editingBlockedSpellId !== bs.id">
+                      <td class="text-center text-muted">{{ bs.type }}</td>
+                      <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.description">
+                        {{ bs.description || '—' }}
+                      </td>
+                      <td class="text-muted" style="font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="bs.message">
+                        {{ bs.message || '—' }}
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-dark py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="startEditBlockedSpell(bs)" title="Edit">
+                          <i class="fa fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size: 11px;"
+                                @click="removeBlockedSpell(bs)" title="Remove">
+                          <i class="fa fa-trash"></i>
+                        </button>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td class="text-center">
+                        <input type="number" class="form-control form-control-sm bg-dark text-white border-secondary text-center"
+                               style="width: 40px; display: inline-block; font-size: 11px;" v-model.number="blockedSpellEditData.type" />
+                      </td>
+                      <td>
+                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                               style="font-size: 10px; height: 22px;" v-model="blockedSpellEditData.description" />
+                      </td>
+                      <td>
+                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                               style="font-size: 10px; height: 22px;" v-model="blockedSpellEditData.message" />
+                      </td>
+                      <td class="text-center" style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-success py-0 px-1 mr-1" style="font-size: 11px;"
+                                @click="saveEditBlockedSpell(bs)" title="Save">
+                          <i class="fa fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary py-0 px-1" style="font-size: 11px;"
+                                @click="editingBlockedSpellId = null" title="Cancel">
+                          <i class="fa fa-times"></i>
+                        </button>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </eq-tab>
 
@@ -1318,35 +2075,75 @@ export default {
       // Fishing tab
       fishingEntries: [],
       loadingFishing: false,
+      showAddFishing: false,
+      newFishing: { itemid: null, _selectedItem: null, skill_level: 0, chance: 0, npc_id: 0, npc_chance: 0 },
+      fishingItemSearchQuery: '',
+      fishingSearchResults: [],
+      fishingHighlightIndex: 0,
+      fishingSearching: false,
+      editingFishingId: null,
+      fishingEditData: {},
 
       // Traps tab
       trapEntries: [],
       loadingTraps: false,
+      showAddTrap: false,
+      newTrap: { x: 0, y: 0, z: 0, chance: 0, maxzdiff: 0, radius: 0, effect: 0, effectvalue: 0, message: '', skill: 0, level: 0, respawn_time: 60 },
+      editingTrapId: null,
+      trapEditData: {},
 
       // Doors tab
       doorEntries: [],
       loadingDoors: false,
       doorSearchQuery: '',
       doorPage: 1,
+      showAddDoor: false,
+      newDoor: { doorid: 0, name: '', pos_x: 0, pos_y: 0, pos_z: 0, heading: 0, opentype: 0, dest_zone: '', dest_x: 0, dest_y: 0, dest_z: 0 },
+      editingDoorId: null,
+      doorEditData: {},
 
       // Objects tab
       objectEntries: [],
       loadingObjects: false,
       objectSearchQuery: '',
       objectPage: 1,
+      showAddObject: false,
+      newObject: { xpos: 0, ypos: 0, zpos: 0, heading: 0, objectname: '', type: 0, itemid: null, _selectedItem: null, icon: 0, size: 100 },
+      objectItemSearchQuery: '',
+      objectSearchResults: [],
+      objectHighlightIndex: 0,
+      objectSearching: false,
+      editingObjectId: null,
+      objectEditData: {},
 
       // LDoN Traps tab
       ldonTrapEntries: [],
       ldonTrapTemplates: [],
       loadingLdonTraps: false,
+      showAddLdonTrap: false,
+      newLdonTrap: { trap_id: 0 },
+      editingLdonTrapId: null,
+      ldonTrapEditData: {},
 
       // Graveyards tab
       graveyardEntries: [],
       loadingGraveyards: false,
+      showAddGraveyard: false,
+      newGraveyard: { x: 0, y: 0, z: 0, heading: 0 },
+      editingGraveyardId: null,
+      graveyardEditData: {},
 
       // Blocked Spells tab
       blockedSpellEntries: [],
       loadingBlockedSpells: false,
+      showAddBlockedSpell: false,
+      newBlockedSpell: { spellid: null, _selectedSpell: null, type: 1, message: '', description: '' },
+      bsSpellSearchQuery: '',
+      bsSearchResults: [],
+      bsHighlightIndex: 0,
+      bsSearching: false,
+      editingBlockedSpellId: null,
+      blockedSpellEditData: {},
     }
   },
   created() {
@@ -2348,6 +3145,492 @@ export default {
       }
       this.loadingBlockedSpells = false
       this.$forceUpdate()
+    },
+
+    // ===== FISHING CRUD =====
+    searchFishingItems: (() => {
+      let timeout = null
+      return function () {
+        this.fishingHighlightIndex = 0
+        clearTimeout(timeout)
+        if (!this.fishingItemSearchQuery || this.fishingItemSearchQuery.length < 2) {
+          this.fishingSearchResults = []
+          return
+        }
+        this.fishingSearching = true
+        timeout = setTimeout(async () => {
+          try {
+            const q = this.fishingItemSearchQuery
+            const isNum = /^\d+$/.test(q)
+            const params = isNum
+              ? { where: `id__${q}`, limit: 20 }
+              : { where: `Name__${q}__and__id__gt__0`, limit: 20, whereOr: `name___like_${q}` }
+            const r = await SpireApi.v1().get(`/items`, { params })
+            this.fishingSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
+          } catch (e) {
+            this.fishingSearchResults = []
+          }
+          this.fishingSearching = false
+        }, 300)
+      }
+    })(),
+
+    selectFishingItem(item) {
+      if (!item) return
+      this.newFishing.itemid = item.id
+      this.newFishing._selectedItem = item
+      this.fishingItemSearchQuery = ''
+      this.fishingSearchResults = []
+    },
+
+    async addFishing() {
+      if (!this.newFishing.itemid) return
+      try {
+        const payload = {
+          zoneid: this.zone.zoneidnumber,
+          itemid: this.newFishing.itemid,
+          skill_level: this.newFishing.skill_level || 0,
+          chance: this.newFishing.chance || 0,
+          npc_id: this.newFishing.npc_id || 0,
+          npc_chance: this.newFishing.npc_chance || 0,
+          min_expansion: -1,
+          max_expansion: -1
+        }
+        const r = await SpireApi.v1().put(`/fishing`, payload)
+        if (r.status === 200 || r.status === 201) {
+          this.showAddFishing = false
+          this.newFishing = { itemid: null, _selectedItem: null, skill_level: 0, chance: 0, npc_id: 0, npc_chance: 0 }
+          await this.loadFishing()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to add fishing entry', e)
+        alert('Failed to add fishing entry: ' + (e.message || e))
+      }
+    },
+
+    startEditFishing(f) {
+      this.editingFishingId = f.id
+      this.fishingEditData = { skill_level: f.skill_level, chance: f.chance, npc_id: f.npc_id, npc_chance: f.npc_chance }
+    },
+
+    async saveEditFishing(f) {
+      try {
+        await SpireApi.v1().patch(`/fishing/${f.id}`, this.fishingEditData)
+        this.editingFishingId = null
+        await this.loadFishing()
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to save fishing entry', e)
+      }
+    },
+
+    async removeFishing(f) {
+      const name = f.itemDetail ? (f.itemDetail.Name || f.itemDetail.name) : `Item #${f.itemid}`
+      if (!confirm(`Remove fishing entry: ${name}?`)) return
+      try {
+        const r = await SpireApi.v1().delete(`/fishing/${f.id}`)
+        if (r.status === 200 || r.status === 204) {
+          await this.loadFishing()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to remove fishing entry', e)
+        alert('Failed to remove fishing entry: ' + (e.message || e))
+      }
+    },
+
+    // ===== TRAPS CRUD =====
+    async addTrap() {
+      try {
+        const payload = {
+          zone: this.zone.short_name,
+          version: this.zone.version || 0,
+          x: this.newTrap.x || 0,
+          y: this.newTrap.y || 0,
+          z: this.newTrap.z || 0,
+          chance: this.newTrap.chance || 0,
+          maxzdiff: this.newTrap.maxzdiff || 0,
+          radius: this.newTrap.radius || 0,
+          effect: this.newTrap.effect || 0,
+          effectvalue: this.newTrap.effectvalue || 0,
+          message: this.newTrap.message || '',
+          skill: this.newTrap.skill || 0,
+          level: this.newTrap.level || 0,
+          respawn_time: this.newTrap.respawn_time || 60
+        }
+        const r = await SpireApi.v1().put(`/trap`, payload)
+        if (r.status === 200 || r.status === 201) {
+          this.showAddTrap = false
+          this.newTrap = { x: 0, y: 0, z: 0, chance: 0, maxzdiff: 0, radius: 0, effect: 0, effectvalue: 0, message: '', skill: 0, level: 0, respawn_time: 60 }
+          await this.loadTraps()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to add trap', e)
+        alert('Failed to add trap: ' + (e.message || e))
+      }
+    },
+
+    startEditTrap(t) {
+      this.editingTrapId = t.id
+      this.trapEditData = { x: t.x, y: t.y, z: t.z, level: t.level, skill: t.skill, chance: t.chance, effect: t.effect, respawn_time: t.respawn_time, message: t.message }
+    },
+
+    async saveEditTrap(t) {
+      try {
+        await SpireApi.v1().patch(`/trap/${t.id}`, this.trapEditData)
+        this.editingTrapId = null
+        await this.loadTraps()
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to save trap', e)
+      }
+    },
+
+    async removeTrap(t) {
+      if (!confirm(`Remove trap #${t.id}?`)) return
+      try {
+        const r = await SpireApi.v1().delete(`/trap/${t.id}`)
+        if (r.status === 200 || r.status === 204) {
+          await this.loadTraps()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to remove trap', e)
+        alert('Failed to remove trap: ' + (e.message || e))
+      }
+    },
+
+    // ===== DOORS CRUD =====
+    async addDoor() {
+      try {
+        const payload = {
+          zone: this.zone.short_name,
+          version: this.zone.version || 0,
+          doorid: this.newDoor.doorid || 0,
+          name: this.newDoor.name || '',
+          pos_x: this.newDoor.pos_x || 0,
+          pos_y: this.newDoor.pos_y || 0,
+          pos_z: this.newDoor.pos_z || 0,
+          heading: this.newDoor.heading || 0,
+          opentype: this.newDoor.opentype || 0,
+          dest_zone: this.newDoor.dest_zone || '',
+          dest_x: this.newDoor.dest_x || 0,
+          dest_y: this.newDoor.dest_y || 0,
+          dest_z: this.newDoor.dest_z || 0
+        }
+        const r = await SpireApi.v1().put(`/door`, payload)
+        if (r.status === 200 || r.status === 201) {
+          this.showAddDoor = false
+          this.newDoor = { doorid: 0, name: '', pos_x: 0, pos_y: 0, pos_z: 0, heading: 0, opentype: 0, dest_zone: '', dest_x: 0, dest_y: 0, dest_z: 0 }
+          await this.loadDoors()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to add door', e)
+        alert('Failed to add door: ' + (e.message || e))
+      }
+    },
+
+    startEditDoor(d) {
+      this.editingDoorId = d.id
+      this.doorEditData = { name: d.name, pos_x: d.pos_x, pos_y: d.pos_y, pos_z: d.pos_z, opentype: d.opentype, dest_zone: d.dest_zone || '' }
+    },
+
+    async saveEditDoor(d) {
+      try {
+        await SpireApi.v1().patch(`/door/${d.id}`, this.doorEditData)
+        this.editingDoorId = null
+        await this.loadDoors()
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to save door', e)
+      }
+    },
+
+    async removeDoor(d) {
+      if (!confirm(`Remove door #${d.doorid} (${d.name || 'unnamed'})?`)) return
+      try {
+        const r = await SpireApi.v1().delete(`/door/${d.id}`)
+        if (r.status === 200 || r.status === 204) {
+          await this.loadDoors()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to remove door', e)
+        alert('Failed to remove door: ' + (e.message || e))
+      }
+    },
+
+    // ===== OBJECTS CRUD =====
+    searchObjectItems: (() => {
+      let timeout = null
+      return function () {
+        this.objectHighlightIndex = 0
+        clearTimeout(timeout)
+        if (!this.objectItemSearchQuery || this.objectItemSearchQuery.length < 2) {
+          this.objectSearchResults = []
+          return
+        }
+        this.objectSearching = true
+        timeout = setTimeout(async () => {
+          try {
+            const q = this.objectItemSearchQuery
+            const isNum = /^\d+$/.test(q)
+            const params = isNum
+              ? { where: `id__${q}`, limit: 20 }
+              : { where: `Name__${q}__and__id__gt__0`, limit: 20, whereOr: `name___like_${q}` }
+            const r = await SpireApi.v1().get(`/items`, { params })
+            this.objectSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
+          } catch (e) {
+            this.objectSearchResults = []
+          }
+          this.objectSearching = false
+        }, 300)
+      }
+    })(),
+
+    selectObjectItem(item) {
+      if (!item) return
+      this.newObject.itemid = item.id
+      this.newObject._selectedItem = item
+      this.objectItemSearchQuery = ''
+      this.objectSearchResults = []
+    },
+
+    async addObject() {
+      try {
+        const payload = {
+          zoneid: this.zone.zoneidnumber,
+          version: this.zone.version || 0,
+          xpos: this.newObject.xpos || 0,
+          ypos: this.newObject.ypos || 0,
+          zpos: this.newObject.zpos || 0,
+          heading: this.newObject.heading || 0,
+          objectname: this.newObject.objectname || '',
+          type: this.newObject.type || 0,
+          itemid: this.newObject.itemid || 0,
+          icon: this.newObject.icon || 0,
+          size: this.newObject.size || 100
+        }
+        const r = await SpireApi.v1().put(`/object`, payload)
+        if (r.status === 200 || r.status === 201) {
+          this.showAddObject = false
+          this.newObject = { xpos: 0, ypos: 0, zpos: 0, heading: 0, objectname: '', type: 0, itemid: null, _selectedItem: null, icon: 0, size: 100 }
+          this.objectItemSearchQuery = ''
+          this.objectSearchResults = []
+          await this.loadObjects()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to add object', e)
+        alert('Failed to add object: ' + (e.message || e))
+      }
+    },
+
+    startEditObject(o) {
+      this.editingObjectId = o.id
+      this.objectEditData = { objectname: o.objectname, xpos: o.xpos, ypos: o.ypos, zpos: o.zpos, type: o.type }
+    },
+
+    async saveEditObject(o) {
+      try {
+        await SpireApi.v1().patch(`/object/${o.id}`, this.objectEditData)
+        this.editingObjectId = null
+        await this.loadObjects()
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to save object', e)
+      }
+    },
+
+    async removeObject(o) {
+      if (!confirm(`Remove object #${o.id} (${o.objectname || 'unnamed'})?`)) return
+      try {
+        const r = await SpireApi.v1().delete(`/object/${o.id}`)
+        if (r.status === 200 || r.status === 204) {
+          await this.loadObjects()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to remove object', e)
+        alert('Failed to remove object: ' + (e.message || e))
+      }
+    },
+
+    // ===== LDON TRAPS CRUD =====
+    async addLdonTrap() {
+      try {
+        const payload = {
+          trap_id: this.newLdonTrap.trap_id || 0
+        }
+        const r = await SpireApi.v1().put(`/ldon_trap_entry`, payload)
+        if (r.status === 200 || r.status === 201) {
+          this.showAddLdonTrap = false
+          this.newLdonTrap = { trap_id: 0 }
+          await this.loadLdonTraps()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to add LDoN trap', e)
+        alert('Failed to add LDoN trap: ' + (e.message || e))
+      }
+    },
+
+    startEditLdonTrap(lt) {
+      this.editingLdonTrapId = lt.id
+      this.ldonTrapEditData = { trap_id: lt.trap_id }
+    },
+
+    async saveEditLdonTrap(lt) {
+      try {
+        await SpireApi.v1().patch(`/ldon_trap_entry/${lt.id}`, this.ldonTrapEditData)
+        this.editingLdonTrapId = null
+        await this.loadLdonTraps()
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to save LDoN trap', e)
+      }
+    },
+
+    async removeLdonTrap(lt) {
+      if (!confirm(`Remove LDoN trap entry #${lt.id}?`)) return
+      try {
+        const r = await SpireApi.v1().delete(`/ldon_trap_entry/${lt.id}`)
+        if (r.status === 200 || r.status === 204) {
+          await this.loadLdonTraps()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to remove LDoN trap', e)
+        alert('Failed to remove LDoN trap: ' + (e.message || e))
+      }
+    },
+
+    // ===== GRAVEYARDS CRUD =====
+    async addGraveyard() {
+      try {
+        const payload = {
+          zone_id: this.zone.zoneidnumber,
+          x: this.newGraveyard.x || 0,
+          y: this.newGraveyard.y || 0,
+          z: this.newGraveyard.z || 0,
+          heading: this.newGraveyard.heading || 0
+        }
+        const r = await SpireApi.v1().put(`/graveyard`, payload)
+        if (r.status === 200 || r.status === 201) {
+          this.showAddGraveyard = false
+          this.newGraveyard = { x: 0, y: 0, z: 0, heading: 0 }
+          await this.loadGraveyards()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to add graveyard', e)
+        alert('Failed to add graveyard: ' + (e.message || e))
+      }
+    },
+
+    startEditGraveyard(gy) {
+      this.editingGraveyardId = gy.id
+      this.graveyardEditData = { x: gy.x, y: gy.y, z: gy.z, heading: gy.heading }
+    },
+
+    async saveEditGraveyard(gy) {
+      try {
+        await SpireApi.v1().patch(`/graveyard/${gy.id}`, this.graveyardEditData)
+        this.editingGraveyardId = null
+        await this.loadGraveyards()
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to save graveyard', e)
+      }
+    },
+
+    async removeGraveyard(gy) {
+      if (!confirm(`Remove graveyard #${gy.id}?`)) return
+      try {
+        const r = await SpireApi.v1().delete(`/graveyard/${gy.id}`)
+        if (r.status === 200 || r.status === 204) {
+          await this.loadGraveyards()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to remove graveyard', e)
+        alert('Failed to remove graveyard: ' + (e.message || e))
+      }
+    },
+
+    // ===== BLOCKED SPELLS CRUD =====
+    searchBlockedSpells: (() => {
+      let timeout = null
+      return function () {
+        this.bsHighlightIndex = 0
+        clearTimeout(timeout)
+        if (!this.bsSpellSearchQuery || this.bsSpellSearchQuery.length < 2) {
+          this.bsSearchResults = []
+          return
+        }
+        this.bsSearching = true
+        timeout = setTimeout(async () => {
+          try {
+            const q = this.bsSpellSearchQuery
+            const isNum = /^\d+$/.test(q)
+            const params = isNum
+              ? { where: `id__${q}`, limit: 20 }
+              : { where: `name__like__${q}`, limit: 20 }
+            const r = await SpireApi.v1().get(`/spells_news`, { params })
+            this.bsSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
+          } catch (e) {
+            this.bsSearchResults = []
+          }
+          this.bsSearching = false
+        }, 300)
+      }
+    })(),
+
+    selectBlockedSpell(spell) {
+      if (!spell) return
+      this.newBlockedSpell.spellid = spell.id
+      this.newBlockedSpell._selectedSpell = spell
+      this.bsSpellSearchQuery = ''
+      this.bsSearchResults = []
+    },
+
+    async addBlockedSpell() {
+      if (!this.newBlockedSpell.spellid) return
+      try {
+        const payload = {
+          zoneid: this.zone.zoneidnumber,
+          spellid: this.newBlockedSpell.spellid,
+          type: this.newBlockedSpell.type || 1,
+          x: 0,
+          y: 0,
+          z: 0,
+          message: this.newBlockedSpell.message || '',
+          description: this.newBlockedSpell.description || ''
+        }
+        const r = await SpireApi.v1().put(`/blocked_spell`, payload)
+        if (r.status === 200 || r.status === 201) {
+          this.showAddBlockedSpell = false
+          this.newBlockedSpell = { spellid: null, _selectedSpell: null, type: 1, message: '', description: '' }
+          await this.loadBlockedSpells()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to add blocked spell', e)
+        alert('Failed to add blocked spell: ' + (e.message || e))
+      }
+    },
+
+    startEditBlockedSpell(bs) {
+      this.editingBlockedSpellId = bs.id
+      this.blockedSpellEditData = { type: bs.type, description: bs.description || '', message: bs.message || '' }
+    },
+
+    async saveEditBlockedSpell(bs) {
+      try {
+        await SpireApi.v1().patch(`/blocked_spell/${bs.id}`, this.blockedSpellEditData)
+        this.editingBlockedSpellId = null
+        await this.loadBlockedSpells()
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to save blocked spell', e)
+      }
+    },
+
+    async removeBlockedSpell(bs) {
+      const name = bs.spellDetail ? (bs.spellDetail.name || `Spell #${bs.spellid}`) : `Spell #${bs.spellid}`
+      if (!confirm(`Remove blocked spell: ${name}?`)) return
+      try {
+        const r = await SpireApi.v1().delete(`/blocked_spell/${bs.id}`)
+        if (r.status === 200 || r.status === 204) {
+          await this.loadBlockedSpells()
+        }
+      } catch (e) {
+        console.error('[ZoneCardPreview] Failed to remove blocked spell', e)
+        alert('Failed to remove blocked spell: ' + (e.message || e))
+      }
     },
 
     async loadZoneSpells() {
