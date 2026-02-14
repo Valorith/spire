@@ -26,6 +26,7 @@
     "highlight.js": "^9.18.3",
     "jquery": "^3.6.0",
     "leaflet": "^1.7.1",
+    "leaflet.markercluster": "^1.5.3",
     "markdown-it": "^12.2.0",
     "ninja-keys": "^1.2.2",
     "qs": "^6.5.2",
@@ -44,6 +45,7 @@
     "vue2-ace-editor": "^0.0.15",
     "vue2-dropzone": "^3.6.0",
     "vue2-leaflet": "^2.7.1",
+    "vue2-leaflet-markercluster": "^3.1.0",
     "vuex": "^3.6.2"
   },
   "devDependencies": {

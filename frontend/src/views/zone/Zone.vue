@@ -1,8 +1,11 @@
 <template>
   <div>
-    <div class="row no-gutters">
+    <div class="zone-editor-layout" ref="zoneLayout">
       <!-- Map Column — expands when sidebar is collapsed -->
-      <div :class="sidebarCollapsed ? 'col-12' : 'col-9'" style="transition: all 0.3s ease;">
+      <div
+        class="zone-map-panel"
+        :style="{ flex: sidebarCollapsed ? '1 1 100%' : 'none', width: sidebarCollapsed ? '100%' : mapWidth + 'px' }"
+      >
         <eq-zone-map
           v-if="zone && version"
           :zone="zone"
@@ -10,6 +13,17 @@
           @npc-marker-hover="processNpcMarkerHover"
           @spell-marker-hover="processSpellMarkerHover"
         />
+
+        <!-- Arrow overlay -->
+        <svg class="zone-arrow-overlay" ref="arrowOverlay" v-if="arrowLine">
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#ffc832" />
+            </marker>
+          </defs>
+          <line :x1="arrowLine.x1" :y1="arrowLine.y1" :x2="arrowLine.x2" :y2="arrowLine.y2"
+                stroke="#ffc832" stroke-width="2" stroke-dasharray="6,4" opacity="0.7" marker-end="url(#arrowhead)" />
+        </svg>
 
         <!-- Sidebar toggle (when collapsed) -->
         <b-button
@@ -22,14 +36,25 @@
         </b-button>
       </div>
 
+      <!-- Draggable Splitter -->
+      <div
+        v-show="!sidebarCollapsed"
+        class="zone-splitter"
+        :class="{ 'zone-splitter-active': isDragging }"
+        @mousedown.prevent="startDrag"
+      >
+        <div class="zone-splitter-handle"></div>
+      </div>
+
       <!-- Sidebar Column -->
       <div
         v-show="!sidebarCollapsed"
-        class="col-3 zone-sidebar"
+        class="zone-sidebar"
+        :style="{ flex: '1 1 0%', minWidth: '250px' }"
       >
         <!-- Sidebar header with collapse button -->
         <div class="zone-sidebar-header">
-          <span class="zone-sidebar-title" v-if="zoneData">
+          <span class="zone-sidebar-title eq-header" v-if="zoneData" style="font-size: 16px; margin: 0; padding: 0;">
             {{ zoneData.long_name || zone }}
           </span>
           <b-button
@@ -111,28 +136,149 @@ export default {
       zoneData: {},
       selectorActive: {},
       sidebarCollapsed: false,
+      mapWidth: 0,
+      isDragging: false,
+      arrowLine: null,
     }
   },
   beforeDestroy() {
     Navbar.expand()
     EventBus.$off("NPC_SHOW_CARD", this.handleNpcShowCardEvent);
+    EventBus.$off("SIDEBAR_HOVER_ARROW", this.handleSidebarArrow);
+    EventBus.$off("SIDEBAR_HOVER_ARROW_CLEAR", this.clearArrow);
+    document.removeEventListener('mousemove', this.onDrag);
+    document.removeEventListener('mouseup', this.stopDrag);
+    window.removeEventListener('resize', this.initSplitWidth);
   },
   created() {
     this.npc           = {}
     this.lastResetTime = Date.now()
     EventBus.$on("NPC_SHOW_CARD", this.handleNpcShowCardEvent);
+
+    // Restore saved split ratio
+    const saved = localStorage.getItem('zone-editor-split-ratio');
+    if (saved) {
+      this._savedRatio = parseFloat(saved);
+    }
   },
   watch: {
     '$route'() {
       this.init()
     },
+    sidebarCollapsed(collapsed) {
+      if (collapsed) {
+        // Clear saved ratio on collapse so expand always uses default
+        this._savedRatio = null;
+        localStorage.removeItem('zone-editor-split-ratio');
+      } else {
+        // Expanding — always use default 1/5 panel width
+        this._savedRatio = 0.80;
+        this.$nextTick(() => {
+          const layout = this.$refs.zoneLayout;
+          if (layout) {
+            const totalWidth = layout.clientWidth;
+            this.mapWidth = Math.round((totalWidth - 10) * 0.80);
+          }
+          this.$nextTick(() => {
+            window.dispatchEvent(new Event('resize'));
+          });
+        });
+      }
+    },
   },
 
   mounted() {
     this.init()
+    this.$nextTick(() => {
+      this.initSplitWidth();
+    });
+    window.addEventListener('resize', this.initSplitWidth);
+    EventBus.$on("SIDEBAR_HOVER_ARROW", this.handleSidebarArrow);
+    EventBus.$on("SIDEBAR_HOVER_ARROW_CLEAR", this.clearArrow);
   },
 
   methods: {
+    handleSidebarArrow(data) {
+      // data: { sourceEl (DOM element), lat, lng }
+      const layout = this.$refs.zoneLayout
+      if (!layout) return
+      const layoutRect = layout.getBoundingClientRect()
+
+      // Get source element position (sidebar item)
+      const srcRect = data.sourceEl.getBoundingClientRect()
+      const x1 = srcRect.left - layoutRect.left
+      const y1 = srcRect.top - layoutRect.top + srcRect.height / 2
+
+      // Ask map for marker pixel position
+      EventBus.$emit("MAP_GET_PIXEL", {
+        lat: data.lat,
+        lng: data.lng,
+        callback: (point, mapContainer) => {
+          if (!point || !mapContainer) { this.arrowLine = null; return }
+          const mapRect = mapContainer.getBoundingClientRect()
+          const x2 = point.x + mapRect.left - layoutRect.left
+          const y2 = point.y + mapRect.top - layoutRect.top
+          this.arrowLine = { x1, y1, x2, y2 }
+        }
+      })
+    },
+
+    clearArrow() {
+      this.arrowLine = null
+    },
+
+    initSplitWidth() {
+      const layout = this.$refs.zoneLayout;
+      if (!layout) return;
+      const totalWidth = layout.clientWidth;
+      const ratio = this._savedRatio || 0.80;
+      // Account for splitter width (10px)
+      this.mapWidth = Math.round((totalWidth - 10) * ratio);
+    },
+
+    startDrag(e) {
+      this.isDragging = true;
+      document.addEventListener('mousemove', this.onDrag);
+      document.addEventListener('mouseup', this.stopDrag);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    },
+
+    onDrag(e) {
+      if (!this.isDragging) return;
+      const layout = this.$refs.zoneLayout;
+      if (!layout) return;
+      const rect = layout.getBoundingClientRect();
+      const totalWidth = rect.width;
+      const minMap = 300;
+      const minSidebar = 250;
+      let newMapWidth = e.clientX - rect.left;
+      // If dragged past collapse threshold, snap sidebar closed
+      const collapseThreshold = totalWidth - 150;
+      if (newMapWidth > collapseThreshold) {
+        this.sidebarCollapsed = true;
+        this.stopDrag();
+        return;
+      }
+      // Clamp
+      newMapWidth = Math.max(minMap, Math.min(newMapWidth, totalWidth - minSidebar - 10));
+      this.mapWidth = newMapWidth;
+      // Save ratio
+      const ratio = newMapWidth / (totalWidth - 10);
+      localStorage.setItem('zone-editor-split-ratio', ratio.toFixed(4));
+      this._savedRatio = ratio;
+      // Trigger map resize
+      window.dispatchEvent(new Event('resize'));
+    },
+
+    stopDrag() {
+      this.isDragging = false;
+      document.removeEventListener('mousemove', this.onDrag);
+      document.removeEventListener('mouseup', this.stopDrag);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    },
+
 
     isZoneCardActive() {
       return Object.keys(this.selectorActive).length > 0 && this.selectorActive['zone-preview']
@@ -211,9 +357,97 @@ export default {
 </script>
 
 <style scoped>
-.zone-sidebar {
+.zone-arrow-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 999;
+}
+
+.zone-editor-layout {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: calc(100vh - 50px);
+  overflow: hidden;
+}
+
+.zone-map-panel {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.zone-splitter {
+  flex: 0 0 10px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+  z-index: 10;
   border-left: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.zone-splitter:hover,
+.zone-splitter-active {
+  background: rgba(255, 200, 50, 0.2);
+  border-left-color: rgba(255, 200, 50, 0.4);
+  border-right-color: rgba(255, 200, 50, 0.4);
+}
+
+.zone-splitter-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.zone-splitter-handle::before,
+.zone-splitter-handle::after {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: background 0.2s ease;
+}
+
+.zone-splitter-handle::before {
+  box-shadow: 0 -7px 0 rgba(255, 255, 255, 0.3);
+}
+
+.zone-splitter-handle::after {
+  box-shadow: 0 7px 0 rgba(255, 255, 255, 0.3);
+}
+
+.zone-splitter:hover .zone-splitter-handle::before,
+.zone-splitter:hover .zone-splitter-handle::after,
+.zone-splitter-active .zone-splitter-handle::before,
+.zone-splitter-active .zone-splitter-handle::after {
+  background: rgba(255, 200, 50, 0.7);
+}
+
+.zone-splitter:hover .zone-splitter-handle::before,
+.zone-splitter-active .zone-splitter-handle::before {
+  box-shadow: 0 -7px 0 rgba(255, 200, 50, 0.7);
+}
+
+.zone-splitter:hover .zone-splitter-handle::after,
+.zone-splitter-active .zone-splitter-handle::after {
+  box-shadow: 0 7px 0 rgba(255, 200, 50, 0.7);
+}
+
+.zone-sidebar {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .zone-sidebar-header {
