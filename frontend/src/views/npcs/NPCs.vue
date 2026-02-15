@@ -535,6 +535,9 @@ export default {
       // reset
       this.previewField = ""
       this.previewValue = ""
+      this.previewMinMaxData = {}
+      this.previewPercentageData = {}
+      this.previewVersion++
 
       this.resetPulseHighlights()
 
