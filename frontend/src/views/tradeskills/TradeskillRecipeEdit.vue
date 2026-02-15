@@ -1,7 +1,7 @@
 <template>
   <content-area>
     <eq-window :title="isNew ? 'Create New ' + tradeskillName + ' Recipe' : 'Edit ' + tradeskillName + ' Recipe: ' + recipe.name" style="position: relative;">
-      <div class="tradeskill-icon-badge">
+      <div v-if="!cloneNotification" class="tradeskill-icon-badge">
         <i :class="tradeskillIcon"></i>
       </div>
 
