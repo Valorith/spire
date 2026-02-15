@@ -520,7 +520,7 @@
         </div>
         <div v-else class="item-search-grid">
           <div
-            v-for="item in itemSearchResults"
+            v-for="item in pagedSearchResults"
             :key="'search-' + item.id"
             class="item-search-card"
             draggable="true"
@@ -532,6 +532,12 @@
             <div class="item-search-card-name">{{ item.Name || item.name }}</div>
             <div class="item-search-card-id">#{{ item.id }}</div>
           </div>
+        </div>
+        <!-- Pagination -->
+        <div v-if="itemSearchTotalPages > 1" class="d-flex justify-content-center align-items-center mt-2 mb-1" style="gap: 8px;">
+          <button class="count-btn count-btn-minus" @click="itemSearchPage = Math.max(1, itemSearchPage - 1)" :disabled="itemSearchPage <= 1"><i class="fa fa-minus"></i></button>
+          <small class="text-muted">Page {{ itemSearchPage }} / {{ itemSearchTotalPages }}</small>
+          <button class="count-btn count-btn-plus" @click="itemSearchPage = Math.min(itemSearchTotalPages, itemSearchPage + 1)" :disabled="itemSearchPage >= itemSearchTotalPages"><i class="fa fa-plus"></i></button>
         </div>
         </div>
       </div>
@@ -618,11 +624,20 @@ export default {
       itemSearchResults: [],
       itemSearching: false,
       itemSearchDebounce: null,
+      itemSearchPage: 1,
+      itemSearchPerPage: 12,
       dropHoverSection: null,
       showStandardContainers: true,
     };
   },
   computed: {
+    pagedSearchResults() {
+      var start = (this.itemSearchPage - 1) * this.itemSearchPerPage;
+      return this.itemSearchResults.slice(start, start + this.itemSearchPerPage);
+    },
+    itemSearchTotalPages() {
+      return Math.ceil(this.itemSearchResults.length / this.itemSearchPerPage);
+    },
     tradeskillName() {
       var names = {
         55: "Fishing", 56: "Make Poison", 57: "Tinkering", 58: "Research",
@@ -987,6 +1002,7 @@ export default {
       const q = this.itemSearchQuery.trim();
       if (!q) return;
       this.itemSearching = true;
+      this.itemSearchPage = 1;
       try {
         const api = SpireApi.v1();
         var params = {};
