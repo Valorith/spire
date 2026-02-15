@@ -37,7 +37,7 @@
       <div class="row" style="display: flex; flex-wrap: wrap;">
         <div class="col-lg-6" style="display: flex; flex-direction: column;">
           <eq-window title="Recipe Properties" class="mb-3" style="flex: 1;">
-            <table class="eq-table" style="font-size: 14px;">
+            <table class="eq-table" style="font-size: 14px; table-layout: fixed; width: 100%;">
               <tbody>
                 <tr>
                   <td style="width: 140px;" class="font-weight-bold">ID</td>
