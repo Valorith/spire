@@ -91,7 +91,7 @@
                 :key="row.id"
               >
                 <td
-                  :style="' text-align: center; ' + ([0, 1].includes(colIndex) ? ' position: sticky; z-index: 999; background-color: rgba(25,31,41, .95);' + getColumnStylingFromIndex(colIndex): '')"
+                  :style="' text-align: center; ' + ([0, 1].includes(colIndex) ? ' position: sticky; z-index: 99; background-color: rgba(25,31,41, .95);' + getColumnStylingFromIndex(colIndex): '')"
                   v-for="(key, colIndex) in cachedColumnKeys"
                   v-if="cachedObjectColumns[key] !== true"
                 >
