@@ -1503,6 +1503,8 @@ export default {
   background: rgba(30, 30, 45, 0.6);
   border: 1px solid rgba(200, 180, 120, 0.15);
   border-radius: 4px;
+  max-height: 95px;
+  overflow: hidden;
   cursor: grab;
   transition: all 0.15s ease;
   min-height: 100px;
