@@ -512,6 +512,11 @@
           <small class="text-muted ml-3 align-self-center" v-if="itemSearchResults.length > 0">
             {{ itemSearchResults.length }} results — drag into sections above
           </small>
+          <div v-if="itemSearchTotalPages > 1" class="d-flex align-items-center ml-auto" style="gap: 6px;">
+            <button class="count-btn count-btn-minus" @click="itemSearchPage = Math.max(1, itemSearchPage - 1)" :disabled="itemSearchPage <= 1"><i class="fa fa-minus"></i></button>
+            <small class="text-muted" style="white-space: nowrap;">Page {{ itemSearchPage }} / {{ itemSearchTotalPages }}</small>
+            <button class="count-btn count-btn-plus" @click="itemSearchPage = Math.min(itemSearchTotalPages, itemSearchPage + 1)" :disabled="itemSearchPage >= itemSearchTotalPages"><i class="fa fa-plus"></i></button>
+          </div>
         </div>
         <div class="item-search-grid-container">
         <div v-if="itemSearchResults.length === 0 && !itemSearching" class="text-muted text-center p-3" style="height: 318px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
@@ -532,12 +537,6 @@
             <div class="item-search-card-name">{{ item.Name || item.name }}</div>
             <div class="item-search-card-id">#{{ item.id }}</div>
           </div>
-        </div>
-        <!-- Pagination -->
-        <div v-if="itemSearchTotalPages > 1" class="d-flex justify-content-center align-items-center mt-2 mb-1" style="gap: 8px;">
-          <button class="count-btn count-btn-minus" @click="itemSearchPage = Math.max(1, itemSearchPage - 1)" :disabled="itemSearchPage <= 1"><i class="fa fa-minus"></i></button>
-          <small class="text-muted">Page {{ itemSearchPage }} / {{ itemSearchTotalPages }}</small>
-          <button class="count-btn count-btn-plus" @click="itemSearchPage = Math.min(itemSearchTotalPages, itemSearchPage + 1)" :disabled="itemSearchPage >= itemSearchTotalPages"><i class="fa fa-plus"></i></button>
         </div>
         </div>
       </div>
@@ -625,7 +624,7 @@ export default {
       itemSearching: false,
       itemSearchDebounce: null,
       itemSearchPage: 1,
-      itemSearchPerPage: 12,
+      itemSearchPerPage: 18,
       dropHoverSection: null,
       showStandardContainers: true,
     };
