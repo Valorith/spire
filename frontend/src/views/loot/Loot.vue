@@ -1,9 +1,9 @@
 <template>
   <content-area style="padding: 0 !important">
-    <div class="row" style="display: flex; flex-wrap: wrap;">
+    <div class="row">
       <!-- Left Panel: Search & List -->
-      <div class="col-4" style="display: flex; flex-direction: column;">
-        <eq-window title="Loot Tables" style="flex: 1;">
+      <div class="col-4">
+        <eq-window title="Loot Tables" ref="lootTablesWindow">
           <div class="d-flex mb-2">
             <input
               type="text"
@@ -81,7 +81,7 @@
       </div>
 
       <!-- Right Panel: Editor -->
-      <div class="col-8" style="display: flex; flex-direction: column;">
+      <div class="col-8">
         <!-- Empty State -->
         <eq-window v-if="!selectedTable" title="Loot Editor">
           <div class="text-center p-5" style="opacity: .4;">
@@ -91,7 +91,7 @@
         </eq-window>
 
         <!-- Editor -->
-        <div v-if="selectedTable" style="display: flex; flex-direction: column; flex: 1;">
+        <div v-if="selectedTable" ref="rightPanel">
           <!-- Header -->
           <eq-window class="p-0">
             <div class="loot-editor-header">
@@ -250,7 +250,7 @@
           </eq-window>
 
           <!-- Lootdrops -->
-          <eq-window title="Loot Drops" class="p-0" style="flex: 1; display: flex; flex-direction: column;">
+          <eq-window title="Loot Drops" class="p-0" ref="lootDropsWindow" :style="lootDropsStyle">
             <div class="d-flex justify-content-end px-3 pt-3 pb-1">
               <b-button
                 size="sm"
@@ -262,7 +262,7 @@
                 {{ allExpanded ? 'Collapse All' : 'Expand All' }}
               </b-button>
             </div>
-            <div class="lootdrops-wrapper" style="position: relative; flex: 1; overflow: hidden;">
+            <div class="lootdrops-wrapper" style="position: relative; overflow: hidden;" :style="lootdropsWrapperStyle">
             <div class="lootdrops-container" ref="lootdropsScroll" style="height: 100%; overflow-y: auto;" @scroll="onLootdropsScroll">
               <div
                 v-for="(le, leIndex) in editEntries"
@@ -726,6 +726,7 @@ export default {
       editTable: {},
       editEntries: [],
       showLootdropsScrollHint: false,
+      lootDropsMinHeight: 0,
       originalSnapshot: null,
       originalValues: {},
 
@@ -768,6 +769,17 @@ export default {
     },
   },
 
+  computed: {
+    lootDropsStyle() {
+      if (this.lootDropsMinHeight > 0) {
+        return { height: this.lootDropsMinHeight + 'px', display: 'flex', flexDirection: 'column' };
+      }
+      return { display: 'flex', flexDirection: 'column' };
+    },
+    lootdropsWrapperStyle() {
+      return this.lootDropsMinHeight > 0 ? { flex: '1', minHeight: '0' } : {};
+    },
+  },
   methods: {
     handleKeydown(e) {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -1015,7 +1027,7 @@ export default {
       this.rerenderContentFlags++
       this.originalSnapshot = JSON.stringify({ editTable: this.editTable, editEntries: this.editEntries })
       this.hasUnsavedChanges = false
-      this.$nextTick(() => this.checkLootdropsScroll())
+      this.$nextTick(() => { this.syncLootDropsHeight(); })
     },
 
     // --- CRUD ---
@@ -1346,6 +1358,20 @@ export default {
       }
     },
 
+    syncLootDropsHeight() {
+      this.$nextTick(() => {
+        const leftCol = this.$refs.lootTablesWindow;
+        const dropsWindow = this.$refs.lootDropsWindow;
+        if (!leftCol || !leftCol.$el || !dropsWindow || !dropsWindow.$el) return;
+        const leftBottom = leftCol.$el.getBoundingClientRect().bottom;
+        const dropsTop = dropsWindow.$el.getBoundingClientRect().top;
+        var targetHeight = leftBottom - dropsTop;
+        if (targetHeight > 200) {
+          this.lootDropsMinHeight = targetHeight;
+        }
+        this.$nextTick(() => this.checkLootdropsScroll());
+      });
+    },
     checkLootdropsScroll() {
       const el = this.$refs.lootdropsScroll;
       if (!el) return;
