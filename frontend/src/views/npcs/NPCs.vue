@@ -309,10 +309,8 @@ export default {
     },
 
     previewStyles(header) {
-      if (this.previewField === header) {
-        return 'padding-left: 75px !important; padding-right: 75px !important; '
-      }
-
+      // Removed dynamic padding — it caused full table reflow on field selection
+      // The preview values (-> newValue) now display inline without extra column space
       return ''
     },
 
@@ -396,7 +394,6 @@ export default {
       // reset min max
       this.previewMinMaxData     = {}
       this.previewPercentageData = {}
-
       this.previewField = e.field
       this.previewValue = e.value
     },
