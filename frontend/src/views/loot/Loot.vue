@@ -1,9 +1,9 @@
 <template>
   <content-area style="padding: 0 !important">
-    <div class="row">
+    <div class="row" style="display: flex; flex-wrap: wrap;">
       <!-- Left Panel: Search & List -->
-      <div class="col-4">
-        <eq-window title="Loot Tables">
+      <div class="col-4" style="display: flex; flex-direction: column;">
+        <eq-window title="Loot Tables" style="flex: 1;">
           <div class="d-flex mb-2">
             <input
               type="text"
@@ -81,7 +81,7 @@
       </div>
 
       <!-- Right Panel: Editor -->
-      <div class="col-8">
+      <div class="col-8" style="display: flex; flex-direction: column;">
         <!-- Empty State -->
         <eq-window v-if="!selectedTable" title="Loot Editor">
           <div class="text-center p-5" style="opacity: .4;">
@@ -91,7 +91,7 @@
         </eq-window>
 
         <!-- Editor -->
-        <div v-if="selectedTable">
+        <div v-if="selectedTable" style="display: flex; flex-direction: column; flex: 1;">
           <!-- Header -->
           <eq-window class="p-0">
             <div class="loot-editor-header">
@@ -185,6 +185,26 @@
                 </div>
               </div>
 
+              <!-- Content Flags (Loottable Level) -->
+              <div class="row mt-2">
+                <div class="col-6">
+                  <label class="small mb-0" style="opacity:.7;">Content Flags</label>
+                  <content-flag-selector
+                    :value="editTable.content_flags"
+                    @input="editTable.content_flags = $event; trackFieldEdit('table-content_flags', originalValues.table?.content_flags || '', editTable.content_flags)"
+                    :key="'lt-cf-' + rerenderContentFlags"
+                  />
+                </div>
+                <div class="col-6">
+                  <label class="small mb-0" style="opacity:.7;">Content Flags Disabled</label>
+                  <content-flag-selector
+                    :value="editTable.content_flags_disabled"
+                    @input="editTable.content_flags_disabled = $event; trackFieldEdit('table-content_flags_disabled', originalValues.table?.content_flags_disabled || '', editTable.content_flags_disabled)"
+                    :key="'lt-cfd-' + rerenderContentFlags"
+                  />
+                </div>
+              </div>
+
               <!-- Linked NPCs -->
               <div v-if="selectedTable.npc_types && (selectedTable.npc_types || []).length > 0" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
                 <div
@@ -230,7 +250,7 @@
           </eq-window>
 
           <!-- Lootdrops -->
-          <eq-window title="Loot Drops" class="p-0">
+          <eq-window title="Loot Drops" class="p-0" style="flex: 1; display: flex; flex-direction: column;">
             <div class="d-flex justify-content-end px-3 pt-3 pb-1">
               <b-button
                 size="sm"
@@ -242,7 +262,8 @@
                 {{ allExpanded ? 'Collapse All' : 'Expand All' }}
               </b-button>
             </div>
-            <div class="lootdrops-container" style="max-height: calc(100vh - 450px); overflow-y: auto;">
+            <div class="lootdrops-wrapper" style="position: relative; flex: 1; overflow: hidden;">
+            <div class="lootdrops-container" ref="lootdropsScroll" style="height: 100%; overflow-y: auto;" @scroll="onLootdropsScroll">
               <div
                 v-for="(le, leIndex) in editEntries"
                 :key="'le-' + leIndex"
@@ -339,16 +360,37 @@
 
                 <!-- Lootdrop Items -->
                 <div v-if="le._expanded && le.lootdrop" class="lootdrop-items">
+                  <!-- Content Flags (Lootdrop Level) -->
+                  <div class="row mx-2 mt-2 mb-1">
+                    <div class="col-6">
+                      <label class="small mb-0" style="opacity:.7;">Content Flags</label>
+                      <content-flag-selector
+                        :value="le.lootdrop.content_flags"
+                        @input="le.lootdrop.content_flags = $event; trackFieldEdit('ld-' + leIndex + '-content_flags', originalValues.entries?.[leIndex]?.lootdrop_content_flags || '', le.lootdrop.content_flags)"
+                        :key="'ld-cf-' + leIndex + '-' + rerenderContentFlags"
+                      />
+                    </div>
+                    <div class="col-6">
+                      <label class="small mb-0" style="opacity:.7;">Content Flags Disabled</label>
+                      <content-flag-selector
+                        :value="le.lootdrop.content_flags_disabled"
+                        @input="le.lootdrop.content_flags_disabled = $event; trackFieldEdit('ld-' + leIndex + '-content_flags_disabled', originalValues.entries?.[leIndex]?.lootdrop_content_flags_disabled || '', le.lootdrop.content_flags_disabled)"
+                        :key="'ld-cfd-' + leIndex + '-' + rerenderContentFlags"
+                      />
+                    </div>
+                  </div>
+
                   <table class="eq-table eq-highlight-rows w-100" style="font-size: 13px;">
                     <thead>
                       <tr>
-                        <th style="width: 40%;">Item</th>
-                        <th style="width: 10%;" class="text-center">Chance</th>
-                        <th style="width: 8%;" class="text-center">Qty</th>
-                        <th style="width: 8%;" class="text-center">Equip</th>
-                        <th style="width: 12%;" class="text-center">NPC Lvl</th>
-                        <th style="width: 12%;" class="text-center">Trivial Lvl</th>
-                        <th style="width: 10%;" class="text-center">Actions</th>
+                        <th style="width: 22%;">Item</th>
+                        <th style="width: 7%;" class="text-center">Chance</th>
+                        <th style="width: 5%;" class="text-center">Qty</th>
+                        <th style="width: 5%;" class="text-center">Equip</th>
+                        <th style="width: 10%;" class="text-center">NPC Lvl</th>
+                        <th style="width: 10%;" class="text-center">Trivial Lvl</th>
+                        <th style="width: 5%;" class="text-center" title="Content Flags"><i class="fa fa-flag" style="color: #e8c56d;"></i></th>
+                        <th style="width: 7%;" class="text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -450,6 +492,40 @@
                               style="width: 50%;"
                             >
                           </div>
+                        </td>
+                        <td class="text-center">
+                          <b-dropdown
+                            size="sm"
+                            variant="link"
+                            no-caret
+                            right
+                            :disabled="lde._pendingDelete"
+                            class="content-flag-dropdown"
+                            :class="{ 'content-flag-edited': isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-content_flags') || isFieldEdited('lde-' + leIndex + '-' + ldeIndex + '-content_flags_disabled') }"
+                          >
+                            <template #button-content>
+                              <i class="fa fa-flag" :style="{ color: (lde.content_flags || lde.content_flags_disabled) ? '#e8c56d' : '#555' }"></i>
+                              <span v-if="flagCount(lde)" class="badge badge-warning ml-1" style="font-size: 10px;">{{ flagCount(lde) }}</span>
+                            </template>
+                            <div class="p-3" style="min-width: 280px;" @click.stop>
+                              <div class="mb-2">
+                                <label class="small font-weight-bold text-muted mb-1">Content Flags</label>
+                                <content-flag-selector
+                                  :value="lde.content_flags"
+                                  @input="lde.content_flags = $event; trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-content_flags', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.content_flags || '', lde.content_flags)"
+                                  :key="'lde-cf-' + leIndex + '-' + ldeIndex + '-' + rerenderContentFlags"
+                                />
+                              </div>
+                              <div>
+                                <label class="small font-weight-bold text-muted mb-1">Flags Disabled</label>
+                                <content-flag-selector
+                                  :value="lde.content_flags_disabled"
+                                  @input="lde.content_flags_disabled = $event; trackFieldEdit('lde-' + leIndex + '-' + ldeIndex + '-content_flags_disabled', originalValues.entries?.[leIndex]?.lootdrop_entries?.[ldeIndex]?.content_flags_disabled || '', lde.content_flags_disabled)"
+                                  :key="'lde-cfd-' + leIndex + '-' + ldeIndex + '-' + rerenderContentFlags"
+                                />
+                              </div>
+                            </div>
+                          </b-dropdown>
                         </td>
                         <td class="text-center">
                           <b-button
@@ -588,6 +664,14 @@
                 </b-button>
               </div>
             </div>
+            <transition name="fade">
+              <div v-if="showLootdropsScrollHint" class="scroll-hint-overlay" @click="scrollLootdropsToBottom">
+                <div class="scroll-hint-arrow">
+                  <i class="fa fa-chevron-down"></i>
+                </div>
+              </div>
+            </transition>
+            </div>
           </eq-window>
 
           <!-- Delete -->
@@ -622,6 +706,7 @@ import ContentArea         from "../../components/layout/ContentArea";
 import ItemPopover         from "../../components/ItemPopover";
 import NpcPopover          from "../../components/NpcPopover";
 import EqCashDisplay       from "../../components/eq-ui/EqCashDisplay";
+import ContentFlagSelector from "../../components/selectors/ContentFlagSelector";
 import {ROUTE}             from "../../routes";
 import {LoottableApi, ItemApi} from "../../app/api";
 import {LoottableEntryApi} from "../../app/api/api/loottable-entry-api";
@@ -633,13 +718,14 @@ import {debounce}          from "../../app/utility/debounce";
 
 export default {
   name: "Loot",
-  components: { EqCashDisplay, NpcPopover, ItemPopover, EqCheckbox, ContentArea, EqWindow },
+  components: { EqCashDisplay, NpcPopover, ItemPopover, EqCheckbox, ContentArea, EqWindow, ContentFlagSelector },
   data() {
     return {
       tableData: [],
       selectedTable: null,
       editTable: {},
       editEntries: [],
+      showLootdropsScrollHint: false,
       originalSnapshot: null,
       originalValues: {},
 
@@ -661,6 +747,7 @@ export default {
       notification: null,
       npcsExpanded: false,
       allExpanded: false,
+      rerenderContentFlags: 0,
     }
   },
 
@@ -704,6 +791,12 @@ export default {
       return !!this.pendingChanges.editedFields[key]
     },
 
+    flagCount(lde) {
+      let count = 0;
+      if (lde.content_flags) count += lde.content_flags.split(',').filter(f => f.trim()).length;
+      if (lde.content_flags_disabled) count += lde.content_flags_disabled.split(',').filter(f => f.trim()).length;
+      return count;
+    },
     trackFieldEdit(key, oldVal, newVal) {
       // Coerce to same type for comparison (v-model.number can return string or number)
       const oldNum = Number(oldVal)
@@ -867,7 +960,7 @@ export default {
       if (this.hasUnsavedChanges) {
         if (!confirm('You have unsaved changes. Discard?')) return
       }
-      this.selectedTable = lt
+      this.selectedTable = JSON.parse(JSON.stringify(lt))
       this.editTable = {
         id: lt.id,
         name: lt.name,
@@ -888,7 +981,9 @@ export default {
         _newItemChance: 10,
         lootdrop: {
           ...le.lootdrop,
-          lootdrop_entries: le.lootdrop.lootdrop_entries ? [...le.lootdrop.lootdrop_entries] : [],
+          lootdrop_entries: le.lootdrop.lootdrop_entries
+            ? le.lootdrop.lootdrop_entries.map(lde => ({ ...lde }))
+            : [],
         },
       }))
       
@@ -898,6 +993,8 @@ export default {
         entries: JSON.parse(JSON.stringify(this.editEntries.map(le => ({
           probability: le.probability,
           multiplier: le.multiplier,
+          lootdrop_content_flags: le.lootdrop?.content_flags || '',
+          lootdrop_content_flags_disabled: le.lootdrop?.content_flags_disabled || '',
           droplimit: le.droplimit,
           mindrop: le.mindrop,
           lootdrop_entries: (le.lootdrop?.lootdrop_entries || []).map(lde => ({
@@ -908,13 +1005,17 @@ export default {
             npc_max_level: lde.npc_max_level,
             trivial_min_level: lde.trivial_min_level,
             trivial_max_level: lde.trivial_max_level,
+            content_flags: lde.content_flags || '',
+            content_flags_disabled: lde.content_flags_disabled || '',
           }))
         }))))
       }
       
       this.resetPendingChanges()
+      this.rerenderContentFlags++
       this.originalSnapshot = JSON.stringify({ editTable: this.editTable, editEntries: this.editEntries })
       this.hasUnsavedChanges = false
+      this.$nextTick(() => this.checkLootdropsScroll())
     },
 
     // --- CRUD ---
@@ -931,7 +1032,11 @@ export default {
           try {
             // Create lootdrop
             const r = await ldApi.createLootdrop({
-              lootdrop: { name: newLe.lootdrop.name }
+              lootdrop: {
+                name: newLe.lootdrop.name,
+                content_flags: newLe.lootdrop.content_flags || '',
+                content_flags_disabled: newLe.lootdrop.content_flags_disabled || '',
+              }
             })
             const createdDrop = Array.isArray(r.data) ? r.data[0] : r.data
             
@@ -980,6 +1085,8 @@ export default {
                   npc_max_level: addedItem.lde.npc_max_level || 0,
                   trivial_min_level: addedItem.lde.trivial_min_level || 0,
                   trivial_max_level: addedItem.lde.trivial_max_level || 0,
+                  content_flags: addedItem.lde.content_flags || '',
+                  content_flags_disabled: addedItem.lde.content_flags_disabled || '',
                 }
               })
               
@@ -1044,6 +1151,34 @@ export default {
           }
         }
 
+        // Lootdrop fields (content_flags, content_flags_disabled)
+        const ldUpdated = new Set()
+        for (const [fieldKey, change] of Object.entries(this.pendingChanges.editedFields)) {
+          if (fieldKey.startsWith('ld-') && !fieldKey.startsWith('lde-')) {
+            const parts = fieldKey.split('-')
+            const leIndex = parseInt(parts[1])
+            const le = this.editEntries[leIndex]
+            if (le && le.lootdrop && le.lootdrop.id && !le._pendingAdd && !le._pendingDelete && !ldUpdated.has(leIndex)) {
+              ldUpdated.add(leIndex)
+
+              try {
+                await ldApi.updateLootdrop({
+                  id: le.lootdrop.id,
+                  lootdrop: {
+                    name: le.lootdrop.name || '',
+                    content_flags: le.lootdrop.content_flags || '',
+                    content_flags_disabled: le.lootdrop.content_flags_disabled || '',
+                    min_expansion: le.lootdrop.min_expansion || -1,
+                    max_expansion: le.lootdrop.max_expansion || -1,
+                  }
+                })
+              } catch (e) {
+                console.error('Error updating lootdrop:', e)
+              }
+            }
+          }
+        }
+
         // Lootdrop entry fields (chance, levels, etc.)
         // Deduplicate: only update each unique lootdrop_id+item_id combo once
         const ldeUpdated = new Set()
@@ -1072,6 +1207,8 @@ export default {
                     multiplier: lde.multiplier || 1,
                     npc_min_level: lde.npc_min_level || 0,
                     npc_max_level: lde.npc_max_level || 0,
+                    content_flags: lde.content_flags || '',
+                    content_flags_disabled: lde.content_flags_disabled || '',
                   }, { params: { item_id: lde.item_id } })
               } catch (e) {
                 console.error('Error updating lootdrop entry:', e)
@@ -1209,6 +1346,19 @@ export default {
       }
     },
 
+    checkLootdropsScroll() {
+      const el = this.$refs.lootdropsScroll;
+      if (!el) return;
+      this.showLootdropsScrollHint = el.scrollHeight > el.clientHeight &&
+        (el.scrollHeight - el.scrollTop - el.clientHeight) > 30;
+    },
+    onLootdropsScroll() {
+      this.checkLootdropsScroll();
+    },
+    scrollLootdropsToBottom() {
+      const el = this.$refs.lootdropsScroll;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    },
     addLootdrop() {
       // Create placeholder lootdrop entry
       const newLe = {
@@ -1531,6 +1681,24 @@ export default {
 }
 </script>
 
+<style>
+.content-flag-dropdown .dropdown-menu {
+  background: rgba(20, 20, 35, 0.98);
+  border: 1px solid rgba(200, 180, 120, 0.3);
+}
+.content-flag-dropdown .btn-link {
+  padding: 2px 6px;
+  color: inherit;
+}
+.content-flag-dropdown .btn-link:hover {
+  text-decoration: none;
+}
+.content-flag-edited .btn-link {
+  background: rgba(255, 165, 0, 0.25);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(255, 165, 0, 0.5);
+}
+</style>
 <style scoped>
 .loot-list-item {
   padding: 8px 12px;
@@ -1720,5 +1888,35 @@ export default {
   background: rgba(255, 152, 0, 0.2) !important;
   border-color: #ff9800 !important;
   box-shadow: 0 0 4px rgba(255, 152, 0, 0.3);
+}
+.scroll-hint-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(transparent, rgba(15, 15, 25, 0.95));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 5;
+}
+.scroll-hint-arrow {
+  color: #e8c56d;
+  font-size: 18px;
+  animation: pulse-bounce 1.5s ease-in-out infinite;
+}
+@keyframes pulse-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.6; }
+  50% { transform: translateY(5px); opacity: 1; }
+}
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s;
+}
+.fade-enter, .fade-leave-to {
+  opacity: 0;
 }
 </style>
