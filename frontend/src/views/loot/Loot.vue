@@ -727,6 +727,7 @@ export default {
       editEntries: [],
       showLootdropsScrollHint: false,
       lootDropsMinHeight: 0,
+      lootdropsMaxHeight: 0,
       originalSnapshot: null,
       originalValues: {},
 
@@ -777,7 +778,10 @@ export default {
       return { display: 'flex', flexDirection: 'column' };
     },
     lootdropsWrapperStyle() {
-      return this.lootDropsMinHeight > 0 ? { flex: '1', minHeight: '0' } : {};
+      if (this.lootdropsMaxHeight > 0) {
+        return { height: this.lootdropsMaxHeight + 'px' };
+      }
+      return {};
     },
   },
   methods: {
@@ -1362,6 +1366,7 @@ export default {
       this.$nextTick(() => {
         const leftCol = this.$refs.lootTablesWindow;
         const dropsWindow = this.$refs.lootDropsWindow;
+        const wrapper = this.$refs.lootdropsScroll;
         if (!leftCol || !leftCol.$el || !dropsWindow || !dropsWindow.$el) return;
         const leftBottom = leftCol.$el.getBoundingClientRect().bottom;
         const dropsTop = dropsWindow.$el.getBoundingClientRect().top;
@@ -1369,7 +1374,17 @@ export default {
         if (targetHeight > 200) {
           this.lootDropsMinHeight = targetHeight;
         }
-        this.$nextTick(() => this.checkLootdropsScroll());
+        // Calculate scrollable area height = total frame height minus the toolbar/header
+        this.$nextTick(() => {
+          if (wrapper && wrapper.parentElement) {
+            const wrapperTop = wrapper.parentElement.getBoundingClientRect().top;
+            var scrollHeight = leftBottom - wrapperTop;
+            if (scrollHeight > 100) {
+              this.lootdropsMaxHeight = scrollHeight;
+            }
+          }
+          this.checkLootdropsScroll();
+        });
       });
     },
     checkLootdropsScroll() {
