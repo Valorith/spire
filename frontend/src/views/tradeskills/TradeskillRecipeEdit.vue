@@ -1,6 +1,9 @@
 <template>
   <content-area>
-    <eq-window :title="isNew ? 'Create New Recipe' : 'Edit Recipe: ' + recipe.name">
+    <eq-window :title="isNew ? 'Create New ' + tradeskillName + ' Recipe' : 'Edit ' + tradeskillName + ' Recipe: ' + recipe.name" style="position: relative;">
+      <div class="tradeskill-icon-badge">
+        <i :class="tradeskillIcon"></i>
+      </div>
       <!-- Top Controls -->
       <div class="row mb-3">
         <div class="col-12">
@@ -125,7 +128,7 @@
                   <td class="font-weight-bold">Learned By Item</td>
                   <td>
                     <div class="d-flex align-items-center" style="position: relative;">
-                      <div style="width: 280px; position: relative;">
+                      <div style="width: 280px; max-width: 100%; position: relative;">
                         <input
                           type="text"
                           class="form-control form-control-sm"
@@ -215,7 +218,7 @@
            <div class="recipe-entries-wrapper">
            <div class="recipe-entries-scroll" ref="entriesScroll" @scroll="onEntriesScroll">
             <!-- Components (inputs) -->
-            <div class="mb-3">
+            <div class="mb-3 drop-section" :class="{ 'drop-hover': dropHoverSection === 'component' }" @dragover.prevent="onSectionDragOver($event, 'component')" @dragleave="onSectionDragLeave('component')" @drop="onSectionDrop($event, 'component')">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0" style="color: #ffc107;">
                   <i class="ra ra-cog mr-1"></i> Components (Inputs)
@@ -260,22 +263,20 @@
 
             <hr style="border-color: rgba(255,255,255,0.1);">
 
-            <!-- Success Results (outputs) -->
-            <div class="mb-3">
+            <!-- Containers -->
+            <div class="mb-3 drop-section" :class="{ 'drop-hover': dropHoverSection === 'container' }" @dragover.prevent="onSectionDragOver($event, 'container')" @dragleave="onSectionDragLeave('container')" @drop="onSectionDrop($event, 'container')">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0" style="color: #28a745;">
-                  <i class="fa fa-check mr-1"></i> Success Results
-                  <small v-if="successEntries.length > 0" class="text-muted ml-1">({{ successEntries.length }})</small>
+                <h6 class="mb-0" style="color: #6c757d;">
+                  <i class="ra ra-wooden-crate mr-1"></i> Containers
                 </h6>
-                <b-button size="sm" variant="outline-success" @click="showItemSearch('success')">
+                <b-button size="sm" variant="outline-success" @click="showItemSearch('container')">
                   <i class="fa fa-plus"></i> Add
                 </b-button>
               </div>
-              <div v-if="successEntries.length === 0" class="text-muted text-center p-2">
-                No success results added yet.
+              <div v-if="containerEntries.length === 0" class="text-muted text-center p-2">
+                No container set (will use any valid container).
               </div>
-              <div class="entry-scroll-area">
-              <div v-for="(entry, idx) in successEntries" :key="'succ-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'success')" @dragover.prevent @drop="onDrop(entry, 'success')">
+              <div v-for="(entry, idx) in containerEntries" :key="'cont-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="d-flex align-items-center">
                     <item-popover
@@ -288,72 +289,17 @@
                     </span>
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
-                  <div class="d-flex align-items-center">
-                    <div class="mr-2">
-                      <small class="text-muted">Count:</small>
-                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.successcount" style="width: 60px;" min="1"
-                        @input="updateHasChanges()">
-                    </div>
-                    <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'success')">
-                      <i class="fa fa-times"></i>
-                    </b-button>
-                  </div>
+                  <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'container')">
+                    <i class="fa fa-times"></i>
+                  </b-button>
                 </div>
-              </div>
-              </div>
-            </div>
-
-            <hr style="border-color: rgba(255,255,255,0.1);">
-
-            <!-- Fail Results -->
-            <div class="mb-3">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0" style="color: #dc3545;">
-                  <i class="fa fa-times mr-1"></i> Fail Results
-                  <small v-if="failEntries.length > 0" class="text-muted ml-1">({{ failEntries.length }})</small>
-                </h6>
-                <b-button size="sm" variant="outline-success" @click="showItemSearch('fail')">
-                  <i class="fa fa-plus"></i> Add
-                </b-button>
-              </div>
-              <div v-if="failEntries.length === 0" class="text-muted text-center p-2">
-                No fail results added yet.
-              </div>
-              <div class="entry-scroll-area">
-              <div v-for="(entry, idx) in failEntries" :key="'fail-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'fail')" @dragover.prevent @drop="onDrop(entry, 'fail')">
-                <div class="d-flex align-items-center justify-content-between">
-                  <div class="d-flex align-items-center">
-                    <item-popover
-                      v-if="itemCache[entry.item_id] && !itemCache[entry.item_id]._missing"
-                      :item="itemCache[entry.item_id]"
-                      size="sm"
-                    />
-                    <span v-else-if="itemCache[entry.item_id] && itemCache[entry.item_id]._missing" class="text-warning">
-                      <i class="fa fa-exclamation-triangle"></i> Missing Item #{{ entry.item_id }}
-                    </span>
-                    <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
-                  </div>
-                  <div class="d-flex align-items-center">
-                    <div class="mr-2">
-                      <small class="text-muted">Count:</small>
-                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.failcount" style="width: 60px;" min="1"
-                        @input="updateHasChanges()">
-                    </div>
-                    <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'fail')">
-                      <i class="fa fa-times"></i>
-                    </b-button>
-                  </div>
-                </div>
-              </div>
               </div>
             </div>
 
             <hr style="border-color: rgba(255,255,255,0.1);">
 
             <!-- Salvage Results -->
-            <div class="mb-3">
+            <div class="mb-3 drop-section" :class="{ 'drop-hover': dropHoverSection === 'salvage' }" @dragover.prevent="onSectionDragOver($event, 'salvage')" @dragleave="onSectionDragLeave('salvage')" @drop="onSectionDrop($event, 'salvage')">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0" style="color: #17a2b8;">
                   <i class="ra ra-recycle mr-1"></i> Salvage Results
@@ -398,20 +344,22 @@
 
             <hr style="border-color: rgba(255,255,255,0.1);">
 
-            <!-- Containers -->
-            <div>
+            <!-- Fail Results -->
+            <div class="mb-3 drop-section" :class="{ 'drop-hover': dropHoverSection === 'fail' }" @dragover.prevent="onSectionDragOver($event, 'fail')" @dragleave="onSectionDragLeave('fail')" @drop="onSectionDrop($event, 'fail')">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0" style="color: #6c757d;">
-                  <i class="ra ra-wooden-crate mr-1"></i> Containers
+                <h6 class="mb-0" style="color: #dc3545;">
+                  <i class="fa fa-times mr-1"></i> Fail Results
+                  <small v-if="failEntries.length > 0" class="text-muted ml-1">({{ failEntries.length }})</small>
                 </h6>
-                <b-button size="sm" variant="outline-success" @click="showItemSearch('container')">
+                <b-button size="sm" variant="outline-success" @click="showItemSearch('fail')">
                   <i class="fa fa-plus"></i> Add
                 </b-button>
               </div>
-              <div v-if="containerEntries.length === 0" class="text-muted text-center p-2">
-                No container set (will use any valid container).
+              <div v-if="failEntries.length === 0" class="text-muted text-center p-2">
+                No fail results added yet.
               </div>
-              <div v-for="(entry, idx) in containerEntries" :key="'cont-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]">
+              <div class="entry-scroll-area">
+              <div v-for="(entry, idx) in failEntries" :key="'fail-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'fail')" @dragover.prevent @drop="onDrop(entry, 'fail')">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="d-flex align-items-center">
                     <item-popover
@@ -424,10 +372,65 @@
                     </span>
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
-                  <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'container')">
-                    <i class="fa fa-times"></i>
-                  </b-button>
+                  <div class="d-flex align-items-center">
+                    <div class="mr-2">
+                      <small class="text-muted">Count:</small>
+                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
+                        v-model.number="entry.failcount" style="width: 60px;" min="1"
+                        @input="updateHasChanges()">
+                    </div>
+                    <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'fail')">
+                      <i class="fa fa-times"></i>
+                    </b-button>
+                  </div>
                 </div>
+              </div>
+              </div>
+            </div>
+
+            <hr style="border-color: rgba(255,255,255,0.1);">
+
+            <!-- Success Results (outputs) -->
+            <div class="drop-section" :class="{ 'drop-hover': dropHoverSection === 'success' }" @dragover.prevent="onSectionDragOver($event, 'success')" @dragleave="onSectionDragLeave('success')" @drop="onSectionDrop($event, 'success')">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0" style="color: #28a745;">
+                  <i class="fa fa-check mr-1"></i> Success Results
+                  <small v-if="successEntries.length > 0" class="text-muted ml-1">({{ successEntries.length }})</small>
+                </h6>
+                <b-button size="sm" variant="outline-success" @click="showItemSearch('success')">
+                  <i class="fa fa-plus"></i> Add
+                </b-button>
+              </div>
+              <div v-if="successEntries.length === 0" class="text-muted text-center p-2">
+                No success results added yet.
+              </div>
+              <div class="entry-scroll-area">
+              <div v-for="(entry, idx) in successEntries" :key="'succ-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'success')" @dragover.prevent @drop="onDrop(entry, 'success')">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center">
+                    <item-popover
+                      v-if="itemCache[entry.item_id] && !itemCache[entry.item_id]._missing"
+                      :item="itemCache[entry.item_id]"
+                      size="sm"
+                    />
+                    <span v-else-if="itemCache[entry.item_id] && itemCache[entry.item_id]._missing" class="text-warning">
+                      <i class="fa fa-exclamation-triangle"></i> Missing Item #{{ entry.item_id }}
+                    </span>
+                    <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
+                  </div>
+                  <div class="d-flex align-items-center">
+                    <div class="mr-2">
+                      <small class="text-muted">Count:</small>
+                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
+                        v-model.number="entry.successcount" style="width: 60px;" min="1"
+                        @input="updateHasChanges()">
+                    </div>
+                    <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'success')">
+                      <i class="fa fa-times"></i>
+                    </b-button>
+                  </div>
+                </div>
+              </div>
               </div>
             </div>
            </div>
@@ -444,7 +447,49 @@
       </div>
     </eq-window>
 
-    <!-- Item Search Modal -->
+    <!-- Item Search Panel (inline, below editor) -->
+    <eq-window title="Item Search — Drag items into recipe sections above" class="mt-4 mb-4">
+      <div class="item-search-panel">
+        <div class="d-flex mb-3">
+          <input
+            type="text"
+            class="form-control form-control-sm"
+            v-model="itemSearchQuery"
+            @input="onItemSearchInput()"
+            @keydown.enter.prevent="searchItems()"
+            placeholder="Search items by name or ID..."
+            style="max-width: 400px; width: 100%;"
+          >
+          <b-button size="sm" variant="outline-warning" class="ml-2" @click="searchItems()" :disabled="itemSearching">
+            <i :class="itemSearching ? 'fa fa-spinner fa-spin' : 'fa fa-search'"></i> Search
+          </b-button>
+          <small class="text-muted ml-3 align-self-center" v-if="itemSearchResults.length > 0">
+            {{ itemSearchResults.length }} results — drag into sections above
+          </small>
+        </div>
+        <div v-if="itemSearchResults.length === 0 && !itemSearching" class="text-muted text-center p-3">
+          <i class="fa fa-search" style="font-size: 24px; opacity: 0.3;"></i>
+          <div class="mt-2">Search for items to drag into your recipe</div>
+        </div>
+        <div class="item-search-grid">
+          <div
+            v-for="item in itemSearchResults"
+            :key="'search-' + item.id"
+            class="item-search-card"
+            draggable="true"
+            @dragstart="onSearchItemDragStart($event, item)"
+          >
+            <div class="item-search-card-icon">
+              <item-popover :item="item" size="regular" :show-name="false" />
+            </div>
+            <div class="item-search-card-name">{{ item.Name || item.name }}</div>
+            <div class="item-search-card-id">#{{ item.id }}</div>
+          </div>
+        </div>
+      </div>
+    </eq-window>
+
+    <!-- Item Search Modal (fallback) -->
     <b-modal ref="itemSearchModal" title="Search Items" size="xl" hide-footer>
       <item-selector @input="onItemSelected($event)" />
     </b-modal>
@@ -517,9 +562,34 @@ export default {
       originalValues: {},
       originalEntryMap: {},
       pendingChanges: { editedFields: {} },
+      // Item Search Panel
+      itemSearchQuery: "",
+      itemSearchResults: [],
+      itemSearching: false,
+      itemSearchDebounce: null,
+      dropHoverSection: null,
     };
   },
   computed: {
+    tradeskillName() {
+      var names = {
+        55: "Fishing", 56: "Make Poison", 57: "Tinkering", 58: "Research",
+        59: "Alchemy", 60: "Baking", 61: "Tailoring", 63: "Blacksmithing",
+        64: "Fletching", 65: "Brewing", 68: "Jewelry Making", 69: "Pottery",
+        75: "Quest Combines",
+      };
+      return names[this.tradeskillId] || "Unknown";
+    },
+    tradeskillIcon() {
+      var icons = {
+        55: "ra ra-fish", 56: "ra ra-death-skull", 57: "ra ra-gear-hammer",
+        58: "ra ra-book", 59: "ra ra-potion", 60: "ra ra-campfire",
+        61: "ra ra-vest", 63: "ra ra-anvil", 64: "ra ra-arrow-flights",
+        65: "ra ra-beer", 68: "ra ra-gem-pendant", 69: "ra ra-hand",
+        75: "ra ra-scroll-unfurled",
+      };
+      return icons[this.tradeskillId] || "ra ra-cog";
+    },
     maxSkill() {
       return 350;
     },
@@ -797,6 +867,90 @@ export default {
       const el = this.$refs.entriesScroll;
       if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     },
+    // --- Item Search Panel ---
+    onItemSearchInput() {
+      clearTimeout(this.itemSearchDebounce);
+      this.itemSearchDebounce = setTimeout(() => {
+        if (this.itemSearchQuery.trim().length >= 2) {
+          this.searchItems();
+        }
+      }, 350);
+    },
+    async searchItems() {
+      const q = this.itemSearchQuery.trim();
+      if (!q) return;
+      this.itemSearching = true;
+      try {
+        const api = SpireApi.v1();
+        var params = {};
+        if (/^\d+$/.test(q)) {
+          params = { where: 'id__' + q, limit: 50 };
+        } else {
+          params = { where: 'Name_like_' + q, limit: 50 };
+        }
+        const r = await api.get('items', { params: params });
+        if (r && r.data) {
+          this.itemSearchResults = Array.isArray(r.data) ? r.data : [];
+          // Cache all results
+          for (const item of this.itemSearchResults) {
+            this.$set(this.itemCache, item.id, item);
+          }
+        }
+      } catch (e) {
+        console.error('Item search error:', e);
+      }
+      this.itemSearching = false;
+    },
+    onSearchItemDragStart(event, item) {
+      event.dataTransfer.setData('application/x-spire-item', JSON.stringify({ id: item.id, name: item.Name || item.name }));
+      event.dataTransfer.effectAllowed = 'copy';
+    },
+    onSectionDragOver(event, section) {
+      if (event.dataTransfer.types.includes('application/x-spire-item')) {
+        event.dataTransfer.dropEffect = 'copy';
+        this.dropHoverSection = section;
+      }
+    },
+    onSectionDragLeave(section) {
+      if (this.dropHoverSection === section) {
+        this.dropHoverSection = null;
+      }
+    },
+    onSectionDrop(event, section) {
+      this.dropHoverSection = null;
+      var data = event.dataTransfer.getData('application/x-spire-item');
+      if (!data) return;
+      try {
+        var itemData = JSON.parse(data);
+        if (!itemData || !itemData.id) return;
+
+        var newEntry = {
+          id: null,
+          recipe_id: this.recipeId || 0,
+          item_id: itemData.id,
+          componentcount: 0,
+          successcount: 0,
+          failcount: 0,
+          salvagecount: 0,
+          iscontainer: 0,
+          _isNew: true,
+        };
+
+        switch (section) {
+          case 'component': newEntry.componentcount = 1; break;
+          case 'success': newEntry.successcount = 1; break;
+          case 'fail': newEntry.failcount = 1; break;
+          case 'salvage': newEntry.salvagecount = 1; break;
+          case 'container': newEntry.iscontainer = 1; break;
+        }
+
+        this.entries.push(newEntry);
+        this.updateHasChanges();
+      } catch (e) {
+        console.error('Drop parse error:', e);
+      }
+    },
+    // --- End Item Search Panel ---
     onDragStart(entry, type) {
       this.draggedEntry = entry;
       this.draggedType = type;
@@ -1147,5 +1301,132 @@ export default {
 @keyframes save-glow {
   0%, 100% { box-shadow: 0 0 4px rgba(255, 100, 0, 0.3); }
   50% { box-shadow: 0 0 12px rgba(255, 100, 0, 0.7); }
+}
+
+/* Mobile Responsive */
+/* Ensure recipe properties table doesn't overflow */
+.eq-table {
+  table-layout: fixed;
+  width: 100%;
+}
+.eq-table td:nth-child(2) {
+  overflow: hidden;
+}
+.eq-table .d-flex.align-items-center {
+  flex-wrap: wrap;
+}
+.eq-table .skill-slider {
+  min-width: 60px;
+}
+
+@media (max-width: 991px) {
+  .eq-table td:first-child {
+    width: 90px !important;
+    font-size: 12px;
+  }
+  .entry-row .d-flex {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .item-search-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+}
+@media (max-width: 576px) {
+  .eq-table td:first-child {
+    width: 75px !important;
+    font-size: 11px;
+  }
+  .eq-table input.form-control-sm,
+  .eq-table textarea.form-control-sm {
+    font-size: 12px;
+  }
+  .item-search-grid {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  }
+  .tradeskill-icon-badge {
+    font-size: 24px;
+    top: 8px;
+    right: 10px;
+  }
+}
+
+/* Tradeskill Icon Badge */
+.tradeskill-icon-badge {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 32px;
+  color: #e8c56d;
+  pointer-events: none;
+}
+
+/* Item Search Panel */
+.item-search-panel {
+  min-height: 100px;
+}
+.item-search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.item-search-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+  padding: 8px 8px 24px 8px;
+  background: rgba(30, 30, 45, 0.6);
+  border: 1px solid rgba(200, 180, 120, 0.15);
+  border-radius: 4px;
+  cursor: grab;
+  transition: all 0.15s ease;
+  min-height: 100px;
+}
+.item-search-card-icon {
+  margin-bottom: 4px;
+}
+/* Hide the inline name from ItemPopover — we render our own */
+.item-search-card-icon > div > div > span:nth-child(2) {
+  display: none !important;
+}
+.item-search-card-name {
+  font-size: 11px;
+  color: #e0d8c8;
+  line-height: 1.2;
+  word-break: break-word;
+}
+.item-search-card:hover {
+  background: rgba(50, 50, 70, 0.8);
+  border-color: rgba(200, 180, 120, 0.4);
+  box-shadow: 0 0 8px rgba(200, 180, 120, 0.2);
+}
+.item-search-card:active {
+  cursor: grabbing;
+}
+.item-search-card-id {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 10px;
+  color: #888;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+/* Drop zone highlighting */
+.drop-section {
+  border-radius: 6px;
+  border: 2px solid transparent;
+  padding: 6px;
+  transition: all 0.2s ease;
+}
+.drop-section.drop-hover {
+  border-color: rgba(255, 193, 7, 0.6);
+  background: rgba(255, 193, 7, 0.08);
+  box-shadow: inset 0 0 12px rgba(255, 193, 7, 0.1);
 }
 </style>
