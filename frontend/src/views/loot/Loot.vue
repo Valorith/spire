@@ -757,11 +757,13 @@ export default {
     this.init()
     window.addEventListener('keydown', this.handleKeydown)
     window.addEventListener('beforeunload', this.beforeUnload)
+    window.addEventListener('resize', this.onWindowResize)
   },
 
   beforeDestroy() {
     window.removeEventListener('keydown', this.handleKeydown)
     window.removeEventListener('beforeunload', this.beforeUnload)
+    window.removeEventListener('resize', this.onWindowResize)
   },
 
   watch: {
@@ -1362,6 +1364,11 @@ export default {
       }
     },
 
+    onWindowResize() {
+      if (this.selectedTable) {
+        this.syncLootDropsHeight();
+      }
+    },
     syncLootDropsHeight() {
       this.$nextTick(() => {
         const leftCol = this.$refs.lootTablesWindow;
