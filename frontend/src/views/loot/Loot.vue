@@ -115,6 +115,15 @@
                 <div>
                   <b-button
                     size="sm"
+                    variant="outline-danger"
+                    class="mr-1"
+                    @click="deleteLoottable"
+                    title="Delete this loot table"
+                  >
+                    <i class="fa fa-trash mr-1"></i> Delete
+                  </b-button>
+                  <b-button
+                    size="sm"
                     variant="outline-info"
                     class="mr-1"
                     @click="cloneLoottable"
@@ -660,14 +669,6 @@
                   @click="addLootdrop"
                 >
                   <i class="fa fa-plus mr-1"></i> Add Loot Drop
-                </b-button>
-                <b-button
-                  size="sm"
-                  variant="outline-danger"
-                  @click="deleteLoottable"
-                  class="ml-2"
-                >
-                  <i class="fa fa-trash mr-1"></i> Delete Loot Table
                 </b-button>
               </div>
             </div>
