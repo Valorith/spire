@@ -1536,20 +1536,25 @@ export default {
   background: rgba(200, 180, 120, 0.1);
   border: none;
   color: #e8c56d;
-  width: 28px;
-  height: 28px;
-  font-size: 12px;
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 11px !important;
   cursor: pointer;
   transition: all 0.15s ease;
-  padding: 0;
+  padding: 0 !important;
   margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
+  line-height: 28px !important;
+  vertical-align: middle;
 }
 .count-btn:hover:not(:disabled) {
   background: rgba(200, 180, 120, 0.3);
   color: #ffd966;
+}
+.count-btn .fa {
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
 }
 .count-btn:disabled {
   opacity: 0.3;
