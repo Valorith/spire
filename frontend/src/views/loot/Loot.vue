@@ -702,6 +702,26 @@
     >
       {{ notification.message }}
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <b-modal
+      id="delete-confirm-modal"
+      ref="deleteConfirmModal"
+      centered
+      no-close-on-backdrop
+      header-bg-variant="danger"
+      header-text-variant="white"
+      :title="deleteConfirm.title"
+      @ok="deleteConfirm.onConfirm"
+      ok-variant="danger"
+      ok-title="Yes, Delete Permanently"
+      cancel-title="Cancel"
+    >
+      <div class="text-center mb-3">
+        <i class="fa fa-exclamation-triangle" style="font-size: 3em; color: #f44336;"></i>
+      </div>
+      <div class="delete-confirm-body" v-html="deleteConfirm.message"></div>
+    </b-modal>
   </content-area>
 </template>
 
@@ -755,6 +775,11 @@ export default {
       npcsExpanded: false,
       allExpanded: false,
       rerenderContentFlags: 0,
+      deleteConfirm: {
+        title: '',
+        message: '',
+        onConfirm: () => {},
+      },
     }
   },
 
@@ -1342,18 +1367,35 @@ export default {
       }
     },
 
-    async deleteLoottable() {
-      if (!confirm('⚠️ PERMANENTLY DELETE loot table "' + (this.editTable.name || '#' + this.editTable.id) + '" (ID: ' + this.editTable.id + ')?\n\nThis will destroy the loot table and ALL associated loot drops and item entries. This action is IRREVERSIBLE and cannot be undone.\n\nAre you absolutely sure?')) return
-      try {
-        const ltApi = new LoottableApi(...SpireApi.cfg())
-        await ltApi.deleteLoottable({ id: this.editTable.id })
-        this.showNotification('Deleted loot table #' + this.editTable.id)
-        this.selectedTable = null
-        this.hasUnsavedChanges = false
-        await this.listLootTables()
-      } catch (e) {
-        this.showNotification('Error deleting', 'error')
+    deleteLoottable() {
+      const name = this.editTable.name || '#' + this.editTable.id
+      const id = this.editTable.id
+      this.deleteConfirm = {
+        title: '⚠️ Delete Loot Table',
+        message: '<p style="color: #ef9a9a; font-weight: 600; font-size: 1.1em;">You are about to PERMANENTLY DELETE loot table:</p>' +
+          '<p style="font-size: 1.2em; color: #fff; font-weight: bold;">"' + name + '" <span style="opacity:.5;">(ID: ' + id + ')</span></p>' +
+          '<div style="background: rgba(244,67,54,0.15); border: 1px solid rgba(244,67,54,0.4); border-radius: 6px; padding: 12px; margin: 12px 0;">' +
+          '<strong style="color: #f44336;">⛔ This will destroy:</strong>' +
+          '<ul style="margin: 8px 0 0 0; color: #ef9a9a;">' +
+          '<li>The loot table itself</li>' +
+          '<li>ALL associated loot drops</li>' +
+          '<li>ALL item entries within those drops</li>' +
+          '</ul></div>' +
+          '<p style="color: #f44336; font-weight: bold;">This action is IRREVERSIBLE and cannot be undone.</p>',
+        onConfirm: async () => {
+          try {
+            const ltApi = new LoottableApi(...SpireApi.cfg())
+            await ltApi.deleteLoottable({ id: id })
+            this.showNotification('Deleted loot table #' + id)
+            this.selectedTable = null
+            this.hasUnsavedChanges = false
+            await this.listLootTables()
+          } catch (e) {
+            this.showNotification('Error deleting', 'error')
+          }
+        },
       }
+      this.$refs.deleteConfirmModal.show()
     },
 
     syncLootDropsHeight() {
@@ -1460,19 +1502,30 @@ export default {
         )
         
         this.showNotification('Cancelled addition of ' + (le.lootdrop.name || 'lootdrop'))
+        this.updateHasChanges()
       } else {
-        // Mark existing lootdrop for deletion
-        if (!confirm('Remove lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '" from this table?')) return
-        
-        this.$set(le, '_pendingDelete', true)
-        
-        // Track in pending changes
-        this.pendingChanges.deletedLootdrops.push(index)
-        
-        this.showNotification('Queued lootdrop "' + (le.lootdrop.name || le.lootdrop_id) + '" for deletion')
+        const name = (le.lootdrop && le.lootdrop.name) || 'Lootdrop #' + le.lootdrop_id
+        const itemCount = (le.lootdrop && le.lootdrop.lootdrop_entries) ? le.lootdrop.lootdrop_entries.length : 0
+        this.deleteConfirm = {
+          title: '⚠️ Delete Loot Drop',
+          message: '<p style="color: #ef9a9a; font-weight: 600; font-size: 1.1em;">You are about to DELETE this loot drop:</p>' +
+            '<p style="font-size: 1.2em; color: #fff; font-weight: bold;">"' + name + '"</p>' +
+            '<div style="background: rgba(244,67,54,0.15); border: 1px solid rgba(244,67,54,0.4); border-radius: 6px; padding: 12px; margin: 12px 0;">' +
+            '<strong style="color: #f44336;">⛔ This will remove:</strong>' +
+            '<ul style="margin: 8px 0 0 0; color: #ef9a9a;">' +
+            '<li>This loot drop and its link to the loot table</li>' +
+            '<li>ALL <strong>' + itemCount + '</strong> item entries within this drop</li>' +
+            '</ul></div>' +
+            '<p style="color: #ff9800;">Save to finalize deletion. You can undo before saving.</p>',
+          onConfirm: () => {
+            this.$set(le, '_pendingDelete', true)
+            this.pendingChanges.deletedLootdrops.push(index)
+            this.showNotification('Queued "' + name + '" for deletion')
+            this.updateHasChanges()
+          },
+        }
+        this.$refs.deleteConfirmModal.show()
       }
-      
-      this.updateHasChanges()
     },
 
     getDropdownPosition(leIndex) {
@@ -1744,6 +1797,32 @@ export default {
 .loot-header-window.eq-window-simple,
 .loot-header-window .eq-window-simple {
   overflow: visible !important;
+}
+#delete-confirm-modal .modal-content {
+  background: #1a1a2e;
+  border: 2px solid #f44336;
+}
+#delete-confirm-modal .modal-header {
+  background: #b71c1c !important;
+  border-bottom: 2px solid #f44336;
+}
+#delete-confirm-modal .modal-header .modal-title {
+  color: #fff;
+  font-weight: bold;
+}
+#delete-confirm-modal .modal-body {
+  color: #ddd;
+}
+#delete-confirm-modal .modal-footer {
+  border-top: 1px solid rgba(244, 67, 54, 0.3);
+}
+#delete-confirm-modal .btn-danger {
+  background: #c62828;
+  border-color: #b71c1c;
+  font-weight: bold;
+}
+#delete-confirm-modal .btn-danger:hover {
+  background: #e53935;
 }
 .content-flag-dropdown .dropdown-menu {
   background: rgba(20, 20, 35, 0.98);
