@@ -2189,8 +2189,11 @@ export default {
   },
   watch: {
     zone: {
+      deep: true,
       handler: function (val, oldVal) {
-        this.init()
+        if (val && val.short_name) {
+          this.init()
+        }
       },
     },
   },
@@ -2451,8 +2454,11 @@ export default {
     },
 
     async loadNpcTypes() {
+      if (!this.zone || !this.zone.short_name) {
+        return
+      }
       let npcTypes = [];
-      const r = await Spawn.getByZone(this.zone.short_name, this.zone.version, true)
+      const r = await Spawn.getByZone(this.zone.short_name, this.zone.version != null ? this.zone.version : 0, true)
       if (r.length > 0) {
         for (let spawn2 of r) {
           if (spawn2.spawnentries) {
