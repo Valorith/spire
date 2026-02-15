@@ -624,7 +624,7 @@ export default {
       itemSearching: false,
       itemSearchDebounce: null,
       itemSearchPage: 1,
-      itemSearchPerPage: 18,
+      itemSearchPerPage: 50,
       dropHoverSection: null,
       showStandardContainers: true,
     };
@@ -1006,9 +1006,9 @@ export default {
         const api = SpireApi.v1();
         var params = {};
         if (/^\d+$/.test(q)) {
-          params = { where: 'id__' + q, limit: 50 };
+          params = { where: 'id__' + q, limit: 100 };
         } else {
-          params = { where: 'Name_like_' + q, limit: 50 };
+          params = { where: 'Name_like_' + q, limit: 100 };
         }
         const r = await api.get('items', { params: params });
         if (r && r.data) {
