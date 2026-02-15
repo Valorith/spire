@@ -37,10 +37,14 @@
       <div class="row" style="display: flex; flex-wrap: wrap;">
         <div class="col-lg-6" style="display: flex; flex-direction: column;">
           <eq-window title="Recipe Properties" class="mb-3" style="flex: 1;">
-            <table class="eq-table" style="font-size: 14px; table-layout: fixed; width: 100%;">
+            <table class="eq-table" style="font-size: 14px; width: 100%;">
+              <colgroup>
+                <col style="width: 140px;">
+                <col>
+              </colgroup>
               <tbody>
                 <tr>
-                  <td style="width: 140px;" class="font-weight-bold">ID</td>
+                  <td class="font-weight-bold">ID</td>
                   <td>{{ isNew ? '(auto)' : recipe.id }}</td>
                 </tr>
                 <tr>
@@ -1428,11 +1432,10 @@ export default {
 /* Mobile Responsive */
 /* Ensure recipe properties table doesn't overflow */
 .eq-table {
-  table-layout: fixed;
   width: 100%;
 }
 .eq-table td:nth-child(2) {
-  overflow: hidden;
+  overflow: visible;
 }
 .eq-table .d-flex.align-items-center {
   flex-wrap: wrap;
