@@ -869,9 +869,12 @@ export default {
     },
 
     createPoint(x, y) {
-      return L.latLng(
-        (typeof (y) === "string" ? -parseFloat(y) : -y),
-        (typeof (x) === "string" ? parseFloat(x) : x));
+      const lat = typeof (y) === "string" ? -parseFloat(y) : -y;
+      const lng = typeof (x) === "string" ? parseFloat(x) : x;
+      if (isNaN(lat) || isNaN(lng)) {
+        return L.latLng(0, 0); // fallback for invalid coordinates
+      }
+      return L.latLng(lat, lng);
     },
 
     iconClass() {
@@ -1122,7 +1125,7 @@ export default {
           for (let spawn2 of result) {
             if (spawn2.spawnentries) {
               for (let spawnentry of spawn2.spawnentries) {
-                if (spawnentry.npc_type) {
+                if (spawnentry.npc_type && spawn2.x != null && spawn2.y != null) {
                   let npcName = ""
                   const n = spawnentry.npc_type
                   npcName = n.name + (n.lastname ? ` (${n.lastname})` : '')
