@@ -215,7 +215,7 @@
               </div>
 
               <!-- Linked NPCs -->
-              <div v-if="selectedTable.npc_types && (selectedTable.npc_types || []).length > 0" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
+              <div v-if="selectedTable.npc_types && (selectedTable.npc_types || []).length > 0" class="mt-3 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06); position: relative;">
                 <div
                   class="npc-section-header"
                   @click="npcsExpanded = !npcsExpanded"
@@ -226,7 +226,7 @@
                   <span class="ml-1 font-weight-bold" style="color: #90caf9;">{{ (selectedTable.npc_types || []).length }}</span>
                   <span class="ml-1" style="opacity:.7;">NPC{{ (selectedTable.npc_types || []).length !== 1 ? 's' : '' }}</span>
                 </div>
-                <div v-if="npcsExpanded" class="npc-table-wrap mt-2">
+                <div v-if="npcsExpanded" class="npc-popover-overlay">
                   <table class="eq-table eq-highlight-rows w-100" style="font-size: 12px;">
                     <thead>
                       <tr>
@@ -1734,11 +1734,18 @@ export default {
 .npc-section-header:hover {
   opacity: .9;
 }
-.npc-table-wrap {
-  max-height: 200px;
+.npc-popover-overlay {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 300px;
   overflow-y: auto;
-  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(15, 15, 25, 0.97);
+  border: 1px solid rgba(144, 202, 249, 0.3);
   border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  z-index: 100;
 }
 .npc-row {
   cursor: pointer;
