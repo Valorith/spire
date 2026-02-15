@@ -1,9 +1,9 @@
 <template>
   <content-area style="padding: 0 !important">
-    <div class="row loot-page-row">
+    <div class="row mt-3">
       <!-- Left Panel: Search & List -->
-      <div class="col-4 loot-left-col">
-        <eq-window title="Loot Tables" ref="lootTablesWindow" class="loot-tables-window">
+      <div class="col-4">
+        <eq-window title="Loot Tables">
           <div class="d-flex mb-2">
             <input
               type="text"
@@ -24,7 +24,7 @@
             </b-button>
           </div>
 
-          <div class="loot-list">
+          <div class="loot-list" style="height: calc(100vh - 200px); overflow-y: auto;">
             <div v-if="loading" class="text-center p-3">
               <i class="fa fa-spinner fa-spin"></i> Loading...
             </div>
@@ -81,7 +81,7 @@
       </div>
 
       <!-- Right Panel: Editor -->
-      <div class="col-8 loot-right-col">
+      <div class="col-8">
         <!-- Empty State -->
         <eq-window v-if="!selectedTable" title="Loot Editor">
           <div class="text-center p-5" style="opacity: .4;">
@@ -91,9 +91,9 @@
         </eq-window>
 
         <!-- Editor -->
-        <div v-if="selectedTable" ref="rightPanel" class="loot-editor-col">
+        <div v-if="selectedTable" ref="rightPanel">
           <!-- Header -->
-          <eq-window class="p-0 loot-header-window">
+          <eq-window class="p-0">
             <div class="loot-editor-header">
               <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
@@ -250,7 +250,7 @@
           </eq-window>
 
           <!-- Lootdrops -->
-          <eq-window title="Loot Drops" class="p-0 loot-drops-window" ref="lootDropsWindow">
+          <eq-window title="Loot Drops" class="p-0" ref="lootDropsWindow">
             <div class="d-flex justify-content-end px-3 pt-3 pb-1">
               <b-button
                 size="sm"
@@ -262,8 +262,7 @@
                 {{ allExpanded ? 'Collapse All' : 'Expand All' }}
               </b-button>
             </div>
-            <div class="lootdrops-wrapper">
-            <div class="lootdrops-container" ref="lootdropsScroll" style="height: 100%; overflow-y: auto;" @scroll="onLootdropsScroll">
+            <div class="lootdrops-container" ref="lootdropsScroll" style="max-height: calc(100vh - 350px); overflow-y: auto; position: relative;" @scroll="onLootdropsScroll">
               <div
                 v-for="(le, leIndex) in editEntries"
                 :key="'le-' + leIndex"
@@ -679,7 +678,6 @@
                 </div>
               </div>
             </transition>
-            </div>
           </eq-window>
         </div>
       </div>
@@ -1893,86 +1891,7 @@ export default {
   border-color: #ff9800 !important;
   box-shadow: 0 0 4px rgba(255, 152, 0, 0.3);
 }
-.loot-page-row {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  height: calc(100vh - 40px);
-  overflow: hidden;
-  padding-top: 14px;
-}
-.loot-left-col {
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-  overflow-y: hidden;
-}
-.loot-tables-window {
-  flex: 1;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden;
-  min-height: 0;
-}
-.loot-tables-window ::v-deep .eq-window-title-bar {
-  flex-shrink: 0 !important;
-}
-.loot-tables-window > div:last-child {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-height: 0;
-}
-.loot-list {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-.loot-right-col {
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-  overflow-y: hidden;
-}
-.loot-editor-col {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-.loot-header-window {
-  flex-shrink: 0 !important;
-  flex-grow: 0 !important;
-  overflow: visible !important;
-}
-.loot-drops-window {
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden;
-  min-height: 0;
-}
-.loot-drops-window ::v-deep .eq-window-title-bar {
-  flex-shrink: 0 !important;
-}
-.loot-drops-window > div:last-child {
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.lootdrops-wrapper {
-  position: relative;
-  overflow: hidden;
-  flex: 1;
-  min-height: 0;
-}
-.lootdrops-wrapper .lootdrops-container {
-  height: 100%;
-  overflow-y: auto;
-}
+/* Scroll hint needs position context on the lootdrops-container */
 .scroll-hint-overlay {
   position: absolute;
   bottom: 0;
