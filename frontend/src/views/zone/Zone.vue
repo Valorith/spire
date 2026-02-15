@@ -525,9 +525,12 @@ export default {
 
 /* --- Zone Title --- */
 .zone-sidebar >>> .eq-header {
-  font-size: 15px !important;
   margin-bottom: 4px !important;
   letter-spacing: 0.5px !important;
+}
+.zone-sidebar-title.eq-header {
+  font-size: 24px !important;
+  color: #fcc721 !important;
 }
 
 /* --- NPC Table --- */

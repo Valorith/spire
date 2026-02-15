@@ -7,7 +7,7 @@
     <div class="p-3 pt-1">
       <div>
         <div class="zt-bar">
-          <a :class="['zt', activeZoneTab === 'npcs' && 'zt-on']" @click="activeZoneTab = 'npcs'">NPCs</a>
+          <a :class="['zt', activeZoneTab === 'npcs' && 'zt-on']" @click="activeZoneTab = 'npcs'">Spawns</a>
           <a :class="['zt', activeZoneTab === 'doors' && 'zt-on']" @click="activeZoneTab = 'doors'">Doors</a>
           <a :class="['zt', activeZoneTab === 'objects' && 'zt-on']" @click="activeZoneTab = 'objects'">Obj</a>
           <a :class="['zt', activeZoneTab === 'traps' && 'zt-on']" @click="activeZoneTab = 'traps'">Traps</a>
