@@ -73,8 +73,8 @@
               </tr>
               </thead>
               <tbody>
-              <!-- Virtual scroll spacer (top) -->
-              <tr v-if="virtualScrollTop > 0" :style="'height:' + virtualScrollTop + 'px'"><td :colspan="cachedColumnKeys.length"></td></tr>
+              <!-- Virtual scroll spacer (top) — previewVersion dependency for reactive preview updates -->
+              <tr v-if="virtualScrollTop > 0" :style="'height:' + virtualScrollTop + 'px'" :data-pv="previewVersion"><td :colspan="cachedColumnKeys.length"></td></tr>
               <tr
                 v-for="(row, index) in visibleNpcTypes"
                 :id="'npc-' + row.id"
@@ -197,16 +197,13 @@ export default {
       // preview / selectors
       selectorActive: {},
 
-      // preview value
-      previewField: "",
-      previewValue: "",
+      // preview value — kept non-reactive via created() to avoid full re-renders
+      // previewField, previewValue, previewMinMaxData, previewPercentageData
+      // are set in created() as non-reactive properties
       bulkEditFeedback: [],
 
-      // preview min / max
-      previewMinMaxData: {},
-
-      // preview percentage
-      previewPercentageData: {},
+      // trigger for preview re-render (increment to force update of visible rows)
+      previewVersion: 0,
 
       // virtual scroll state
       virtualStartIndex: 0,
@@ -242,6 +239,9 @@ export default {
       return {};
     },
     visibleNpcTypes() {
+      // Reference previewVersion to trigger re-render when preview data changes
+      // (previewField/previewValue are non-reactive for performance)
+      void this.previewVersion;
       if (!this.npcTypes) return [];
       return this.npcTypes.slice(this.virtualStartIndex, this.virtualEndIndex);
     },
@@ -273,6 +273,12 @@ export default {
   },
 
   created() {
+
+    // Non-reactive preview state (avoids full table re-render on field selection)
+    this.previewField = ""
+    this.previewValue = ""
+    this.previewMinMaxData = {}
+    this.previewPercentageData = {}
 
     // data
     this.npcTypes = []
@@ -396,6 +402,10 @@ export default {
       this.previewPercentageData = {}
       this.previewField = e.field
       this.previewValue = e.value
+      // Only trigger re-render when there's a value to preview
+      if (e.value !== '' && e.value != null) {
+        this.previewVersion++
+      }
     },
     getRandomArbitrary(min, max) {
       return Math.random() * (max - min) + min;
@@ -417,6 +427,7 @@ export default {
       }
 
       this.previewMinMaxData = previewMinMaxData
+      this.previewVersion++
     },
     handlePercentageSetValuesPreview(e) {
       // reset other previews
@@ -433,6 +444,7 @@ export default {
       }
 
       this.previewPercentageData = previewPercentageData
+      this.previewVersion++
     },
     scrollToColumn(e) {
       const container = document.getElementById("npcs-table-container");
