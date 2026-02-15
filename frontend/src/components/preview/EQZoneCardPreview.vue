@@ -2023,8 +2023,18 @@ export default {
   name: "EqZoneCardPreview",
   components: { LoaderFakeProgress, NpcPopover, ItemPopover, SpellPopover, EqCheckbox, EqTab, EqTabs, EqWindow, 'chrome-picker': Chrome },
   props: {
-    zone: Object,
-    required: true,
+    zone: {
+      type: Object,
+      default: function () { return {} }
+    },
+    zoneShortName: {
+      type: String,
+      default: ''
+    },
+    zoneVersion: {
+      type: [String, Number],
+      default: 0
+    },
   },
 
   data() {
@@ -2192,6 +2202,13 @@ export default {
       deep: true,
       handler: function (val, oldVal) {
         if (val && val.short_name) {
+          this.init()
+        }
+      },
+    },
+    zoneShortName: {
+      handler: function (val) {
+        if (val) {
           this.init()
         }
       },
@@ -2454,11 +2471,13 @@ export default {
     },
 
     async loadNpcTypes() {
-      if (!this.zone || !this.zone.short_name) {
+      const shortName = this.zoneShortName || (this.zone && this.zone.short_name)
+      const version = this.zoneVersion != null ? this.zoneVersion : (this.zone && this.zone.version != null ? this.zone.version : 0)
+      if (!shortName) {
         return
       }
       let npcTypes = [];
-      const r = await Spawn.getByZone(this.zone.short_name, this.zone.version != null ? this.zone.version : 0, true)
+      const r = await Spawn.getByZone(shortName, version, true)
       if (r.length > 0) {
         for (let spawn2 of r) {
           if (spawn2.spawnentries) {

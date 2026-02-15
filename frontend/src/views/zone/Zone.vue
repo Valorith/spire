@@ -78,8 +78,10 @@
         <!-- Zone Card -->
         <eq-zone-card-preview
           style="height: 92vh; overflow-y: auto;"
-          v-show="selectorActive['zone-preview'] && zoneData"
+          v-show="selectorActive['zone-preview']"
           :zone="zoneData"
+          :zone-short-name="zone"
+          :zone-version="version"
           class="zone-card-no-gap"
         />
 
