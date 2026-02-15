@@ -333,7 +333,7 @@ export default {
       npcNav: {
         label: "NPCs",
         labelIcon: "ra ra-dragon mr-1",
-        routePrefixMatches: ["npc", "merchant", "loot"],
+        routePrefixMatches: ["npc", "merchant", "loot", "tradeskills"],
         navs: [
           {
             title: "NPC Editor",
@@ -370,6 +370,13 @@ export default {
             to: ROUTE.LOOT,
             icon: "ra ra-gold-bar mr-1",
             routes: ['loot']
+          },
+          {
+            title: "Tradeskills",
+            to: ROUTE.TRADESKILLS,
+            icon: "ra ra-anvil mr-1",
+            isNew: true,
+            routes: ['tradeskills']
           },
         ]
       },

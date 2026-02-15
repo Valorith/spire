@@ -173,6 +173,21 @@ const router = new Router({
           meta: {title: "Changelog"},
         },
         {
+          path: ROUTE.TRADESKILLS,
+          component: () => import('./views/tradeskills/TradeskillList.vue'),
+          meta: {title: "Tradeskills"},
+        },
+        {
+          path: ROUTE.TRADESKILL_VIEW,
+          component: () => import('./views/tradeskills/Tradeskills.vue'),
+          meta: {title: "Tradeskill Recipes"},
+        },
+        {
+          path: ROUTE.TRADESKILL_RECIPE_EDIT,
+          component: () => import('./views/tradeskills/TradeskillRecipeEdit.vue'),
+          meta: {title: "Recipe Editor"},
+        },
+        {
           path: ROUTE.MERCHANTS,
           component: () => import('./views/merchants/Merchants.vue'),
           meta: {title: "Merchants"},
