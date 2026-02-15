@@ -345,6 +345,16 @@
                       <b-button
                         v-if="!le._pendingDelete"
                         size="sm"
+                        variant="outline-info"
+                        @click.stop="cloneLootdrop(leIndex)"
+                        title="Clone this loot drop"
+                        class="ml-1"
+                      >
+                        <i class="fa fa-copy"></i>
+                      </b-button>
+                      <b-button
+                        v-if="!le._pendingDelete"
+                        size="sm"
                         variant="outline-danger"
                         @click.stop="removeLootdrop(leIndex)"
                         title="Remove lootdrop"
@@ -1388,6 +1398,52 @@ export default {
       this.pendingChanges.addedLootdrops.push(newLe)
       
       this.showNotification('Queued new lootdrop for creation')
+      this.updateHasChanges()
+    },
+
+    cloneLootdrop(index) {
+      const source = this.editEntries[index]
+      const clonedLe = {
+        loottable_id: this.editTable.id,
+        lootdrop_id: null,
+        probability: source.probability || 100,
+        multiplier: source.multiplier || 1,
+        droplimit: source.droplimit || 0,
+        mindrop: source.mindrop || 0,
+        _expanded: false,
+        _addingItem: false,
+        _pendingAdd: true,
+        lootdrop: {
+          id: null,
+          name: ((source.lootdrop && source.lootdrop.name) || 'Lootdrop') + ' (Clone)',
+          content_flags: (source.lootdrop && source.lootdrop.content_flags) || '',
+          content_flags_disabled: (source.lootdrop && source.lootdrop.content_flags_disabled) || '',
+          lootdrop_entries: (source.lootdrop && source.lootdrop.lootdrop_entries || [])
+            .filter(lde => !lde._pendingDelete)
+            .map(lde => ({
+              lootdrop_id: null,
+              item_id: lde.item_id,
+              chance: lde.chance || 0,
+              multiplier: lde.multiplier || 1,
+              equip_item: lde.equip_item || 0,
+              item_charges: lde.item_charges || 1,
+              npc_min_level: lde.npc_min_level || 0,
+              npc_max_level: lde.npc_max_level || 0,
+              trivial_min_level: lde.trivial_min_level || 0,
+              trivial_max_level: lde.trivial_max_level || 0,
+              content_flags: lde.content_flags || '',
+              content_flags_disabled: lde.content_flags_disabled || '',
+              item: lde.item,
+              _pendingAdd: true,
+            }))
+        }
+      }
+
+      this.editEntries.splice(index + 1, 0, clonedLe)
+      this.pendingChanges.addedLootdrops.push(clonedLe)
+
+      const name = (source.lootdrop && source.lootdrop.name) || 'lootdrop'
+      this.showNotification('Cloned "' + name + '" — save to persist')
       this.updateHasChanges()
     },
 
