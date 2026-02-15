@@ -1,20 +1,29 @@
 <template>
-  <div>
+  <content-area>
     <eq-window :title="isNew ? 'Create New Recipe' : 'Edit Recipe: ' + recipe.name">
       <!-- Top Controls -->
       <div class="row mb-3">
         <div class="col-12">
           <div class="btn-group">
             <b-button size="sm" variant="outline-secondary" @click="goBack()">
-              <i class="fa fa-arrow-left"></i> Back to Recipes
+              <i class="fa fa-arrow-left"></i> Back
             </b-button>
-            <b-button size="sm" variant="outline-success" @click="saveRecipe()" :disabled="saving">
+            <b-button size="sm"
+              :variant="hasUnsavedChanges ? 'outline-danger' : 'outline-warning'"
+              :class="{ 'save-btn-glow': hasUnsavedChanges }"
+              @click="saveRecipe()" :disabled="saving || !hasUnsavedChanges">
               <i :class="saving ? 'fa fa-spinner fa-spin' : 'fa fa-save'"></i> Save
+            </b-button>
+            <b-button v-if="hasUnsavedChanges" size="sm" variant="outline-warning" @click="confirmReset()">
+              <i class="fa fa-undo"></i> Reset
             </b-button>
             <b-button v-if="!isNew" size="sm" variant="outline-danger" @click="confirmDelete()">
               <i class="fa fa-trash"></i> Delete
             </b-button>
           </div>
+          <span v-if="hasUnsavedChanges" class="ml-3 text-warning" style="font-size: 12px;">
+            <i class="fa fa-exclamation-triangle"></i> Unsaved changes
+          </span>
           <span v-if="saveMessage" class="ml-3" :class="saveError ? 'text-danger' : 'text-success'">
             {{ saveMessage }}
           </span>
@@ -35,27 +44,49 @@
                   <td class="font-weight-bold">Name</td>
                   <td>
                     <input type="text" class="form-control form-control-sm" v-model="recipe.name"
-                      placeholder="Recipe name">
+                      placeholder="Recipe name"
+                      @input="trackFieldEdit('name', originalValues.name || '', recipe.name)"
+                      :class="{ 'pending-edit': isFieldEdited('name') }">
                   </td>
                 </tr>
                 <tr>
                   <td class="font-weight-bold">Trivial</td>
                   <td>
-                    <input type="number" class="form-control form-control-sm" v-model.number="recipe.trivial"
-                      style="width: 120px;">
+                    <div class="d-flex align-items-center">
+                      <input type="number" class="form-control form-control-sm" v-model.number="recipe.trivial"
+                        style="width: 80px;" min="0" :max="maxSkill"
+                        @input="trackFieldEdit('trivial', originalValues.trivial || 0, recipe.trivial)"
+                        :class="{ 'pending-edit': isFieldEdited('trivial') }">
+                      <input type="range" class="skill-slider ml-2" v-model.number="recipe.trivial"
+                        min="0" :max="maxSkill" step="1" style="flex: 1;"
+                        @input="trackFieldEdit('trivial', originalValues.trivial || 0, recipe.trivial)"
+                        :class="{ 'pending-edit-slider': isFieldEdited('trivial') }">
+                      <small class="text-muted ml-2" style="white-space: nowrap;">/ {{ maxSkill }}</small>
+                    </div>
                   </td>
                 </tr>
                 <tr>
                   <td class="font-weight-bold">Skill Needed</td>
                   <td>
-                    <input type="number" class="form-control form-control-sm" v-model.number="recipe.skillneeded"
-                      style="width: 120px;">
+                    <div class="d-flex align-items-center">
+                      <input type="number" class="form-control form-control-sm" v-model.number="recipe.skillneeded"
+                        style="width: 80px;" min="0" :max="maxSkill"
+                        @input="trackFieldEdit('skillneeded', originalValues.skillneeded || 0, recipe.skillneeded)"
+                        :class="{ 'pending-edit': isFieldEdited('skillneeded') }">
+                      <input type="range" class="skill-slider ml-2" v-model.number="recipe.skillneeded"
+                        min="0" :max="maxSkill" step="1" style="flex: 1;"
+                        @input="trackFieldEdit('skillneeded', originalValues.skillneeded || 0, recipe.skillneeded)"
+                        :class="{ 'pending-edit-slider': isFieldEdited('skillneeded') }">
+                      <small class="text-muted ml-2" style="white-space: nowrap;">/ {{ maxSkill }}</small>
+                    </div>
                   </td>
                 </tr>
                 <tr>
                   <td class="font-weight-bold">No Fail</td>
                   <td>
-                    <b-form-checkbox v-model="recipe.nofail" :value="1" :unchecked-value="0" switch>
+                    <b-form-checkbox v-model="recipe.nofail" :value="1" :unchecked-value="0" switch
+                      @change="trackFieldEdit('nofail', originalValues.nofail || 0, $event)"
+                      :class="{ 'pending-edit-check': isFieldEdited('nofail') }">
                       {{ recipe.nofail ? 'Yes' : 'No' }}
                     </b-form-checkbox>
                   </td>
@@ -63,7 +94,9 @@
                 <tr>
                   <td class="font-weight-bold">Quest</td>
                   <td>
-                    <b-form-checkbox v-model="recipe.quest" :value="1" :unchecked-value="0" switch>
+                    <b-form-checkbox v-model="recipe.quest" :value="1" :unchecked-value="0" switch
+                      @change="trackFieldEdit('quest', originalValues.quest || 0, $event)"
+                      :class="{ 'pending-edit-check': isFieldEdited('quest') }">
                       {{ recipe.quest ? 'Yes' : 'No' }}
                     </b-form-checkbox>
                   </td>
@@ -71,7 +104,9 @@
                 <tr>
                   <td class="font-weight-bold">Must Learn</td>
                   <td>
-                    <b-form-checkbox v-model="recipe.must_learn" :value="1" :unchecked-value="0" switch>
+                    <b-form-checkbox v-model="recipe.must_learn" :value="1" :unchecked-value="0" switch
+                      @change="trackFieldEdit('must_learn', originalValues.must_learn || 0, $event)"
+                      :class="{ 'pending-edit-check': isFieldEdited('must_learn') }">
                       {{ recipe.must_learn ? 'Yes' : 'No' }}
                     </b-form-checkbox>
                   </td>
@@ -79,7 +114,9 @@
                 <tr>
                   <td class="font-weight-bold">Enabled</td>
                   <td>
-                    <b-form-checkbox v-model="recipe.enabled" :value="1" :unchecked-value="0" switch>
+                    <b-form-checkbox v-model="recipe.enabled" :value="1" :unchecked-value="0" switch
+                      @change="trackFieldEdit('enabled', originalValues.enabled || 0, $event)"
+                      :class="{ 'pending-edit-check': isFieldEdited('enabled') }">
                       {{ recipe.enabled ? 'Yes' : 'No' }}
                     </b-form-checkbox>
                   </td>
@@ -87,31 +124,84 @@
                 <tr>
                   <td class="font-weight-bold">Learned By Item</td>
                   <td>
-                    <div class="d-flex align-items-center">
-                      <input type="number" class="form-control form-control-sm" v-model.number="recipe.learned_by_item_id"
-                        style="width: 120px;" placeholder="Item ID">
+                    <div class="d-flex align-items-center" style="position: relative;">
+                      <div style="width: 280px; position: relative;">
+                        <input
+                          type="text"
+                          class="form-control form-control-sm"
+                          v-model="learnedBySearch"
+                          @input="onLearnedByInput()"
+                          @keydown.down.prevent="learnedByHighlight = Math.min(learnedByHighlight + 1, learnedByResults.length - 1)"
+                          @keydown.up.prevent="learnedByHighlight = Math.max(learnedByHighlight - 1, 0)"
+                          @keydown.enter.prevent="selectLearnedByItem(learnedByResults[learnedByHighlight])"
+                          @keydown.escape="learnedByResults = []"
+                          @blur="setTimeout(() => learnedByResults = [], 200)"
+                          placeholder="Search by name"
+                        >
+                        <div v-if="learnedByResults.length > 0" class="learned-by-dropdown">
+                          <div
+                            v-for="(item, idx) in learnedByResults"
+                            :key="item.id"
+                            class="learned-by-item"
+                            :class="{ highlighted: idx === learnedByHighlight }"
+                            @mousedown.prevent="selectLearnedByItem(item)"
+                            @mouseenter="learnedByHighlight = idx"
+                          >
+                            <item-popover :item="item" size="sm" class="mr-2" />
+                            <small class="text-muted ml-auto">#{{ item.id }}</small>
+                          </div>
+                        </div>
+                      </div>
                       <item-popover
                         v-if="learnedByItem && recipe.learned_by_item_id > 0"
                         :item="learnedByItem"
                         class="ml-2"
                         size="sm"
                       />
+                      <b-button
+                        v-if="recipe.learned_by_item_id > 0"
+                        size="sm"
+                        variant="outline-danger"
+                        class="ml-1"
+                        @click="clearLearnedBy()"
+                        title="Clear"
+                      >
+                        <i class="fa fa-times"></i>
+                      </b-button>
                     </div>
                   </td>
                 </tr>
                 <tr>
                   <td class="font-weight-bold">Replace Container</td>
                   <td>
-                    <b-form-checkbox v-model="recipe.replace_container" :value="1" :unchecked-value="0" switch>
+                    <b-form-checkbox v-model="recipe.replace_container" :value="1" :unchecked-value="0" switch
+                      @change="trackFieldEdit('replace_container', originalValues.replace_container || 0, $event)"
+                      :class="{ 'pending-edit-check': isFieldEdited('replace_container') }">
                       {{ recipe.replace_container ? 'Yes' : 'No' }}
                     </b-form-checkbox>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="font-weight-bold">Content Flags</td>
+                  <td :class="{ 'pending-edit': isFieldEdited('content_flags') }">
+                    <content-flag-selector v-model="recipe.content_flags"
+                      @input="trackFieldEdit('content_flags', originalValues.content_flags || '', $event)" />
+                  </td>
+                </tr>
+                <tr>
+                  <td class="font-weight-bold">Content Flags Disabled</td>
+                  <td :class="{ 'pending-edit': isFieldEdited('content_flags_disabled') }">
+                    <content-flag-selector v-model="recipe.content_flags_disabled"
+                      @input="trackFieldEdit('content_flags_disabled', originalValues.content_flags_disabled || '', $event)" />
                   </td>
                 </tr>
                 <tr>
                   <td class="font-weight-bold">Notes</td>
                   <td>
                     <textarea class="form-control form-control-sm" v-model="recipe.notes" rows="2"
-                      placeholder="Optional notes"></textarea>
+                      placeholder="Optional notes"
+                      @input="trackFieldEdit('notes', originalValues.notes || '', recipe.notes)"
+                      :class="{ 'pending-edit': isFieldEdited('notes') }"></textarea>
                   </td>
                 </tr>
               </tbody>
@@ -122,11 +212,14 @@
         <!-- Recipe Entries (Visual) -->
         <div class="col-lg-6">
           <eq-window title="Recipe Components & Results" class="mb-3">
+           <div class="recipe-entries-wrapper">
+           <div class="recipe-entries-scroll" ref="entriesScroll" @scroll="onEntriesScroll">
             <!-- Components (inputs) -->
             <div class="mb-3">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0" style="color: #ffc107;">
                   <i class="ra ra-cog mr-1"></i> Components (Inputs)
+                  <small v-if="componentEntries.length > 0" class="text-muted ml-1">({{ componentEntries.length }})</small>
                 </h6>
                 <b-button size="sm" variant="outline-success" @click="showItemSearch('component')">
                   <i class="fa fa-plus"></i> Add
@@ -135,27 +228,33 @@
               <div v-if="componentEntries.length === 0" class="text-muted text-center p-2">
                 No components added yet.
               </div>
-              <div v-for="(entry, idx) in componentEntries" :key="'comp-' + idx" class="entry-row p-2 mb-1" draggable="true" @dragstart="onDragStart(entry, 'component')" @dragover.prevent @drop="onDrop(entry, 'component')">
+              <div class="entry-scroll-area">
+              <div v-for="(entry, idx) in componentEntries" :key="'comp-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'component')" @dragover.prevent @drop="onDrop(entry, 'component')">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="d-flex align-items-center">
                     <item-popover
-                      v-if="itemCache[entry.item_id]"
+                      v-if="itemCache[entry.item_id] && !itemCache[entry.item_id]._missing"
                       :item="itemCache[entry.item_id]"
                       size="sm"
                     />
+                    <span v-else-if="itemCache[entry.item_id] && itemCache[entry.item_id]._missing" class="text-warning">
+                      <i class="fa fa-exclamation-triangle"></i> Missing Item #{{ entry.item_id }}
+                    </span>
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
                     <div class="mr-2">
                       <small class="text-muted">Count:</small>
                       <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.componentcount" style="width: 60px;" min="1">
+                        v-model.number="entry.componentcount" style="width: 60px;" min="1"
+                        @input="updateHasChanges()">
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'component')">
                       <i class="fa fa-times"></i>
                     </b-button>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
 
@@ -166,6 +265,7 @@
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0" style="color: #28a745;">
                   <i class="fa fa-check mr-1"></i> Success Results
+                  <small v-if="successEntries.length > 0" class="text-muted ml-1">({{ successEntries.length }})</small>
                 </h6>
                 <b-button size="sm" variant="outline-success" @click="showItemSearch('success')">
                   <i class="fa fa-plus"></i> Add
@@ -174,27 +274,33 @@
               <div v-if="successEntries.length === 0" class="text-muted text-center p-2">
                 No success results added yet.
               </div>
-              <div v-for="(entry, idx) in successEntries" :key="'succ-' + idx" class="entry-row p-2 mb-1" draggable="true" @dragstart="onDragStart(entry, 'success')" @dragover.prevent @drop="onDrop(entry, 'success')">
+              <div class="entry-scroll-area">
+              <div v-for="(entry, idx) in successEntries" :key="'succ-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'success')" @dragover.prevent @drop="onDrop(entry, 'success')">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="d-flex align-items-center">
                     <item-popover
-                      v-if="itemCache[entry.item_id]"
+                      v-if="itemCache[entry.item_id] && !itemCache[entry.item_id]._missing"
                       :item="itemCache[entry.item_id]"
                       size="sm"
                     />
+                    <span v-else-if="itemCache[entry.item_id] && itemCache[entry.item_id]._missing" class="text-warning">
+                      <i class="fa fa-exclamation-triangle"></i> Missing Item #{{ entry.item_id }}
+                    </span>
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
                     <div class="mr-2">
                       <small class="text-muted">Count:</small>
                       <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.successcount" style="width: 60px;" min="1">
+                        v-model.number="entry.successcount" style="width: 60px;" min="1"
+                        @input="updateHasChanges()">
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'success')">
                       <i class="fa fa-times"></i>
                     </b-button>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
 
@@ -205,6 +311,7 @@
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0" style="color: #dc3545;">
                   <i class="fa fa-times mr-1"></i> Fail Results
+                  <small v-if="failEntries.length > 0" class="text-muted ml-1">({{ failEntries.length }})</small>
                 </h6>
                 <b-button size="sm" variant="outline-success" @click="showItemSearch('fail')">
                   <i class="fa fa-plus"></i> Add
@@ -213,27 +320,33 @@
               <div v-if="failEntries.length === 0" class="text-muted text-center p-2">
                 No fail results added yet.
               </div>
-              <div v-for="(entry, idx) in failEntries" :key="'fail-' + idx" class="entry-row p-2 mb-1" draggable="true" @dragstart="onDragStart(entry, 'fail')" @dragover.prevent @drop="onDrop(entry, 'fail')">
+              <div class="entry-scroll-area">
+              <div v-for="(entry, idx) in failEntries" :key="'fail-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'fail')" @dragover.prevent @drop="onDrop(entry, 'fail')">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="d-flex align-items-center">
                     <item-popover
-                      v-if="itemCache[entry.item_id]"
+                      v-if="itemCache[entry.item_id] && !itemCache[entry.item_id]._missing"
                       :item="itemCache[entry.item_id]"
                       size="sm"
                     />
+                    <span v-else-if="itemCache[entry.item_id] && itemCache[entry.item_id]._missing" class="text-warning">
+                      <i class="fa fa-exclamation-triangle"></i> Missing Item #{{ entry.item_id }}
+                    </span>
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
                     <div class="mr-2">
                       <small class="text-muted">Count:</small>
                       <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.failcount" style="width: 60px;" min="1">
+                        v-model.number="entry.failcount" style="width: 60px;" min="1"
+                        @input="updateHasChanges()">
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'fail')">
                       <i class="fa fa-times"></i>
                     </b-button>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
 
@@ -244,6 +357,7 @@
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0" style="color: #17a2b8;">
                   <i class="ra ra-recycle mr-1"></i> Salvage Results
+                  <small v-if="salvageEntries.length > 0" class="text-muted ml-1">({{ salvageEntries.length }})</small>
                 </h6>
                 <b-button size="sm" variant="outline-success" @click="showItemSearch('salvage')">
                   <i class="fa fa-plus"></i> Add
@@ -252,27 +366,33 @@
               <div v-if="salvageEntries.length === 0" class="text-muted text-center p-2">
                 No salvage results added yet.
               </div>
-              <div v-for="(entry, idx) in salvageEntries" :key="'salv-' + idx" class="entry-row p-2 mb-1" draggable="true" @dragstart="onDragStart(entry, 'salvage')" @dragover.prevent @drop="onDrop(entry, 'salvage')">
+              <div class="entry-scroll-area">
+              <div v-for="(entry, idx) in salvageEntries" :key="'salv-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]" draggable="true" @dragstart="onDragStart(entry, 'salvage')" @dragover.prevent @drop="onDrop(entry, 'salvage')">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="d-flex align-items-center">
                     <item-popover
-                      v-if="itemCache[entry.item_id]"
+                      v-if="itemCache[entry.item_id] && !itemCache[entry.item_id]._missing"
                       :item="itemCache[entry.item_id]"
                       size="sm"
                     />
+                    <span v-else-if="itemCache[entry.item_id] && itemCache[entry.item_id]._missing" class="text-warning">
+                      <i class="fa fa-exclamation-triangle"></i> Missing Item #{{ entry.item_id }}
+                    </span>
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
                     <div class="mr-2">
                       <small class="text-muted">Count:</small>
                       <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.salvagecount" style="width: 60px;" min="1">
+                        v-model.number="entry.salvagecount" style="width: 60px;" min="1"
+                        @input="updateHasChanges()">
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'salvage')">
                       <i class="fa fa-times"></i>
                     </b-button>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
 
@@ -291,14 +411,17 @@
               <div v-if="containerEntries.length === 0" class="text-muted text-center p-2">
                 No container set (will use any valid container).
               </div>
-              <div v-for="(entry, idx) in containerEntries" :key="'cont-' + idx" class="entry-row p-2 mb-1">
+              <div v-for="(entry, idx) in containerEntries" :key="'cont-' + idx" :class="['entry-row','p-2','mb-1', entryRowClass(entry)]">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="d-flex align-items-center">
                     <item-popover
-                      v-if="itemCache[entry.item_id]"
+                      v-if="itemCache[entry.item_id] && !itemCache[entry.item_id]._missing"
                       :item="itemCache[entry.item_id]"
                       size="sm"
                     />
+                    <span v-else-if="itemCache[entry.item_id] && itemCache[entry.item_id]._missing" class="text-warning">
+                      <i class="fa fa-exclamation-triangle"></i> Missing Item #{{ entry.item_id }}
+                    </span>
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'container')">
@@ -307,6 +430,15 @@
                 </div>
               </div>
             </div>
+           </div>
+           <transition name="fade">
+             <div v-if="showScrollHint" class="scroll-hint-overlay" @click="scrollToBottom">
+               <div class="scroll-hint-arrow">
+                 <i class="fa fa-chevron-down"></i>
+               </div>
+             </div>
+           </transition>
+           </div>
           </eq-window>
         </div>
       </div>
@@ -322,7 +454,7 @@
       <p>Delete recipe <strong>{{ recipe.name }}</strong>?</p>
       <p class="text-danger">This will also delete all recipe entries. Cannot be undone.</p>
     </b-modal>
-  </div>
+  </content-area>
 </template>
 
 <script>
@@ -331,12 +463,19 @@ import {SpireApi} from "@/app/api/spire-api";
 import {Items} from "@/app/items";
 import ItemPopover from "@/components/ItemPopover";
 import ItemSelector from "@/components/selectors/ItemSelector";
+import ContentArea from "@/components/layout/ContentArea";
+import EqWindow from "@/components/eq-ui/EQWindow";
+import ContentFlagSelector from "@/components/selectors/ContentFlagSelector";
+import {tradeskillToSlug, slugToTradeskillId} from "./tradeskill-slugs";
 
 export default {
   name: "TradeskillRecipeEdit",
   components: {
     "item-popover": ItemPopover,
     "item-selector": ItemSelector,
+    "eq-window": EqWindow,
+    "content-area": ContentArea,
+    "content-flag-selector": ContentFlagSelector,
   },
   data() {
     return {
@@ -358,6 +497,8 @@ export default {
         enabled: 1,
         learned_by_item_id: 0,
         replace_container: 0,
+        content_flags: "",
+        content_flags_disabled: "",
         notes: "",
       },
       entries: [],
@@ -367,9 +508,21 @@ export default {
       entriesToDelete: [],
       draggedEntry: null,
       draggedType: null,
+      showScrollHint: false,
+      learnedBySearch: "",
+      learnedByResults: [],
+      learnedByHighlight: -1,
+      learnedByDebounce: null,
+      hasUnsavedChanges: false,
+      originalValues: {},
+      originalEntryMap: {},
+      pendingChanges: { editedFields: {} },
     };
   },
   computed: {
+    maxSkill() {
+      return 350;
+    },
     componentEntries() {
       return this.entries.filter(e => e.componentcount > 0 && !e.iscontainer);
     },
@@ -387,7 +540,7 @@ export default {
     },
   },
   async created() {
-    this.tradeskillId = parseInt(this.$route.params.tradeskillId) || 0;
+    this.tradeskillId = slugToTradeskillId(this.$route.params.tradeskillId);
     const rid = this.$route.params.recipeId;
 
     if (rid === "new") {
@@ -399,12 +552,30 @@ export default {
       await this.loadRecipe();
     }
   },
+  mounted() {
+    this.$nextTick(() => this.checkScrollOverflow());
+    window.addEventListener('keydown', this.handleKeydown);
+    window.addEventListener('beforeunload', this.beforeUnload);
+  },
+  beforeDestroy() {
+    window.removeEventListener('keydown', this.handleKeydown);
+    window.removeEventListener('beforeunload', this.beforeUnload);
+  },
+  updated() {
+    this.$nextTick(() => this.checkScrollOverflow());
+  },
   watch: {
     'recipe.learned_by_item_id'(val) {
       if (val > 0) {
-        this.loadItem(val).then(item => { this.learnedByItem = item; });
+        this.loadItem(val).then(item => {
+          this.learnedByItem = item;
+          if (item && !item._missing) {
+            this.learnedBySearch = String(val);
+          }
+        });
       } else {
         this.learnedByItem = null;
+        this.learnedBySearch = "";
       }
     },
   },
@@ -438,6 +609,8 @@ export default {
         console.error("Failed to load recipe:", e);
       }
       this.loading = false;
+      this.storeOriginalValues();
+      this.resetPendingChanges();
     },
     async loadItem(itemId) {
       if (this.itemCache[itemId]) return this.itemCache[itemId];
@@ -459,12 +632,170 @@ export default {
             this.$set(this.itemCache, item.id, item);
           }
         }
+        // Retry missing items individually
+        const missing = itemIds.filter(id => !this.itemCache[id]);
+        for (const id of missing) {
+          const item = await this.loadItem(id);
+          if (!item) {
+            // Mark as missing so template shows a placeholder with name
+            this.$set(this.itemCache, id, {id: id, Name: '(Missing Item #' + id + ')', icon: 0, _missing: true});
+          }
+        }
       } catch (e) {
         // Load individually as fallback
         for (const id of itemIds) {
-          await this.loadItem(id);
+          if (!this.itemCache[id]) {
+            const item = await this.loadItem(id);
+            if (!item) {
+              this.$set(this.itemCache, id, {id: id, Name: '(Missing Item #' + id + ')', icon: 0, _missing: true});
+            }
+          }
         }
       }
+    },
+    handleKeydown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (this.hasUnsavedChanges) this.saveRecipe();
+      }
+    },
+    beforeUnload(e) {
+      if (this.hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    },
+    trackFieldEdit(key, oldVal, newVal) {
+      const oldStr = String(oldVal != null ? oldVal : '');
+      const newStr = String(newVal != null ? newVal : '');
+      if (oldStr === newStr) {
+        this.$delete(this.pendingChanges.editedFields, key);
+      } else {
+        this.$set(this.pendingChanges.editedFields, key, { old: oldVal, new: newVal });
+      }
+      this.updateHasChanges();
+    },
+    isFieldEdited(key) {
+      return !!this.pendingChanges.editedFields[key];
+    },
+    updateHasChanges() {
+      this.hasUnsavedChanges = Object.keys(this.pendingChanges.editedFields).length > 0
+        || this.entriesToDelete.length > 0
+        || this.entries.some(e => e._isNew || e._pendingDelete || this.isEntryModified(e));
+    },
+    resetPendingChanges() {
+      this.pendingChanges = { editedFields: {} };
+      this.hasUnsavedChanges = false;
+    },
+    storeOriginalValues() {
+      this.originalValues = {
+        name: this.recipe.name,
+        trivial: this.recipe.trivial,
+        skillneeded: this.recipe.skillneeded,
+        nofail: this.recipe.nofail,
+        quest: this.recipe.quest,
+        must_learn: this.recipe.must_learn,
+        enabled: this.recipe.enabled,
+        learned_by_item_id: this.recipe.learned_by_item_id,
+        replace_container: this.recipe.replace_container,
+        content_flags: this.recipe.content_flags || '',
+        content_flags_disabled: this.recipe.content_flags_disabled || '',
+        notes: this.recipe.notes || '',
+      };
+      this.originalEntryMap = {};
+      for (const e of this.entries) {
+        if (e.id) {
+          this.originalEntryMap[e.id] = {
+            item_id: e.item_id,
+            componentcount: e.componentcount || 0,
+            successcount: e.successcount || 0,
+            failcount: e.failcount || 0,
+            salvagecount: e.salvagecount || 0,
+            iscontainer: e.iscontainer || 0,
+          };
+        }
+      }
+    },
+    isEntryModified(entry) {
+      if (!entry || !entry.id || !this.originalEntryMap[entry.id] || entry._pendingDelete) return false;
+      const o = this.originalEntryMap[entry.id];
+      return (entry.item_id !== o.item_id)
+        || ((entry.componentcount || 0) !== (o.componentcount || 0))
+        || ((entry.successcount || 0) !== (o.successcount || 0))
+        || ((entry.failcount || 0) !== (o.failcount || 0))
+        || ((entry.salvagecount || 0) !== (o.salvagecount || 0))
+        || ((entry.iscontainer || 0) !== (o.iscontainer || 0));
+    },
+    entryRowClass(entry) {
+      if (entry._pendingDelete) return 'entry-pending-delete';
+      if (entry._isNew) return 'entry-pending-add';
+      if (this.isEntryModified(entry)) return 'entry-pending-edit';
+      return '';
+    },
+    confirmReset() {
+      if (confirm('Discard all pending changes?')) {
+        Object.assign(this.recipe, { ...this.originalValues });
+        this.loadRecipe();
+      }
+    },
+    onLearnedByInput() {
+      clearTimeout(this.learnedByDebounce);
+      const val = this.learnedBySearch.trim();
+      if (!val || val.length < 2) {
+        this.learnedByResults = [];
+        return;
+      }
+      // If it's a number, try loading by ID
+      if (/^\d+$/.test(val)) {
+        this.loadItem(parseInt(val)).then(item => {
+          if (item && !item._missing) {
+            this.learnedByResults = [item];
+            this.learnedByHighlight = 0;
+          } else {
+            this.learnedByResults = [];
+          }
+        });
+        return;
+      }
+      this.learnedByDebounce = setTimeout(async () => {
+        try {
+          const api = SpireApi.v1();
+          const r = await api.get('items', {
+            params: { where: `Name_like_${val}`, limit: 15, orderBy: 'Name', orderDirection: 'asc', select: 'id,Name,icon' }
+          });
+          this.learnedByResults = r.data || [];
+          this.learnedByHighlight = 0;
+        } catch (e) {
+          this.learnedByResults = [];
+        }
+      }, 300);
+    },
+    selectLearnedByItem(item) {
+      if (!item) return;
+      this.recipe.learned_by_item_id = item.id;
+      this.$set(this.itemCache, item.id, item);
+      this.learnedByItem = item;
+      this.learnedBySearch = String(item.id);
+      this.learnedByResults = [];
+    },
+    clearLearnedBy() {
+      this.recipe.learned_by_item_id = 0;
+      this.learnedByItem = null;
+      this.learnedBySearch = "";
+      this.learnedByResults = [];
+    },
+    checkScrollOverflow() {
+      const el = this.$refs.entriesScroll;
+      if (!el) return;
+      this.showScrollHint = el.scrollHeight > el.clientHeight && 
+        (el.scrollHeight - el.scrollTop - el.clientHeight) > 30;
+    },
+    onEntriesScroll() {
+      this.checkScrollOverflow();
+    },
+    scrollToBottom() {
+      const el = this.$refs.entriesScroll;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     },
     onDragStart(entry, type) {
       this.draggedEntry = entry;
@@ -526,16 +857,27 @@ export default {
       }
 
       this.entries.push(newEntry);
+      this.updateHasChanges();
       this.$refs.itemSearchModal.hide();
     },
     removeEntry(entry, type) {
       const idx = this.entries.indexOf(entry);
-      if (idx >= 0) {
-        if (entry.id) {
-          this.entriesToDelete.push(entry.id);
+      if (idx < 0) return;
+
+      if (entry.id) {
+        if (entry._pendingDelete) {
+          entry._pendingDelete = false;
+          this.entriesToDelete = this.entriesToDelete.filter(id => id !== entry.id);
+        } else {
+          this.$set(entry, '_pendingDelete', true);
+          if (!this.entriesToDelete.includes(entry.id)) {
+            this.entriesToDelete.push(entry.id);
+          }
         }
+      } else {
         this.entries.splice(idx, 1);
       }
+      this.updateHasChanges();
     },
     async saveRecipe() {
       this.saving = true;
@@ -558,6 +900,8 @@ export default {
           enabled: this.recipe.enabled,
           learned_by_item_id: this.recipe.learned_by_item_id || 0,
           replace_container: this.recipe.replace_container,
+          content_flags: this.recipe.content_flags || "",
+          content_flags_disabled: this.recipe.content_flags_disabled || "",
           notes: this.recipe.notes || "",
         };
 
@@ -568,10 +912,10 @@ export default {
             this.recipeId = recipeId;
             this.recipe.id = recipeId;
             this.isNew = false;
-            window.history.replaceState({}, '', `/tradeskills/${this.tradeskillId}/recipe/${recipeId}`);
+            window.history.replaceState({}, '', `/tradeskills/${tradeskillToSlug(this.tradeskillId)}/recipe/${recipeId}`);
           }
         } else {
-          await api.post(`tradeskill_recipe/${recipeId}`, {...recipeData, id: recipeId});
+          await api.patch(`tradeskill_recipe/${recipeId}`, {...recipeData, id: recipeId});
         }
 
         // Delete removed entries
@@ -584,8 +928,9 @@ export default {
         }
         this.entriesToDelete = [];
 
-        // Save entries
+        // Save entries (skip pending deletes)
         for (const entry of this.entries) {
+          if (entry._pendingDelete) continue;
           const entryData = {
             recipe_id: recipeId,
             item_id: entry.item_id,
@@ -603,11 +948,17 @@ export default {
               delete entry._isNew;
             }
           } else {
-            await api.post(`tradeskill_recipe_entry/${entry.id}`, {...entryData, id: entry.id});
+            await api.patch(`tradeskill_recipe_entry/${entry.id}`, {...entryData, id: entry.id});
           }
         }
 
+        this.entries = this.entries.filter(e => !e._pendingDelete).map(e => {
+          delete e._pendingDelete;
+          return e;
+        });
         this.saveMessage = "Saved successfully!";
+        this.storeOriginalValues();
+        this.resetPendingChanges();
         setTimeout(() => { this.saveMessage = ""; }, 3000);
       } catch (e) {
         console.error("Save failed:", e);
@@ -629,19 +980,172 @@ export default {
       }
     },
     goBack() {
-      this.$router.push({path: `/tradeskills/${this.tradeskillId}`});
+      this.$router.push({path: `/tradeskills/${tradeskillToSlug(this.tradeskillId)}`});
     },
   },
 };
 </script>
 
-<style scoped>
-.entry-row {
+<style>
+.recipe-entries-wrapper {
+  position: relative;
+}
+.scroll-hint-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(transparent, rgba(15, 15, 25, 0.95));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 5;
+}
+.scroll-hint-arrow {
+  color: #e8c56d;
+  font-size: 18px;
+  animation: pulse-bounce 1.5s ease-in-out infinite;
+}
+@keyframes pulse-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.6; }
+  50% { transform: translateY(5px); opacity: 1; }
+}
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s;
+}
+.fade-enter, .fade-leave-to {
+  opacity: 0;
+}
+.recipe-entries-scroll {
+  max-height: 600px;
+  overflow-y: auto;
+}
+.recipe-entries-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.recipe-entries-scroll::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.recipe-entries-scroll::-webkit-scrollbar-thumb {
+  background: rgba(200, 180, 120, 0.3);
+  border-radius: 3px;
+}
+.recipe-entries-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(200, 180, 120, 0.5);
+}
+.entry-scroll-area {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.entry-scroll-area::-webkit-scrollbar {
+  width: 6px;
+}
+.entry-scroll-area::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+.entry-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(200, 180, 120, 0.3);
+  border-radius: 3px;
+}
+.entry-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(200, 180, 120, 0.5);
+}
+.skill-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  outline: none;
+}
+.skill-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e8c56d;
+  cursor: pointer;
+  border: 2px solid rgba(0, 0, 0, 0.3);
+}
+.skill-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e8c56d;
+  cursor: pointer;
+  border: 2px solid rgba(0, 0, 0, 0.3);
+}
+.learned-by-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  background: rgba(20, 20, 35, 0.98);
+  border: 1px solid rgba(200, 180, 120, 0.3);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  max-height: 250px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.learned-by-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.learned-by-item:hover,
+.learned-by-item.highlighted {
+  background: rgba(200, 180, 120, 0.15);
+}
+.entry-row {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 4px;
 }
 .entry-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.5);
+}
+.entry-pending-add {
+  background: rgba(40, 167, 69, 0.18) !important;
+  border-color: rgba(40, 167, 69, 0.65) !important;
+}
+.entry-pending-delete {
+  background: rgba(220, 53, 69, 0.18) !important;
+  border-color: rgba(220, 53, 69, 0.65) !important;
+  opacity: 0.85;
+}
+.entry-pending-edit {
+  background: rgba(255, 165, 0, 0.14) !important;
+  border-color: rgba(255, 165, 0, 0.6) !important;
+}
+.pending-edit {
+  background-color: rgba(255, 165, 0, 0.15) !important;
+  border-color: rgba(255, 165, 0, 0.5) !important;
+  box-shadow: 0 0 0 1px rgba(255, 165, 0, 0.3);
+}
+.pending-edit-slider {
+  filter: hue-rotate(30deg) brightness(1.2);
+}
+.pending-edit-check {
+  background: rgba(255, 165, 0, 0.15);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.save-btn-glow {
+  animation: save-glow 1.5s ease-in-out infinite;
+}
+@keyframes save-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(255, 100, 0, 0.3); }
+  50% { box-shadow: 0 0 12px rgba(255, 100, 0, 0.7); }
 }
 </style>

@@ -1,15 +1,20 @@
 <template>
-  <div>
+  <content-area>
     <eq-window :title="tradeskillName + ' Recipes'">
       <!-- Controls -->
       <div class="row mb-3">
+        <div class="col-auto d-flex align-items-center pr-0">
+          <b-button size="sm" variant="outline-secondary" @click="goBack()" title="Back to Tradeskills">
+            <i class="fa fa-arrow-left"></i> Back
+          </b-button>
+        </div>
         <div class="col-lg-4">
           <input
             type="text"
             class="form-control"
             placeholder="Search recipes by name..."
             v-model="search"
-            @keyup.enter="loadRecipes()"
+            @keyup.enter="page = 1; loadRecipes()"
             autofocus
           >
         </div>
@@ -36,19 +41,20 @@
             <option value="desc">Desc</option>
           </select>
         </div>
-        <div class="col-lg-3 text-right">
+        <div class="col-lg-1">
+          <select class="form-control" v-model.number="pageSize" @change="onPageSizeChange()" title="Rows per page">
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+        </div>
+        <div class="col text-right">
           <div class="btn-group">
-            <b-button size="sm" variant="outline-warning" @click="loadRecipes()" title="Search">
-              <i class="fa fa-search"></i> Search
-            </b-button>
             <b-button size="sm" variant="outline-danger" @click="resetSearch()" title="Reset">
               <i class="fa fa-eraser"></i> Reset
             </b-button>
             <b-button size="sm" variant="outline-success" @click="createRecipe()" title="New Recipe">
               <i class="fa fa-plus"></i> New Recipe
-            </b-button>
-            <b-button size="sm" variant="outline-secondary" @click="goBack()" title="Back to Tradeskills">
-              <i class="fa fa-arrow-left"></i> Back
             </b-button>
           </div>
         </div>
@@ -65,8 +71,8 @@
       </div>
 
       <!-- Recipe Table -->
-      <div v-if="!loading && recipes.length > 0" style="overflow-y: auto; max-height: 78vh;">
-        <table class="eq-table bordered eq-highlight-rows" style="font-size: 14px;">
+      <div v-if="!loading && recipes.length > 0" class="tradeskill-table-wrap" style="overflow-y: auto; max-height: 78vh;">
+        <table class="eq-table bordered eq-highlight-rows tradeskill-table" style="font-size: 14px;">
           <thead class="eq-table-floating-header">
             <tr>
               <th style="width: 60px;">ID</th>
@@ -121,7 +127,7 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="!loading && totalPages > 1" class="text-center mt-3">
+      <div v-if="!loading && totalCount > 0" class="text-center mt-3">
         <div class="btn-group">
           <b-button size="sm" variant="outline-secondary" @click="page > 1 && changePage(page - 1)" :disabled="page <= 1">
             <i class="fa fa-chevron-left"></i>
@@ -150,24 +156,32 @@
       <p>Are you sure you want to delete recipe <strong>{{ deleteTarget ? deleteTarget.name : '' }}</strong> (ID: {{ deleteTarget ? deleteTarget.id : '' }})?</p>
       <p class="text-danger">This action cannot be undone.</p>
     </b-modal>
-  </div>
+  </content-area>
 </template>
 
 <script>
 import {ROUTE} from "@/routes";
 import {SpireApi} from "@/app/api/spire-api";
+import {tradeskillToSlug, slugToTradeskillId} from "./tradeskill-slugs";
 
 const TRADESKILL_NAMES = {
   55: "Fishing", 56: "Make Poison", 57: "Tinkering", 58: "Research",
-  59: "Alchemy", 60: "Baking", 61: "Blacksmithing", 63: "Brewing",
-  64: "Fletching", 65: "Jewelcraft", 68: "Pottery", 69: "Tailoring",
+  59: "Alchemy", 60: "Baking", 61: "Tailoring", 63: "Blacksmithing",
+  64: "Fletching", 65: "Brewing", 68: "Jewelry Making", 69: "Pottery",
   75: "Quest Combines",
 };
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
+
+import ContentArea from "@/components/layout/ContentArea";
+import EqWindow from "@/components/eq-ui/EQWindow";
 
 export default {
   name: "Tradeskills",
+  components: {
+    "content-area": ContentArea,
+    "eq-window": EqWindow,
+  },
   data() {
     return {
       tradeskillId: 0,
@@ -178,6 +192,7 @@ export default {
       sortField: "name",
       sortDir: "asc",
       page: 1,
+      pageSize: DEFAULT_PAGE_SIZE,
       totalCount: 0,
       deleteTarget: null,
     };
@@ -187,7 +202,7 @@ export default {
       return TRADESKILL_NAMES[this.tradeskillId] || "Unknown";
     },
     totalPages() {
-      return Math.max(1, Math.ceil(this.totalCount / PAGE_SIZE));
+      return Math.max(1, Math.ceil(this.totalCount / this.pageSize));
     },
     visiblePages() {
       const pages = [];
@@ -199,8 +214,17 @@ export default {
       return pages;
     },
   },
+  watch: {
+    '$route.params.tradeskillId': {
+      handler(newId) {
+        this.tradeskillId = slugToTradeskillId(newId);
+        this.page = 1;
+        this.loadRecipes();
+      },
+    },
+  },
   async created() {
-    this.tradeskillId = parseInt(this.$route.params.tradeskillId) || 0;
+    this.tradeskillId = slugToTradeskillId(this.$route.params.tradeskillId);
     await this.loadRecipes();
   },
   methods: {
@@ -209,36 +233,53 @@ export default {
       try {
         const api = SpireApi.v1();
 
-        let where = `tradeskill__${this.tradeskillId}`;
+        var whereParts = ['tradeskill__' + this.tradeskillId];
         if (this.search) {
-          where += `__and__name_like_${this.search}`;
+          whereParts.push('name_like_' + this.search);
         }
         if (this.maxTrivial) {
-          where += `__and__trivial__lte__${this.maxTrivial}`;
+          whereParts.push('trivial__lte__' + this.maxTrivial);
         }
+        var where = whereParts.join('.');
 
         // Get count
         try {
-          const countResult = await api.get(`tradeskill_recipes/count`, {params: {where}});
+          const countResult = await api.get('tradeskill_recipes/count', {
+            params: { where: where }
+          });
           if (countResult.data) {
-            this.totalCount = Array.isArray(countResult.data) ? (countResult.data[0]?.count || 0) : countResult.data;
+            if (Array.isArray(countResult.data)) {
+              this.totalCount = (countResult.data[0] && countResult.data[0].count) || 0;
+            } else if (typeof countResult.data === 'object' && countResult.data.count != null) {
+              this.totalCount = countResult.data.count;
+            } else if (typeof countResult.data === 'number') {
+              this.totalCount = countResult.data;
+            }
           }
         } catch (e) {
           this.totalCount = 0;
         }
 
         // Get page
-        const result = await api.get(`tradeskill_recipes`, {
+        const result = await api.get('tradeskill_recipes', {
           params: {
-            where,
-            limit: PAGE_SIZE,
-            page: this.page,
+            where: where,
+            limit: this.pageSize,
+            page: this.page - 1,
             orderBy: this.sortField,
             orderDirection: this.sortDir,
           }
         });
 
         this.recipes = (result.data || []).map(r => ({...r, entryCount: undefined}));
+
+        // If page is beyond valid range (empty last page), clamp to last valid page
+        if (this.recipes.length === 0 && this.page > 1 && this.totalCount > 0) {
+          this.page = this.totalPages;
+          this.loading = false;
+          return this.loadRecipes();
+        }
+
         this.loading = false;
 
         // Load entry counts in background
@@ -265,6 +306,10 @@ export default {
       this.page = p;
       this.loadRecipes();
     },
+    onPageSizeChange() {
+      this.page = 1;
+      this.loadRecipes();
+    },
     resetSearch() {
       this.search = "";
       this.maxTrivial = null;
@@ -274,10 +319,10 @@ export default {
       this.loadRecipes();
     },
     editRecipe(recipe) {
-      this.$router.push({path: `/tradeskills/${this.tradeskillId}/recipe/${recipe.id}`});
+      this.$router.push({path: `/tradeskills/${tradeskillToSlug(this.tradeskillId)}/recipe/${recipe.id}`});
     },
     createRecipe() {
-      this.$router.push({path: `/tradeskills/${this.tradeskillId}/recipe/new`});
+      this.$router.push({path: `/tradeskills/${tradeskillToSlug(this.tradeskillId)}/recipe/new`});
     },
     confirmDelete(recipe) {
       this.deleteTarget = recipe;
@@ -302,7 +347,7 @@ export default {
 };
 </script>
 
-<style scoped>
+<style>
 .cursor-pointer {
   cursor: pointer;
 }
