@@ -662,6 +662,14 @@
                 >
                   <i class="fa fa-plus mr-1"></i> Add Loot Drop
                 </b-button>
+                <b-button
+                  size="sm"
+                  variant="outline-danger"
+                  @click="deleteLoottable"
+                  class="ml-2"
+                >
+                  <i class="fa fa-trash mr-1"></i> Delete Loot Table
+                </b-button>
               </div>
             </div>
             <transition name="fade">
@@ -673,17 +681,6 @@
             </transition>
             </div>
           </eq-window>
-
-          <!-- Delete -->
-          <div class="text-right mt-2 mb-3 mr-2">
-            <b-button
-              size="sm"
-              variant="outline-danger"
-              @click="deleteLoottable"
-            >
-              <i class="fa fa-trash mr-1"></i> Delete Loot Table
-            </b-button>
-          </div>
         </div>
       </div>
     </div>
