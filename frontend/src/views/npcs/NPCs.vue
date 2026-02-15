@@ -53,6 +53,8 @@
           <div
             id="npcs-table-container"
             style="overflow-x: scroll; height: 85vh"
+            @scroll="handleTableScroll"
+            ref="npcTableContainer"
           >
             <table
               id="npcs-table"
@@ -63,7 +65,7 @@
               <thead class="eq-table-floating-header">
               <tr>
                 <th
-                  v-for="(header, index) in Object.keys(npcTypes[0])"
+                  v-for="(header, index) in cachedColumnKeys"
                   :id="'column-' + header"
                   :style="previewStyles(header) + 'text-align: center; ' + getColumnHeaderWidth(header) + '' + ([0, 1].includes(index) ? ' position: sticky; z-index: 9999; background-color: rgba(25,31,41, 1); ' + getColumnStylingFromIndex(index) : '')"
                 >{{ header }}
@@ -71,15 +73,17 @@
               </tr>
               </thead>
               <tbody>
+              <!-- Virtual scroll spacer (top) -->
+              <tr v-if="virtualScrollTop > 0" :style="'height:' + virtualScrollTop + 'px'"><td :colspan="cachedColumnKeys.length"></td></tr>
               <tr
-                v-for="(row, index) in npcTypes"
+                v-for="(row, index) in visibleNpcTypes"
                 :id="'npc-' + row.id"
-                :key="index"
+                :key="row.id"
               >
                 <td
                   :style="' text-align: center; ' + ([0, 1].includes(colIndex) ? ' position: sticky; z-index: 999; background-color: rgba(25,31,41, .95);' + getColumnStylingFromIndex(colIndex): '')"
-                  v-for="(key, colIndex) in Object.keys(row)"
-                  v-if="doesRowColumnHaveObjects(row, key)"
+                  v-for="(key, colIndex) in cachedColumnKeys"
+                  v-if="cachedObjectColumns[key] !== true"
                 >
                   <npc-popover
                     v-if="key === 'name'"
@@ -94,7 +98,7 @@
 
                   <!-- Set all values preview -->
                   <span
-                    v-if="isPreviewValueChangeable(row[key], previewValue) && previewField === key && row[key] !== getTypedField(previewValue)"
+                    v-if="previewField === key && isPreviewValueChangeable(row[key], previewValue) && row[key] !== getTypedField(previewValue)"
                     style="color: yellow"
                     class="ml-1"
                   >-> {{
@@ -103,7 +107,7 @@
 
                   <!-- Min / Max -->
                   <span
-                    v-if="isPreviewValueChangeable(row[key], previewMinMaxData[row.id]) && previewField === key && row[key] !== getTypedField(previewMinMaxData[row.id]) && previewMinMaxData[row.id]"
+                    v-if="previewField === key && isPreviewValueChangeable(row[key], previewMinMaxData[row.id]) && row[key] !== getTypedField(previewMinMaxData[row.id]) && previewMinMaxData[row.id]"
                     style="color: yellow"
                     class="ml-1"
                   >-> {{
@@ -112,7 +116,7 @@
 
                   <!-- Percentage -->
                   <span
-                    v-if="isPreviewValueChangeable(row[key], previewPercentageData[row.id]) && previewField === key && row[key] !== getTypedField(previewPercentageData[row.id]) && previewPercentageData[row.id]"
+                    v-if="previewField === key && isPreviewValueChangeable(row[key], previewPercentageData[row.id]) && row[key] !== getTypedField(previewPercentageData[row.id]) && previewPercentageData[row.id]"
                     style="color: yellow"
                     class="ml-1"
                   >-> {{
@@ -121,6 +125,8 @@
 
                 </td>
               </tr>
+              <!-- Virtual scroll spacer (bottom) -->
+              <tr v-if="virtualScrollBottom > 0" :style="'height:' + virtualScrollBottom + 'px'"><td :colspan="cachedColumnKeys.length"></td></tr>
               </tbody>
             </table>
           </div>
@@ -201,7 +207,51 @@ export default {
 
       // preview percentage
       previewPercentageData: {},
+
+      // virtual scroll state
+      virtualStartIndex: 0,
+      virtualEndIndex: 50,
+      rowHeight: 28,
+      visibleRowBuffer: 10,
     }
+  },
+
+  computed: {
+    cachedColumnKeys() {
+      if (this.npcTypes && this.npcTypes.length > 0) {
+        return Object.keys(this.npcTypes[0]).filter(k => {
+          const val = this.npcTypes[0][k];
+          return !((typeof val === 'object') && val !== null && Object.keys(val));
+        });
+      }
+      return [];
+    },
+    cachedObjectColumns() {
+      // Pre-compute which columns are object type (to skip in rendering)
+      if (this.npcTypes && this.npcTypes.length > 0) {
+        const cols = {};
+        const first = this.npcTypes[0];
+        for (const k of Object.keys(first)) {
+          const val = first[k];
+          if ((typeof val === 'object') && val !== null && Object.keys(val)) {
+            cols[k] = true;
+          }
+        }
+        return cols;
+      }
+      return {};
+    },
+    visibleNpcTypes() {
+      if (!this.npcTypes) return [];
+      return this.npcTypes.slice(this.virtualStartIndex, this.virtualEndIndex);
+    },
+    virtualScrollTop() {
+      return this.virtualStartIndex * this.rowHeight;
+    },
+    virtualScrollBottom() {
+      if (!this.npcTypes) return 0;
+      return Math.max(0, (this.npcTypes.length - this.virtualEndIndex) * this.rowHeight);
+    },
   },
 
   watch: {
@@ -499,6 +549,24 @@ export default {
       return (typeof r[key] !== 'undefined') && !(typeof r[key] === 'object' && r[key] !== null && Object.keys(r[key]))
     },
 
+    handleTableScroll() {
+      if (this._scrollRaf) return;
+      this._scrollRaf = requestAnimationFrame(() => {
+        this._scrollRaf = null;
+        const container = this.$refs.npcTableContainer;
+        if (!container || !this.npcTypes || this.npcTypes.length === 0) return;
+        const scrollTop = container.scrollTop;
+        const viewHeight = container.clientHeight;
+        const start = Math.max(0, Math.floor(scrollTop / this.rowHeight) - this.visibleRowBuffer);
+        const visible = Math.ceil(viewHeight / this.rowHeight) + this.visibleRowBuffer * 2;
+        const end = Math.min(this.npcTypes.length, start + visible);
+        if (start !== this.virtualStartIndex || end !== this.virtualEndIndex) {
+          this.virtualStartIndex = start;
+          this.virtualEndIndex = end;
+        }
+      });
+    },
+
     async init() {
       this.loadQueryState()
 
@@ -603,6 +671,10 @@ export default {
           });
 
           this.npcTypes = rn.data
+
+          // Reset virtual scroll to show first batch
+          this.virtualStartIndex = 0;
+          this.virtualEndIndex = Math.min(50, rn.data.length);
         }
 
         this.$forceUpdate()
