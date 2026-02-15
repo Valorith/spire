@@ -10,6 +10,13 @@
             <div :class="(isAnySelectorActive() ? 'col-2' : 'col-1') + 'text-right'">
               <button
                 class='btn btn-dark btn-sm mt-1'
+                @click="$router.push('/zone/' + zone)"
+                title="Back to Zone Editor"
+              >
+                <i class="fa fa-arrow-left"></i> Back
+              </button>
+              <button
+                class='btn btn-dark btn-sm mt-1 ml-3'
                 @click="reset"
               >
                 <i class="fa fa-refresh"></i> Reset
