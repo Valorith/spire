@@ -496,9 +496,17 @@ export default {
       this.previewVersion++
     },
     scrollToColumnDeferred(e) {
-      // Wait for Vue to re-render (column may have just been added to the visible set)
+      // Ensure the preview field is set and column is visible before scrolling
+      if (this.previewField !== e) {
+        this.previewField = e;
+      }
+      // Increment previewVersion to trigger cachedColumnKeys to include this field
+      this.previewVersion++;
+      // Wait for Vue to re-render, then scroll
       this.$nextTick(() => {
-        this.scrollToColumn(e);
+        this.$nextTick(() => {
+          this.scrollToColumn(e);
+        });
       });
     },
 
