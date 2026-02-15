@@ -93,7 +93,7 @@
         <!-- Editor -->
         <div v-if="selectedTable" ref="rightPanel">
           <!-- Header -->
-          <eq-window class="p-0">
+          <eq-window class="p-0 loot-header-window">
             <div class="loot-editor-header">
               <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
@@ -1685,6 +1685,10 @@ export default {
 </script>
 
 <style>
+.loot-header-window.eq-window-simple,
+.loot-header-window .eq-window-simple {
+  overflow: visible !important;
+}
 .content-flag-dropdown .dropdown-menu {
   background: rgba(20, 20, 35, 0.98);
   border: 1px solid rgba(200, 180, 120, 0.3);
@@ -1733,6 +1737,10 @@ export default {
 }
 .npc-section-header:hover {
   opacity: .9;
+}
+.loot-header-window {
+  position: relative;
+  z-index: 10;
 }
 .npc-popover-overlay {
   position: absolute;
