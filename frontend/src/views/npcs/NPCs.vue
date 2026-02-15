@@ -4,7 +4,7 @@
       <div :class="(isAnySelectorActive() ? 'col-7' : 'col-12')">
         <eq-window
           v-if="zoneData"
-          :title="`${zoneData.long_name} Short Name (${zoneData.short_name}) Version (${zoneData.version}) NPC(s) (${npcTypes.length})`"
+          :title="`${zoneData.long_name} (${zoneData.short_name}) Version (${zoneData.version}) NPC(s) (${npcTypes.length})`"
         >
           <div class="row">
             <div :class="(isAnySelectorActive() ? 'col-2' : 'col-1') + 'text-right'">
