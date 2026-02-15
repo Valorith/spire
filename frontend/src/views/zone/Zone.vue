@@ -60,7 +60,7 @@
               @click="$router.push('/zones')"
               title="Back to Zone List"
             >
-              <i class="fa fa-arrow-left"></i>
+              <i class="fa fa-arrow-left"></i> Back
             </b-button>
             <span class="zone-sidebar-title eq-header" v-if="zoneData">
               {{ zoneData.long_name || zone }}
