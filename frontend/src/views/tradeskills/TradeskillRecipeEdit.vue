@@ -1350,6 +1350,8 @@ export default {
   padding: 10px 16px;
   color: #bbdefb;
   font-size: 0.9em;
+  position: relative;
+  z-index: 10;
 }
 .recipe-entries-wrapper {
   position: relative;
