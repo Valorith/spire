@@ -1343,6 +1343,15 @@ export default {
 </script>
 
 <style>
+/* Hide number input spinners */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
 .clone-notification {
   background: rgba(33, 150, 243, 0.15);
   border: 1px solid rgba(33, 150, 243, 0.4);

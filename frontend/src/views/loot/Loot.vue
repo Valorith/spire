@@ -1794,6 +1794,15 @@ export default {
 </script>
 
 <style>
+/* Hide number input spinners */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
 .loot-header-window.eq-window-simple,
 .loot-header-window .eq-window-simple {
   overflow: visible !important;
