@@ -834,6 +834,7 @@ export default {
         }
 
         this.cloneNotification = true;
+        this.hasUnsavedChanges = true;
       } catch (e) {
         console.error("Failed to load clone source:", e);
       }
