@@ -1,9 +1,9 @@
 <template>
   <content-area style="padding: 0 !important">
-    <div class="row">
+    <div class="row loot-page-row">
       <!-- Left Panel: Search & List -->
-      <div class="col-4">
-        <eq-window title="Loot Tables" ref="lootTablesWindow">
+      <div class="col-4 loot-left-col">
+        <eq-window title="Loot Tables" ref="lootTablesWindow" class="loot-tables-window">
           <div class="d-flex mb-2">
             <input
               type="text"
@@ -81,7 +81,7 @@
       </div>
 
       <!-- Right Panel: Editor -->
-      <div class="col-8">
+      <div class="col-8 loot-right-col">
         <!-- Empty State -->
         <eq-window v-if="!selectedTable" title="Loot Editor">
           <div class="text-center p-5" style="opacity: .4;">
@@ -91,7 +91,7 @@
         </eq-window>
 
         <!-- Editor -->
-        <div v-if="selectedTable" ref="rightPanel">
+        <div v-if="selectedTable" ref="rightPanel" class="loot-editor-col">
           <!-- Header -->
           <eq-window class="p-0">
             <div class="loot-editor-header">
@@ -1896,11 +1896,46 @@ export default {
   border-color: #ff9800 !important;
   box-shadow: 0 0 4px rgba(255, 152, 0, 0.3);
 }
-.loot-drops-window {
+.loot-page-row {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  height: calc(100vh - 40px);
+  overflow: hidden;
+}
+.loot-left-col {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.loot-tables-window {
+  flex: 1;
   display: flex !important;
   flex-direction: column !important;
-  max-height: calc(100vh - 260px);
   overflow: hidden;
+}
+.loot-tables-window > div:last-child {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.loot-right-col {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.loot-editor-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.loot-drops-window {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden;
+  min-height: 0;
 }
 .loot-drops-window > div:last-child {
   flex: 1;
