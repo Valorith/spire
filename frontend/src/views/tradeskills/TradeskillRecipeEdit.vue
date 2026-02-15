@@ -34,9 +34,9 @@
       </div>
 
       <!-- Recipe Properties -->
-      <div class="row">
-        <div class="col-lg-6">
-          <eq-window title="Recipe Properties" class="mb-3">
+      <div class="row" style="display: flex; flex-wrap: wrap;">
+        <div class="col-lg-6" style="display: flex; flex-direction: column;">
+          <eq-window title="Recipe Properties" class="mb-3" style="flex: 1;">
             <table class="eq-table" style="font-size: 14px;">
               <tbody>
                 <tr>
@@ -213,8 +213,8 @@
         </div>
 
         <!-- Recipe Entries (Visual) -->
-        <div class="col-lg-6">
-          <eq-window title="Recipe Components & Results" class="mb-3">
+        <div class="col-lg-6" style="display: flex; flex-direction: column;">
+          <eq-window title="Recipe Components & Results" class="mb-3" style="flex: 1;">
            <div class="recipe-entries-wrapper">
            <div class="recipe-entries-scroll" ref="entriesScroll" @scroll="onEntriesScroll">
             <!-- Components (inputs) -->
