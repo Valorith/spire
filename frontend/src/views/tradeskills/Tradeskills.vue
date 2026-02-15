@@ -324,57 +324,11 @@ export default {
     editRecipe(recipe) {
       this.$router.push({path: `/tradeskills/${tradeskillToSlug(this.tradeskillId)}/recipe/${recipe.id}`});
     },
-    async cloneRecipe(recipe) {
-      try {
-        const api = SpireApi.v1();
-        // Fetch the full recipe with entries
-        const r = await api.get(`tradeskill_recipe/${recipe.id}`, {
-          params: { includes: 'TradeskillRecipeEntries' }
-        });
-        const source = Array.isArray(r.data) ? r.data[0] : r.data;
-        if (!source) throw new Error('Recipe not found');
-
-        // Create the cloned recipe
-        const cloneData = {
-          name: (source.name || 'Recipe') + ' (Clone)',
-          tradeskill: source.tradeskill,
-          skillneeded: source.skillneeded || 0,
-          trivial: source.trivial || 0,
-          nofail: source.nofail || 0,
-          replace_container: source.replace_container || 0,
-          notes: source.notes || '',
-          must_learn: source.must_learn || 0,
-          quest: source.quest || 0,
-          enabled: source.enabled != null ? source.enabled : 1,
-          min_expansion: source.min_expansion || -1,
-          max_expansion: source.max_expansion || -1,
-          content_flags: source.content_flags || '',
-          content_flags_disabled: source.content_flags_disabled || '',
-        };
-        const createR = await api.put('tradeskill_recipe', cloneData);
-        const created = Array.isArray(createR.data) ? createR.data[0] : createR.data;
-        if (!created || !created.id) throw new Error('Clone create failed');
-
-        // Clone entries
-        const entries = source.tradeskill_recipe_entries || [];
-        for (const entry of entries) {
-          await api.put('tradeskill_recipe_entry', {
-            recipe_id: created.id,
-            item_id: entry.item_id,
-            successcount: entry.successcount || 0,
-            failcount: entry.failcount || 0,
-            componentcount: entry.componentcount || 0,
-            salvagecount: entry.salvagecount || 0,
-            iscontainer: entry.iscontainer || 0,
-          });
-        }
-
-        // Navigate to the cloned recipe
-        this.$router.push({path: `/tradeskills/${tradeskillToSlug(this.tradeskillId)}/recipe/${created.id}`});
-      } catch (e) {
-        console.error('Clone failed:', e);
-        alert('Failed to clone recipe: ' + (e.message || e));
-      }
+    cloneRecipe(recipe) {
+      this.$router.push({
+        path: `/tradeskills/${tradeskillToSlug(this.tradeskillId)}/recipe/new`,
+        query: { cloneFrom: recipe.id }
+      });
     },
     createRecipe() {
       this.$router.push({path: `/tradeskills/${tradeskillToSlug(this.tradeskillId)}/recipe/new`});

@@ -4,6 +4,21 @@
       <div class="tradeskill-icon-badge">
         <i :class="tradeskillIcon"></i>
       </div>
+
+      <!-- Clone Notification -->
+      <div v-if="cloneNotification" class="clone-notification mb-3">
+        <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <i class="fa fa-copy mr-2" style="color: #42a5f5;"></i>
+            <strong>Cloned Recipe</strong> — This is an unsaved copy. Review the details and click
+            <strong style="color: #ffd54f;">Save</strong> to create it as a new recipe.
+          </div>
+          <b-button size="sm" variant="link" @click="cloneNotification = false" style="color: #999;">
+            <i class="fa fa-times"></i>
+          </b-button>
+        </div>
+      </div>
+
       <!-- Top Controls -->
       <div class="row mb-3">
         <div class="col-12">
@@ -587,6 +602,7 @@ export default {
       tradeskillId: 0,
       recipeId: null,
       isNew: false,
+      cloneNotification: false,
       loading: true,
       saving: false,
       saveMessage: "",
@@ -699,6 +715,12 @@ export default {
       this.isNew = true;
       this.recipe.tradeskill = this.tradeskillId;
       this.loading = false;
+
+      // Handle clone from existing recipe
+      const cloneFrom = this.$route.query.cloneFrom;
+      if (cloneFrom) {
+        await this.loadCloneSource(parseInt(cloneFrom));
+      }
     } else {
       this.recipeId = parseInt(rid);
       await this.loadRecipe();
@@ -763,6 +785,59 @@ export default {
       this.loading = false;
       this.storeOriginalValues();
       this.resetPendingChanges();
+    },
+    async loadCloneSource(sourceId) {
+      this.loading = true;
+      try {
+        const api = SpireApi.v1();
+        const result = await api.get(`tradeskill_recipe/${sourceId}`);
+        const source = result.data;
+        if (source) {
+          this.recipe = {
+            ...this.recipe,
+            name: (source.name || 'Recipe') + ' (Clone)',
+            tradeskill: source.tradeskill,
+            skillneeded: source.skillneeded || 0,
+            trivial: source.trivial || 0,
+            nofail: source.nofail || 0,
+            replace_container: source.replace_container || 0,
+            notes: source.notes || '',
+            must_learn: source.must_learn || 0,
+            learned_by_item_id: source.learned_by_item_id || 0,
+            quest: source.quest || 0,
+            enabled: source.enabled != null ? source.enabled : 1,
+            min_expansion: source.min_expansion || -1,
+            max_expansion: source.max_expansion || -1,
+            content_flags: source.content_flags || '',
+            content_flags_disabled: source.content_flags_disabled || '',
+          };
+        }
+
+        // Load entries from source
+        const entriesResult = await api.get(`tradeskill_recipe_entries`, {
+          params: {where: `recipe_id__${sourceId}`, limit: 1000}
+        });
+        this.entries = (entriesResult.data || []).map(e => ({
+          ...e,
+          recipe_id: 0, // Mark as belonging to new recipe (not yet saved)
+        }));
+
+        // Load item details
+        const itemIds = [...new Set(this.entries.map(e => e.item_id))];
+        if (this.recipe.learned_by_item_id > 0) {
+          itemIds.push(this.recipe.learned_by_item_id);
+        }
+        await this.loadItems(itemIds);
+
+        if (this.recipe.learned_by_item_id > 0) {
+          this.learnedByItem = this.itemCache[this.recipe.learned_by_item_id] || null;
+        }
+
+        this.cloneNotification = true;
+      } catch (e) {
+        console.error("Failed to load clone source:", e);
+      }
+      this.loading = false;
     },
     async loadItem(itemId) {
       if (this.itemCache[itemId]) return this.itemCache[itemId];
@@ -1267,6 +1342,14 @@ export default {
 </script>
 
 <style>
+.clone-notification {
+  background: rgba(33, 150, 243, 0.15);
+  border: 1px solid rgba(33, 150, 243, 0.4);
+  border-radius: 6px;
+  padding: 10px 16px;
+  color: #bbdefb;
+  font-size: 0.9em;
+}
 .recipe-entries-wrapper {
   position: relative;
 }
