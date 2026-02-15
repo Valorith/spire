@@ -54,7 +54,7 @@
       >
         <!-- Sidebar header with collapse button -->
         <div class="zone-sidebar-header">
-          <span class="zone-sidebar-title eq-header" v-if="zoneData" style="font-size: 16px; margin: 0; padding: 0;">
+          <span class="zone-sidebar-title eq-header" v-if="zoneData" style="font-size: 22px; margin: 0; padding: 0;">
             {{ zoneData.long_name || zone }}
           </span>
           <b-button
