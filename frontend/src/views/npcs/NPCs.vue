@@ -30,7 +30,7 @@
               ></b-input>
             </div>
 
-            <div class="col-6 p-0">
+            <div class="col-4 p-0">
               <db-column-filter
                 v-if="npcTypeFields && filters"
                 :set-filters="filters"
@@ -39,10 +39,20 @@
               />
             </div>
 
-
-            <!--        <div class="col-2">-->
-            <!--          {{ npcTypes.length }} NPC(s)-->
-            <!--        </div>-->
+            <div class="col-2 d-flex align-items-center justify-content-end pr-3">
+              <label class="mb-0 mr-2 text-muted" style="font-size: 12px; white-space: nowrap;">Columns</label>
+              <select
+                class="form-control form-control-sm bg-dark text-white border-secondary"
+                style="width: 70px;"
+                v-model.number="columnLimit"
+              >
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+                <option :value="75">75</option>
+                <option :value="0">All</option>
+              </select>
+            </div>
           </div>
         </eq-window>
         <eq-window
@@ -205,6 +215,9 @@ export default {
       // trigger for preview re-render (increment to force update of visible rows)
       previewVersion: 0,
 
+      // column limit (0 = all)
+      columnLimit: 25,
+
       // virtual scroll state
       virtualStartIndex: 0,
       virtualEndIndex: 50,
@@ -214,7 +227,7 @@ export default {
   },
 
   computed: {
-    cachedColumnKeys() {
+    allColumnKeys() {
       if (this.npcTypes && this.npcTypes.length > 0) {
         return Object.keys(this.npcTypes[0]).filter(k => {
           const val = this.npcTypes[0][k];
@@ -222,6 +235,39 @@ export default {
         });
       }
       return [];
+    },
+    cachedColumnKeys() {
+      // Priority-ordered columns — most commonly adjusted NPC fields first
+      const priority = [
+        'id', 'name', 'lastname', 'level', 'race', 'class', 'hp', 'mana', 'ac',
+        'mindmg', 'maxdmg', 'attack_delay', 'attack_speed', 'attack_count',
+        'str', 'sta', 'dex', 'agi', '_int', 'wis', 'cha',
+        'mr', 'cr', 'dr', 'fr', 'pr',
+        'hp_regen_rate', 'mana_regen_rate', 'size', 'runspeed',
+        'npc_spells_id', 'npc_faction_id', 'loottable_id', 'merchant_id',
+        'aggroradius', 'assistradius', 'see_invis', 'see_hide',
+        'special_abilities', 'npcspecialattks', 'bodytype', 'gender',
+        'scalerate', 'exp_mod', 'accuracy', 'avoidance', 'atk',
+        'slow_mitigation', 'maxlevel', 'rare_spawn', 'spawn_limit'
+      ];
+      const all = this.allColumnKeys;
+      if (all.length === 0) return [];
+
+      // Build ordered list: priority columns first, then remaining
+      const allSet = new Set(all);
+      const ordered = priority.filter(k => allSet.has(k));
+      const remaining = all.filter(k => !new Set(ordered).has(k));
+      const full = ordered.concat(remaining);
+
+      // Also always include the preview field if set
+      if (this.columnLimit > 0) {
+        let limited = full.slice(0, this.columnLimit);
+        if (this.previewField && !limited.includes(this.previewField)) {
+          limited.push(this.previewField);
+        }
+        return limited;
+      }
+      return full;
     },
     cachedObjectColumns() {
       // Pre-compute which columns are object type (to skip in rendering)
