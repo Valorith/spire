@@ -467,11 +467,12 @@
             {{ itemSearchResults.length }} results — drag into sections above
           </small>
         </div>
-        <div v-if="itemSearchResults.length === 0 && !itemSearching" class="text-muted text-center p-3">
+        <div class="item-search-grid-container">
+        <div v-if="itemSearchResults.length === 0 && !itemSearching" class="text-muted text-center p-3" style="height: 318px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
           <i class="fa fa-search" style="font-size: 24px; opacity: 0.3;"></i>
           <div class="mt-2">Search for items to drag into your recipe</div>
         </div>
-        <div class="item-search-grid">
+        <div v-else class="item-search-grid">
           <div
             v-for="item in itemSearchResults"
             :key="'search-' + item.id"
@@ -485,6 +486,7 @@
             <div class="item-search-card-name">{{ item.Name || item.name }}</div>
             <div class="item-search-card-id">#{{ item.id }}</div>
           </div>
+        </div>
         </div>
       </div>
     </eq-window>
@@ -1363,14 +1365,14 @@ export default {
 
 /* Item Search Panel */
 .item-search-panel {
-  min-height: 100px;
 }
 .item-search-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
-  max-height: 400px;
+  height: 318px;
   overflow-y: auto;
+  padding-bottom: 8px;
 }
 .item-search-card {
   display: flex;
