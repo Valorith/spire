@@ -1569,6 +1569,7 @@ export default {
   font-size: 32px;
   color: #e8c56d;
   pointer-events: none;
+  z-index: 5;
 }
 
 /* Item Search Panel */
