@@ -245,11 +245,13 @@
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
-                    <div class="mr-2">
-                      <small class="text-muted">Count:</small>
-                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.componentcount" style="width: 60px;" min="1"
-                        @input="updateHasChanges()">
+                    <div class="mr-2 d-flex align-items-center">
+                      <small class="text-muted mr-1">Count:</small>
+                      <div class="count-stepper">
+                        <button class="count-btn count-btn-minus" @click="decrementCount(entry, 'componentcount')" :disabled="entry.componentcount <= 1"><i class="fa fa-minus"></i></button>
+                        <input type="number" class="count-input" v-model.number="entry.componentcount" min="1" @input="updateHasChanges()">
+                        <button class="count-btn count-btn-plus" @click="incrementCount(entry, 'componentcount')"><i class="fa fa-plus"></i></button>
+                      </div>
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'component')">
                       <i class="fa fa-times"></i>
@@ -367,11 +369,13 @@
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
-                    <div class="mr-2">
-                      <small class="text-muted">Count:</small>
-                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.salvagecount" style="width: 60px;" min="1"
-                        @input="updateHasChanges()">
+                    <div class="mr-2 d-flex align-items-center">
+                      <small class="text-muted mr-1">Count:</small>
+                      <div class="count-stepper">
+                        <button class="count-btn count-btn-minus" @click="decrementCount(entry, 'salvagecount')" :disabled="entry.salvagecount <= 1"><i class="fa fa-minus"></i></button>
+                        <input type="number" class="count-input" v-model.number="entry.salvagecount" min="1" @input="updateHasChanges()">
+                        <button class="count-btn count-btn-plus" @click="incrementCount(entry, 'salvagecount')"><i class="fa fa-plus"></i></button>
+                      </div>
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'salvage')">
                       <i class="fa fa-times"></i>
@@ -412,11 +416,13 @@
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
-                    <div class="mr-2">
-                      <small class="text-muted">Count:</small>
-                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.failcount" style="width: 60px;" min="1"
-                        @input="updateHasChanges()">
+                    <div class="mr-2 d-flex align-items-center">
+                      <small class="text-muted mr-1">Count:</small>
+                      <div class="count-stepper">
+                        <button class="count-btn count-btn-minus" @click="decrementCount(entry, 'failcount')" :disabled="entry.failcount <= 1"><i class="fa fa-minus"></i></button>
+                        <input type="number" class="count-input" v-model.number="entry.failcount" min="1" @input="updateHasChanges()">
+                        <button class="count-btn count-btn-plus" @click="incrementCount(entry, 'failcount')"><i class="fa fa-plus"></i></button>
+                      </div>
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'fail')">
                       <i class="fa fa-times"></i>
@@ -457,11 +463,13 @@
                     <span v-else class="text-muted">Item #{{ entry.item_id }}</span>
                   </div>
                   <div class="d-flex align-items-center">
-                    <div class="mr-2">
-                      <small class="text-muted">Count:</small>
-                      <input type="number" class="form-control form-control-sm d-inline-block ml-1"
-                        v-model.number="entry.successcount" style="width: 60px;" min="1"
-                        @input="updateHasChanges()">
+                    <div class="mr-2 d-flex align-items-center">
+                      <small class="text-muted mr-1">Count:</small>
+                      <div class="count-stepper">
+                        <button class="count-btn count-btn-minus" @click="decrementCount(entry, 'successcount')" :disabled="entry.successcount <= 1"><i class="fa fa-minus"></i></button>
+                        <input type="number" class="count-input" v-model.number="entry.successcount" min="1" @input="updateHasChanges()">
+                        <button class="count-btn count-btn-plus" @click="incrementCount(entry, 'successcount')"><i class="fa fa-plus"></i></button>
+                      </div>
                     </div>
                     <b-button size="sm" variant="outline-danger" @click="removeEntry(entry, 'success')">
                       <i class="fa fa-times"></i>
@@ -925,6 +933,17 @@ export default {
     scrollToBottom() {
       const el = this.$refs.entriesScroll;
       if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    },
+    // --- Count Stepper ---
+    incrementCount(entry, field) {
+      entry[field] = (entry[field] || 0) + 1;
+      this.updateHasChanges();
+    },
+    decrementCount(entry, field) {
+      if (entry[field] > 1) {
+        entry[field] = entry[field] - 1;
+        this.updateHasChanges();
+      }
     },
     // --- World Containers ---
     isWorldContainer(itemId) {
@@ -1503,6 +1522,63 @@ export default {
   background: rgba(0, 0, 0, 0.5);
   padding: 1px 6px;
   border-radius: 10px;
+}
+
+/* Count Stepper */
+.count-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(200, 180, 120, 0.25);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.count-btn {
+  background: rgba(200, 180, 120, 0.1);
+  border: none;
+  color: #e8c56d;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.count-btn:hover:not(:disabled) {
+  background: rgba(200, 180, 120, 0.3);
+  color: #ffd966;
+}
+.count-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.count-btn-minus {
+  border-right: 1px solid rgba(200, 180, 120, 0.2);
+}
+.count-btn-plus {
+  border-left: 1px solid rgba(200, 180, 120, 0.2);
+}
+.count-input {
+  width: 44px;
+  height: 28px;
+  background: rgba(20, 20, 35, 0.9);
+  border: none;
+  color: #e0d8c8;
+  text-align: center;
+  font-size: 13px;
+  -moz-appearance: textfield;
+}
+.count-input::-webkit-outer-spin-button,
+.count-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.count-input:focus {
+  outline: none;
+  background: rgba(30, 30, 50, 0.9);
 }
 
 /* Empty section compact */
