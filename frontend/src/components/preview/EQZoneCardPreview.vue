@@ -2452,7 +2452,7 @@ export default {
 
     async loadNpcTypes() {
       let npcTypes = [];
-      const r = await Spawn.getByZone(this.zone.short_name, this.zone.version, true)
+      const r = await Spawn.getByZone(this.zone.short_name, this.zone.version, false)
       if (r.length > 0) {
         for (let spawn2 of r) {
           if (spawn2.spawnentries) {

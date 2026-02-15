@@ -1117,7 +1117,7 @@ export default {
           this.pathingGridData = gridEntries
         }
 
-        const result = await Spawn.getByZone(this.zone, this.version, true)
+        const result = await Spawn.getByZone(this.zone, this.version, false)
         if (result.length > 0) {
           for (let spawn2 of result) {
             if (spawn2.spawnentries) {
