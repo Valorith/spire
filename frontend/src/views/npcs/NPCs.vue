@@ -146,7 +146,7 @@
 
       <div class="col-5" v-if="isAnySelectorActive()">
         <npcs-bulk-editor
-          @field-selected="scrollToColumn($event)"
+          @field-selected="scrollToColumnDeferred($event)"
           @set-values-preview="handleSetValuesPreview($event)"
           @set-values-commit="handleSetValuesCommit($event)"
           @set-min-max-values-preview="handleMinMaxSetValuesPreview($event)"
@@ -495,6 +495,13 @@ export default {
       this.previewPercentageData = previewPercentageData
       this.previewVersion++
     },
+    scrollToColumnDeferred(e) {
+      // Wait for Vue to re-render (column may have just been added to the visible set)
+      this.$nextTick(() => {
+        this.scrollToColumn(e);
+      });
+    },
+
     scrollToColumn(e) {
       const container = document.getElementById("npcs-table-container");
       const target    = document.getElementById(util.format("column-%s", e))
