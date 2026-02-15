@@ -39,7 +39,7 @@
               />
             </div>
 
-            <div class="col-2 d-flex align-items-center justify-content-end pr-3">
+            <div class="ml-auto d-flex align-items-center justify-content-end pr-3">
               <label class="mb-0 mr-2 text-muted" style="font-size: 12px; white-space: nowrap;">Columns</label>
               <select
                 class="form-control form-control-sm bg-dark text-white border-secondary"
