@@ -53,24 +53,34 @@
         :style="{ flex: '1 1 0%', minWidth: '250px' }"
       >
         <!-- Sidebar header with collapse button -->
-        <div class="zone-sidebar-header">
-          <span class="zone-sidebar-title eq-header" v-if="zoneData" style="font-size: 24px; margin: 0; padding: 0;">
-            {{ zoneData.long_name || zone }}
-          </span>
-          <b-button
-            class="btn-dark btn-sm ml-auto"
-            @click="sidebarCollapsed = true"
-            title="Collapse sidebar"
-          >
-            <i class="fa fa-chevron-right"></i>
-          </b-button>
-        </div>
+        <eq-window class="zone-name-frame">
+          <div class="zone-sidebar-header">
+            <b-button
+              class="zone-sidebar-back btn-dark btn-sm"
+              @click="$router.push('/zones')"
+              title="Back to Zone List"
+            >
+              <i class="fa fa-arrow-left"></i>
+            </b-button>
+            <span class="zone-sidebar-title eq-header" v-if="zoneData">
+              {{ zoneData.long_name || zone }}
+            </span>
+            <b-button
+              class="zone-sidebar-collapse btn-dark btn-sm"
+              @click="sidebarCollapsed = true"
+              title="Collapse sidebar"
+            >
+              <i class="fa fa-chevron-right"></i>
+            </b-button>
+          </div>
+        </eq-window>
 
         <!-- Zone Card -->
         <eq-zone-card-preview
           style="height: 92vh; overflow-y: auto;"
           v-show="selectorActive['zone-preview'] && zoneData"
           :zone="zoneData"
+          class="zone-card-no-gap"
         />
 
         <eq-window
@@ -453,9 +463,11 @@ export default {
 .zone-sidebar-header {
   display: flex;
   align-items: center;
-  padding: 6px 10px;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  justify-content: center;
+  padding: 0 10px;
+  border-bottom: none;
+  min-height: 48px;
+  position: relative;
 }
 
 .zone-sidebar-title {
@@ -465,6 +477,22 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
+  flex: 1;
+}
+
+.zone-sidebar-back {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.zone-sidebar-collapse {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .zone-sidebar-toggle-open {
@@ -529,8 +557,42 @@ export default {
   letter-spacing: 0.5px !important;
 }
 .zone-sidebar-title.eq-header {
-  font-size: 24px !important;
+  font-size: 32px !important;
   color: #fcc721 !important;
+  text-align: center !important;
+  line-height: 1.1 !important;
+}
+
+/* --- Zone name EQ frame: hide title bar --- */
+.zone-name-frame >>> .eq-window-title-bar {
+  display: none !important;
+}
+.zone-name-frame {
+  margin-bottom: 0 !important;
+}
+.zone-name-frame >>> .eq-window-simple {
+  margin-bottom: 0 !important;
+}
+
+/* --- Close gap between zone name header and tabs --- */
+.zone-card-no-gap >>> .eq-window-simple {
+  margin-top: 7px !important;
+  border-top: none !important;
+}
+.zone-card-no-gap >>> .eq-window-simple > .eq-window-title-bar {
+  display: none !important;
+}
+.zone-card-no-gap >>> .eq-window-simple > div:last-child {
+  padding-top: 0 !important;
+}
+.zone-card-no-gap >>> .p-3.pt-1 {
+  padding-top: 0 !important;
+}
+.zone-card-no-gap >>> #zone-preview {
+  margin-top: 0 !important;
+}
+.zone-card-no-gap >>> #zone-preview > .p-3 {
+  padding-top: 0 !important;
 }
 
 /* --- NPC Table --- */
