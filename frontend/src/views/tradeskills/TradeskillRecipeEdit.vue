@@ -1419,7 +1419,6 @@ export default {
 .pending-edit-check {
   background: rgba(255, 165, 0, 0.15);
   border-radius: 4px;
-  padding: 2px 6px;
 }
 .save-btn-glow {
   animation: save-glow 1.5s ease-in-out infinite;
