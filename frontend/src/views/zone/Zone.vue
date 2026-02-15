@@ -133,6 +133,9 @@ import EqSpellPreview    from "../../components/preview/EQSpellCardPreview";
 import {Zones}           from "../../app/zones";
 import EqZoneCardPreview from "../../components/preview/EQZoneCardPreview";
 import {EventBus}        from "../../app/event-bus/event-bus";
+import {NpcTypeApi}      from "../../app/api";
+import {SpireApi}        from "../../app/api/spire-api";
+import {SpireQueryBuilder} from "../../app/api/spire-query-builder";
 
 const MILLISECONDS_BEFORE_WINDOW_RESET = 5000;
 
@@ -352,10 +355,36 @@ export default {
       }
     },
 
-    processNpcMarkerHover(n) {
+    async processNpcMarkerHover(n) {
       this.npc = {}
       this.setSelectorActive("npc-hover", true)
-      this.npc = n
+
+      // If NPC lacks deep relations (lazy load), fetch full NPC with relations
+      if (n && n.id && !n.npc_spell && !n.loottable) {
+        try {
+          const api = (new NpcTypeApi(...SpireApi.cfg()))
+          const builder = (new SpireQueryBuilder())
+          builder.where("id", "=", n.id)
+          builder.includes([
+            "NpcSpell.NpcSpellsEntries.SpellsNew",
+            "NpcFactions.NpcFactionEntries.FactionList",
+            "NpcEmotes",
+            "Merchantlists.Items",
+            "Loottable.LoottableEntries.Lootdrop.LootdropEntries.Item"
+          ])
+          const r = await api.listNpcTypes(builder.get())
+          if (r.status === 200 && r.data && r.data.length > 0) {
+            // Merge full data with original (preserve any extra fields)
+            this.npc = Object.assign({}, n, r.data[0])
+          } else {
+            this.npc = n
+          }
+        } catch (e) {
+          this.npc = n
+        }
+      } else {
+        this.npc = n
+      }
 
       const t = document.getElementById("preview-pane");
       if (t) {
