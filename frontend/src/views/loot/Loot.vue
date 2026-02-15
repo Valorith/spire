@@ -24,7 +24,7 @@
             </b-button>
           </div>
 
-          <div class="loot-list" style="height: calc(100vh - 200px); overflow-y: auto;">
+          <div class="loot-list">
             <div v-if="loading" class="text-center p-3">
               <i class="fa fa-spinner fa-spin"></i> Loading...
             </div>
@@ -93,7 +93,7 @@
         <!-- Editor -->
         <div v-if="selectedTable" ref="rightPanel" class="loot-editor-col">
           <!-- Header -->
-          <eq-window class="p-0">
+          <eq-window class="p-0 loot-header-window">
             <div class="loot-editor-header">
               <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
@@ -1901,19 +1901,32 @@ export default {
   flex-wrap: nowrap !important;
   height: calc(100vh - 40px);
   overflow: hidden;
+  padding-top: 14px;
 }
 .loot-left-col {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
+  overflow-y: hidden;
 }
 .loot-tables-window {
   flex: 1;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden;
+  min-height: 0;
+}
+.loot-tables-window ::v-deep .eq-window-title-bar {
+  flex-shrink: 0 !important;
 }
 .loot-tables-window > div:last-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.loot-list {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
@@ -1921,7 +1934,8 @@ export default {
 .loot-right-col {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
+  overflow-y: hidden;
 }
 .loot-editor-col {
   display: flex;
@@ -1930,12 +1944,20 @@ export default {
   min-height: 0;
   overflow: hidden;
 }
+.loot-header-window {
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  overflow: visible !important;
+}
 .loot-drops-window {
   flex: 1 !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden;
   min-height: 0;
+}
+.loot-drops-window ::v-deep .eq-window-title-bar {
+  flex-shrink: 0 !important;
 }
 .loot-drops-window > div:last-child {
   flex: 1;

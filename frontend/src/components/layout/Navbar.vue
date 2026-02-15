@@ -146,6 +146,12 @@
                 <b-badge class="ml-3" variant="primary">NEW!</b-badge>
               </router-link>
             </li>
+            <li class="nav-item">
+              <router-link class="nav-link " to="/tradeskills">
+                <i class="ra ra-anvil mr-1"></i> Tradeskills
+                <b-badge class="ml-3" variant="primary">NEW!</b-badge>
+              </router-link>
+            </li>
             <nav-section-component :config="viewerNav"/>
 
             <li class="nav-item">
@@ -333,7 +339,7 @@ export default {
       npcNav: {
         label: "NPCs",
         labelIcon: "ra ra-dragon mr-1",
-        routePrefixMatches: ["npc", "merchant", "loot", "tradeskills"],
+        routePrefixMatches: ["npc", "merchant", "loot"],
         navs: [
           {
             title: "NPC Editor",
@@ -370,13 +376,6 @@ export default {
             to: ROUTE.LOOT,
             icon: "ra ra-gold-bar mr-1",
             routes: ['loot']
-          },
-          {
-            title: "Tradeskills",
-            to: ROUTE.TRADESKILLS,
-            icon: "ra ra-anvil mr-1",
-            isNew: true,
-            routes: ['tradeskills']
           },
         ]
       },

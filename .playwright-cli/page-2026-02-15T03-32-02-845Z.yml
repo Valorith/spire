@@ -1,0 +1,180 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - text: 
+    - generic [ref=e5]:
+      - link "Spire" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - heading "Spire" [level=1] [ref=e7]
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - heading "Content Tools" [level=6] [ref=e10]
+          - list [ref=e11]:
+            - listitem [ref=e12]:
+              - button " Bots " [ref=e13] [cursor=pointer]:
+                - generic [ref=e14]: 
+                - text: Bots 
+              - text: 
+            - listitem [ref=e15]:
+              - button " Calculators " [ref=e16] [cursor=pointer]:
+                - generic [ref=e17]: 
+                - text: Calculators 
+              - text:        
+            - listitem [ref=e18]:
+              - link " Client File NEW!" [ref=e19] [cursor=pointer]:
+                - /url: /client-files
+                - generic [ref=e20]: 
+                - text: Client File
+                - generic [ref=e21]: NEW!
+            - listitem [ref=e22]:
+              - link " Items NEW!" [ref=e23] [cursor=pointer]:
+                - /url: /items
+                - generic [ref=e24]: 
+                - text: Items
+                - generic [ref=e25]: NEW!
+            - listitem [ref=e26]:
+              - button " NPCs " [expanded] [ref=e27] [cursor=pointer]:
+                - generic [ref=e28]: 
+                - text: NPCs 
+              - list [ref=e30]:
+                - listitem [ref=e31]:
+                  - link " NPC Editor ALPHA NEW!" [ref=e32] [cursor=pointer]:
+                    - /url: /npc
+                    - generic [ref=e33]: 
+                    - text: NPC Editor
+                    - generic [ref=e34]: ALPHA
+                    - generic [ref=e35]: NEW!
+                - listitem [ref=e36]:
+                  - link " Emotes ALPHA" [ref=e37] [cursor=pointer]:
+                    - /url: /npc-emotes
+                    - generic [ref=e38]: 
+                    - text: Emotes
+                    - generic [ref=e39]: ALPHA
+                - listitem [ref=e40]:
+                  - link " Merchants ALPHA" [ref=e41] [cursor=pointer]:
+                    - /url: /merchants
+                    - generic [ref=e42]: 
+                    - text: Merchants
+                    - generic [ref=e43]: ALPHA
+                - listitem [ref=e44]:
+                  - link " Spells ALPHA" [ref=e45] [cursor=pointer]:
+                    - /url: /npc-spells
+                    - generic [ref=e46]: 
+                    - text: Spells
+                    - generic [ref=e47]: ALPHA
+                - listitem [ref=e48]:
+                  - link " Loot" [ref=e49] [cursor=pointer]:
+                    - /url: /loot
+                    - generic [ref=e50]: 
+                    - text: Loot
+            - listitem [ref=e51]:
+              - link " Quest API Explorer" [ref=e52] [cursor=pointer]:
+                - /url: /quest-api-explorer
+                - generic [ref=e53]: 
+                - text: Quest API Explorer
+            - listitem [ref=e54]:
+              - link " Sage NEW!" [ref=e55] [cursor=pointer]:
+                - /url: /sage
+                - generic [ref=e56]: 
+                - text: Sage
+                - generic [ref=e57]: NEW!
+            - listitem [ref=e58]:
+              - link " Strings DB NEW!" [ref=e59] [cursor=pointer]:
+                - /url: /strings-database
+                - generic [ref=e60]: 
+                - text: Strings DB
+                - generic [ref=e61]: NEW!
+            - listitem [ref=e62]:
+              - link " Spells NEW!" [ref=e63] [cursor=pointer]:
+                - /url: /spells
+                - generic [ref=e64]: 
+                - text: Spells
+                - generic [ref=e65]: NEW!
+            - listitem [ref=e66]:
+              - link " Tasks BETA NEW!" [ref=e67] [cursor=pointer]:
+                - /url: /tasks
+                - generic [ref=e68]: 
+                - text: Tasks
+                - generic [ref=e69]: BETA
+                - generic [ref=e70]: NEW!
+            - listitem [ref=e71]:
+              - link " Tradeskills NEW!" [ref=e72] [cursor=pointer]:
+                - /url: /tradeskills
+                - generic [ref=e73]: 
+                - text: Tradeskills
+                - generic [ref=e74]: NEW!
+            - listitem [ref=e75]:
+              - button " Viewers " [ref=e76] [cursor=pointer]:
+                - generic [ref=e77]: 
+                - text: Viewers 
+              - text:    
+            - listitem [ref=e78]:
+              - link " Zones ALPHA NEW!" [ref=e79] [cursor=pointer]:
+                - /url: /zones
+                - generic [ref=e80]: 
+                - text: Zones
+                - generic [ref=e81]: ALPHA
+                - generic [ref=e82]: NEW!
+          - heading "Spire Docs" [level=6] [ref=e83]
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - button " Spire API Docs " [ref=e86] [cursor=pointer]:
+                - generic [ref=e87]: 
+                - text: Spire API Docs 
+              - text:  
+            - listitem [ref=e88]:
+              - button " Components " [ref=e89] [cursor=pointer]:
+                - generic [ref=e90]: 
+                - text: Components 
+        - heading "Version (production) 4.23.5" [level=6] [ref=e91]
+        - list [ref=e92]:
+          - listitem [ref=e93]:
+            - link " Spire Update Check" [ref=e94] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e95]: 
+              - text: Spire Update Check
+          - listitem [ref=e96]:
+            - link " Nav Search (Ctrl + K)" [ref=e97] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e98]: 
+              - text: Nav Search (Ctrl + K)
+        - generic [ref=e99]:
+          - button "" [ref=e101] [cursor=pointer]:
+            - generic [ref=e103]: 
+          - button "..." [ref=e105] [cursor=pointer]:
+            - img "..." [ref=e107]
+          - link "" [ref=e108] [cursor=pointer]:
+            - /url: javascript:void(0)
+            - generic [ref=e110]: 
+        - 'generic "Host: undefined Status: online" [ref=e112]':
+          - img [ref=e114]
+          - generic [ref=e115]: 
+          - text: Local (Default)
+  - generic [ref=e127]:
+    - generic [ref=e129]:
+      - generic [ref=e130]: Loot Tables
+      - generic [ref=e131]:
+        - generic [ref=e132]:
+          - textbox "Search by name or ID..." [ref=e133]
+          - button " New" [ref=e134] [cursor=pointer]:
+            - generic [ref=e135]: 
+            - text: New
+        - generic [ref=e136]:
+          - generic [ref=e137]:
+            - generic [ref=e138]: 
+            - text: Loading...
+          - menubar "Pagination" [ref=e140]:
+            - listitem [ref=e141]:
+              - menuitem [disabled]: «
+            - listitem [ref=e142]:
+              - menuitem [disabled]: ‹
+            - menuitemradio "Go to page 1" [checked] [ref=e143] [cursor=pointer]: "1"
+            - menuitemradio "Go to page 2" [ref=e144] [cursor=pointer]: "2"
+            - menuitemradio "Go to page 3" [ref=e145] [cursor=pointer]: "3"
+            - menuitemradio "Go to page 4" [ref=e146] [cursor=pointer]: "4"
+            - menuitemradio "Go to page 5" [ref=e147] [cursor=pointer]: "5"
+            - menuitem "Go to next page" [ref=e148] [cursor=pointer]: ›
+            - menuitem "Go to last page" [ref=e149] [cursor=pointer]: »
+    - generic [ref=e151]:
+      - generic [ref=e152]: Loot Editor
+      - generic [ref=e155]: Select a loot table to edit
+  - text: 
