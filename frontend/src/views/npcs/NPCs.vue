@@ -307,18 +307,16 @@ export default {
         else if (this.isNumeric(newValue)) {
           n[e.field] = parseInt(newValue)
         }
-
-        await Npcs.updateNpc(n.id, n);
-
-        // scroll to table row entry as we are editing entries
-        const container = document.getElementById("npcs-table-container");
-        const target    = document.getElementById(util.format("npc-%s", n.id))
-        if (container && target) {
-          container.scrollTop = container.scrollTop + target.getBoundingClientRect().top - 200;
-        }
-
-        this.$forceUpdate()
       }
+
+      // Batch API calls (8 concurrent)
+      const batchSize = 8;
+      for (let i = 0; i < this.npcTypes.length; i += batchSize) {
+        const batch = this.npcTypes.slice(i, i + batchSize);
+        await Promise.all(batch.map(n => Npcs.updateNpc(n.id, n)));
+      }
+
+      this.$forceUpdate()
 
       this.bulkEditFeedback = editFeedback
 

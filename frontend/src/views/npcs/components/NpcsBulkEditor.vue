@@ -236,15 +236,28 @@ export default {
   },
   methods: {
 
+    // debounce helper
+    _debounce(key, fn, delay = 300) {
+      if (this._debounceTimers && this._debounceTimers[key]) {
+        clearTimeout(this._debounceTimers[key]);
+      }
+      if (!this._debounceTimers) {
+        this._debounceTimers = {};
+      }
+      this._debounceTimers[key] = setTimeout(fn, delay);
+    },
+
     // set all values to
     setValuesToPreview() {
-      this.$emit(
-        'set-values-preview',
-        {
-          field: this.selectedField,
-          value: this.setValue
-        }
-      );
+      this._debounce('setValues', () => {
+        this.$emit(
+          'set-values-preview',
+          {
+            field: this.selectedField,
+            value: this.setValue
+          }
+        );
+      });
     },
     setValuesTo() {
       this.$emit(
@@ -258,14 +271,16 @@ export default {
 
     // set min / max values to
     setMinMaxValuesToPreview() {
-      this.$emit(
-        'set-min-max-values-preview',
-        {
-          field: this.selectedField,
-          min: this.setMin,
-          max: this.setMax,
-        }
-      );
+      this._debounce('setMinMax', () => {
+        this.$emit(
+          'set-min-max-values-preview',
+          {
+            field: this.selectedField,
+            min: this.setMin,
+            max: this.setMax,
+          }
+        );
+      });
     },
     setMinMaxValuesTo() {
       this.$emit(
@@ -278,15 +293,17 @@ export default {
       );
     },
 
-    // set min / max values to
+    // set percentage values to
     setPercentageToPreview() {
-      this.$emit(
-        'set-percentage-values-preview',
-        {
-          field: this.selectedField,
-          percentage: this.setPercentage,
-        }
-      );
+      this._debounce('setPercentage', () => {
+        this.$emit(
+          'set-percentage-values-preview',
+          {
+            field: this.selectedField,
+            percentage: this.setPercentage,
+          }
+        );
+      });
     },
     setPercentageTo() {
       this.setPercentage = 1
