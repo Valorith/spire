@@ -260,6 +260,8 @@ export default {
       const full = ordered.concat(remaining);
 
       // Also always include the preview field if set
+      // Reference previewVersion to re-evaluate when preview field changes
+      void this.previewVersion;
       if (this.columnLimit > 0) {
         let limited = full.slice(0, this.columnLimit);
         if (this.previewField && !limited.includes(this.previewField)) {
@@ -446,10 +448,11 @@ export default {
       // reset min max
       this.previewMinMaxData     = {}
       this.previewPercentageData = {}
+      const fieldChanged = this.previewField !== e.field
       this.previewField = e.field
       this.previewValue = e.value
-      // Only trigger re-render when there's a value to preview
-      if (e.value !== '' && e.value != null) {
+      // Trigger re-render when field changes (to show/hide column) or value entered
+      if (fieldChanged || (e.value !== '' && e.value != null)) {
         this.previewVersion++
       }
     },
