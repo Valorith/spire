@@ -436,7 +436,7 @@ export default {
       },
       layerPanelOpen: true,
       layerDefs: [
-        { key: 'npcs',         label: 'NPCs',           icon: 'fa fa-users',        color: '#4ade80' },
+        { key: 'npcs',         label: 'Spawns',          icon: 'fa fa-users',        color: '#4ade80' },
         { key: 'doors',        label: 'Doors',           icon: 'fa fa-door-open',    color: '#fb923c' },
         { key: 'zonePoints',   label: 'Zone Points',     icon: 'fa fa-map-signs',    color: '#60a5fa' },
         { key: 'spells',       label: 'Spells',          icon: 'fa fa-magic',        color: '#c084fc' },
