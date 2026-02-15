@@ -271,7 +271,7 @@
                 {{ allExpanded ? 'Collapse All' : 'Expand All' }}
               </b-button>
             </div>
-            <div class="lootdrops-container" ref="lootdropsScroll" style="height: calc(100vh - 375px); overflow-y: auto; position: relative;" @scroll="onLootdropsScroll">
+            <div class="lootdrops-container" ref="lootdropsScroll" style="height: calc(100vh - 381px); overflow-y: auto; position: relative;" @scroll="onLootdropsScroll">
               <div
                 v-for="(le, leIndex) in editEntries"
                 :key="'le-' + leIndex"
