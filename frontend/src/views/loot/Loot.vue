@@ -250,7 +250,7 @@
           </eq-window>
 
           <!-- Lootdrops -->
-          <eq-window title="Loot Drops" class="p-0" ref="lootDropsWindow" :style="lootDropsStyle">
+          <eq-window title="Loot Drops" class="p-0 loot-drops-window" ref="lootDropsWindow">
             <div class="d-flex justify-content-end px-3 pt-3 pb-1">
               <b-button
                 size="sm"
@@ -262,7 +262,7 @@
                 {{ allExpanded ? 'Collapse All' : 'Expand All' }}
               </b-button>
             </div>
-            <div class="lootdrops-wrapper" style="position: relative; overflow: hidden;" :style="lootdropsWrapperStyle">
+            <div class="lootdrops-wrapper">
             <div class="lootdrops-container" ref="lootdropsScroll" style="height: 100%; overflow-y: auto;" @scroll="onLootdropsScroll">
               <div
                 v-for="(le, leIndex) in editEntries"
@@ -726,8 +726,7 @@ export default {
       editTable: {},
       editEntries: [],
       showLootdropsScrollHint: false,
-      lootDropsMinHeight: 0,
-      lootdropsMaxHeight: 0,
+      lootDropsMinHeight: 0, // kept for compat
       originalSnapshot: null,
       originalValues: {},
 
@@ -757,13 +756,13 @@ export default {
     this.init()
     window.addEventListener('keydown', this.handleKeydown)
     window.addEventListener('beforeunload', this.beforeUnload)
-    window.addEventListener('resize', this.onWindowResize)
+    // resize handled via CSS now
   },
 
   beforeDestroy() {
     window.removeEventListener('keydown', this.handleKeydown)
     window.removeEventListener('beforeunload', this.beforeUnload)
-    window.removeEventListener('resize', this.onWindowResize)
+    // resize handled via CSS now
   },
 
   watch: {
@@ -772,20 +771,7 @@ export default {
     },
   },
 
-  computed: {
-    lootDropsStyle() {
-      if (this.lootDropsMinHeight > 0) {
-        return { height: this.lootDropsMinHeight + 'px', display: 'flex', flexDirection: 'column' };
-      }
-      return { display: 'flex', flexDirection: 'column' };
-    },
-    lootdropsWrapperStyle() {
-      if (this.lootdropsMaxHeight > 0) {
-        return { height: this.lootdropsMaxHeight + 'px' };
-      }
-      return {};
-    },
-  },
+  computed: {},
   methods: {
     handleKeydown(e) {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -1364,35 +1350,8 @@ export default {
       }
     },
 
-    onWindowResize() {
-      if (this.selectedTable) {
-        this.syncLootDropsHeight();
-      }
-    },
     syncLootDropsHeight() {
-      this.$nextTick(() => {
-        const leftCol = this.$refs.lootTablesWindow;
-        const dropsWindow = this.$refs.lootDropsWindow;
-        const wrapper = this.$refs.lootdropsScroll;
-        if (!leftCol || !leftCol.$el || !dropsWindow || !dropsWindow.$el) return;
-        const leftBottom = leftCol.$el.getBoundingClientRect().bottom;
-        const dropsTop = dropsWindow.$el.getBoundingClientRect().top;
-        var targetHeight = leftBottom - dropsTop;
-        if (targetHeight > 200) {
-          this.lootDropsMinHeight = targetHeight;
-        }
-        // Calculate scrollable area height = total frame height minus the toolbar/header
-        this.$nextTick(() => {
-          if (wrapper && wrapper.parentElement) {
-            const wrapperTop = wrapper.parentElement.getBoundingClientRect().top;
-            var scrollHeight = leftBottom - wrapperTop;
-            if (scrollHeight > 100) {
-              this.lootdropsMaxHeight = scrollHeight;
-            }
-          }
-          this.checkLootdropsScroll();
-        });
-      });
+      this.$nextTick(() => this.checkLootdropsScroll());
     },
     checkLootdropsScroll() {
       const el = this.$refs.lootdropsScroll;
@@ -1936,6 +1895,29 @@ export default {
   background: rgba(255, 152, 0, 0.2) !important;
   border-color: #ff9800 !important;
   box-shadow: 0 0 4px rgba(255, 152, 0, 0.3);
+}
+.loot-drops-window {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: calc(100vh - 260px);
+  overflow: hidden;
+}
+.loot-drops-window > div:last-child {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lootdrops-wrapper {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+.lootdrops-wrapper .lootdrops-container {
+  height: 100%;
+  overflow-y: auto;
 }
 .scroll-hint-overlay {
   position: absolute;
