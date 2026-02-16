@@ -2215,6 +2215,16 @@ export default {
     },
   },
   computed: {
+    effectiveShortName() {
+      return this.zoneShortName || (this.zone && this.zone.short_name) || ''
+    },
+    effectiveVersion() {
+      if (this.zoneVersion != null && this.zoneVersion !== '') return this.zoneVersion
+      return (this.zone && this.zone.version != null) ? this.zone.version : 0
+    },
+    effectiveZoneId() {
+      return (this.zone && this.zone.zoneidnumber) || 0
+    },
     filteredNpcs() {
       if (!this.npcSearchQuery) return this.npcTypes
       const q = this.npcSearchQuery.toLowerCase()
@@ -2330,9 +2340,9 @@ export default {
     npcGridEditor() {
       this.$router.push(
         {
-          path: ROUTE.NPCS_EDIT.replaceAll(":zone", this.zone.short_name),
+          path: ROUTE.NPCS_EDIT.replaceAll(":zone", this.effectiveShortName),
           query: {
-            v: this.zone.version
+            v: this.effectiveVersion
           }
         }
       ).catch(() => {
@@ -2368,12 +2378,12 @@ export default {
       })
 
       this.loadNpcTypes()
-      if (this.zone && this.zone.short_name) {
+      if (this.effectiveShortName) {
         this.loadZoneConnections()
         this.loadTraps()
         this.loadDoors()
       }
-      if (this.zone && this.zone.zoneidnumber) {
+      if (this.effectiveZoneId) {
         this.loadGroundSpawns()
         this.loadZoneTasks()
         this.loadForageItems()
@@ -2471,8 +2481,8 @@ export default {
     },
 
     async loadNpcTypes() {
-      const shortName = this.zoneShortName || (this.zone && this.zone.short_name)
-      const version = this.zoneVersion != null ? this.zoneVersion : (this.zone && this.zone.version != null ? this.zone.version : 0)
+      const shortName = this.effectiveShortName
+      const version = this.effectiveVersion
       if (!shortName) {
         return
       }
@@ -2539,7 +2549,7 @@ export default {
       try {
         const r = await SpireApi.v1().get(`/zone_points`, {
           params: {
-            where: `zone__${this.zone.short_name}`,
+            where: `zone__${this.effectiveShortName}`,
             limit: 100
           }
         })
@@ -2675,7 +2685,7 @@ export default {
       try {
         const payload = {
           zoneid: this.zone.zoneidnumber,
-          version: this.zone.version || 0,
+          version: this.effectiveVersion || 0,
           item: this.newGroundSpawn.item,
           min_x: this.newGroundSpawn.min_x || 0,
           min_y: this.newGroundSpawn.min_y || 0,
@@ -3038,7 +3048,7 @@ export default {
       this.trapEntries = []
       try {
         const r = await SpireApi.v1().get(`/traps`, {
-          params: { where: `zone__${this.zone.short_name}`, limit: 500 }
+          params: { where: `zone__${this.effectiveShortName}`, limit: 500 }
         })
         if (r.status === 200 && Array.isArray(r.data)) {
           this.trapEntries = r.data.sort((a, b) => (a.id || 0) - (b.id || 0))
@@ -3055,7 +3065,7 @@ export default {
       this.doorEntries = []
       try {
         const r = await SpireApi.v1().get(`/doors`, {
-          params: { where: `zone__${this.zone.short_name}`, limit: 1000 }
+          params: { where: `zone__${this.effectiveShortName}`, limit: 1000 }
         })
         if (r.status === 200 && Array.isArray(r.data)) {
           this.doorEntries = r.data.sort((a, b) => (a.doorid || 0) - (b.doorid || 0))
@@ -3314,8 +3324,8 @@ export default {
     async addTrap() {
       try {
         const payload = {
-          zone: this.zone.short_name,
-          version: this.zone.version || 0,
+          zone: this.effectiveShortName,
+          version: this.effectiveVersion || 0,
           x: this.newTrap.x || 0,
           y: this.newTrap.y || 0,
           z: this.newTrap.z || 0,
@@ -3373,8 +3383,8 @@ export default {
     async addDoor() {
       try {
         const payload = {
-          zone: this.zone.short_name,
-          version: this.zone.version || 0,
+          zone: this.effectiveShortName,
+          version: this.effectiveVersion || 0,
           doorid: this.newDoor.doorid || 0,
           name: this.newDoor.name || '',
           pos_x: this.newDoor.pos_x || 0,
@@ -3467,7 +3477,7 @@ export default {
       try {
         const payload = {
           zoneid: this.zone.zoneidnumber,
-          version: this.zone.version || 0,
+          version: this.effectiveVersion || 0,
           xpos: this.newObject.xpos || 0,
           ypos: this.newObject.ypos || 0,
           zpos: this.newObject.zpos || 0,
