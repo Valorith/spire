@@ -484,7 +484,7 @@
           <div v-else-if="zoneSpells.length === 0" class="mt-3 text-center" style="opacity: 0.5">
             <i class="fa fa-magic"></i> No spells found in this zone
           </div>
-          <div style="height: 85vh; overflow-y: scroll;" v-else>
+          <div v-else>
             <div class="d-flex align-items-center mb-2 px-1">
               <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
                      v-model="spellSearchQuery" placeholder="Search Spells..." style="max-width: 250px;"
