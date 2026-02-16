@@ -1495,6 +1495,30 @@ export default {
 </script>
 
 <style>
+/* Dark mode zoom controls */
+.leaflet-bar {
+  border: 1px solid rgba(200, 180, 120, 0.3) !important;
+  border-radius: 4px !important;
+  overflow: hidden;
+}
+.leaflet-bar a {
+  background-color: rgba(20, 20, 30, 0.85) !important;
+  color: #e8c56d !important;
+  border-bottom-color: rgba(200, 180, 120, 0.2) !important;
+  width: 30px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  font-size: 16px !important;
+}
+.leaflet-bar a:hover {
+  background-color: rgba(40, 40, 55, 0.95) !important;
+  color: #f0d078 !important;
+}
+.leaflet-bar a.leaflet-disabled {
+  background-color: rgba(20, 20, 30, 0.5) !important;
+  color: rgba(200, 180, 120, 0.3) !important;
+}
+
 .leaflet-tooltip {
   background-color: transparent;
   border: none;
