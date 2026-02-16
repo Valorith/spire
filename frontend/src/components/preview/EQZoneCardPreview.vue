@@ -2825,16 +2825,20 @@ export default {
           .map(n => n.npc)
 
         const merchants = []
-        for (const npc of merchantNpcs) {
-          try {
-            const r = await SpireApi.v1().get(`/merchantlists`, {
+        const BATCH_SIZE = 8
+        for (let i = 0; i < merchantNpcs.length; i += BATCH_SIZE) {
+          const batch = merchantNpcs.slice(i, i + BATCH_SIZE)
+          const results = await Promise.all(batch.map(npc =>
+            SpireApi.v1().get(`/merchantlists`, {
               params: {
                 where: `merchantid__${npc.merchant_id}`,
                 includes: 'Items',
                 limit: 200
               }
-            })
-            if (r.status === 200 && Array.isArray(r.data)) {
+            }).then(r => ({ npc, r })).catch(() => ({ npc, r: null }))
+          ))
+          for (const { npc, r } of results) {
+            if (r && r.status === 200 && Array.isArray(r.data)) {
               const items = r.data
                 .filter(ml => ml.items && ml.items.length > 0)
                 .map(ml => ml.items[0])
@@ -2848,7 +2852,7 @@ export default {
                 })
               }
             }
-          } catch (e) {}
+          }
         }
         this.zoneMerchants = merchants.sort((a, b) => a.npcName.localeCompare(b.npcName))
       } catch (e) {
@@ -3721,7 +3725,7 @@ export default {
       this.loadingSpells = true
       this.zoneSpells = []
       try {
-        // Get unique spell list IDs from NPCs in this zone
+        // Wait for NPCs to load first
         const waitForNpcs = () => new Promise((resolve) => {
           const check = () => {
             if (this.npcTypes && this.npcTypes.length > 0) resolve()
@@ -3738,16 +3742,18 @@ export default {
             .map(n => n.npc.npc_spells_id)
         )]
 
+        // Fetch all spell lists in parallel (batches of 10)
         const allSpells = new Map()
-        for (const listId of spellListIds) {
-          try {
-            const r = await SpireApi.v1().get(`/npc_spells_entries`, {
-              params: {
-                where: `npc_spells_id__${listId}`,
-                limit: 100
-              }
-            })
-            if (r.status === 200 && Array.isArray(r.data)) {
+        const BATCH_SIZE = 10
+        for (let i = 0; i < spellListIds.length; i += BATCH_SIZE) {
+          const batch = spellListIds.slice(i, i + BATCH_SIZE)
+          const results = await Promise.all(batch.map(listId =>
+            SpireApi.v1().get(`/npc_spells_entries`, {
+              params: { where: `npc_spells_id__${listId}`, limit: 500 }
+            }).catch(() => null)
+          ))
+          for (const r of results) {
+            if (r && r.status === 200 && Array.isArray(r.data)) {
               for (const entry of r.data) {
                 const spellId = entry.spellid || entry.spell_id
                 if (spellId && !allSpells.has(spellId)) {
@@ -3755,18 +3761,22 @@ export default {
                 }
               }
             }
-          } catch (e) {}
+          }
         }
 
-        // Resolve all spell details
+        // Fetch spell details in parallel (batches of 20)
         const spellIds = [...allSpells.keys()]
-        for (const spellId of spellIds) {
-          try {
-            const r = await SpireApi.v1().get(`/spells_new/${spellId}`)
-            if (r.status === 200 && r.data) {
-              allSpells.set(spellId, r.data)
+        const SPELL_BATCH = 20
+        for (let i = 0; i < spellIds.length; i += SPELL_BATCH) {
+          const batch = spellIds.slice(i, i + SPELL_BATCH)
+          const results = await Promise.all(batch.map(spellId =>
+            SpireApi.v1().get(`/spells_new/${spellId}`).catch(() => null)
+          ))
+          for (const r of results) {
+            if (r && r.status === 200 && r.data) {
+              allSpells.set(r.data.id, r.data)
             }
-          } catch (e) {}
+          }
         }
 
         // Show resolved spells first, then unresolved by ID
