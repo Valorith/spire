@@ -2905,7 +2905,7 @@ export default {
             const isNum = /^\d+$/.test(q)
             const params = isNum
               ? { where: `id__${q}`, limit: 20 }
-              : { where: `Name__${q}__and__id__gt__0`, limit: 20, whereOr: `name___like_${q}` }
+              : { where: `Name_like_${q}`, limit: 20 }
             const r = await SpireApi.v1().get(`/items`, { params })
             this.forageSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
           } catch (e) {
@@ -3251,7 +3251,7 @@ export default {
             const isNum = /^\d+$/.test(q)
             const params = isNum
               ? { where: `id__${q}`, limit: 20 }
-              : { where: `Name__${q}__and__id__gt__0`, limit: 20, whereOr: `name___like_${q}` }
+              : { where: `Name_like_${q}`, limit: 20 }
             const r = await SpireApi.v1().get(`/items`, { params })
             this.fishingSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
           } catch (e) {
@@ -3458,7 +3458,7 @@ export default {
             const isNum = /^\d+$/.test(q)
             const params = isNum
               ? { where: `id__${q}`, limit: 20 }
-              : { where: `Name__${q}__and__id__gt__0`, limit: 20, whereOr: `name___like_${q}` }
+              : { where: `Name_like_${q}`, limit: 20 }
             const r = await SpireApi.v1().get(`/items`, { params })
             this.objectSearchResults = (r.status === 200 && Array.isArray(r.data)) ? r.data : []
           } catch (e) {
