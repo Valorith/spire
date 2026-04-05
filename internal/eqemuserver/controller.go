@@ -711,16 +711,10 @@ type DashboardStatsResponse struct {
 	Guilds     int64  `json:"guilds"`
 	Items      int64  `json:"items"`
 	Npcs       int64  `json:"npcs"`
-	Uptime     string `json:"uptime"`
 }
 
 func (a *Controller) getDashboardStats(c echo.Context) error {
 	counts := make(map[string]int64)
-
-	uptime, err := a.eqemuserverapi.GetWorldUptime()
-	if err != nil {
-		uptime = "Server offline"
-	}
 
 	tableModels := []models.Modelable{
 		models.Item{},
@@ -742,7 +736,6 @@ func (a *Controller) getDashboardStats(c echo.Context) error {
 		Guilds:     counts["guilds"],
 		Items:      counts["items"],
 		Npcs:       counts["npc_types"],
-		Uptime:     uptime,
 	}
 
 	return c.JSON(http.StatusOK, r)
