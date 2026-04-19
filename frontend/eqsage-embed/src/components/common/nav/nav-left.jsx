@@ -22,7 +22,11 @@ export const NavLeft = ({ children, height = '70%', navHeight = 80 }) => {
         className="builder-left-nav"
       >
         <Stack
-          sx={{ height, marginTop: '100%' }}
+          sx={{
+            height,
+            width: '100%',
+            py   : 1,
+          }}
           direction={'column'}
           justifyContent={'space-evenly'}
           alignItems={'center'}

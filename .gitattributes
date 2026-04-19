@@ -108,3 +108,6 @@ AUTHORS text
 *.pyc binary
 *.pdf binary
 *.bak binary
+*.wasm binary
+*.glb binary
+*.dds binary

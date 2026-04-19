@@ -98,6 +98,23 @@ export const Main = () => {
           })}
         >
           <ConfirmProvider>
+            <Stack
+              onDragOver={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              direction={'row'}
+              onDrop={onDrop}
+              sx={{
+                position      : 'fixed',
+                inset         : 0,
+                zIndex        : 0,
+                pointerEvents : 'none',
+                background    : sessionBg,
+                backgroundSize: 'cover',
+              }}
+              className="sage-main"
+            />
             {statusDialogOpen && (
               <StatusDialog
                 fsHandle={rootFileSystemHandle}
@@ -112,20 +129,6 @@ export const Main = () => {
             <ZoneProvider>
               <BabylonZone />
             </ZoneProvider>
-
-            <Stack
-              onDragOver={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              direction={'row'}
-              onDrop={onDrop}
-              sx={{
-                background    : sessionBg,
-                backgroundSize: 'cover',
-              }}
-              className="sage-main"
-            ></Stack>
           </ConfirmProvider>
         </ThemeProvider>
       ) : null}
