@@ -8,8 +8,9 @@ import { zoneController } from './ZoneController';
 import { zoneBuilderController } from './ZoneBuilderController';
 
 import { GlobalStore } from '../../state';
-import { getEQFile } from 'sage-core/util/fileHandler';
+import { getEQDir, getEQFile, getFiles } from 'sage-core/util/fileHandler';
 import { assetUrl } from '../../embed-config';
+import { textureAnimationMap } from '../helpers/textureAnimationMap';
 
 const { Engine, ThinEngine, WebGPUEngine, Database, SceneLoader, GLTFLoader } =
   BABYLON;
@@ -32,6 +33,121 @@ const params = new Proxy(new URLSearchParams(window.location.search), {
   get: (searchParams, prop) => searchParams.get(prop),
 });
 
+const textureAliasCache = new Map();
+const missingTextureWarnings = new Set();
+let textureFileIndexPromise = null;
+let textureFileIndex = null;
+
+const normalizeTextureLookupKey = (value) =>
+  `${value ?? ''}`
+    .toLowerCase()
+    .replace(/\.\w+$/, '')
+    .replace(/[^a-z0-9]/g, '');
+
+const buildTextureCandidates = (rawName) => {
+  const base = `${rawName ?? ''}`.toLowerCase().replace(/\.\w+$/, '');
+  if (!base) {
+    return [];
+  }
+
+  const candidates = new Set([base]);
+  candidates.add(base.replace(/-/g, '_'));
+  candidates.add(base.replace(/_/g, '-'));
+  candidates.add(base.replace(/[^a-z0-9]/g, ''));
+
+  for (const candidate of [...candidates]) {
+    if (candidate.includes('_')) {
+      candidates.add(candidate.replace(/^[^_]+_/, ''));
+    }
+  }
+
+  const suffixMatches = textureAliasCache.get(base);
+  if (suffixMatches) {
+    suffixMatches.forEach((match) => candidates.add(match));
+  } else {
+    const matches = Object.keys(textureAnimationMap).filter(
+      (key) => key === base || key.endsWith(`_${base}`)
+    );
+    textureAliasCache.set(base, matches);
+    matches.forEach((match) => candidates.add(match));
+  }
+
+  return [...candidates];
+};
+
+const getTextureMimeType = (name) =>
+  name.endsWith('.jpg') || name.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
+
+const isIgnorableMissingTexture = (name) => /^m000\d+$/i.test(`${name ?? ''}`);
+
+const getTextureFileIndex = async () => {
+  if (textureFileIndex) {
+    return textureFileIndex;
+  }
+  if (!textureFileIndexPromise) {
+    textureFileIndexPromise = (async () => {
+      const index = new Map();
+      const textureDir = await getEQDir('textures');
+      if (!textureDir) {
+        return index;
+      }
+
+      const fileNames = await getFiles(textureDir, undefined, true);
+      fileNames.forEach((fileName) => {
+        const baseName = `${fileName}`.toLowerCase().replace(/\.\w+$/, '');
+        if (!index.has(baseName)) {
+          index.set(baseName, fileName);
+        }
+
+        const normalized = normalizeTextureLookupKey(baseName);
+        if (normalized && !index.has(normalized)) {
+          index.set(normalized, fileName);
+        }
+      });
+
+      return index;
+    })()
+      .then((index) => {
+        textureFileIndex = index;
+        return index;
+      })
+      .finally(() => {
+        textureFileIndexPromise = null;
+      });
+  }
+
+  return textureFileIndexPromise;
+};
+
+const getTextureFileData = async (rawName) => {
+  for (const candidate of buildTextureCandidates(rawName)) {
+    for (const extension of ['png', 'jpg', 'jpeg']) {
+      const fileName = `${candidate}.${extension}`;
+      const data = await getEQFile('textures', fileName);
+      if (data) {
+        return { data, fileName };
+      }
+    }
+  }
+
+  const textureIndex = await getTextureFileIndex();
+  for (const candidate of buildTextureCandidates(rawName)) {
+    const indexedFileName =
+      textureIndex.get(candidate) ??
+      textureIndex.get(normalizeTextureLookupKey(candidate));
+    if (!indexedFileName) {
+      continue;
+    }
+
+    const data = await getEQFile('textures', indexedFileName);
+    if (data) {
+      return { data, fileName: indexedFileName };
+    }
+  }
+
+  return null;
+};
+
 class EQDatabase extends Database {
   async loadImage(url, image, ..._rest) {
     if (url.startsWith('http') || url.startsWith(assetUrl('static'))) {
@@ -41,9 +157,14 @@ class EQDatabase extends Database {
       );
       return;
     }
-    const data = await getEQFile('textures', `${url}.png`);
+    const resolvedTexture = await getTextureFileData(url);
+    if (!resolvedTexture) {
+      return;
+    }
     image.src = URL.createObjectURL(
-      new Blob([data], { type: 'image/png' } /* (1) */)
+      new Blob([resolvedTexture.data], {
+        type: getTextureMimeType(resolvedTexture.fileName),
+      } /* (1) */)
     );
   }
 
@@ -75,8 +196,7 @@ class EQDatabase extends Database {
     const [, eq, folder, file] = url.split('/');
     if (eq === 'eq') {
       const fileBuffer =
-        (await getEQFile(folder, file)) ||
-        (await getEQFile('textures', `${url}.png`));
+        (await getEQFile(folder, file)) || (await getTextureFileData(url))?.data;
       if (!fileBuffer) {
         console.log('No bytes', url);
         errorCallback();
@@ -90,7 +210,7 @@ class EQDatabase extends Database {
       return;
     }
 
-    const fileBuffer = await getEQFile('textures', `${url}.png`);
+    const fileBuffer = (await getTextureFileData(url))?.data;
     if (!fileBuffer) {
       console.log('No bytes for png', url);
       errorCallback();
@@ -234,7 +354,8 @@ export class GameController {
         }
       }
       if (!image._data) {
-        const data = await getEQFile('textures', `${image.name}.png`);
+        const resolvedTexture = await getTextureFileData(image.name);
+        const data = resolvedTexture?.data;
 
         if (data) {
           image._data = data; // entry.data.buffer;
@@ -245,7 +366,13 @@ export class GameController {
               return res;
             }
           } catch {}
-          console.warn(`Unhandled image ${image.name}`);
+          if (
+            !isIgnorableMissingTexture(image.name) &&
+            !missingTextureWarnings.has(image.name)
+          ) {
+            missingTextureWarnings.add(image.name);
+            console.warn(`Missing texture ${image.name}`);
+          }
 
           // Solid gray 1px png until this is solved
           const pngData = new Uint8Array([

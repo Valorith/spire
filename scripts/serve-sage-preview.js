@@ -5,6 +5,7 @@ const crypto = require('crypto');
 
 const defaultDistRoot = path.resolve(__dirname, '..', 'frontend', 'dist');
 const defaultIndexPath = path.join(defaultDistRoot, 'index.html');
+const defaultChangelogPath = path.resolve(__dirname, '..', 'CHANGELOG.md');
 const defaultZoneDataPath = path.join(
   defaultDistRoot,
   'eqsage-embed',
@@ -36,6 +37,11 @@ const readZoneData = (zoneDataPath = defaultZoneDataPath) =>
   fs.existsSync(zoneDataPath)
     ? JSON.parse(fs.readFileSync(zoneDataPath, 'utf8'))
     : [];
+
+const readPreviewChangelog = (changelogPath = defaultChangelogPath) =>
+  fs.existsSync(changelogPath)
+    ? fs.readFileSync(changelogPath, 'utf8')
+    : '## Preview Build\n\nThe local Sage preview server is running without a full backend.';
 
 const coercePreviewValue = (value) => {
   if (value === undefined || value === null) {
@@ -184,7 +190,8 @@ const json = (res, statusCode, payload) => {
     'Access-Control-Allow-Origin' : '*',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Content-Type'                : 'application/json; charset=utf-8',
+    'Cache-Control'              : 'no-store, no-cache, must-revalidate',
+    'Content-Type'               : 'application/json; charset=utf-8',
   });
   res.end(JSON.stringify(payload));
 };
@@ -232,7 +239,10 @@ const serveFile = (res, absolutePath) => {
     stream.destroy();
   });
 
-  res.writeHead(200, { 'Content-Type': contentType });
+  res.writeHead(200, {
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Content-Type' : contentType,
+  });
   stream.pipe(res);
 };
 
@@ -535,6 +545,13 @@ const createApiHandler = (state) => async (req, res, reqPath, reqUrl) => {
 
   if (req.method === 'GET' && reqPath === '/api/v1/app/env') {
     json(res, 200, appEnvPayload);
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/app/changelog') {
+    json(res, 200, {
+      data: readPreviewChangelog(),
+    });
     return;
   }
 

@@ -97,15 +97,19 @@ export default {
 
 <style>
 .sage-container {
-  position: relative;
-  min-height: calc(100vh - 10px);
-  margin-left: -35px;
-  margin-top: -10px;
-  width: calc(100% + 70px);
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
 }
 
 .sage-root {
-  min-height: calc(100vh - 10px);
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
 }
 
 .sage-error {

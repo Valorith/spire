@@ -3,6 +3,7 @@ import { globals } from 'sage-core/globals';
 import { getEQDir, getFiles, writeEQFile } from 'sage-core/util/fileHandler';
 import { SageFileSystemDirectoryHandle } from 'sage-core/util/fileSystem';
 import { normalizeTextureName, parseTexture } from './shared';
+import ImageWorker from './worker?worker&inline';
 
 
 function chunkArray(array, numChunks) {
@@ -56,9 +57,7 @@ class ImageProcessor {
     }
     this.clearWorkers();
     for (let i = 0; i < workers; i++) {
-      const worker = new Worker(new URL('./worker.js', import.meta.url), {
-        type: 'module',
-      });
+      const worker = new ImageWorker();
       this.#workers.push(worker);
       this.babylonWorkers.push(Comlink.wrap(worker));
     }

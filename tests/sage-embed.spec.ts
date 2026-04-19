@@ -116,13 +116,14 @@ test.describe('Sage native embed', () => {
 
     await page.goto(`${previewBaseUrl}/`);
     await expect(page.locator('#eqsage-native-root')).toHaveCount(0);
+    await expect(page.locator('.navbar')).toHaveCount(1);
     expect(bundleRequests).toHaveLength(0);
 
     await page.goto(`${previewBaseUrl}/sage`);
 
     await expect(page.locator('iframe[title="EQSage"]')).toHaveCount(0);
     await expect(page.locator('#eqsage-native-root')).toHaveText('EQSage Embedded');
-    await expect(page.locator('.navbar')).toHaveClass(/navbar-collapsed/);
+    await expect(page.locator('.navbar')).toHaveCount(0);
     expect(bundleRequests).toHaveLength(1);
 
     const bridgeKeys = await page.evaluate(() =>
@@ -139,6 +140,6 @@ test.describe('Sage native embed', () => {
     ]);
 
     await page.goto(`${previewBaseUrl}/`);
-    await expect(page.locator('.navbar')).not.toHaveClass(/navbar-collapsed/);
+    await expect(page.locator('.navbar')).toHaveCount(1);
   });
 });

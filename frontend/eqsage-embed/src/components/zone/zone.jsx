@@ -86,11 +86,16 @@ export const BabylonZone = () => {
       {canvasState && (
         <Box
           as="canvas"
-          sx={{ flexGrow: '1', position: 'fixed' }}
+          sx={{
+            display : 'block',
+            position: 'fixed',
+            top     : 0,
+            left    : 0,
+            width   : '100vw',
+            height  : '100vh',
+          }}
           ref={canvasRef}
           id="renderCanvas"
-          width="100vw"
-          height="100vh"
         />
       )}
     </OverlayProvider>

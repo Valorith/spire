@@ -4,7 +4,7 @@
     style="overflow-y: overlay"
     id="sidebar"
     @click.self="expandNavbar()"
-    v-if="!hideNavbar"
+    v-if="!hideNavbar && !isSageRoute"
   >
     <div
       style="position: inherit; top: 50%; left: 10px; display: none"
@@ -281,6 +281,9 @@ export default {
   computed: {
     ROUTE() {
       return ROUTE
+    },
+    isSageRoute() {
+      return this.$route.path.startsWith("/sage")
     },
     hasUpdate() {
       if (!this.latestAppVersion) {
