@@ -19,6 +19,7 @@ import {
 import { useAlertContext } from '@/context/alerts';
 import { ItemApi } from 'spire-api/api/item-api';
 import { useSettingsContext } from '@/context/settings';
+import { useMainContext } from '@/components/main/context';
 
 // 4304412
 
@@ -40,6 +41,7 @@ function hexToRgbaNumber(hex) {
 }
 
 export const MageloDialog = ({ open, onClose }) => {
+  const { Spire } = useMainContext();
   const [id, setId] = useState('123895');
   const { openAlert } = useAlertContext();
   const { config, setOption } = useSettingsContext();
@@ -49,6 +51,10 @@ export const MageloDialog = ({ open, onClose }) => {
     setProfile(null);
   }, [open]);
   const fetchMageloProfile = useCallback(async () => {
+    if (!Spire) {
+      openAlert('Spire is not connected', 'warning');
+      return;
+    }
     setProfile(null);
     setLoading(true);
     const mageloResult = await fetch('/api/magelo/', {
@@ -87,7 +93,6 @@ export const MageloDialog = ({ open, onClose }) => {
           Primary  : null,
           Secondary: null,
         };
-        const Spire = window.Spire;
         const itemApi = new ItemApi(...Spire.SpireApi.cfg());
         const pieceMap = {
           Helm     : 2,
@@ -148,7 +153,7 @@ export const MageloDialog = ({ open, onClose }) => {
       return;
     }
     setProfile(mageloResult);
-  }, [id, openAlert]);
+  }, [id, openAlert, Spire]);
 
   const doImport = async () => {
     setOption('config', {

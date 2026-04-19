@@ -5,6 +5,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { useDebouncedCallback } from 'use-debounce';
 import { ItemApi } from 'spire-api/api/item-api';
 import { Popper } from '@mui/material';
+import { useMainContext } from '@/components/main/context';
 
 const StyledPopper = (props) => {
   const { anchorEl } = props;
@@ -20,6 +21,7 @@ const StyledPopper = (props) => {
 };
 
 export const ItemSearch = ({ label, piece, onSelect, onClose, baseOptions, fullyPopulate }) => {
+  const { Spire } = useMainContext();
   const [options, setOptions] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,7 +50,10 @@ export const ItemSearch = ({ label, piece, onSelect, onClose, baseOptions, fully
         }
         setOptions(options);
       } else {
-        const Spire = window.Spire;
+        if (!Spire) {
+          setOptions([]);
+          return;
+        }
         const itemApi = new ItemApi(...Spire.SpireApi.cfg());
         const queryBuilder = new Spire.SpireQueryBuilder();
         queryBuilder.where('name', 'like', query);
@@ -114,8 +119,13 @@ export const ItemSearch = ({ label, piece, onSelect, onClose, baseOptions, fully
       
       }}
       onChange={async (_e, v) => {
+        if (!v?.item) {
+          return;
+        }
         if (fullyPopulate) {
-          const Spire = window.Spire;
+          if (!Spire) {
+            return;
+          }
           const itemApi = new ItemApi(...Spire.SpireApi.cfg());
           const queryBuilder = new Spire.SpireQueryBuilder();
           queryBuilder.where('name', '=', v.item.name);
