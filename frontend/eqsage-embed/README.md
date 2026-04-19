@@ -8,6 +8,7 @@ This package contains the native React/Babylon EQ Sage zone editor embed used by
 2. In a second terminal run `npm --prefix frontend run serve`
 
 The watch build writes the embed bundle into `frontend/public/eqsage-embed`, and the Vue dev server serves those files from the same origin.
+That directory is generated build output and should not be source-controlled; the source static assets live in `frontend/eqsage-embed/public`.
 
 ## Production build
 

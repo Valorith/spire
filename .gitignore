@@ -14,6 +14,9 @@ internal/generators/config/database-schema-reference.yml
 
 docs-quest-api
 public/
+# Generated EQ Sage embed bundle. Source assets live under frontend/eqsage-embed/public
+# and the build writes the emitted bundle here before the Vue app build copies it to dist.
+frontend/public/eqsage-embed/
 spire*.exe
 spire.exe~
 
