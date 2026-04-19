@@ -221,8 +221,15 @@ const serveFile = (res, absolutePath) => {
   const stream = fs.createReadStream(absolutePath);
 
   stream.on('error', () => {
+    if (res.destroyed || res.writableEnded || res.headersSent) {
+      return;
+    }
     res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Failed to read file');
+  });
+
+  res.on('close', () => {
+    stream.destroy();
   });
 
   res.writeHead(200, { 'Content-Type': contentType });

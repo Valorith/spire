@@ -22,11 +22,15 @@ export default {
   data() {
     return {
       loadError: "",
+      mountAttempt: 0,
+      tornDown: false,
       unmount: null,
     }
   },
 
-  destroyed() {
+  beforeDestroy() {
+    this.tornDown = true
+    this.mountAttempt += 1
     this.teardownSage()
   },
 
@@ -53,20 +57,36 @@ export default {
   },
 
   async mounted() {
+    const mountAttempt = ++this.mountAttempt
+
     Navbar.collapse()
 
     try {
       const { mountSpireZoneEditor, unmountSpireZoneEditor } = await loadEqSageEmbed()
+      if (this.tornDown || mountAttempt !== this.mountAttempt) {
+        return
+      }
+
       const container = this.$refs["sage-root"]
+      if (!(container instanceof HTMLElement)) {
+        return
+      }
 
       await mountSpireZoneEditor(container, {
         spireBridge: this.getSpireBridge(),
       })
+      if (this.tornDown || mountAttempt !== this.mountAttempt) {
+        unmountSpireZoneEditor(container)
+        return
+      }
 
       this.unmount = () => {
         unmountSpireZoneEditor(container)
       }
     } catch (error) {
+      if (this.tornDown || mountAttempt !== this.mountAttempt) {
+        return
+      }
       console.error("Failed to mount EQ Sage embed", error)
       this.loadError = "Unable to load the EQ Sage zone editor bundle."
       Navbar.expand()

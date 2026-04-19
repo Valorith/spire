@@ -1,5 +1,11 @@
 import { expect, Page, test } from '@playwright/test';
 
+const { createPreviewServer } = require('../scripts/serve-sage-preview.js');
+
+let previewServer: any;
+let closePreviewServer: undefined | (() => Promise<void>);
+let previewBaseUrl = '';
+
 async function mockBaseApis(page: Page) {
   await page.route('**/api/v1/**', route => {
     if (!route.request().isNavigationRequest()) {
@@ -72,6 +78,31 @@ async function mockEqSageEmbed(page: Page) {
 }
 
 test.describe('Sage native embed', () => {
+  test.beforeAll(async () => {
+    const preview = createPreviewServer();
+    previewServer = preview.server;
+    closePreviewServer = preview.close;
+
+    await new Promise<void>((resolve) => {
+      previewServer.listen(0, '127.0.0.1', resolve);
+    });
+
+    const address = previewServer.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Failed to bind sage preview server');
+    }
+
+    previewBaseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  test.afterAll(async () => {
+    if (!previewServer) {
+      return;
+    }
+
+    await closePreviewServer?.();
+  });
+
   test('lazy-loads the embed bundle and mounts without an iframe', async ({ page }) => {
     await mockBaseApis(page);
     await mockEqSageEmbed(page);
@@ -83,11 +114,11 @@ test.describe('Sage native embed', () => {
       }
     });
 
-    await page.goto('/');
+    await page.goto(`${previewBaseUrl}/`);
     await expect(page.locator('#eqsage-native-root')).toHaveCount(0);
     expect(bundleRequests).toHaveLength(0);
 
-    await page.goto('/sage');
+    await page.goto(`${previewBaseUrl}/sage`);
 
     await expect(page.locator('iframe[title="EQSage"]')).toHaveCount(0);
     await expect(page.locator('#eqsage-native-root')).toHaveText('EQSage Embedded');
@@ -107,7 +138,7 @@ test.describe('Sage native embed', () => {
       'Zones',
     ]);
 
-    await page.goto('/');
+    await page.goto(`${previewBaseUrl}/`);
     await expect(page.locator('.navbar')).not.toHaveClass(/navbar-collapsed/);
   });
 });
