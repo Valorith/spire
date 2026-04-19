@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build:eqsage-embed": "npm --prefix eqsage-embed install && npm --prefix eqsage-embed run build",
-    "watch:eqsage-embed": "npm --prefix eqsage-embed install && npm --prefix eqsage-embed run build:watch",
+    "build:eqsage-embed": "npm --prefix eqsage-embed ci --ignore-scripts && npm --prefix eqsage-embed run build",
+    "watch:eqsage-embed": "npm --prefix eqsage-embed ci --ignore-scripts && npm --prefix eqsage-embed run build:watch",
     "dev": "npm run build:eqsage-embed && cross-env NODE_OPTIONS=--openssl-legacy-provider node --max_old_space_size=4096 --stack-size=10000 node_modules/@vue/cli-service/bin/vue-cli-service.js serve --open --host=0.0.0.0",
     "serve": "npm run build:eqsage-embed && cross-env NODE_OPTIONS=--openssl-legacy-provider node --max_old_space_size=4096 --stack-size=10000 node_modules/@vue/cli-service/bin/vue-cli-service.js serve --host=0.0.0.0",
     "build:vue": "cross-env NODE_OPTIONS=--openssl-legacy-provider NODE_ENV=production node --max_old_space_size=4096 --stack-size=10000 node_modules/@vue/cli-service/bin/vue-cli-service.js build --nomaps",
