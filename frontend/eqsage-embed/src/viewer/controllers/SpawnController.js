@@ -1,19 +1,16 @@
 import BABYLON from '@bjs';
-
-import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { WebIO } from '@gltf-transform/core';
 import assimpjs from '../../modules/assimp';
 import raceData from '../common/raceData.json';
 import { GameControllerChild } from './GameControllerChild';
 import { BabylonSpawn } from '../models/BabylonSpawn';
 import { GlobalStore } from '../../state';
-import { dedup, prune, textureCompress } from '@gltf-transform/functions';
 import { getEQFile, getEQFileExists } from 'sage-core/util/fileHandler';
 import {
   GLOBAL_VERSION,
   processGlobal,
 } from '../../components/zone/processZone';
 import { locateStaticAsset } from '../../static-assets';
+import { createGltfTransformIo, loadGltfTransformModules } from '../../util/gltf-transform';
 
 const {
   AbstractMesh,
@@ -643,7 +640,9 @@ class SpawnController extends GameControllerChild {
         GlobalStore.actions.setLoadingText('Applying GLB optimizations');
         const blob = Object.values(glb.glTFFiles)[0];
         const arr = new Uint8Array(await blob.arrayBuffer());
-        const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
+        const io = await createGltfTransformIo();
+        const { dedup, prune, textureCompress } =
+          await loadGltfTransformModules();
         const doc = await io.readBinary(arr);
         await doc.transform(
           dedup(),

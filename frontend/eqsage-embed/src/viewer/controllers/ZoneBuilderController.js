@@ -1,12 +1,11 @@
 import BABYLON from '@bjs';
-import { WebIO } from '@gltf-transform/core';
-import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { GameControllerChild } from './GameControllerChild';
 import { GlobalStore } from '../../state';
 import { RegionType } from 'sage-core/s3d/bsp/bsp-tree';
 import { instantiate3dMover, teardown3dMover } from '../util/babylonUtil';
 import { flipImageX } from 'sage-core/util/util';
 import { getEQFile } from 'sage-core/util/fileHandler';
+import { createGltfTransformIo } from '../../util/gltf-transform';
 
 const {
   AbstractMesh,
@@ -31,8 +30,6 @@ const {
   GLTF2Export,
   CubeTexture,
 } = BABYLON;
-const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
-
 class ZoneBuilderController extends GameControllerChild {
   /**
    * @type {import('@babylonjs/core/scene').Scene}
@@ -636,6 +633,7 @@ class ZoneBuilderController extends GameControllerChild {
   setSpawnLOD() {}
 
   async importZone(originalBuffer) {
+    const io = await createGltfTransformIo();
     // Preprocess - flip images
     // We expect terrain textutes to be flipped over X axis
     const document = await io.readBinary(new Uint8Array(originalBuffer));

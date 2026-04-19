@@ -3,10 +3,8 @@ import { GameControllerChild } from './GameControllerChild';
 import { optimizeBoundingBoxes } from 'sage-core/s3d/bsp/region-utils';
 import { getEQFile, writeEQFile } from 'sage-core/util/fileHandler';
 import { GlobalStore } from '../../state';
-import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { WebIO } from '@gltf-transform/core';
-import { dedup, prune, textureCompress } from '@gltf-transform/functions';
 import { assetUrl } from '../../embed-config';
+import { createGltfTransformIo, loadGltfTransformModules } from '../../util/gltf-transform';
 
 const {
   Color3,
@@ -139,7 +137,9 @@ class ZoneController extends GameControllerChild {
         let blob = Object.values(glb.glTFFiles)[0];
         try {
           const arr = new Uint8Array(await blob.arrayBuffer());
-          const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
+          const io = await createGltfTransformIo();
+          const { dedup, prune, textureCompress } =
+            await loadGltfTransformModules();
           const doc = await io.readBinary(arr);
           await doc.transform(
             dedup(),

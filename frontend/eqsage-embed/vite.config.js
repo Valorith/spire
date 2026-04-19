@@ -85,10 +85,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      buffer: 'buffer/',
-      util  : 'util/',
-      '@bjs': path.resolve(__dirname, 'src/bjs'),
-      '@'   : path.resolve(__dirname, 'src'),
+      buffer      : 'buffer/',
+      util        : 'util/',
+      draco3dgltf : path.resolve(__dirname, 'src/modules/draco3dgltf-browser.js'),
+      '@bjs'      : path.resolve(__dirname, 'src/bjs'),
+      '@'         : path.resolve(__dirname, 'src'),
     },
   },
   css: {

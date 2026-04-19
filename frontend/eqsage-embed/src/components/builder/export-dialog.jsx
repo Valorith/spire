@@ -9,8 +9,6 @@ import {
 } from '@mui/material';
 import BABYLON from '@bjs';
 
-import { WebIO } from '@gltf-transform/core';
-import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { CommonDialog } from '../spire/dialogs/common';
 import {
   getEQDir,
@@ -28,6 +26,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { usePermissions } from 'sage-core/hooks/permissions';
 import { useProject } from './hooks/metadata';
 import { staticAssetUrl } from '../../static-assets';
+import { createGltfTransformIo } from '../../util/gltf-transform';
 
 const { SubMesh, Vector3, Color3, VertexBuffer, PBRMaterial } = BABYLON;
 
@@ -67,8 +66,6 @@ const propertiesUsed = [
   // Water flowing -- all from above plus
   // e_fSlide properties
 ];
-
-const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
 
 async function compressPNG(inputBuffer) {
   const result = await window.imageProcessor.compressImage(inputBuffer);
@@ -114,6 +111,7 @@ export const ExportDialog = ({ open, setOpen }) => {
 
   /* eslint-disable */
   const doExport = useCallback(async () => {
+    const io = await createGltfTransformIo();
     setExporting(true);
     setExportedFiles([]);
     const metadata = zb.metadata;
