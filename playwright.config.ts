@@ -11,8 +11,11 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
-    viewport: { width: 1400, height: 900 },
+    viewport: null,
     ignoreHTTPSErrors: true,
+    launchOptions: {
+      args: ['--start-maximized'],
+    },
   },
   projects: [
     {

@@ -36,7 +36,6 @@ export const DrawerButton = ({
         <Icon
           fill={'#ddd'}
           color="#000 !important"
-          fillColor="#000"
           width={30}
           height={30}
           style={{

@@ -213,11 +213,21 @@ export const ZoneChooserDialog = ({ open }) => {
             <Select
               labelId="zone-filter-label"
               id="zone-filter"
+              name="expansionFilter"
               fullWidth={false}
               multiple
               value={expansionFilter}
               onChange={handleExpansionFilterChange}
-              input={<OutlinedInput label="Expansion Filter" />}
+              inputProps={{ 'aria-label': 'Expansion Filter' }}
+              input={
+                <OutlinedInput
+                  label="Expansion Filter"
+                  inputProps={{
+                    'aria-label': 'Expansion Filter',
+                    name        : 'expansionFilter',
+                  }}
+                />
+              }
               renderValue={(selected) =>
                 selected.length === 0
                   ? 'None'
@@ -277,7 +287,17 @@ export const ZoneChooserDialog = ({ open }) => {
                 };
               })}
               //  sx={{ width: 300 }}
-              renderInput={(params) => <TextField {...params} label="Zone" />}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Zone"
+                  inputProps={{
+                    ...params.inputProps,
+                    'aria-label': 'Zone',
+                    name        : 'zone',
+                  }}
+                />
+              )}
             />
           </FormControl>
           <FormControl sx={{ maxWidth: '400px' }}>

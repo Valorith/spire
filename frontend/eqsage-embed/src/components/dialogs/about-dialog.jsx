@@ -11,7 +11,6 @@ import {
 import GitHubIcon from '@mui/icons-material/GitHub';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import CodeIcon from '@mui/icons-material/Code';
-import { DiscordIcon } from '../common/icons/discord';
 
 import './about-dialog.scss';
 
@@ -75,11 +74,6 @@ export const AboutDialog = ({ open, setOpen }) => {
             link="https://github.com/Valorith/spire"
           />
           <Link
-            Icon={DiscordIcon}
-            text="EQEmu Discord (in channel #project-requiem)"
-            link="https://discord.gg/785p886eCw"
-          />
-          <Link
             Icon={YouTubeIcon}
             text="Spire Repository"
             link="https://github.com/Valorith/spire"
@@ -88,11 +82,6 @@ export const AboutDialog = ({ open, setOpen }) => {
             Icon={CodeIcon}
             text="EQ Advanced Maps"
             link="https://eqmap.vercel.app"
-          />
-          <Link
-            Icon={CodeIcon}
-            text="EQ: Requiem"
-            link="https://eqrequiem.com"
           />
      
           <Typography

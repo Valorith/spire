@@ -3,13 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const host = process.env.HOST || '127.0.0.1';
-const requestedPort = process.argv[2] || process.env.PORT || '8104';
-const port = parseInt(requestedPort, 10);
-const distRoot = path.resolve(__dirname, '..', 'frontend', 'dist');
-const indexPath = path.join(distRoot, 'index.html');
-const zoneDataPath = path.join(
-  distRoot,
+const defaultDistRoot = path.resolve(__dirname, '..', 'frontend', 'dist');
+const defaultIndexPath = path.join(defaultDistRoot, 'index.html');
+const defaultZoneDataPath = path.join(
+  defaultDistRoot,
   'eqsage-embed',
   'static',
   'zoneData.json'
@@ -33,42 +30,154 @@ const mimeTypes = {
   '.woff2': 'font/woff2',
 };
 
-const zoneData = fs.existsSync(zoneDataPath)
-  ? JSON.parse(fs.readFileSync(zoneDataPath, 'utf8'))
-  : [];
+const clone = (value) => JSON.parse(JSON.stringify(value));
 
-const previewDoors = [];
-let nextDoorId = 1;
+const readZoneData = (zoneDataPath = defaultZoneDataPath) =>
+  fs.existsSync(zoneDataPath)
+    ? JSON.parse(fs.readFileSync(zoneDataPath, 'utf8'))
+    : [];
 
-const appEnvPayload = {
-  data: {
-    env                           : 'local',
-    features                      : { github_auth_enabled: false },
-    is_hosted_read_only_mode_enabled: false,
-    is_spire_initialized          : true,
-    os                            : 'windows',
-    release_repository            : 'EQEmuTools/spire',
-    settings                      : [],
-    version                       : '0.0.0',
-  },
+const coercePreviewValue = (value) => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+  const trimmed = `${value}`.trim();
+  if (trimmed === '') {
+    return trimmed;
+  }
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+  return trimmed;
 };
 
-const userPayload = {
-  id      : 1,
-  is_admin: true,
-  name    : 'Local Preview',
-  username: 'local-preview',
+const normalizeLookupKey = (value = '') =>
+  `${value}`.replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+const getEntityFieldName = (entity, field) => {
+  if (Object.prototype.hasOwnProperty.call(entity, field)) {
+    return field;
+  }
+  const normalizedField = normalizeLookupKey(field);
+  return (
+    Object.keys(entity).find(
+      (key) => normalizeLookupKey(key) === normalizedField
+    ) ?? field
+  );
 };
 
-const emptyArrayPaths = new Set([
-  '/api/v1/grid_entries',
-  '/api/v1/grids',
-  '/api/v1/npc_types',
-  '/api/v1/spawn2s',
-  '/api/v1/spawnentries',
-  '/api/v1/spawngroups',
-  '/api/v1/zone_points',
-]);
+const getEntityValue = (entity, field) => entity[getEntityFieldName(entity, field)];
+
+const parseQueryClause = (clause) => {
+  const operators = [
+    ['_notlike_', 'notlike'],
+    ['_like_', 'like'],
+    ['_gte_', 'gte'],
+    ['_lte_', 'lte'],
+    ['_gt_', 'gt'],
+    ['_lt_', 'lt'],
+    ['_ne_', 'ne'],
+    ['__', 'eq'],
+  ];
+
+  for (const [token, operator] of operators) {
+    const tokenIndex = clause.indexOf(token);
+    if (tokenIndex === -1) {
+      continue;
+    }
+    return {
+      field   : clause.slice(0, tokenIndex),
+      operator,
+      value   : clause.slice(tokenIndex + token.length),
+    };
+  }
+
+  return {
+    field   : clause,
+    operator: 'eq',
+    value   : '',
+  };
+};
+
+const parseQueryClauses = (raw = '') =>
+  raw
+    .split('.')
+    .filter(Boolean)
+    .map(parseQueryClause)
+    .filter(({ field }) => !!field);
+
+const matchesClause = (entity, clause) => {
+  const actual = coercePreviewValue(getEntityValue(entity, clause.field));
+  const expected = coercePreviewValue(clause.value);
+
+  switch (clause.operator) {
+    case 'like':
+      return `${actual ?? ''}`.toLowerCase().includes(`${expected ?? ''}`.toLowerCase());
+    case 'notlike':
+      return !`${actual ?? ''}`.toLowerCase().includes(`${expected ?? ''}`.toLowerCase());
+    case 'ne':
+      return actual !== expected;
+    case 'gt':
+      return actual > expected;
+    case 'gte':
+      return actual >= expected;
+    case 'lt':
+      return actual < expected;
+    case 'lte':
+      return actual <= expected;
+    case 'eq':
+    default:
+      return actual === expected;
+  }
+};
+
+const applyQuery = (collection, searchParams) => {
+  const whereClauses = parseQueryClauses(searchParams.get('where') || '');
+  const whereOrClauses = parseQueryClauses(searchParams.get('whereOr') || '');
+  const orderByFields = (searchParams.get('orderBy') || '')
+    .split('.')
+    .filter(Boolean);
+  const limit = Number(searchParams.get('limit') || 0);
+  const page = Number(searchParams.get('page') || 0);
+
+  let result = [...collection];
+
+  if (whereClauses.length > 0) {
+    result = result.filter((entry) =>
+      whereClauses.every((clause) => matchesClause(entry, clause))
+    );
+  }
+
+  if (whereOrClauses.length > 0) {
+    result = result.filter((entry) =>
+      whereOrClauses.some((clause) => matchesClause(entry, clause))
+    );
+  }
+
+  if (orderByFields.length > 0) {
+    result.sort((left, right) => {
+      for (const field of orderByFields) {
+        const a = coercePreviewValue(getEntityValue(left, field));
+        const b = coercePreviewValue(getEntityValue(right, field));
+        if (a === b) {
+          continue;
+        }
+        return a > b ? 1 : -1;
+      }
+      return 0;
+    });
+  }
+
+  if (limit > 0) {
+    const start = page > 0 ? page * limit : 0;
+    result = result.slice(start, start + limit);
+  }
+
+  return result;
+};
 
 const json = (res, statusCode, payload) => {
   res.writeHead(statusCode, {
@@ -100,81 +209,6 @@ const readJsonBody = (req) =>
     req.on('error', reject);
   });
 
-const parseWhereClause = (where = '') =>
-  where
-    .split('.')
-    .filter(Boolean)
-    .map((clause) => {
-      const [field, rawValue = ''] = clause.split('__');
-      return {
-        field,
-        value: rawValue,
-      };
-    })
-    .filter(({ field }) => !!field);
-
-const coercePreviewValue = (value) => {
-  if (value === undefined || value === null) {
-    return value;
-  }
-  if (typeof value === 'number') {
-    return value;
-  }
-  const trimmed = `${value}`.trim();
-  if (trimmed === '') {
-    return trimmed;
-  }
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-    return Number(trimmed);
-  }
-  return trimmed;
-};
-
-const filterDoors = (searchParams) => {
-  const where = parseWhereClause(searchParams.get('where') || '');
-  let doors = [...previewDoors];
-
-  for (const { field, value } of where) {
-    const expected = coercePreviewValue(value);
-    doors = doors.filter((door) => coercePreviewValue(door[field]) === expected);
-  }
-
-  const orderBy = (searchParams.get('orderBy') || '')
-    .split('.')
-    .filter(Boolean);
-  if (orderBy.length > 0) {
-    doors.sort((left, right) => {
-      for (const field of orderBy) {
-        const a = coercePreviewValue(left[field]);
-        const b = coercePreviewValue(right[field]);
-        if (a === b) {
-          continue;
-        }
-        return a > b ? 1 : -1;
-      }
-      return 0;
-    });
-  }
-
-  return doors;
-};
-
-const normalizeDoor = (door) => {
-  const normalized = {
-    ...door,
-    id: door.id ?? nextDoorId++,
-  };
-  if (normalized.doorid === undefined || normalized.doorid === null) {
-    const zoneDoors = previewDoors.filter(
-      (entry) =>
-        entry.zone === normalized.zone && entry.version === normalized.version
-    );
-    normalized.doorid =
-      Math.max(0, ...zoneDoors.map((entry) => entry.doorid ?? 0)) + 1;
-  }
-  return normalized;
-};
-
 const notFound = (res, reqPath) => {
   json(res, 404, {
     error: `No preview handler for ${reqPath}`,
@@ -195,17 +229,21 @@ const serveFile = (res, absolutePath) => {
   stream.pipe(res);
 };
 
-const isSafePath = (absolutePath) => {
+const isSafePath = (distRoot, absolutePath) => {
   const relative = path.relative(distRoot, absolutePath);
   return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
 };
 
-const serveSpa = (res, reqPath) => {
+const serveSpa = (res, reqPath, distRoot, indexPath) => {
   const normalized = decodeURIComponent(reqPath.split('?')[0] || '/');
   const requestedPath = normalized === '/' ? '/index.html' : normalized;
   const absolutePath = path.join(distRoot, requestedPath);
 
-  if (isSafePath(absolutePath) && fs.existsSync(absolutePath) && fs.statSync(absolutePath).isFile()) {
+  if (
+    isSafePath(distRoot, absolutePath) &&
+    fs.existsSync(absolutePath) &&
+    fs.statSync(absolutePath).isFile()
+  ) {
     serveFile(res, absolutePath);
     return;
   }
@@ -213,7 +251,271 @@ const serveSpa = (res, reqPath) => {
   serveFile(res, indexPath);
 };
 
-const apiHandler = async (req, res, reqPath, reqUrl) => {
+const appEnvPayload = {
+  data: {
+    env                              : 'local',
+    features                         : { github_auth_enabled: false },
+    is_hosted_read_only_mode_enabled : false,
+    is_spire_initialized             : true,
+    os                               : 'windows',
+    release_repository               : 'EQEmuTools/spire',
+    settings                         : [],
+    version                          : '0.0.0',
+  },
+};
+
+const userPayload = {
+  id      : 1,
+  is_admin: true,
+  name    : 'Local Preview',
+  username: 'local-preview',
+};
+
+const buildSeedState = (zoneData) => {
+  const tutorialZone =
+    zoneData.find((zone) => zone.short_name === 'tutorial') ?? zoneData[0] ?? {
+      long_name    : 'EverQuest Tutorial',
+      short_name   : 'tutorial',
+      version      : 0,
+      zoneidnumber : 183,
+    };
+
+  const npcTypes = [
+    {
+      id       : 1001,
+      level    : 10,
+      lastname : '',
+      name     : 'Preview Guard',
+      race     : 1,
+      texture  : 0,
+      version  : tutorialZone.version ?? 0,
+    },
+    {
+      id       : 1002,
+      level    : 14,
+      lastname : '',
+      name     : 'Preview Rogue',
+      race     : 2,
+      texture  : 0,
+      version  : tutorialZone.version ?? 0,
+    },
+    {
+      id       : 1003,
+      level    : 18,
+      lastname : '',
+      name     : 'Preview Caster',
+      race     : 3,
+      texture  : 0,
+      version  : tutorialZone.version ?? 0,
+    },
+  ];
+
+  const spawngroups = [
+    { id: 2001, name: 'preview_tutorial_group' },
+  ];
+
+  const spawnentries = [
+    {
+      chance                : 100,
+      content_flags         : null,
+      content_flags_disabled: null,
+      max_expansion         : -1,
+      max_time              : 0,
+      min_expansion         : -1,
+      min_time              : 0,
+      npc_id                : 1001,
+      spawngroup_id         : 2001,
+    },
+  ];
+
+  const grids = [
+    {
+      id     : 3001,
+      type   : 0,
+      type_2 : 1,
+      zoneid : tutorialZone.zoneidnumber,
+    },
+  ];
+
+  const gridEntries = [
+    {
+      gridid : 3001,
+      heading: 0,
+      number : 1,
+      pause  : 0,
+      x      : 0,
+      y      : 0,
+      z      : 0,
+      zoneid : tutorialZone.zoneidnumber,
+    },
+    {
+      gridid : 3001,
+      heading: 64,
+      number : 2,
+      pause  : 5,
+      x      : 20,
+      y      : 10,
+      z      : 0,
+      zoneid : tutorialZone.zoneidnumber,
+    },
+  ];
+
+  const spawns = [
+    {
+      id            : 4001,
+      pathgrid      : 3001,
+      respawntime   : 1200,
+      spawngroup_id : 2001,
+      version       : tutorialZone.version ?? 0,
+      x             : 20,
+      y             : 15,
+      z             : 2,
+      zone          : tutorialZone.short_name,
+    },
+  ];
+
+  const doors = [
+    {
+      id      : 5001,
+      doorid  : 1,
+      heading : 0,
+      name    : 'IT63_ACTORDEF',
+      opentype: 31,
+      pos_x   : 5,
+      pos_y   : 10,
+      pos_z   : 0,
+      size    : 100,
+      version : tutorialZone.version ?? 0,
+      zone    : tutorialZone.short_name,
+    },
+  ];
+
+  return {
+    doors,
+    gridEntries,
+    grids,
+    nextDoorId      : 5002,
+    nextGridId      : 3002,
+    nextNpcTypeId   : 1004,
+    nextSpawnId     : 4002,
+    nextSpawngroupId: 2002,
+    npcTypes,
+    spawngroups,
+    spawnentries,
+    spawns,
+    tutorialZone,
+    zoneData,
+  };
+};
+
+const createPreviewState = ({ zoneData = readZoneData() } = {}) =>
+  buildSeedState(clone(zoneData));
+
+const normalizeDoor = (state, door) => {
+  const normalized = {
+    ...door,
+    id: door.id ?? state.nextDoorId++,
+  };
+  if (normalized.doorid === undefined || normalized.doorid === null) {
+    const zoneDoors = state.doors.filter(
+      (entry) =>
+        entry.zone === normalized.zone && entry.version === normalized.version
+    );
+    normalized.doorid =
+      Math.max(0, ...zoneDoors.map((entry) => entry.doorid ?? 0)) + 1;
+  }
+  return normalized;
+};
+
+const normalizeSpawn = (state, spawn) => ({
+  condition_value_filter: 1,
+  heading               : 0,
+  id                    : spawn.id ?? state.nextSpawnId++,
+  max_expansion         : -1,
+  min_expansion         : -1,
+  pathgrid              : 0,
+  respawntime           : 1200,
+  version               : 0,
+  x                     : 0,
+  y                     : 0,
+  z                     : 0,
+  ...spawn,
+});
+
+const normalizeSpawngroup = (state, spawngroup) => ({
+  id  : spawngroup.id ?? state.nextSpawngroupId++,
+  name: spawngroup.name ?? `preview_group_${state.nextSpawngroupId}`,
+  ...spawngroup,
+});
+
+const normalizeGrid = (state, grid) => ({
+  id     : grid.id ?? state.nextGridId++,
+  type   : 0,
+  type_2 : 1,
+  zoneid : state.tutorialZone.zoneidnumber,
+  ...grid,
+});
+
+const normalizeGridEntry = (gridEntry) => ({
+  gridid : 0,
+  heading: 0,
+  number : 1,
+  pause  : 0,
+  x      : 0,
+  y      : 0,
+  z      : 0,
+  zoneid : 0,
+  ...gridEntry,
+});
+
+const normalizeSpawnentry = (spawnentry) => ({
+  chance                : 100,
+  condition_value_filter: 1,
+  content_flags         : null,
+  content_flags_disabled: null,
+  max_expansion         : -1,
+  max_time              : 0,
+  min_expansion         : -1,
+  min_time              : 0,
+  ...spawnentry,
+});
+
+const buildSpawnEntryPayload = (state, spawnentry) => ({
+  ...clone(spawnentry),
+  npc_type: clone(
+    state.npcTypes.find((npcType) => npcType.id === spawnentry.npc_id) ?? null
+  ),
+});
+
+const buildSpawnPayload = (state, spawn) => {
+  const spawnentries = state.spawnentries
+    .filter((entry) => entry.spawngroup_id === spawn.spawngroup_id)
+    .map((entry) => buildSpawnEntryPayload(state, entry));
+
+  return {
+    ...clone(spawn),
+    spawnentries,
+  };
+};
+
+const findIndexById = (collection, id) =>
+  collection.findIndex((entry) => Number(entry.id) === Number(id));
+
+const findGridEntryIndex = (collection, id, searchParams) => {
+  const filtered = applyQuery(collection, searchParams);
+  const match = filtered.find((entry) => Number(entry.gridid) === Number(id));
+  if (!match) {
+    return -1;
+  }
+  return collection.findIndex(
+    (entry) =>
+      Number(entry.gridid) === Number(match.gridid) &&
+      Number(entry.zoneid) === Number(match.zoneid) &&
+      Number(entry.number) === Number(match.number)
+  );
+};
+
+const createApiHandler = (state) => async (req, res, reqPath, reqUrl) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin' : '*',
@@ -240,126 +542,485 @@ const apiHandler = async (req, res, reqPath, reqUrl) => {
   }
 
   if (req.method === 'GET' && reqPath === '/api/v1/zones') {
-    json(res, 200, zoneData);
+    json(res, 200, clone(state.zoneData));
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/query/free-id-ranges/grid/id') {
+    json(res, 200, {
+      data: [
+        {
+          end_id  : state.nextGridId,
+          start_id: state.nextGridId,
+        },
+      ],
+    });
     return;
   }
 
   if (req.method === 'GET' && reqPath === '/api/v1/doors') {
-    json(res, 200, filterDoors(reqUrl.searchParams));
+    json(res, 200, clone(applyQuery(state.doors, reqUrl.searchParams)));
     return;
   }
 
   if (req.method === 'GET' && reqPath === '/api/v1/doors/count') {
-    json(res, 200, filterDoors(reqUrl.searchParams).length);
+    json(res, 200, applyQuery(state.doors, reqUrl.searchParams).length);
     return;
   }
 
   if (req.method === 'PUT' && reqPath === '/api/v1/door') {
-    try {
-      const body = normalizeDoor(await readJsonBody(req));
-      previewDoors.push(body);
-      json(res, 200, [body]);
-    } catch (error) {
-      json(res, 400, { error: `Invalid JSON body: ${error.message}` });
-    }
+    const body = normalizeDoor(state, await readJsonBody(req));
+    state.doors.push(body);
+    json(res, 200, clone(body));
     return;
   }
 
   const doorMatch = reqPath.match(/^\/api\/v1\/door\/(\d+)$/);
   if (doorMatch) {
     const id = Number(doorMatch[1]);
-    const doorIndex = previewDoors.findIndex((door) => door.id === id);
+    const doorIndex = findIndexById(state.doors, id);
+
+    if (doorIndex === -1) {
+      notFound(res, reqPath);
+      return;
+    }
+
+    if (req.method === 'GET') {
+      json(res, 200, clone(state.doors[doorIndex]));
+      return;
+    }
 
     if (req.method === 'PATCH') {
-      if (doorIndex === -1) {
-        notFound(res, reqPath);
-        return;
-      }
-      try {
-        const body = await readJsonBody(req);
-        previewDoors[doorIndex] = {
-          ...previewDoors[doorIndex],
-          ...body,
-          id,
-        };
-        json(res, 200, [previewDoors[doorIndex]]);
-      } catch (error) {
-        json(res, 400, { error: `Invalid JSON body: ${error.message}` });
-      }
+      const body = await readJsonBody(req);
+      state.doors[doorIndex] = {
+        ...state.doors[doorIndex],
+        ...body,
+        id,
+      };
+      json(res, 200, clone(state.doors[doorIndex]));
       return;
     }
 
     if (req.method === 'DELETE') {
-      if (doorIndex === -1) {
-        notFound(res, reqPath);
-        return;
-      }
-      previewDoors.splice(doorIndex, 1);
+      state.doors.splice(doorIndex, 1);
       json(res, 200, 'ok');
       return;
     }
   }
 
-  if (req.method === 'GET' && emptyArrayPaths.has(reqPath)) {
-    json(res, 200, []);
+  if (req.method === 'GET' && reqPath === '/api/v1/npc_types') {
+    json(res, 200, clone(applyQuery(state.npcTypes, reqUrl.searchParams)));
     return;
   }
 
-  if (req.method === 'GET' && reqPath.endsWith('/count')) {
-    json(res, 200, 0);
+  if (req.method === 'GET' && reqPath === '/api/v1/npc_types/count') {
+    json(res, 200, applyQuery(state.npcTypes, reqUrl.searchParams).length);
     return;
+  }
+
+  const npcTypeMatch = reqPath.match(/^\/api\/v1\/npc_type\/(\d+)$/);
+  if (npcTypeMatch) {
+    const npcType = state.npcTypes.find(
+      (entry) => Number(entry.id) === Number(npcTypeMatch[1])
+    );
+    if (!npcType) {
+      notFound(res, reqPath);
+      return;
+    }
+    json(res, 200, clone(npcType));
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/spawngroups') {
+    json(res, 200, clone(applyQuery(state.spawngroups, reqUrl.searchParams)));
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/spawngroups/count') {
+    json(res, 200, applyQuery(state.spawngroups, reqUrl.searchParams).length);
+    return;
+  }
+
+  if (req.method === 'PUT' && reqPath === '/api/v1/spawngroup') {
+    const body = normalizeSpawngroup(state, await readJsonBody(req));
+    state.spawngroups.push(body);
+    json(res, 200, clone(body));
+    return;
+  }
+
+  const spawngroupMatch = reqPath.match(/^\/api\/v1\/spawngroup\/(\d+)$/);
+  if (spawngroupMatch) {
+    const id = Number(spawngroupMatch[1]);
+    const spawngroupIndex = findIndexById(state.spawngroups, id);
+
+    if (spawngroupIndex === -1) {
+      notFound(res, reqPath);
+      return;
+    }
+
+    if (req.method === 'GET') {
+      json(res, 200, clone(state.spawngroups[spawngroupIndex]));
+      return;
+    }
+
+    if (req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      state.spawngroups[spawngroupIndex] = {
+        ...state.spawngroups[spawngroupIndex],
+        ...body,
+        id,
+      };
+      json(res, 200, clone(state.spawngroups[spawngroupIndex]));
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      state.spawngroups.splice(spawngroupIndex, 1);
+      state.spawnentries = state.spawnentries.filter(
+        (entry) => Number(entry.spawngroup_id) !== id
+      );
+      state.spawns = state.spawns.filter(
+        (spawn) => Number(spawn.spawngroup_id) !== id
+      );
+      json(res, 200, 'ok');
+      return;
+    }
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/spawnentries') {
+    json(
+      res,
+      200,
+      applyQuery(state.spawnentries, reqUrl.searchParams).map((entry) =>
+        buildSpawnEntryPayload(state, entry)
+      )
+    );
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/spawnentries/count') {
+    json(res, 200, applyQuery(state.spawnentries, reqUrl.searchParams).length);
+    return;
+  }
+
+  if (req.method === 'PUT' && reqPath === '/api/v1/spawnentry') {
+    const body = normalizeSpawnentry(await readJsonBody(req));
+    state.spawnentries.push(body);
+    json(res, 200, buildSpawnEntryPayload(state, body));
+    return;
+  }
+
+  const spawnentryMatch = reqPath.match(/^\/api\/v1\/spawnentry\/(\d+)$/);
+  if (spawnentryMatch) {
+    const spawngroupId = Number(spawnentryMatch[1]);
+    const filteredEntries = applyQuery(state.spawnentries, reqUrl.searchParams);
+    const match = filteredEntries.find(
+      (entry) => Number(entry.spawngroup_id) === spawngroupId
+    );
+    if (!match) {
+      notFound(res, reqPath);
+      return;
+    }
+    const entryIndex = state.spawnentries.findIndex(
+      (entry) =>
+        Number(entry.spawngroup_id) === Number(match.spawngroup_id) &&
+        Number(entry.npc_id) === Number(match.npc_id)
+    );
+
+    if (req.method === 'GET') {
+      json(res, 200, buildSpawnEntryPayload(state, state.spawnentries[entryIndex]));
+      return;
+    }
+
+    if (req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      state.spawnentries[entryIndex] = {
+        ...state.spawnentries[entryIndex],
+        ...body,
+        spawngroup_id: spawngroupId,
+      };
+      json(res, 200, buildSpawnEntryPayload(state, state.spawnentries[entryIndex]));
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      state.spawnentries.splice(entryIndex, 1);
+      json(res, 200, 'ok');
+      return;
+    }
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/spawn_2s') {
+    json(
+      res,
+      200,
+      applyQuery(state.spawns, reqUrl.searchParams).map((spawn) =>
+        buildSpawnPayload(state, spawn)
+      )
+    );
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/spawn_2s/count') {
+    json(res, 200, applyQuery(state.spawns, reqUrl.searchParams).length);
+    return;
+  }
+
+  if (req.method === 'PUT' && reqPath === '/api/v1/spawn_2') {
+    const body = normalizeSpawn(state, await readJsonBody(req));
+    state.spawns.push(body);
+    json(res, 200, buildSpawnPayload(state, body));
+    return;
+  }
+
+  const spawnMatch = reqPath.match(/^\/api\/v1\/spawn_2\/(\d+)$/);
+  if (spawnMatch) {
+    const id = Number(spawnMatch[1]);
+    const spawnIndex = findIndexById(state.spawns, id);
+
+    if (spawnIndex === -1) {
+      notFound(res, reqPath);
+      return;
+    }
+
+    if (req.method === 'GET') {
+      json(res, 200, buildSpawnPayload(state, state.spawns[spawnIndex]));
+      return;
+    }
+
+    if (req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      state.spawns[spawnIndex] = {
+        ...state.spawns[spawnIndex],
+        ...body,
+        id,
+      };
+      json(res, 200, buildSpawnPayload(state, state.spawns[spawnIndex]));
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      state.spawns.splice(spawnIndex, 1);
+      json(res, 200, 'ok');
+      return;
+    }
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/grids') {
+    json(res, 200, clone(applyQuery(state.grids, reqUrl.searchParams)));
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/grids/count') {
+    json(res, 200, applyQuery(state.grids, reqUrl.searchParams).length);
+    return;
+  }
+
+  if (req.method === 'PUT' && reqPath === '/api/v1/grid') {
+    const body = normalizeGrid(state, await readJsonBody(req));
+    state.grids.push(body);
+    json(res, 200, clone(body));
+    return;
+  }
+
+  const gridMatch = reqPath.match(/^\/api\/v1\/grid\/(\d+)$/);
+  if (gridMatch) {
+    const id = Number(gridMatch[1]);
+    const gridIndex = findIndexById(state.grids, id);
+
+    if (gridIndex === -1) {
+      notFound(res, reqPath);
+      return;
+    }
+
+    if (req.method === 'GET') {
+      json(res, 200, clone(state.grids[gridIndex]));
+      return;
+    }
+
+    if (req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      state.grids[gridIndex] = {
+        ...state.grids[gridIndex],
+        ...body,
+        id,
+      };
+      json(res, 200, clone(state.grids[gridIndex]));
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      state.grids.splice(gridIndex, 1);
+      state.gridEntries = state.gridEntries.filter(
+        (entry) => Number(entry.gridid) !== id
+      );
+      json(res, 200, 'ok');
+      return;
+    }
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/grid_entries') {
+    json(res, 200, clone(applyQuery(state.gridEntries, reqUrl.searchParams)));
+    return;
+  }
+
+  if (req.method === 'GET' && reqPath === '/api/v1/grid_entries/count') {
+    json(res, 200, applyQuery(state.gridEntries, reqUrl.searchParams).length);
+    return;
+  }
+
+  if (req.method === 'PUT' && reqPath === '/api/v1/grid_entry') {
+    const body = normalizeGridEntry(await readJsonBody(req));
+    state.gridEntries.push(body);
+    json(res, 200, clone(body));
+    return;
+  }
+
+  const gridEntryMatch = reqPath.match(/^\/api\/v1\/grid_entry\/(\d+)$/);
+  if (gridEntryMatch) {
+    const id = Number(gridEntryMatch[1]);
+    const gridEntryIndex = findGridEntryIndex(
+      state.gridEntries,
+      id,
+      reqUrl.searchParams
+    );
+
+    if (gridEntryIndex === -1) {
+      notFound(res, reqPath);
+      return;
+    }
+
+    if (req.method === 'GET') {
+      json(res, 200, clone(state.gridEntries[gridEntryIndex]));
+      return;
+    }
+
+    if (req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      state.gridEntries[gridEntryIndex] = {
+        ...state.gridEntries[gridEntryIndex],
+        ...body,
+        gridid: id,
+      };
+      json(res, 200, clone(state.gridEntries[gridEntryIndex]));
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      state.gridEntries.splice(gridEntryIndex, 1);
+      json(res, 200, 'ok');
+      return;
+    }
   }
 
   notFound(res, reqPath);
 };
 
-const server = http.createServer((req, res) => {
-  const reqUrl = new URL(req.url, `http://${req.headers.host}`);
-  const reqPath = reqUrl.pathname;
+const createPreviewServer = ({
+  distRoot = defaultDistRoot,
+  host = '127.0.0.1',
+  indexPath = defaultIndexPath,
+  state = createPreviewState(),
+} = {}) => {
+  const apiHandler = createApiHandler(state);
+  const sockets = new Set();
 
-  if (reqPath.startsWith('/api/')) {
-    apiHandler(req, res, reqPath, reqUrl).catch((error) => {
-      console.error('[sage-preview] API error', error);
-      json(res, 500, { error: error.message || 'Preview API failure' });
+  const server = http.createServer((req, res) => {
+    const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+    const reqPath = reqUrl.pathname;
+
+    if (reqPath.startsWith('/api/')) {
+      apiHandler(req, res, reqPath, reqUrl).catch((error) => {
+        console.error('[sage-preview] API error', error);
+        json(res, 500, { error: error.message || 'Preview API failure' });
+      });
+      return;
+    }
+
+    serveSpa(res, reqPath, distRoot, indexPath);
+  });
+
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
     });
-    return;
-  }
+  });
 
-  serveSpa(res, reqPath);
-});
+  server.on('upgrade', (req, socket) => {
+    const reqPath = new URL(req.url, `http://${req.headers.host}`).pathname;
+    if (reqPath !== '/api/v1/websocket') {
+      socket.destroy();
+      return;
+    }
 
-server.on('upgrade', (req, socket) => {
-  const reqPath = new URL(req.url, `http://${req.headers.host}`).pathname;
-  if (reqPath !== '/api/v1/websocket') {
-    socket.destroy();
-    return;
-  }
+    const websocketKey = req.headers['sec-websocket-key'];
+    if (!websocketKey) {
+      socket.destroy();
+      return;
+    }
 
-  const websocketKey = req.headers['sec-websocket-key'];
-  if (!websocketKey) {
-    socket.destroy();
-    return;
-  }
+    const acceptKey = crypto
+      .createHash('sha1')
+      .update(
+        `${websocketKey}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`,
+        'binary'
+      )
+      .digest('base64');
 
-  const acceptKey = crypto
-    .createHash('sha1')
-    .update(`${websocketKey}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`, 'binary')
-    .digest('base64');
+    socket.write(
+      [
+        'HTTP/1.1 101 Switching Protocols',
+        'Upgrade: websocket',
+        'Connection: Upgrade',
+        `Sec-WebSocket-Accept: ${acceptKey}`,
+        '\r\n',
+      ].join('\r\n')
+    );
 
-  socket.write(
-    [
-      'HTTP/1.1 101 Switching Protocols',
-      'Upgrade: websocket',
-      'Connection: Upgrade',
-      `Sec-WebSocket-Accept: ${acceptKey}`,
-      '\r\n',
-    ].join('\r\n')
-  );
+    socket.on('error', () => {});
+  });
 
-  socket.on('error', () => {});
-});
+  const close = () =>
+    new Promise((resolve, reject) => {
+      server.closeIdleConnections?.();
+      server.closeAllConnections?.();
 
-server.listen(port, host, () => {
-  console.log(`[sage-preview] Serving ${distRoot}`);
-  console.log(`[sage-preview] Preview available at http://${host}:${port}/sage`);
-});
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+
+  return {
+    close,
+    host,
+    server,
+    state,
+  };
+};
+
+if (require.main === module) {
+  const requestedPort = process.argv[2] || process.env.PORT || '8104';
+  const port = parseInt(requestedPort, 10);
+  const host = process.env.HOST || '127.0.0.1';
+  const { server } = createPreviewServer({ host });
+
+  server.listen(port, host, () => {
+    console.log(`[sage-preview] Serving ${defaultDistRoot}`);
+    console.log(`[sage-preview] Preview available at http://${host}:${port}/sage`);
+  });
+}
+
+module.exports = {
+  createPreviewServer,
+  createPreviewState,
+  readZoneData,
+};

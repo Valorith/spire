@@ -1,4 +1,4 @@
-import { bx as e, by as n } from "./assets/embed-entry-Bb6cfUYP.js";
+import { bx as e, by as n } from "./assets/embed-entry-BgvWRWVI.js";
 export {
   e as mountSpireZoneEditor,
   n as unmountSpireZoneEditor
