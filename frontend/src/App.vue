@@ -292,8 +292,17 @@ export default {
 
       const url = `https://api.github.com/repos/${releaseRepository}/releases/latest`
       fetch(url)
-        .then(response => response.json())
+        .then(async response => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch latest release: ${response.status}`)
+          }
+          return response.json()
+        })
         .then(data => {
+          if (!data || typeof data.tag_name !== "string") {
+            throw new Error("Latest release payload is missing tag_name")
+          }
+
           latest = data.tag_name.replace("v", "")
           this.release = data
           const ignoredUpdateVersion = LocalSettings.getIgnoredUpdateVersion()
@@ -316,7 +325,7 @@ export default {
 
           this.currentVersion = current
         })
-        .catch(err => console.error(err))
+        .catch(err => console.warn("skipping update check", err))
     },
     handleWebsocketMessage(e) {
       if (e && e.data) {

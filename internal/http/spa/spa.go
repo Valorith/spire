@@ -36,7 +36,7 @@ func NewSpa(logger *logger.AppLogger) *Spa {
 				BasePath:      SpireBasePath,
 				LocalBasePath: SpireLocalBasePath,
 				SpaIndex:      SpireSpaIndex,
-				SkipPaths:     strings.Split(env.Get("SPA_SKIP_PATH_PREFIXES", "/auth,/api,/swagger,/websocket,/eqsage,/static"), ","),
+				SkipPaths:     strings.Split(env.Get("SPA_SKIP_PATH_PREFIXES", "/auth,/api,/swagger,/websocket"), ","),
 			},
 		),
 	}
