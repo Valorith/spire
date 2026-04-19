@@ -2,6 +2,8 @@
 vendor/
 .idea
 spire
+!frontend/eqsage-embed/src/components/spire/
+!frontend/eqsage-embed/src/components/spire/**
 data/
 _data/
 bin/
