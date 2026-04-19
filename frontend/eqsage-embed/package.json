@@ -1,0 +1,190 @@
+{
+  "name": "eqsage-embed",
+  "version": "1.8.15",
+  "author": {
+    "name": "Spire Contributors",
+    "url": "https://github.com/Valorith/spire"
+  },
+  "type": "module",
+  "description": "Embedded EQ Sage zone editor for Spire",
+  "build": {
+    "appId": "com.valorith.spire.sage-embed",
+    "productName": "Spire Zone Editor",
+    "directories": {
+      "output": "dist",
+      "buildResources": "public"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Valorith",
+        "repo": "spire"
+      }
+    ],
+    "files": [
+      "electron.js",
+      "preload.cjs",
+      "src/fsInterface.js",
+      "package.json",
+      "build/**/*",
+      "!node_modules/!(electron*|mimic-function|stubborn-fs|when-exit|ajv|ajv-formats|atomically|debounce-fn|dot-prop|env-paths|json-schema-typed|uint8array-extras|fast-uri|fast-deep-equal|builder-util-runtime|debug|ms|sax|universalify|graceful-fs|jsonfile|fs-extra|js-yaml|lazy-val|lodash.escaperegexp|lodash.isequal|semver|tiny-typed-emitter|builder-util-runtime|conf|type-fest)/**"
+    ],
+    "mac": {
+      "icon": "public/favicon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "icon": "public/favicon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "public/favicon.png",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@babylonjs/core": "7.2.1",
+    "@babylonjs/inspector": "7.2.1",
+    "@babylonjs/loaders": "7.2.1",
+    "@babylonjs/materials": "7.2.1",
+    "@babylonjs/serializers": "7.2.1",
+    "@base-ui-components/react": "^1.0.0-alpha.6",
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@gltf-transform/core": "^4.1.1",
+    "@gltf-transform/extensions": "^4.1.1",
+    "@gltf-transform/functions": "^3.10.0",
+    "@monaco-editor/react": "^4.6.0",
+    "@msgpack/msgpack": "^3.0.0-beta2",
+    "@mui/icons-material": "^6.4.4",
+    "@mui/lab": "^6.0.0-beta.27",
+    "@mui/material": "^6.4.4",
+    "@mui/x-tree-view": "^7.26.0",
+    "@reduxjs/toolkit": "^2.0.1",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@vitejs/plugin-react": "^1.3.2",
+    "@vitejs/plugin-react-swc": "^3.7.0",
+    "allotment": "^1.20.3",
+    "auto-bind": "^5.0.1",
+    "classnames": "^2.5.1",
+    "comlink": "^4.4.1",
+    "draco3dgltf": "^1.5.7",
+    "dxt-js": "^0.0.3",
+    "electron-store": "^10.0.1",
+    "electron-updater": "^6.3.9",
+    "events": "^3.3.0",
+    "fflate": "^0.8.2",
+    "gl-matrix": "^3.4.3",
+    "idb-keyval": "^6.2.1",
+    "jimp": "^0.22.12",
+    "material-ui-confirm": "^3.0.11",
+    "midievents": "^2.0.0",
+    "midifile": "^2.0.0",
+    "mui-color-input": "^4.0.1",
+    "mui-file-input": "^6.0.0",
+    "pako": "^2.1.0",
+    "quail-wasm": "^1.4.22",
+    "querystring": "^0.2.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-draggable": "^4.4.6",
+    "react-joyride": "^2.8.2",
+    "react-redux": "^9.0.4",
+    "recast-navigation": "^0.36.0",
+    "sage-core": "file:./sage",
+    "sparse-octree": "^7.1.8",
+    "spire-api": "1.0.15",
+    "tslib": "^2.8.1",
+    "use-debounce": "^10.0.0"
+  },
+  "devDependencies": {
+    "@originjs/vite-plugin-commonjs": "^1.0.3",
+    "buffer": "^6.0.3",
+    "cross-env": "^7.0.3",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.25.0",
+    "eslint-config-react-app": "^7.0.1",
+    "http-proxy": "^1.18.1",
+    "midi-writer-js": "^3.1.1",
+    "node-abi": "^3.74.0",
+    "rollup": "^4.20.0",
+    "sass": "^1.77.8",
+    "util": "^0.12.5",
+    "vite": "^5.3.5",
+    "vite-bundle-visualizer": "^1.2.1",
+    "vite-plugin-comlink": "^0.0.1",
+    "vite-plugin-static-copy": "^1.0.6",
+    "vite-plugin-tsconfig-paths": "^1.4.1"
+  },
+  "scripts": {
+    "dev": "vite --mode development",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vite build",
+    "build:watch": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vite build --watch",
+    "bundle-visualize": "npx vite-bundle-visualizer"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

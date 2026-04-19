@@ -1,0 +1,87 @@
+@font-face {
+  font-family: 'Menuetto';
+  src:  url('../eq-ui/styles/Menuetto.ttf') format('truetype'); /* Chrome 4+, Firefox 3.5, Opera 10+, Safari 3—5 */
+} 
+
+.Root {
+  isolation: isolate;
+}
+
+:root {
+  
+    --color-blue: oklch(69% 50% 264);
+    --color-red: oklch(80% 55% 31);
+
+    --color-gray-50: oklch(17% 1% 264);
+    --color-gray-100: oklch(28% 3% 264 / 65%);
+    --color-gray-200: oklch(31% 3% 264 / 80%);
+    --color-gray-300: oklch(35% 3% 264 / 80%);
+    --color-gray-400: oklch(47% 3.5% 264 / 80%);
+    --color-gray-500: oklch(64% 4% 264 / 80%);
+    --color-gray-600: oklch(82% 4% 264 / 80%);
+    --color-gray-700: oklch(92% 4.5% 264 / 80%);
+    --color-gray-800: oklch(93% 3.5% 264 / 85%);
+    --color-gray-900: oklch(95% 2% 264 / 90%);
+    --color-gray-950: oklch(94% 1.5% 264 / 95%);
+
+}
+
+
+html, body {
+  overflow: hidden !important;
+}
+
+#embed-host {
+  z-index: 100000 !important;
+}
+.sage-main {
+    background-size: cover;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+
+  .MuiDialog-paper[role=dialog]  {
+    &::before {
+    pointer-events: none;
+
+      position: absolute;
+      width: calc(100% + 22px);
+      height: calc(100% + 16px);
+      z-index: -1;
+      left: -12px;
+      top: -5px;
+      content: ' ';
+      background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+      background-position-x: left, right, left, right;
+      background-position-y: top, top, bottom, bottom;
+      background-clip:border-box;
+      background-image: url(../images/simple_window_corner_tl.png), url(../images/simple_window_corner_tr.png), url(../images/simple_window_corner_bl.png), url(../images/simple_window_corner_br.png);
+
+    }
+    overflow: visible;
+    border-radius: 5px;
+    background-image: url('../images/super_fancy_bg.png');
+    // background-image: url('../../../public/ui/wnd_bg_light_rock.png');
+    background-repeat: repeat;
+    background-position: center;
+    border-width: 2px;
+    border-style: solid;
+    border-color: rgb(180, 173, 134) rgb(142, 134, 107) rgb(61, 58, 48) rgb(177, 170, 142);
+    color: white !important;go
+    p {
+      color: white;
+    }
+    opacity: 1;
+    & > * {
+      opacity: 1;
+    }
+    //border: 1px solid #b2b2b2;
+    padding: 10px;
+  }
+  
+  

@@ -18,17 +18,6 @@ module.exports = {
         target: "http://127.0.0.1:3010",
         changeOrigin: true,
       },
-      ...(process.env.SAGE_LOCAL_DEV === 'true' ? {
-        "^/eqsage": {
-          changeOrigin: true,
-          target: "http://127.0.0.1:4100",
-          pathRewrite: (path) => path.replace(/^\/eqsage/, ""),
-        },
-        "^/static": {
-          changeOrigin: true,
-          target: "http://127.0.0.1:4100",
-        },
-      } : {}),
     },
   },
   // configureWebpack: {

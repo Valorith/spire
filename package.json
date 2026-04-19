@@ -5,6 +5,9 @@
     "type": "git",
     "url": "https://github.com/EQEmuTools/spire.git"
   },
+  "scripts": {
+    "serve:sage-preview": "node scripts/serve-sage-preview.js"
+  },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
     "playwright": "^1.56.1",

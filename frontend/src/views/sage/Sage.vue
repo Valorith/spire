@@ -1,61 +1,98 @@
 <template>
-  <div class="sage-container" ref="sage-root">
-    <iframe ref="sage-iframe" class="sage-iframe" src="/eqsage" title="EQSage"></iframe>
+  <div class="sage-container">
+    <div ref="sage-root" class="sage-root"></div>
+    <div v-if="loadError" class="sage-error">
+      {{ loadError }}
+    </div>
   </div>
 </template>
 
-<script type="ts">
+<script>
 import * as SpireApiTypes from "@/app/api";
 import { SpireApi } from "../../app/api/spire-api";
 import { SpireQueryBuilder } from "@/app/api/spire-query-builder";
-import {Navbar}          from "../../app/navbar";
+import { Navbar } from "../../app/navbar";
 import { Zones } from "../../app/zones";
 import { Spawn } from "../../app/spawn";
 import { Npcs } from "../../app/npcs";
 import { Grid } from "../../app/grid";
+import { loadEqSageEmbed } from "./eqsage-loader";
+
 export default {
-  components: {
-
-  },
   data() {
-
-    return {}
-  },
-  watch: {
-
+    return {
+      loadError: "",
+      unmount: null,
+    }
   },
 
   destroyed() {
-    Navbar.expand();
+    this.teardownSage()
   },
-  async mounted() {
-    Navbar.collapse()
-    this.$refs['sage-iframe'].addEventListener('load', e => {
-      e.target.contentWindow.Spire = {
+
+  methods: {
+    getSpireBridge() {
+      return {
         SpireApi,
         SpireApiTypes,
         SpireQueryBuilder,
         Grid,
         Zones,
         Spawn,
-        Npcs
+        Npcs,
       }
-    })
+    },
+
+    teardownSage() {
+      if (this.unmount) {
+        this.unmount()
+        this.unmount = null
+      }
+      Navbar.expand()
+    },
+  },
+
+  async mounted() {
+    Navbar.collapse()
+
+    try {
+      const { mountSpireZoneEditor, unmountSpireZoneEditor } = await loadEqSageEmbed()
+      const container = this.$refs["sage-root"]
+
+      await mountSpireZoneEditor(container, {
+        spireBridge: this.getSpireBridge(),
+      })
+
+      this.unmount = () => {
+        unmountSpireZoneEditor(container)
+      }
+    } catch (error) {
+      console.error("Failed to mount EQ Sage embed", error)
+      this.loadError = "Unable to load the EQ Sage zone editor bundle."
+      Navbar.expand()
+    }
   },
 }
 </script>
 
 <style>
-.sage-iframe {
-  height: calc(100vh - 10px);
-  border: none;
+.sage-container {
+  position: relative;
+  min-height: calc(100vh - 10px);
   margin-left: -35px;
   margin-top: -10px;
   width: calc(100% + 70px);
 }
-.code-display {
-  font-size: 14px !important;
-  max-width: 100% !important;
-  width: 100%;
+
+.sage-root {
+  min-height: calc(100vh - 10px);
+}
+
+.sage-error {
+  color: #f8d7da;
+  background: rgba(55, 10, 10, 0.9);
+  border: 1px solid rgba(248, 215, 218, 0.4);
+  margin: 24px;
+  padding: 16px;
 }
 </style>
