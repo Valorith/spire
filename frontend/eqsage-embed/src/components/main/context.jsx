@@ -65,8 +65,12 @@ export const MainProvider = ({
   ] = usePermissions();
   const { remoteUrl } = useSettingsContext();
   const [selectedZone, setSelectedZone] = useState(null);
-  const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
-  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [zoneDialogOpen, setZoneDialogOpen] = useState(
+    () => permissionStatus === PermissionStatusTypes.Ready
+  );
+  const [statusDialogOpen, setStatusDialogOpen] = useState(
+    () => permissionStatus !== PermissionStatusTypes.Ready
+  );
   const [zoneBuilderDialogOpen, setZoneBuilderDialogOpen] = useState(false);
   const [audioDialogOpen, setAudioDialogOpen] = useState(false);
   const [modelExporter, setModelExporter] = useState(false);
