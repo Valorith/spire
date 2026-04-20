@@ -76,20 +76,27 @@ class CameraController extends GameControllerChild {
     // Prevent the page from scrolling
     event.preventDefault();
   }
-  #autoRotationBehavior = new BABYLON.AutoRotationBehavior();
+  #autoRotationBehavior = null;
   #rotating = false;
   #rotateSpeed = 0.5;
+  ensureAutoRotationBehavior() {
+    if (!this.#autoRotationBehavior) {
+      this.#autoRotationBehavior = new BABYLON.AutoRotationBehavior();
+    }
+    return this.#autoRotationBehavior;
+  }
   rotate(rotate, speed = 0.5) {
+    const autoRotationBehavior = this.ensureAutoRotationBehavior();
     this.#rotating = rotate;
     this.#rotateSpeed = speed;
-    this.#autoRotationBehavior.idleRotationSpeed = speed;
-    this.#autoRotationBehavior.zoomStopsAnimation = false;
-    this.#autoRotationBehavior.idleRotationSpinupTime = 1;
-    this.#autoRotationBehavior.idleRotationWaitTime = 1;
+    autoRotationBehavior.idleRotationSpeed = speed;
+    autoRotationBehavior.zoomStopsAnimation = false;
+    autoRotationBehavior.idleRotationSpinupTime = 1;
+    autoRotationBehavior.idleRotationWaitTime = 1;
     if (rotate) {
-      this.#autoRotationBehavior.attach(this.camera);
+      autoRotationBehavior.attach(this.camera);
     } else {
-      this.#autoRotationBehavior.detach();
+      autoRotationBehavior.detach();
     }
   }
 
@@ -171,16 +178,17 @@ class CameraController extends GameControllerChild {
     this.camera.attachControl(this.canvas);
     this.camera.panningSensibility = 1000;
     this.camera.wheelPrecision = 25;
+    const autoRotationBehavior = this.ensureAutoRotationBehavior();
     // Assume camera is your ArcRotateCamera instance.
 
     // Set the idle rotation speed (in radians per millisecond).
-    this.#autoRotationBehavior.idleRotationSpeed = 0.001; // Adjust as needed
+    autoRotationBehavior.idleRotationSpeed = 0.001; // Adjust as needed
 
     // Optionally, adjust other properties:
-    this.#autoRotationBehavior.zoomStopsAnimation = false; // Example setting
+    autoRotationBehavior.zoomStopsAnimation = false; // Example setting
 
     // Attach the behavior to the camera.
-    this.camera.addBehavior(this.#autoRotationBehavior);
+    this.camera.addBehavior(autoRotationBehavior);
   };
 
   /**
