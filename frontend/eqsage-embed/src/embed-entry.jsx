@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import bjs from '@bjs';
 
 import './index.css';
@@ -10,6 +11,16 @@ const roots = new WeakMap();
 let initialized = false;
 let initializedPromise = null;
 let deferredInitializationHandle = null;
+
+const waitForNextPaint = () =>
+  new Promise((resolve) => {
+    const raf = globalThis.requestAnimationFrame;
+    if (!raf) {
+      globalThis.setTimeout(resolve, 16);
+      return;
+    }
+    raf(() => raf(resolve));
+  });
 
 const initializeBabylon = async () => {
   if (initialized) {
@@ -40,21 +51,24 @@ const renderApp = async (container, spireBridge, options = {}) => {
 
   const root = ReactDOM.createRoot(container);
   roots.set(container, root);
-  root.render(
-    <GlobalStoreProvider>
-      <SettingsProvider storageKey="eqsage-embed-options">
-        <AlertProvider>
-          <MainProvider
-            initialRouteState={options.initialRouteState}
-            onChromeChange={options.onChromeChange}
-            spireBridge={spireBridge}
-          >
-            <Main />
-          </MainProvider>
-        </AlertProvider>
-      </SettingsProvider>
-    </GlobalStoreProvider>
-  );
+  flushSync(() => {
+    root.render(
+      <GlobalStoreProvider>
+        <SettingsProvider storageKey="eqsage-embed-options">
+          <AlertProvider>
+            <MainProvider
+              initialRouteState={options.initialRouteState}
+              onChromeChange={options.onChromeChange}
+              spireBridge={spireBridge}
+            >
+              <Main />
+            </MainProvider>
+          </AlertProvider>
+        </SettingsProvider>
+      </GlobalStoreProvider>
+    );
+  });
+  await waitForNextPaint();
 };
 
 export const mountSpireZoneEditor = async (
@@ -77,7 +91,7 @@ export const mountSpireZoneEditor = async (
 
   const scheduleInit = globalThis.requestIdleCallback
     ? (fn) => globalThis.requestIdleCallback(fn, { timeout: 1500 })
-    : (fn) => globalThis.setTimeout(fn, 0);
+    : (fn) => globalThis.setTimeout(fn, 50);
 
   deferredInitializationHandle = scheduleInit(() => {
     initializeBabylon().catch((error) => {
