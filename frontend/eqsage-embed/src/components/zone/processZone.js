@@ -1,12 +1,16 @@
 import { EQFileHandle } from 'sage-core/model/file-handle';
 import { getEQFile, getFilesRecursively, writeEQFile } from 'sage-core/util/fileHandler';
 import { GlobalStore } from '../../state';
-import { gameController } from '../../viewer/controllers/GameController';
 
 export const GLOBAL_VERSION = 1.8;
 
-export async function processGlobal(settings, rootFileSystemHandle, standalone = false) {
-  gameController.rootFileSystemHandle = rootFileSystemHandle;
+const getActiveController = (controller) => controller ?? window.gameController ?? null;
+
+export async function processGlobal(settings, rootFileSystemHandle, standalone = false, controller = null) {
+  const activeGameController = getActiveController(controller);
+  if (activeGameController) {
+    activeGameController.rootFileSystemHandle = rootFileSystemHandle;
+  }
   if (standalone) {
     GlobalStore.actions.setLoading(true);
 
@@ -36,8 +40,8 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
     await obj.initialize();
     await obj.process();
     await writeEQFile('data', 'global.json', JSON.stringify({ version: GLOBAL_VERSION }));
-    if (standalone) {
-      gameController.openAlert('Done processing global');
+    if (standalone && activeGameController) {
+      activeGameController.openAlert('Done processing global');
 
       GlobalStore.actions.setLoading(false);
     }
@@ -45,8 +49,11 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
   });
 }
 
-export async function processEquip(settings, rootFileSystemHandle, standalone = false) {
-  gameController.rootFileSystemHandle = rootFileSystemHandle;
+export async function processEquip(settings, rootFileSystemHandle, standalone = false, controller = null) {
+  const activeGameController = getActiveController(controller);
+  if (activeGameController) {
+    activeGameController.rootFileSystemHandle = rootFileSystemHandle;
+  }
   if (standalone) {
     GlobalStore.actions.setLoading(true);
 
@@ -80,8 +87,8 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
     await obj.initialize();
     await obj.process();
     await writeEQFile('data', 'gequip.json', JSON.stringify({ version: GLOBAL_VERSION }));
-    if (standalone) {
-      gameController.openAlert('Done processing gequip');
+    if (standalone && activeGameController) {
+      activeGameController.openAlert('Done processing gequip');
 
       GlobalStore.actions.setLoading(false);
     }
@@ -89,12 +96,20 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
   });
 }
 
-export async function processZone(zoneName, settings, rootFileSystemHandle, _onlyChr = false) {
-  gameController.rootFileSystemHandle = rootFileSystemHandle;
+export async function processZone(zoneName, settings, rootFileSystemHandle, _onlyChr = false, controller = null) {
+  const activeGameController = getActiveController(controller);
+  if (activeGameController) {
+    activeGameController.rootFileSystemHandle = rootFileSystemHandle;
+  }
   GlobalStore.actions.setLoading(true);
   const v = await getEQFile('data', 'global.json', 'json');
   if (v?.version !== GLOBAL_VERSION) {
-    await processGlobal(gameController.settings, gameController.rootFileSystemHandle, true);
+    await processGlobal(
+      activeGameController?.settings ?? settings,
+      activeGameController?.rootFileSystemHandle ?? rootFileSystemHandle,
+      true,
+      activeGameController
+    );
   }
   console.log('Zone name', zoneName);
   GlobalStore.actions.setLoadingTitle(`Processing Zone ${zoneName}`);

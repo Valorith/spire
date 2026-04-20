@@ -1,15 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 
 import { Box, Typography } from '@mui/material';
 import { useMainContext } from '../main/context';
 import { processZone } from './processZone';
-import { SpireOverlay } from '../spire/overlay';
 import { OverlayProvider } from '../spire/provider';
 import { useSettingsContext } from '../../context/settings';
 import { GlobalStore } from '../../state';
 import { sleep } from '@/viewer/util/util';
 import bjs from '@bjs';
 import { debugSageLog, markStage } from '../../debug-stage';
+
+const SpireOverlay = React.lazy(() =>
+  import('../spire/overlay').then((module) => ({ default: module.SpireOverlay }))
+);
 
 export const BabylonZone = () => {
   markStage('babylon-zone:render');
@@ -64,7 +67,9 @@ export const BabylonZone = () => {
         await processZone(
           selectedZone.short_name,
           settings,
-          rootFileSystemHandle
+          rootFileSystemHandle,
+          false,
+          gameController
         );
         if (!current) {
           return;
@@ -162,9 +167,11 @@ export const BabylonZone = () => {
           pointerEvents: 'none',
         }}
       >
-        <Box sx={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
-          <SpireOverlay inZone={!!selectedZone} />
-        </Box>
+        <Suspense fallback={null}>
+          <Box sx={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
+            <SpireOverlay inZone={!!selectedZone} />
+          </Box>
+        </Suspense>
       </Box>
       {canvasState && (
         <Box
