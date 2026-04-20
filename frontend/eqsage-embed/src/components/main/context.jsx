@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PermissionStatusTypes, usePermissions } from 'sage-core/hooks/permissions';
 import { useSettingsContext } from '../../context/settings';
 import { getEmbedConfig } from '../../embed-config';
-import { markStage } from '../../debug-stage';
+import { debugSageLog, markStage } from '../../debug-stage';
 
 const MainContext = React.createContext({});
 
@@ -119,7 +119,7 @@ export const MainProvider = ({
       selectedZone: selectedZone?.short_name ?? null,
       hasRootHandle: !!rootFileSystemHandle,
     });
-    console.log('[SageMainProvider] permission state', {
+    debugSageLog('[SageMainProvider] permission state', {
       permissionStatus,
       selectedZone : selectedZone?.short_name ?? null,
       rootFsHandle : rootFileSystemHandle?.name ?? null,
@@ -135,7 +135,7 @@ export const MainProvider = ({
   ]);
 
   useEffect(() => {
-    console.log('[SageMainProvider] dialog state', {
+    debugSageLog('[SageMainProvider] dialog state', {
       zoneDialogOpen,
       statusDialogOpen,
       selectedZone: selectedZone?.short_name ?? null,

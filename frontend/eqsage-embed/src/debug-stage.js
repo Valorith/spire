@@ -1,7 +1,31 @@
 const markerId = 'sage-debug-stage';
+let debugEnabled = null;
+
+export const isSageDebugEnabled = () => {
+  if (debugEnabled !== null) {
+    return debugEnabled;
+  }
+
+  if (typeof window === 'undefined') {
+    debugEnabled = false;
+    return debugEnabled;
+  }
+
+  const search = new URLSearchParams(window.location.search);
+  debugEnabled =
+    search.get('debugSage') === '1' ||
+    window.localStorage?.getItem('debug-sage') === '1';
+  return debugEnabled;
+};
+
+export const debugSageLog = (...args) => {
+  if (isSageDebugEnabled()) {
+    console.log(...args);
+  }
+};
 
 const getMarker = () => {
-  if (typeof document === 'undefined') {
+  if (typeof document === 'undefined' || !isSageDebugEnabled()) {
     return null;
   }
 

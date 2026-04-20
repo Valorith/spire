@@ -10,11 +10,11 @@ import { useSettingsContext } from '../../context/settings';
 import { GlobalStore } from '../../state';
 import { sleep } from '@/viewer/util/util';
 import bjs from '@bjs';
-import { markStage } from '../../debug-stage';
+import { debugSageLog, markStage } from '../../debug-stage';
 
 export const BabylonZone = () => {
   markStage('babylon-zone:render');
-  console.log('[BabylonZoneRender]');
+  debugSageLog('[BabylonZoneRender]');
   const canvasRef = useRef();
   const {
     selectedZone,
@@ -34,7 +34,7 @@ export const BabylonZone = () => {
       while (!canvasRef.current) {
         await sleep(50);
       }
-      console.log('Ref', canvasRef.current);
+      debugSageLog('Ref', canvasRef.current);
       await gameController.loadEngine(canvasRef.current, settings.webgpu);
       await gameController.ZoneController.loadViewerScene();
       window.addEventListener('resize', gameController.resize);

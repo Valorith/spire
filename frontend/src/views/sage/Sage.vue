@@ -58,46 +58,23 @@ export default {
 
   async mounted() {
     const mountAttempt = ++this.mountAttempt
-
-    console.log("[SageVue]", "mounted:start", { mountAttempt })
     Navbar.collapse()
 
     try {
-      console.log("[SageVue]", "load:start")
       const { mountSpireZoneEditor, unmountSpireZoneEditor } = await loadEqSageEmbed()
-      console.log("[SageVue]", "load:done", {
-        hasMount  : typeof mountSpireZoneEditor === "function",
-        hasUnmount: typeof unmountSpireZoneEditor === "function",
-      })
       if (this.tornDown || mountAttempt !== this.mountAttempt) {
-        console.log("[SageVue]", "mount:aborted-before-container", {
-          tornDown: this.tornDown,
-          mountAttempt,
-          currentAttempt: this.mountAttempt,
-        })
         return
       }
 
       const container = this.$refs["sage-root"]
-      console.log("[SageVue]", "container:resolved", {
-        type         : typeof container,
-        isHTMLElement: container instanceof HTMLElement,
-      })
       if (!(container instanceof HTMLElement)) {
         return
       }
 
-      console.log("[SageVue]", "mount:call:start")
       await mountSpireZoneEditor(container, {
         spireBridge: this.getSpireBridge(),
       })
-      console.log("[SageVue]", "mount:call:done")
       if (this.tornDown || mountAttempt !== this.mountAttempt) {
-        console.log("[SageVue]", "mount:aborted-after-mount", {
-          tornDown: this.tornDown,
-          mountAttempt,
-          currentAttempt: this.mountAttempt,
-        })
         unmountSpireZoneEditor(container)
         return
       }
@@ -106,7 +83,6 @@ export default {
         unmountSpireZoneEditor(container)
       }
     } catch (error) {
-      console.error("[SageVue]", "mount:error", error)
       if (this.tornDown || mountAttempt !== this.mountAttempt) {
         return
       }

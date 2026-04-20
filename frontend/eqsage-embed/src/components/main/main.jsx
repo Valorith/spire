@@ -6,7 +6,7 @@ import { GlobalStore } from '@/state';
 import { assetUrl } from '../../embed-config';
 
 import './main.scss';
-import { markStage } from '../../debug-stage';
+import { debugSageLog, markStage } from '../../debug-stage';
 
 const CONSTANTS = {
   BONE         : '#ccc',
@@ -23,7 +23,7 @@ const LoadingDialog = React.lazy(() => import('../spire/dialogs/loading-dialog')
 
 export const Main = () => {
   markStage('main:render');
-  console.log('[SageMainRender]');
+  debugSageLog('[SageMainRender]');
   const {
     zoneDialogOpen,
     statusDialogOpen,
@@ -73,7 +73,7 @@ export const Main = () => {
       hasRootHandle: !!rootFileSystemHandle,
       unsupported,
     });
-    console.log('[SageMain] render state', {
+    debugSageLog('[SageMain] render state', {
       permissionStatus,
       statusDialogOpen,
       zoneDialogOpen,

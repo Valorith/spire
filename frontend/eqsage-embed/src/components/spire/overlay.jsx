@@ -29,17 +29,17 @@ import { assetUrl } from '../../embed-config';
 
 import './overlay.scss';
 import Drawer from './drawer';
-import { markStage } from '../../debug-stage';
+import { debugSageLog, markStage } from '../../debug-stage';
 
 export const SpireOverlay = ({ inZone }) => {
   markStage('spire-overlay:render', { inZone });
-  console.log('[SpireOverlayRender]', { inZone });
+  debugSageLog('[SpireOverlayRender]', { inZone });
   const { toggleDialog, dialogState, closeDialogs } = useOverlayContext();
   const { selectedZone, setZoneDialogOpen, setSelectedZone } = useMainContext();
 
   useSettingsHook();
   useEffect(() => {
-    console.log('[SpireOverlay] mounted', {
+    debugSageLog('[SpireOverlay] mounted', {
       inZone,
       selectedZone: selectedZone?.short_name ?? null,
       dialogKeys   : Object.keys(dialogState || {}),

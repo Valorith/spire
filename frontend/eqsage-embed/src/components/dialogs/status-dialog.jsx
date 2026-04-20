@@ -9,6 +9,7 @@ import {
 import { PermissionStatusTypes } from 'sage-core/hooks/permissions';
 import './status-dialog.scss';
 import { useMainContext } from '../main/context';
+import { debugSageLog } from '../../debug-stage';
 
 export const StatusDialog = ({
   open,
@@ -18,7 +19,7 @@ export const StatusDialog = ({
   fsHandle,
   onFolderSelected
 }) => {
-  console.log('[SageStatusDialogRender]', {
+  debugSageLog('[SageStatusDialogRender]', {
     open,
     permissionStatus,
     fsHandleName: fsHandle?.name ?? null,
