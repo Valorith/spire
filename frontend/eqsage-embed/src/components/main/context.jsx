@@ -156,7 +156,7 @@ export const MainProvider = ({
   }, [gameController, rootFileSystemHandle]);
 
   useEffect(() => {
-    if (statusDialogOpen || gameController) {
+    if (statusDialogOpen || zoneDialogOpen || !selectedZone || gameController) {
       return undefined;
     }
     let current = true;
@@ -176,7 +176,7 @@ export const MainProvider = ({
     return () => {
       current = false;
     };
-  }, [gameController, statusDialogOpen]);
+  }, [gameController, selectedZone, statusDialogOpen, zoneDialogOpen]);
 
   useEffect(() => {
     if (gameController) {

@@ -25,6 +25,7 @@ export const Main = () => {
   markStage('main:render');
   debugSageLog('[SageMainRender]');
   const {
+    selectedZone,
     zoneDialogOpen,
     statusDialogOpen,
     rootFileSystemHandle,
@@ -156,7 +157,7 @@ export const Main = () => {
             <Suspense fallback={null}>
               {zoneDialogOpen && <ZoneChooserDialog open={true} />}
             </Suspense>
-            {!statusDialogOpen && (
+            {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && (
               <Suspense fallback={null}>
                 <ZoneProvider>
                   <BabylonZone />
