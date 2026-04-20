@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useState } from 'react';
-import { Box, Stack, ThemeProvider, createTheme } from '@mui/material';
+import { Box, Stack, ThemeProvider, Typography, createTheme } from '@mui/material';
 import { ConfirmProvider } from 'material-ui-confirm';
 import { useMainContext } from './context';
 import { GlobalStore } from '@/state';
