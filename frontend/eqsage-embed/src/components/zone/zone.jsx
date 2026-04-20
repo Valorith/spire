@@ -24,60 +24,87 @@ export const BabylonZone = () => {
   } = useMainContext();
 
   const settings = useSettingsContext();
-
-  useEffect(() => {
-    (async () => {
-      if (!selectedZone || !gameController) {
-        return;
-      }
-      await bjs.prepareZoneViewer();
-      while (!canvasRef.current) {
-        await sleep(50);
-      }
-      debugSageLog('Ref', canvasRef.current);
-      await gameController.loadEngine(canvasRef.current, settings.webgpu);
-      await gameController.ZoneController.loadViewerScene();
-      window.addEventListener('resize', gameController.resize);
-      window.addEventListener('keydown', gameController.keyDown);
-    })();
-
-    return () => {
-      window.removeEventListener('resize', gameController.resize);
-      window.removeEventListener('keydown', gameController.keyDown);
-    };
-  }, [
-    gameController,
-    selectedZone,
-    settings?.webgpu,
-  ]);
+  const [viewerStage, setViewerStage] = useState('Preparing zone canvas');
+  const [viewerReady, setViewerReady] = useState(false);
+  const [viewerError, setViewerError] = useState(null);
 
   useEffect(() => {
     if (!selectedZone || !gameController) {
       return;
     }
     let current = true;
+    setViewerReady(false);
+    setViewerError(null);
+    setViewerStage('Loading viewer modules');
+
     (async () => {
-      await processZone(
-        selectedZone.short_name,
-        settings,
-        rootFileSystemHandle
-      );
-      if (!current) {
-        return;
-      }
-      gameController.ZoneController.loadModel(selectedZone.short_name).catch(
-        (e) => {
-          gameController.openAlert(
-            'Error loading zone. Check console output.',
-            'warning'
-          );
-          console.log('Error loading zone', e);
-          GlobalStore.actions.setLoading(false);
+      try {
+        await bjs.prepareZoneViewer();
+        while (current && !canvasRef.current) {
+          await sleep(50);
         }
-      );
+        if (!current) {
+          return;
+        }
+        debugSageLog('Ref', canvasRef.current);
+        setViewerStage('Initializing Babylon renderer');
+        await gameController.loadEngine(canvasRef.current, settings.webgpu);
+        if (!current) {
+          return;
+        }
+        setViewerStage('Creating zone scene');
+        await gameController.ZoneController.loadViewerScene();
+        if (!current) {
+          return;
+        }
+        window.addEventListener('resize', gameController.resize);
+        window.addEventListener('keydown', gameController.keyDown);
+
+        setViewerStage('Processing zone assets');
+        await processZone(
+          selectedZone.short_name,
+          settings,
+          rootFileSystemHandle
+        );
+        if (!current) {
+          return;
+        }
+        setViewerStage(
+          `Loading ${selectedZone.long_name ?? selectedZone.short_name}`
+        );
+        await gameController.ZoneController.loadModel(selectedZone.short_name);
+        if (!current) {
+          return;
+        }
+        setViewerStage('Zone ready');
+        setViewerReady(true);
+      } catch (e) {
+        if (!current) {
+          return;
+        }
+        setViewerError(e);
+        setViewerStage('Failed to load zone viewer');
+        gameController.openAlert(
+          'Error loading zone. Check console output.',
+          'warning'
+        );
+        console.log('Error loading zone', e);
+        GlobalStore.actions.setLoading(false);
+      }
     })();
-    return () => (current = false);
-  }, [gameController, selectedZone]); // eslint-disable-line
+
+    return () => {
+      current = false;
+      window.removeEventListener('resize', gameController.resize);
+      window.removeEventListener('keydown', gameController.keyDown);
+    };
+  }, [
+    gameController,
+    rootFileSystemHandle,
+    selectedZone,
+    settings?.webgpu,
+    settings,
+  ]);
 
   useEffect(() => {
     if (!canvasState) {
@@ -88,7 +115,7 @@ export const BabylonZone = () => {
   }, [canvasState, setCanvasState]);
   return (
     <OverlayProvider>
-      {!gameController && (
+      {!viewerReady && (
         <Box
           sx={{
             position      : 'fixed',
@@ -117,8 +144,13 @@ export const BabylonZone = () => {
               Preparing Zone Editor
             </Typography>
             <Typography sx={{ fontSize: 15 }} color="text.secondary">
-              Loading viewer modules for {selectedZone?.long_name ?? selectedZone?.short_name}.
+              {viewerStage}
             </Typography>
+            {viewerError && (
+              <Typography sx={{ fontSize: 13, marginTop: 1.5 }} color="error.main">
+                Zone viewer failed to initialize. Reopen Sage or reselect the zone after refresh.
+              </Typography>
+            )}
           </Box>
         </Box>
       )}
