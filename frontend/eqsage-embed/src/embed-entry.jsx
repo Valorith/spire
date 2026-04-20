@@ -9,6 +9,7 @@ import { setEmbedConfig } from './embed-config';
 const roots = new WeakMap();
 let initialized = false;
 let initializedPromise = null;
+let deferredInitializationHandle = null;
 
 const initializeBabylon = async () => {
   if (initialized) {
@@ -69,16 +70,31 @@ export const mountSpireZoneEditor = async (
 
   unmountSpireZoneEditor(container);
   setEmbedConfig(globalThis.__SPIRE_EQSAGE_EMBED_CONFIG__ ?? {});
-  initializeBabylon().catch((error) => {
-    console.error('Failed to initialize Babylon for the Sage embed', error);
-  });
   await renderApp(container, spireBridge, {
     initialRouteState,
     onChromeChange,
   });
+
+  const scheduleInit = globalThis.requestIdleCallback
+    ? (fn) => globalThis.requestIdleCallback(fn, { timeout: 1500 })
+    : (fn) => globalThis.setTimeout(fn, 0);
+
+  deferredInitializationHandle = scheduleInit(() => {
+    initializeBabylon().catch((error) => {
+      console.error('Failed to initialize Babylon for the Sage embed', error);
+    });
+  });
 };
 
 export const unmountSpireZoneEditor = (container) => {
+  if (deferredInitializationHandle) {
+    if (globalThis.cancelIdleCallback) {
+      globalThis.cancelIdleCallback(deferredInitializationHandle);
+    } else {
+      globalThis.clearTimeout(deferredInitializationHandle);
+    }
+    deferredInitializationHandle = null;
+  }
   const root = roots.get(container);
   if (root) {
     root.unmount();
