@@ -53,6 +53,7 @@ export const ZoneChooserDialog = ({ open }) => {
     selectedZone,
     setSelectedZone,
     setZoneDialogOpen,
+    loadGameController,
     Spire,
     setZones,
     recentList,
@@ -63,6 +64,7 @@ export const ZoneChooserDialog = ({ open }) => {
   const [expansionFilter, setExpansionFilter] = useState([]);
   const [zone, setZone] = useState(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [enteringZone, setEnteringZone] = useState(false);
 
   const autocompleteRef = useRef(null);
   const filteredZoneList = useMemo(() => {
@@ -109,18 +111,24 @@ export const ZoneChooserDialog = ({ open }) => {
   }, [rootFileSystemHandle]);
 
   const selectAndExit = useCallback(
-    (zone, save = true) => {
+    async (zone, save = true) => {
       if (!zone?.short_name) {
         return;
       }
-      if (save && !recentList.some((a) => a.short_name === zone.short_name)) {
-        recentList.push(zone);
-        localStorage.setItem('recent-zones', JSON.stringify(recentList));
+      setEnteringZone(true);
+      try {
+        await loadGameController();
+        if (save && !recentList.some((a) => a.short_name === zone.short_name)) {
+          recentList.push(zone);
+          localStorage.setItem('recent-zones', JSON.stringify(recentList));
+        }
+        setSelectedZone(zone);
+        setZoneDialogOpen(false);
+      } finally {
+        setEnteringZone(false);
       }
-      setSelectedZone(zone);
-      setZoneDialogOpen(false);
     },
-    [setZoneDialogOpen, setSelectedZone, recentList]
+    [loadGameController, setZoneDialogOpen, setSelectedZone, recentList]
   );
 
   useEffect(() => {
@@ -284,14 +292,14 @@ export const ZoneChooserDialog = ({ open }) => {
                   return;
                 }
                 if (typeof values === 'string') {
-                  selectAndExit({
-                    short_name: e.target.value,
-                    id        : -1,
-                    long_name : e.target.value,
-                  }, false);
+                    await selectAndExit({
+                      short_name: e.target.value,
+                      id        : -1,
+                      long_name : e.target.value,
+                    }, false);
                 } else {
                   if (e.key === 'Enter') {
-                    selectAndExit(values.zone, true);
+                    await selectAndExit(values.zone, true);
                   }
                   setZone(values.zone);
                 }
@@ -346,7 +354,9 @@ export const ZoneChooserDialog = ({ open }) => {
                     zone.version > 0 ? `[v${zone.version}]` : ''
                   }`.trim()}
                   variant="outlined"
-                  onClick={() => selectAndExit(zone)}
+                  onClick={() => {
+                    void selectAndExit(zone);
+                  }}
                   onDelete={() => {
                     setRecentList((l) => l.filter((z) => z.id !== zone.id));
                   }}
@@ -358,12 +368,14 @@ export const ZoneChooserDialog = ({ open }) => {
         <Stack direction={'column'}>
           <Button
             color="primary"
-            onClick={() => selectAndExit(zone)}
-            disabled={!zone}
+            onClick={() => {
+              void selectAndExit(zone);
+            }}
+            disabled={!zone || enteringZone}
             variant="outlined"
             sx={{ margin: '5px auto' }}
           >
-            Enter Zone Editor
+            {enteringZone ? 'Preparing Zone Editor...' : 'Enter Zone Editor'}
           </Button>
         </Stack>
       </Box>

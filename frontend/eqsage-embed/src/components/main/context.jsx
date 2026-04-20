@@ -5,6 +5,7 @@ import { getEmbedConfig } from '../../embed-config';
 import { debugSageLog, markStage } from '../../debug-stage';
 
 const MainContext = React.createContext({});
+let gameControllerImportPromise = null;
 
 /**
  * @typedef Spire
@@ -82,6 +83,7 @@ export const MainProvider = ({
   const [canvasState, setCanvasState] = useState(false);
   const [modelExporterLoaded, setModelExporterLoaded] = useState(false);
   const [gameController, setGameController] = useState(() => window.gameController ?? null);
+  const [gameControllerLoading, setGameControllerLoading] = useState(false);
   const { embeddedMode } = getEmbedConfig();
   const Spire = useMemo(
     () => spireBridge ?? null,
@@ -164,28 +166,34 @@ export const MainProvider = ({
     };
   }, [gameController, rootFileSystemHandle]);
 
-  useEffect(() => {
-    if (statusDialogOpen || gameController) {
-      return undefined;
+  const loadGameController = useCallback(async () => {
+    if (gameController) {
+      return gameController;
     }
-    let current = true;
-    import('../../viewer/controllers/GameController')
-      .then((module) => {
-        if (!current) {
-          return;
-        }
-        if (window.__spireSageOpenAlert) {
-          module.gameController.openAlert = window.__spireSageOpenAlert;
-        }
-        setGameController(module.gameController);
-      })
-      .catch((error) => {
-        console.error('[SageMainProvider] failed to load gameController', error);
-      });
-    return () => {
-      current = false;
-    };
-  }, [gameController, statusDialogOpen]);
+    if (!gameControllerImportPromise) {
+      setGameControllerLoading(true);
+      gameControllerImportPromise = import('../../viewer/controllers/GameController')
+        .then((module) => {
+          const controller = module.gameController;
+          if (window.__spireSageOpenAlert) {
+            controller.openAlert = window.__spireSageOpenAlert;
+          }
+          controller.rootFileSystemHandle = window.__spireSageRootFileSystemHandle ?? null;
+          window.gameController = controller;
+          setGameController(controller);
+          return controller;
+        })
+        .catch((error) => {
+          console.error('[SageMainProvider] failed to load gameController', error);
+          throw error;
+        })
+        .finally(() => {
+          setGameControllerLoading(false);
+          gameControllerImportPromise = null;
+        });
+    }
+    return gameControllerImportPromise;
+  }, [gameController]);
 
   useEffect(() => {
     if (gameController) {
@@ -255,6 +263,8 @@ export const MainProvider = ({
         setRecentList,
         reset,
         gameController,
+        gameControllerLoading,
+        loadGameController,
       }}
     >
       {children}
