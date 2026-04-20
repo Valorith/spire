@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { flushSync } from 'react-dom';
-import bjs from '@bjs';
 
 import './index.css';
 
@@ -9,9 +8,6 @@ import { setEmbedConfig } from './embed-config';
 import { debugSageLog, markStage } from './debug-stage';
 
 const roots = new WeakMap();
-let initialized = false;
-let initializedPromise = null;
-let deferredInitializationHandle = null;
 
 const waitForNextPaint = () =>
   new Promise((resolve) => {
@@ -22,24 +18,6 @@ const waitForNextPaint = () =>
     }
     raf(() => raf(resolve));
   });
-
-const initializeBabylon = async () => {
-  markStage('babylon-init:start');
-  debugSageLog('[SageEmbed]', 'babylon-init:start');
-  if (initialized) {
-    markStage('babylon-init:already');
-    debugSageLog('[SageEmbed]', 'babylon-init:already');
-    return;
-  }
-  if (!initializedPromise) {
-    initializedPromise = bjs.initialize().then(() => {
-      initialized = true;
-      markStage('babylon-init:done');
-      debugSageLog('[SageEmbed]', 'babylon-init:done');
-    });
-  }
-  await initializedPromise;
-};
 
 const renderApp = async (container, spireBridge, options = {}) => {
   markStage('render:imports:start');
@@ -119,29 +97,9 @@ export const mountSpireZoneEditor = async (
   });
   markStage('mount:rendered');
   debugSageLog('[SageEmbed]', 'mount:rendered');
-
-  const scheduleInit = globalThis.requestIdleCallback
-    ? (fn) => globalThis.requestIdleCallback(fn, { timeout: 1500 })
-    : (fn) => globalThis.setTimeout(fn, 50);
-
-  deferredInitializationHandle = scheduleInit(() => {
-    markStage('mount:idle-init-fired');
-    debugSageLog('[SageEmbed]', 'mount:idle-init-fired');
-    initializeBabylon().catch((error) => {
-      console.error('Failed to initialize Babylon for the Sage embed', error);
-    });
-  });
 };
 
 export const unmountSpireZoneEditor = (container) => {
-  if (deferredInitializationHandle) {
-    if (globalThis.cancelIdleCallback) {
-      globalThis.cancelIdleCallback(deferredInitializationHandle);
-    } else {
-      globalThis.clearTimeout(deferredInitializationHandle);
-    }
-    deferredInitializationHandle = null;
-  }
   const root = roots.get(container);
   if (root) {
     root.unmount();

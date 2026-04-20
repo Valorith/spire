@@ -42,12 +42,6 @@ export const Main = () => {
   );
 
   useEffect(() => {
-    import('../../util/image/image-processor').catch((error) => {
-      console.error('[SageMain] failed to initialize image processor', error);
-    });
-  }, []);
-
-  useEffect(() => {
     if (window.electronAPI) {
       (async () => {
         const hasStandalone = await window.electronAPI?.hasStandalone?.();
@@ -162,11 +156,13 @@ export const Main = () => {
             <Suspense fallback={null}>
               {zoneDialogOpen && <ZoneChooserDialog open={true} />}
             </Suspense>
-            <Suspense fallback={null}>
-              <ZoneProvider>
-                <BabylonZone />
-              </ZoneProvider>
-            </Suspense>
+            {!statusDialogOpen && (
+              <Suspense fallback={null}>
+                <ZoneProvider>
+                  <BabylonZone />
+                </ZoneProvider>
+              </Suspense>
+            )}
           </ConfirmProvider>
         </ThemeProvider>
       ) : null}
