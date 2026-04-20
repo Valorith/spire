@@ -143,10 +143,16 @@ export const MainProvider = ({
   }, [selectedZone, statusDialogOpen, zoneDialogOpen]);
 
   useEffect(() => {
+    window.__spireSageRootFileSystemHandle = rootFileSystemHandle ?? null;
     if (gameController) {
       gameController.rootFileSystemHandle = rootFileSystemHandle;
       window.gameController = gameController;
     }
+    return () => {
+      if (!rootFileSystemHandle) {
+        window.__spireSageRootFileSystemHandle = null;
+      }
+    };
   }, [gameController, rootFileSystemHandle]);
 
   useEffect(() => {

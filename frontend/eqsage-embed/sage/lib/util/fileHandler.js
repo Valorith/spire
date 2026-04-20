@@ -1,6 +1,12 @@
 
 import { globals } from '../globals';
 
+const getActiveRootHandle = () =>
+  globals.gameController?.rootFileSystemHandle ??
+  window.gameController?.rootFileSystemHandle ??
+  window.__spireSageRootFileSystemHandle ??
+  null;
+
 async function* getDirFiles(entry, path = '') {
   if (entry.kind === 'file') {
     const file = await entry;
@@ -109,12 +115,13 @@ let cachedDirHandle = null;
 const handles = {};
 
 export const getEQSageDir = async () => {
-  if (!window.gameController.rootFileSystemHandle) {
+  const rootHandle = getActiveRootHandle();
+  if (!rootHandle) {
     return;
   }
   const eqsageDir =
     cachedDirHandle ||
-    (await window.gameController.rootFileSystemHandle.getDirectoryHandle(
+    (await rootHandle.getDirectoryHandle(
       globals.root,
       {
         create: true,
@@ -126,7 +133,7 @@ export const getEQSageDir = async () => {
 };
 
 export const getEQRootDir = () => {
-  return window.gameController.rootFileSystemHandle;
+  return getActiveRootHandle();
 };
 
 /**
@@ -135,13 +142,14 @@ export const getEQRootDir = () => {
  * @returns {Promise<FileSystemDirectoryHandle>}
  */
 export const getEQDir = async (name) => {
-  if (!window.gameController.rootFileSystemHandle) {
+  const rootHandle = getActiveRootHandle();
+  if (!rootHandle) {
     return;
   }
   try {
     const eqsageDir =
       cachedDirHandle ||
-      (await window.gameController.rootFileSystemHandle.getDirectoryHandle(
+      (await rootHandle.getDirectoryHandle(
         globals.root,
         {
           create: true,
