@@ -9,8 +9,7 @@ import { getEQDir, getEQFile, getFiles } from 'sage-core/util/fileHandler';
 import { assetUrl } from '../../embed-config';
 import { textureAnimationMap } from '../helpers/textureAnimationMap';
 
-const { Engine, ThinEngine, WebGPUEngine, Database, SceneLoader, GLTFLoader } =
-  BABYLON;
+const { Engine, ThinEngine, WebGPUEngine, Database, SceneLoader } = BABYLON;
 
 const createNoopController = () => ({
   scene: null,
@@ -78,6 +77,7 @@ const textureAliasCache = new Map();
 const missingTextureWarnings = new Set();
 let textureFileIndexPromise = null;
 let textureFileIndex = null;
+const patchedGltfLoaders = new WeakSet();
 
 const normalizeTextureLookupKey = (value) =>
   `${value ?? ''}`
@@ -189,6 +189,71 @@ const getTextureFileData = async (rawName) => {
   return null;
 };
 
+const patchGltfImageLoader = (controller, loaderCandidate) => {
+  const loader = loaderCandidate?._loader ?? loaderCandidate;
+
+  if (!loader || patchedGltfLoaders.has(loader)) {
+    return false;
+  }
+
+  if (typeof loader.loadImageAsync !== 'function') {
+    return false;
+  }
+
+  const originalLoadImageAsync = loader.loadImageAsync;
+
+  loader.loadImageAsync = async function (context, image) {
+    if (controller.ZoneBuilderController?.scene) {
+      try {
+        const result = await originalLoadImageAsync.apply(this, arguments);
+        return result;
+      } catch (e) {
+        console.warn('Error with image', image);
+      }
+    }
+    if (!image._data) {
+      const resolvedTexture = await getTextureFileData(image.name);
+      const data = resolvedTexture?.data;
+
+      if (data) {
+        image._data = data;
+      } else {
+        try {
+          const res = await originalLoadImageAsync.call(this, context, image);
+          if (res) {
+            return res;
+          }
+        } catch {}
+        if (
+          !isIgnorableMissingTexture(image.name) &&
+          !missingTextureWarnings.has(image.name)
+        ) {
+          missingTextureWarnings.add(image.name);
+          console.warn(`Missing texture ${image.name}`);
+        }
+
+        // Solid gray 1px png until this is solved
+        const pngData = new Uint8Array([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+          0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+          0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde,
+          0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63,
+          0x68, 0x68, 0x68, 0x00, 0x00, 0x03, 0x04, 0x01, 0x81, 0x4b, 0xd3,
+          0xd2, 0x10, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+          0x42, 0x60, 0x82,
+        ]);
+
+        image._data = pngData.buffer;
+      }
+    }
+
+    return image._data;
+  };
+
+  patchedGltfLoaders.add(loader);
+  return true;
+};
+
 class EQDatabase extends Database {
   async loadImage(url, image, ..._rest) {
     if (url.startsWith('http') || url.startsWith(assetUrl('static'))) {
@@ -297,6 +362,7 @@ export class GameController {
   ZoneBuilderController = createNoopController();
 
   videoElement = null;
+  gltfPluginObserver = null;
 
   constructor() {
     const controller = this;
@@ -385,55 +451,12 @@ export class GameController {
         disableManifestCheck
       );
     };
-    const originalLoadImageAsync = GLTFLoader.prototype.loadImageAsync;
-    GLTFLoader.prototype.loadImageAsync = async function (context, image) {
-      if (controller.ZoneBuilderController?.scene) {
-        try {
-          const result = await originalLoadImageAsync.apply(this, arguments);
-          return result;
-        } catch (e) {
-          console.warn('Error with image', image);
-        }
+
+    this.gltfPluginObserver = SceneLoader?.OnPluginActivatedObservable?.add(
+      (plugin) => {
+        patchGltfImageLoader(controller, plugin);
       }
-      if (!image._data) {
-        const resolvedTexture = await getTextureFileData(image.name);
-        const data = resolvedTexture?.data;
-
-        if (data) {
-          image._data = data; // entry.data.buffer;
-        } else {
-          try {
-            const res = await originalLoadImageAsync.call(this, context, image);
-            if (res) {
-              return res;
-            }
-          } catch {}
-          if (
-            !isIgnorableMissingTexture(image.name) &&
-            !missingTextureWarnings.has(image.name)
-          ) {
-            missingTextureWarnings.add(image.name);
-            console.warn(`Missing texture ${image.name}`);
-          }
-
-          // Solid gray 1px png until this is solved
-          const pngData = new Uint8Array([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
-            0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-            0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde,
-            0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63,
-            0x68, 0x68, 0x68, 0x00, 0x00, 0x03, 0x04, 0x01, 0x81, 0x4b, 0xd3,
-            0xd2, 0x10, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
-            0x42, 0x60, 0x82,
-          ]);
-
-          image._data = pngData.buffer;
-          // (await getEQFile('textures', 'citywal4.png')) ?? new ArrayBuffer();
-        }
-      }
-
-      return image._data;
-    };
+    );
   }
 
   get currentScene() {
