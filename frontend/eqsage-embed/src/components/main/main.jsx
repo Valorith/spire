@@ -2,6 +2,8 @@ import React, { Suspense, useEffect, useState } from 'react';
 import { Box, Stack, ThemeProvider, Typography, createTheme } from '@mui/material';
 import { ConfirmProvider } from 'material-ui-confirm';
 import { useMainContext } from './context';
+import { BabylonZone } from '../zone/zone';
+import { ZoneProvider } from '../zone/zone-context';
 import { GlobalStore } from '@/state';
 import { assetUrl } from '../../embed-config';
 
@@ -17,8 +19,6 @@ const CONSTANTS = {
 const bgMax = 6;
 const StatusDialog = React.lazy(() => import('../dialogs/status-dialog').then((m) => ({ default: m.StatusDialog })));
 const ZoneChooserDialog = React.lazy(() => import('../dialogs/zone-chooser-dialog').then((m) => ({ default: m.ZoneChooserDialog })));
-const BabylonZone = React.lazy(() => import('../zone/zone').then((m) => ({ default: m.BabylonZone })));
-const ZoneProvider = React.lazy(() => import('../zone/zone-context').then((m) => ({ default: m.ZoneProvider })));
 const LoadingDialog = React.lazy(() => import('../spire/dialogs/loading-dialog').then((m) => ({ default: m.LoadingDialog })));
 
 const ZoneLoadingOverlay = ({
@@ -224,17 +224,9 @@ export const Main = () => {
               />
             )}
             {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !!gameController && (
-              <Suspense
-                fallback={
-                  <ZoneLoadingOverlay
-                    message={`Loading zone viewer shell for ${selectedZone.long_name ?? selectedZone.short_name}.`}
-                  />
-                }
-              >
-                <ZoneProvider>
-                  <BabylonZone />
-                </ZoneProvider>
-              </Suspense>
+              <ZoneProvider>
+                <BabylonZone />
+              </ZoneProvider>
             )}
           </ConfirmProvider>
         </ThemeProvider>
