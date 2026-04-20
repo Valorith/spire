@@ -177,8 +177,8 @@ export const ZoneChooserDialog = ({ open }) => {
       className="ui-dialog"
       onKeyDown={(e) => e.stopPropagation()}
       maxWidth="md"
-
       open={open}
+      disablePortal
       onClose={() => (selectedZone ? setZoneDialogOpen(false) : null)}
       aria-labelledby="draggable-dialog-title"
     >

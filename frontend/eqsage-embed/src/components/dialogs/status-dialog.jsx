@@ -2,9 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   Link,
   Stack,
   Typography,
@@ -36,34 +33,65 @@ export const StatusDialog = ({
       }
     }, 150);
   }, [Spire]);
+
+  if (!open) {
+    return null;
+  }
+
   return (
-    <Dialog
-      fullWidth
-      maxWidth="sm"
-      open={open}
-      disablePortal
+    <Box
+      sx={{
+        position      : 'fixed',
+        inset         : 0,
+        zIndex        : 2400,
+        display       : 'flex',
+        alignItems    : 'center',
+        justifyContent: 'center',
+        padding       : 3,
+        background    : 'rgba(4, 6, 10, 0.62)',
+        pointerEvents : 'auto',
+      }}
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
       }}
       onDrop={onDrop}
-      onClose={() => {}}
-      aria-labelledby="draggable-dialog-title"
     >
-      <DialogTitle
-        style={{ cursor: 'move', margin: '0 auto' }}
-        id="draggable-dialog-title"
+      <Box
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sage-status-title"
+        sx={{
+          width         : '100%',
+          maxWidth      : 720,
+          maxHeight     : 'calc(100vh - 48px)',
+          overflowY     : 'auto',
+          border        : '1px solid rgba(221, 208, 160, 0.7)',
+          background    : 'linear-gradient(180deg, rgba(17, 24, 34, 0.98), rgba(9, 13, 19, 0.98))',
+          boxShadow     : '0 18px 48px rgba(0, 0, 0, 0.55)',
+          borderRadius  : '6px',
+          color         : '#e8dcc0',
+          pointerEvents : 'auto',
+          padding       : 3,
+        }}
       >
-        Welcome to the Spire Zone Editor
-      </DialogTitle>
-      <DialogContent>
+        <Typography
+          id="sage-status-title"
+          variant="h5"
+          sx={{
+            textAlign   : 'center',
+            marginBottom: 2,
+          }}
+        >
+          Welcome to the Spire Zone Editor
+        </Typography>
         <div>
           <Stack
             alignContent="center"
             justifyContent="space-between"
             direction="row"
             spacing={1}
-          ></Stack>
+          />
 
           <Typography
             sx={{ fontSize: 17, marginBottom: 2 }}
@@ -134,40 +162,39 @@ export const StatusDialog = ({
               <Box className="chrome-flags" sx={{ width: '100%' }} />
             </Stack>
           )}
-          {
-            permissionStatus === PermissionStatusTypes.NeedEQDir && (
-              <Stack
-                direction={'column'}
-                sx={{
-                  justifyContent: 'center !important',
-                  alignItems    : 'center',
-                  alignContent  : 'center',
-                }}
+          {permissionStatus === PermissionStatusTypes.NeedEQDir && (
+            <Stack
+              direction={'column'}
+              sx={{
+                justifyContent: 'center !important',
+                alignItems    : 'center',
+                alignContent  : 'center',
+              }}
+            >
+              <Typography
+                sx={{ fontSize: 17, marginBottom: 2 }}
+                color="text.secondary"
+                gutterBottom
               >
-                <Typography
-                  sx={{ fontSize: 17, marginBottom: 2 }}
-                  color="text.secondary"
-                  gutterBottom
-                >
-                 Drag and drop an EQ directory on the page to get started. All
-                  Windows versions are compatible, but keep in mind availability
-                  and version of zones related to the database linked, e.g. old
-                  Freeport vs. new. This should be your base EQ directory
-                  including all the s3d/eqg files.
-                </Typography>
-                <Button
-                  onClick={async () => {
-                    onFolderSelected();
-                  }}
-                  variant={'outlined'}
-                  sx={{ margin: '0 auto' }}
-                >
-                  Select EQ Directory
-                </Button>
-              </Stack>
-            )}
+                Drag and drop an EQ directory on the page to get started. All
+                Windows versions are compatible, but keep in mind availability
+                and version of zones related to the database linked, e.g. old
+                Freeport vs. new. This should be your base EQ directory
+                including all the s3d/eqg files.
+              </Typography>
+              <Button
+                onClick={async () => {
+                  onFolderSelected();
+                }}
+                variant={'outlined'}
+                sx={{ margin: '0 auto' }}
+              >
+                Select EQ Directory
+              </Button>
+            </Stack>
+          )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </Box>
+    </Box>
   );
 };
