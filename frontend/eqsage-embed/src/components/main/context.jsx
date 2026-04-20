@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PermissionStatusTypes, usePermissions } from 'sage-core/hooks/permissions';
 import { useSettingsContext } from '../../context/settings';
-import { gameController } from '../../viewer/controllers/GameController';
 import { getEmbedConfig } from '../../embed-config';
+import { markStage } from '../../debug-stage';
 
 const MainContext = React.createContext({});
 
@@ -56,6 +56,7 @@ export const MainProvider = ({
   onChromeChange,
   spireBridge,
 }) => {
+  markStage('main-provider:render:start');
   const [
     permissionStatus,
     onDrop,
@@ -80,7 +81,12 @@ export const MainProvider = ({
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [canvasState, setCanvasState] = useState(false);
   const [modelExporterLoaded, setModelExporterLoaded] = useState(false);
+  const [gameController, setGameController] = useState(() => window.gameController ?? null);
   const { embeddedMode } = getEmbedConfig();
+  const Spire = useMemo(
+    () => spireBridge ?? null,
+    [spireBridge]
+  );
 
   const [recentList, setRecentList] = useState(() =>
     localStorage.getItem('recent-zones')
@@ -108,6 +114,11 @@ export const MainProvider = ({
   }, [permissionStatus, selectedZone]);
 
   useEffect(() => {
+    markStage('main-provider:permission-effect', {
+      permissionStatus,
+      selectedZone: selectedZone?.short_name ?? null,
+      hasRootHandle: !!rootFileSystemHandle,
+    });
     console.log('[SageMainProvider] permission state', {
       permissionStatus,
       selectedZone : selectedZone?.short_name ?? null,
@@ -132,17 +143,35 @@ export const MainProvider = ({
   }, [selectedZone, statusDialogOpen, zoneDialogOpen]);
 
   useEffect(() => {
-    window.gameController.rootFileSystemHandle = rootFileSystemHandle;
-  }, [rootFileSystemHandle]);
+    if (gameController) {
+      gameController.rootFileSystemHandle = rootFileSystemHandle;
+      window.gameController = gameController;
+    }
+  }, [gameController, rootFileSystemHandle]);
 
   useEffect(() => {
-    window.gameController.modelExporter = true;
-  }, [modelExporter]);
+    let current = true;
+    import('../../viewer/controllers/GameController')
+      .then((module) => {
+        if (!current) {
+          return;
+        }
+        setGameController(module.gameController);
+      })
+      .catch((error) => {
+        console.error('[SageMainProvider] failed to load gameController', error);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
 
-  const Spire = useMemo(
-    () => spireBridge ?? null,
-    [spireBridge]
-  );
+  useEffect(() => {
+    if (gameController) {
+      gameController.modelExporter = true;
+      window.gameController = gameController;
+    }
+  }, [gameController, modelExporter]);
 
   useEffect(() => {
     if (Spire?.SpireApi) {
@@ -155,8 +184,11 @@ export const MainProvider = ({
   }, [recentList]);
 
   useEffect(() => {
-    gameController.Spire = Spire;
-  }, [Spire]);
+    if (gameController) {
+      gameController.Spire = Spire;
+      window.gameController = gameController;
+    }
+  }, [Spire, gameController]);
 
   useEffect(() => {
     onChromeChange?.({ immersive: true });

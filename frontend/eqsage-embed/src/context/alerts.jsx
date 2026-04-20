@@ -1,7 +1,6 @@
-import React, { createContext, useState, useCallback, useContext } from 'react';
+import React, { createContext, useState, useCallback, useContext, useEffect } from 'react';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
-import { gameController } from '../viewer/controllers/GameController';
 
 export const AlertContext = createContext({});
 export const useAlertContext = () => useContext(AlertContext);
@@ -24,7 +23,23 @@ export const AlertProvider = ({ children }) => {
     setSeverity(severity);
   }, []);
 
-  gameController.openAlert = openAlert;
+  useEffect(() => {
+    let current = true;
+    import('../viewer/controllers/GameController')
+      .then((module) => {
+        if (!current) {
+          return;
+        }
+        module.gameController.openAlert = openAlert;
+        window.gameController = module.gameController;
+      })
+      .catch((error) => {
+        console.error('[AlertProvider] failed to load gameController', error);
+      });
+    return () => {
+      current = false;
+    };
+  }, [openAlert]);
 
   return (
     <AlertContext.Provider

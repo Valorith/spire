@@ -10,8 +10,10 @@ import { useSettingsContext } from '../../context/settings';
 import { GlobalStore } from '../../state';
 import { sleep } from '@/viewer/util/util';
 import bjs from '@bjs';
+import { markStage } from '../../debug-stage';
 
 export const BabylonZone = () => {
+  markStage('babylon-zone:render');
   console.log('[BabylonZoneRender]');
   const canvasRef = useRef();
   const {

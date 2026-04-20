@@ -1,18 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Box, Stack, ThemeProvider, createTheme } from '@mui/material';
 import { ConfirmProvider } from 'material-ui-confirm';
-import { StatusDialog } from '../dialogs/status-dialog';
-import { ZoneChooserDialog } from '../dialogs/zone-chooser-dialog';
-import { BabylonZone } from '../zone/zone';
-import { ZoneProvider } from '../zone/zone-context';
-import { LoadingDialog } from '../spire/dialogs/loading-dialog';
 import { useMainContext } from './context';
 import { GlobalStore } from '@/state';
 import { assetUrl } from '../../embed-config';
 
-import '../../util/image/image-processor';
-
 import './main.scss';
+import { markStage } from '../../debug-stage';
 
 const CONSTANTS = {
   BONE         : '#ccc',
@@ -21,8 +15,14 @@ const CONSTANTS = {
 };
 
 const bgMax = 6;
+const StatusDialog = React.lazy(() => import('../dialogs/status-dialog').then((m) => ({ default: m.StatusDialog })));
+const ZoneChooserDialog = React.lazy(() => import('../dialogs/zone-chooser-dialog').then((m) => ({ default: m.ZoneChooserDialog })));
+const BabylonZone = React.lazy(() => import('../zone/zone').then((m) => ({ default: m.BabylonZone })));
+const ZoneProvider = React.lazy(() => import('../zone/zone-context').then((m) => ({ default: m.ZoneProvider })));
+const LoadingDialog = React.lazy(() => import('../spire/dialogs/loading-dialog').then((m) => ({ default: m.LoadingDialog })));
 
 export const Main = () => {
+  markStage('main:render');
   console.log('[SageMainRender]');
   const {
     zoneDialogOpen,
@@ -40,6 +40,12 @@ export const Main = () => {
         `static/sage/bg${Math.ceil(Math.random() * bgMax)}.jpg`
       )}')`
   );
+
+  useEffect(() => {
+    import('../../util/image/image-processor').catch((error) => {
+      console.error('[SageMain] failed to initialize image processor', error);
+    });
+  }, []);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -60,6 +66,13 @@ export const Main = () => {
   }, []);
 
   useEffect(() => {
+    markStage('main:state-effect', {
+      permissionStatus,
+      statusDialogOpen,
+      zoneDialogOpen,
+      hasRootHandle: !!rootFileSystemHandle,
+      unsupported,
+    });
     console.log('[SageMain] render state', {
       permissionStatus,
       statusDialogOpen,
@@ -77,7 +90,9 @@ export const Main = () => {
 
   return (
     <Box>
-      <LoadingDialog />
+      <Suspense fallback={null}>
+        <LoadingDialog />
+      </Suspense>
       {!unsupported ? (
         <ThemeProvider
           theme={createTheme({
@@ -132,20 +147,26 @@ export const Main = () => {
               }}
               className="sage-main"
             />
-            {statusDialogOpen && (
-              <StatusDialog
-                fsHandle={rootFileSystemHandle}
-                onDrop={onDrop}
-                permissionStatus={permissionStatus}
-                open={true}
-                requestPermissions={requestPermissions}
-                onFolderSelected={onFolderSelected}
-              />
-            )}
-            {zoneDialogOpen && <ZoneChooserDialog open={true} />}
-            <ZoneProvider>
-              <BabylonZone />
-            </ZoneProvider>
+            <Suspense fallback={null}>
+              {statusDialogOpen && (
+                <StatusDialog
+                  fsHandle={rootFileSystemHandle}
+                  onDrop={onDrop}
+                  permissionStatus={permissionStatus}
+                  open={true}
+                  requestPermissions={requestPermissions}
+                  onFolderSelected={onFolderSelected}
+                />
+              )}
+            </Suspense>
+            <Suspense fallback={null}>
+              {zoneDialogOpen && <ZoneChooserDialog open={true} />}
+            </Suspense>
+            <Suspense fallback={null}>
+              <ZoneProvider>
+                <BabylonZone />
+              </ZoneProvider>
+            </Suspense>
           </ConfirmProvider>
         </ThemeProvider>
       ) : null}
