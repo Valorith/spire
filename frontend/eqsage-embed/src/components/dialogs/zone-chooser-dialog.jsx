@@ -7,12 +7,10 @@ import React, {
 } from 'react';
 import {
   Autocomplete,
+  Box,
   Button,
   Checkbox,
   Chip,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   FormControl,
   InputLabel,
   ListItemText,
@@ -59,6 +57,7 @@ export const ZoneChooserDialog = ({ open }) => {
     setZones,
     recentList,
     setRecentList,
+    rootFileSystemHandle,
   } = useMainContext();
   const [zoneList, setZoneList] = useState([]);
   const [expansionFilter, setExpansionFilter] = useState([]);
@@ -86,6 +85,9 @@ export const ZoneChooserDialog = ({ open }) => {
   };
 
   useEffect(() => {
+    if (!rootFileSystemHandle) {
+      return;
+    }
     (async () => {
       const assetData = await getEQFile('data', 'version.json', 'json');
       if (assetData?.version === VERSION) {
@@ -104,7 +106,7 @@ export const ZoneChooserDialog = ({ open }) => {
         JSON.stringify({ version: VERSION })
       );
     })();
-  }, []);
+  }, [rootFileSystemHandle]);
 
   const selectAndExit = useCallback(
     (zone, save = true) => {
@@ -173,36 +175,59 @@ export const ZoneChooserDialog = ({ open }) => {
   };
 
   return (
-    <Dialog
-      className="ui-dialog"
+    <Box
+      sx={{
+        position      : 'fixed',
+        inset         : 0,
+        zIndex        : 2400,
+        display       : open ? 'flex' : 'none',
+        alignItems    : 'center',
+        justifyContent: 'center',
+        padding       : 3,
+        background    : 'rgba(4, 6, 10, 0.35)',
+        pointerEvents : 'auto',
+      }}
       onKeyDown={(e) => e.stopPropagation()}
-      maxWidth="md"
-      open={open}
-      disablePortal
-      onClose={() => (selectedZone ? setZoneDialogOpen(false) : null)}
-      aria-labelledby="draggable-dialog-title"
     >
-      <DialogTitle
-        style={{ cursor: 'move', margin: '0 auto' }}
-        id="draggable-dialog-title"
-        className="ui-dialog-title"
+      <Box
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="spire-zone-chooser-title"
+        sx={{
+          position      : 'relative',
+          width         : '100%',
+          maxWidth      : 520,
+          minWidth      : 350,
+          minHeight     : 240,
+          border        : '1px solid rgba(221, 208, 160, 0.7)',
+          background    : 'linear-gradient(180deg, rgba(17, 24, 34, 0.98), rgba(9, 13, 19, 0.98))',
+          boxShadow     : '0 18px 48px rgba(0, 0, 0, 0.55)',
+          borderRadius  : '6px',
+          color         : '#e8dcc0',
+          pointerEvents : 'auto',
+          padding       : 2,
+        }}
       >
-        EQ Sage: Zone Editor
-      </DialogTitle>
-      <Flyout>
-        <FlyoutButton
-          onClick={() => setAboutOpen(true)}
-          Icon={InfoIcon}
-          title="About / Contact"
-        />
-        <FlyoutButton
-          disabled={selectedZone}
-          onClick={unlinkDir}
-          Icon={LinkOffIcon}
-          title="Unlink EQ Directory"
-        />
-      </Flyout>
-      <DialogContent sx={{ minHeight: '240px', minWidth: '350px' }}>
+        <Typography
+          id="spire-zone-chooser-title"
+          className="ui-dialog-title"
+          sx={{ textAlign: 'center', marginBottom: 2 }}
+        >
+          EQ Sage: Zone Editor
+        </Typography>
+        <Flyout>
+          <FlyoutButton
+            onClick={() => setAboutOpen(true)}
+            Icon={InfoIcon}
+            title="About / Contact"
+          />
+          <FlyoutButton
+            disabled={selectedZone}
+            onClick={unlinkDir}
+            Icon={LinkOffIcon}
+            title="Unlink EQ Directory"
+          />
+        </Flyout>
         <AboutDialog open={aboutOpen} setOpen={setAboutOpen} />
         <Stack alignContent={'center'} alignItems={'center'} direction={'column'}>
           <FormControl
@@ -327,19 +352,19 @@ export const ZoneChooserDialog = ({ open }) => {
             </Stack>
           </FormControl>
         </Stack>
-      </DialogContent>
+        <Stack direction={'column'}>
+          <Button
+            color="primary"
+            onClick={() => selectAndExit(zone)}
+            disabled={!zone}
+            variant="outlined"
+            sx={{ margin: '5px auto' }}
+          >
+            Enter Zone Editor
+          </Button>
+        </Stack>
+      </Box>
+    </Box>
 
-      <Stack direction={'column'}>
-        <Button
-          color="primary"
-          onClick={() => selectAndExit(zone)}
-          disabled={!zone}
-          variant="outlined"
-          sx={{ margin: '5px auto' }}
-        >
-          Enter Zone Editor
-        </Button>
-      </Stack>
-    </Dialog>
   );
 };
