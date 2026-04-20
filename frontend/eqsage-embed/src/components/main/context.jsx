@@ -85,6 +85,7 @@ export const MainProvider = ({
   const [modelExporterLoaded, setModelExporterLoaded] = useState(false);
   const [gameController, setGameController] = useState(() => window.gameController ?? null);
   const [gameControllerLoading, setGameControllerLoading] = useState(false);
+  const [controllerLoadStage, setControllerLoadStage] = useState('Waiting for zone selection');
   const { embeddedMode } = getEmbedConfig();
   const Spire = useMemo(
     () => spireBridge ?? null,
@@ -107,6 +108,7 @@ export const MainProvider = ({
     setCanvasState(false);
     setRightDrawerOpen(false);
     setQuailWorkspace(false);
+    setControllerLoadStage('Waiting for zone selection');
   }, []);
 
   useEffect(() => {
@@ -184,13 +186,19 @@ export const MainProvider = ({
 
   const loadGameController = useCallback(async () => {
     if (gameController) {
+      setControllerLoadStage('Viewer controller ready');
       return gameController;
     }
     if (!gameControllerImportPromise) {
       setGameControllerLoading(true);
+      setControllerLoadStage('Loading Babylon runtime');
       gameControllerImportPromise = ensureBabylonRuntime()
-        .then(() => import('../../viewer/controllers/GameController'))
+        .then(() => {
+          setControllerLoadStage('Importing game controller');
+          return import('../../viewer/controllers/GameController');
+        })
         .then((module) => {
+          setControllerLoadStage('Initializing game controller');
           const controller = module.gameController;
           if (window.__spireSageOpenAlert) {
             controller.openAlert = window.__spireSageOpenAlert;
@@ -198,9 +206,11 @@ export const MainProvider = ({
           controller.rootFileSystemHandle = window.__spireSageRootFileSystemHandle ?? null;
           window.gameController = controller;
           setGameController(controller);
+          setControllerLoadStage('Viewer controller ready');
           return controller;
         })
         .catch((error) => {
+          setControllerLoadStage('Failed to load viewer controller');
           console.error('[SageMainProvider] failed to load gameController', error);
           throw error;
         })
@@ -255,6 +265,12 @@ export const MainProvider = ({
     statusDialogOpen,
     zoneDialogOpen,
   ]);
+
+  useEffect(() => {
+    if (!selectedZone) {
+      setControllerLoadStage('Waiting for zone selection');
+    }
+  }, [selectedZone]);
 
   useEffect(() => {
     if (gameController) {
@@ -325,6 +341,7 @@ export const MainProvider = ({
         reset,
         gameController,
         gameControllerLoading,
+        controllerLoadStage,
         loadGameController,
       }}
     >

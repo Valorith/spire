@@ -53,6 +53,7 @@ export const ZoneChooserDialog = ({ open }) => {
     selectedZone,
     setSelectedZone,
     setZoneDialogOpen,
+    loadGameController,
     Spire,
     setZones,
     recentList,
@@ -122,11 +123,14 @@ export const ZoneChooserDialog = ({ open }) => {
         }
         setSelectedZone(zone);
         setZoneDialogOpen(false);
+        void loadGameController().catch((error) => {
+          console.error('[ZoneChooserDialog] failed to start zone editor controller load', error);
+        });
       } finally {
         setEnteringZone(false);
       }
     },
-    [setZoneDialogOpen, setSelectedZone, recentList]
+    [loadGameController, setZoneDialogOpen, setSelectedZone, recentList]
   );
 
   useEffect(() => {

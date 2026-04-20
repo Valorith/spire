@@ -30,6 +30,7 @@ export const Main = () => {
     statusDialogOpen,
     rootFileSystemHandle,
     gameController,
+    controllerLoadStage,
     onDrop,
     requestPermissions,
     permissionStatus,
@@ -193,7 +194,7 @@ export const Main = () => {
                     Preparing Zone Editor
                   </Typography>
                   <Typography sx={{ fontSize: 15 }} color="text.secondary">
-                    Loading viewer modules for {selectedZone.long_name ?? selectedZone.short_name}.
+                    {controllerLoadStage || `Loading viewer modules for ${selectedZone.long_name ?? selectedZone.short_name}.`}
                   </Typography>
                 </Box>
               </Box>
