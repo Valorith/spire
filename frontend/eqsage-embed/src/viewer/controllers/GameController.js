@@ -2,10 +2,7 @@ import BABYLON from '@bjs';
 import { setGlobals } from 'sage-core';
 import { cameraController } from './CameraController';
 import { skyController } from './SkyController';
-import { modelController } from './ModelController';
-import { spawnController } from './SpawnController';
 import { zoneController } from './ZoneController';
-import { zoneBuilderController } from './ZoneBuilderController';
 
 import { GlobalStore } from '../../state';
 import { getEQDir, getEQFile, getFiles } from 'sage-core/util/fileHandler';
@@ -14,6 +11,50 @@ import { textureAnimationMap } from '../helpers/textureAnimationMap';
 
 const { Engine, ThinEngine, WebGPUEngine, Database, SceneLoader, GLTFLoader } =
   BABYLON;
+
+const createNoopController = () => ({
+  scene: null,
+  project: {},
+  metadata: {},
+  setGameController() {},
+  dispose() {},
+  setupSpawnController() {},
+  sceneMouseDown() {},
+  sceneMouseUp() {},
+  setSpawnLOD() {},
+  addSpawns() {},
+  updateSpawn() {},
+  deleteSpawn() {},
+  npcLight() {},
+  moveSpawn() {},
+  addClickCallback() {},
+  removeClickCallback() {},
+  showSpawnPath() {},
+  clearAssetContainer() {},
+  disposeModel() {},
+  swapBackground() {},
+  toggleOpen() {},
+  showRegions() {},
+  setFlySpeed() {},
+  setClipPlane() {},
+  setGlow() {},
+  async loadModel() {},
+  async addBackgroundMesh() {
+    return null;
+  },
+  async addExportModel() {
+    return null;
+  },
+  async addObject() {
+    return null;
+  },
+  async getAssetContainer() {
+    return null;
+  },
+  exportModel() {},
+  exportSTL() {},
+  exportFBX() {},
+});
 
 /**
  * @typedef Spire
@@ -250,14 +291,15 @@ export class GameController {
 
   CameraController = cameraController;
   SkyController = skyController;
-  SpawnController = spawnController;
+  SpawnController = createNoopController();
   ZoneController = zoneController;
-  ModelController = modelController;
-  ZoneBuilderController = zoneBuilderController;
+  ModelController = createNoopController();
+  ZoneBuilderController = createNoopController();
 
   videoElement = null;
 
   constructor() {
+    const controller = this;
     this.CameraController.setGameController(this);
     this.SkyController.setGameController(this);
     this.SpawnController.setGameController(this);
@@ -309,7 +351,7 @@ export class GameController {
       useSRGBBuffer
     ) {
       const doFlip =
-        zoneBuilderController.scene ||
+        controller.ZoneBuilderController?.scene ||
         (!url?.includes('eq/models') && !/\w+\d{4}/.test(url));
       return origCreate.call(
         this,
@@ -345,7 +387,7 @@ export class GameController {
     };
     const originalLoadImageAsync = GLTFLoader.prototype.loadImageAsync;
     GLTFLoader.prototype.loadImageAsync = async function (context, image) {
-      if (zoneBuilderController?.scene) {
+      if (controller.ZoneBuilderController?.scene) {
         try {
           const result = await originalLoadImageAsync.apply(this, arguments);
           return result;
@@ -397,8 +439,8 @@ export class GameController {
   get currentScene() {
     return (
       zoneController.scene ??
-      modelController.scene ??
-      zoneBuilderController.scene
+      this.ModelController?.scene ??
+      this.ZoneBuilderController?.scene
     );
   }
 
