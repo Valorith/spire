@@ -36,6 +36,14 @@ export const SpireOverlay = ({ inZone }) => {
 
   useSettingsHook();
   useEffect(() => {
+    console.log('[SpireOverlay] mounted', {
+      inZone,
+      selectedZone: selectedZone?.short_name ?? null,
+      dialogKeys   : Object.keys(dialogState || {}),
+    });
+  }, [dialogState, inZone, selectedZone]);
+
+  useEffect(() => {
     const keyHandler = (e) => {
       if (e.key === 'Escape') {
         closeDialogs();

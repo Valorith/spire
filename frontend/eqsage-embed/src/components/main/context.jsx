@@ -104,6 +104,30 @@ export const MainProvider = ({
   }, [permissionStatus, selectedZone]);
 
   useEffect(() => {
+    console.log('[SageMainProvider] permission state', {
+      permissionStatus,
+      selectedZone : selectedZone?.short_name ?? null,
+      rootFsHandle : rootFileSystemHandle?.name ?? null,
+      embeddedMode,
+      hasSpire     : !!Spire,
+    });
+  }, [
+    Spire,
+    embeddedMode,
+    permissionStatus,
+    rootFileSystemHandle,
+    selectedZone,
+  ]);
+
+  useEffect(() => {
+    console.log('[SageMainProvider] dialog state', {
+      zoneDialogOpen,
+      statusDialogOpen,
+      selectedZone: selectedZone?.short_name ?? null,
+    });
+  }, [selectedZone, statusDialogOpen, zoneDialogOpen]);
+
+  useEffect(() => {
     window.gameController.rootFileSystemHandle = rootFileSystemHandle;
   }, [rootFileSystemHandle]);
 

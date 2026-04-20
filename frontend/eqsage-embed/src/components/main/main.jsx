@@ -58,6 +58,22 @@ export const Main = () => {
     }
   }, []);
 
+  useEffect(() => {
+    console.log('[SageMain] render state', {
+      permissionStatus,
+      statusDialogOpen,
+      zoneDialogOpen,
+      hasRootHandle: !!rootFileSystemHandle,
+      unsupported,
+    });
+  }, [
+    permissionStatus,
+    rootFileSystemHandle,
+    statusDialogOpen,
+    unsupported,
+    zoneDialogOpen,
+  ]);
+
   return (
     <Box>
       <LoadingDialog />
