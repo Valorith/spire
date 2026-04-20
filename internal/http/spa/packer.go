@@ -108,7 +108,7 @@ func (s Packer) serve(c echo.Context) error {
 		return s.serveIndex(c)
 	}
 
-	cleanPath := strings.Replace(requestPath, s.config.BasePath, "", -1)
+	cleanPath := strings.TrimPrefix(strings.Replace(requestPath, s.config.BasePath, "", -1), "/")
 	localPath := filepath.Join(s.config.LocalBasePath, cleanPath)
 	if info, statErr := os.Stat(localPath); statErr == nil && !info.IsDir() {
 		if contains([]string{".js", ".css", ".png", ".woff", ".ttf", ".jpg", ".gif", ".svg", ".ico"}, cleanPath) {
@@ -157,7 +157,7 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 			// and let the static asset handler pick up the request later
 			fileRequest := strings.Replace(c.Request().RequestURI, s.config.BasePath, "", -1)
 			// Clean path for filesystem lookups (strip query string)
-			cleanPath := strings.Replace(c.Request().URL.Path, s.config.BasePath, "", -1)
+			cleanPath := strings.TrimPrefix(strings.Replace(c.Request().URL.Path, s.config.BasePath, "", -1), "/")
 			_, err = s.box.Find(fileRequest)
 			if err == nil {
 				return next(c)
