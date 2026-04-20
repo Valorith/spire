@@ -30,7 +30,7 @@ export const BabylonZone = () => {
       if (!selectedZone || !gameController) {
         return;
       }
-      await bjs.initialize();
+      await bjs.prepareZoneViewer();
       while (!canvasRef.current) {
         await sleep(50);
       }
