@@ -90,6 +90,7 @@ export const CommonDialog = ({
         }
       }}
       open={open}
+      disablePortal
       disableEnforceFocus={disableEnforceFocus}
       fullWidth={fullWidth}
       maxWidth={maxWidth}

@@ -21,6 +21,11 @@ export const StatusDialog = ({
   fsHandle,
   onFolderSelected
 }) => {
+  console.log('[SageStatusDialogRender]', {
+    open,
+    permissionStatus,
+    fsHandleName: fsHandle?.name ?? null,
+  });
   const [_type, setType] = useState('unknown');
   const { Spire } = useMainContext();
 
@@ -36,6 +41,7 @@ export const StatusDialog = ({
       fullWidth
       maxWidth="sm"
       open={open}
+      disablePortal
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
