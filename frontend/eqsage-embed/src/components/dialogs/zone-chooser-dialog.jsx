@@ -53,7 +53,6 @@ export const ZoneChooserDialog = ({ open }) => {
     selectedZone,
     setSelectedZone,
     setZoneDialogOpen,
-    loadGameController,
     Spire,
     setZones,
     recentList,
@@ -117,7 +116,6 @@ export const ZoneChooserDialog = ({ open }) => {
       }
       setEnteringZone(true);
       try {
-        await loadGameController();
         if (save && !recentList.some((a) => a.short_name === zone.short_name)) {
           recentList.push(zone);
           localStorage.setItem('recent-zones', JSON.stringify(recentList));
@@ -128,7 +126,7 @@ export const ZoneChooserDialog = ({ open }) => {
         setEnteringZone(false);
       }
     },
-    [loadGameController, setZoneDialogOpen, setSelectedZone, recentList]
+    [setZoneDialogOpen, setSelectedZone, recentList]
   );
 
   useEffect(() => {

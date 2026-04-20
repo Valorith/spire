@@ -233,6 +233,30 @@ export const MainProvider = ({
   ]);
 
   useEffect(() => {
+    if (
+      permissionStatus !== PermissionStatusTypes.Ready ||
+      statusDialogOpen ||
+      zoneDialogOpen ||
+      !selectedZone ||
+      !!gameController ||
+      gameControllerLoading
+    ) {
+      return;
+    }
+    void loadGameController().catch((error) => {
+      console.error('[SageMainProvider] failed to load controller after zone selection', error);
+    });
+  }, [
+    gameController,
+    gameControllerLoading,
+    loadGameController,
+    permissionStatus,
+    selectedZone,
+    statusDialogOpen,
+    zoneDialogOpen,
+  ]);
+
+  useEffect(() => {
     if (gameController) {
       gameController.modelExporter = true;
       window.gameController = gameController;
