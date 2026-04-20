@@ -27,7 +27,7 @@ type Packer struct {
 }
 
 func (s Packer) Handler() echo.HandlerFunc {
-	return s.handler
+	return s.serve
 }
 
 // PackedSpaServeConfig is the configuration for the PackedSpaService
@@ -45,7 +45,6 @@ func NewPackedSpaService(logger *logger.AppLogger, config PackedSpaServeConfig) 
 	s.logger = logger
 	s.box = packr.NewBox(s.config.LocalBasePath)
 	s.fs = http.FileServer(s.box)
-	//s.handler = echo.WrapHandler(http.StripPrefix(s.config.BasePath, s.fs))
 	s.handler = WrapCachedHandler(http.StripPrefix(s.config.BasePath, s.fs))
 
 	return s
@@ -73,6 +72,59 @@ func contains(slice []string, val string) bool {
 	return false
 }
 
+func (s Packer) serveIndex(c echo.Context) error {
+	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Response().Header().Set("Pragma", "no-cache")
+
+	localIndex := filepath.Join(s.config.LocalBasePath, s.config.SpaIndex)
+	if _, statErr := os.Stat(localIndex); statErr == nil {
+		return c.File(localIndex)
+	}
+
+	index, err := s.box.Find(s.config.SpaIndex)
+	if err != nil {
+		s.logger.Error().Err(err).Msg("error finding spa index")
+		return err
+	}
+
+	return c.HTML(http.StatusOK, string(index))
+}
+
+func (s Packer) serve(c echo.Context) error {
+	requestPath := c.Request().URL.Path
+	p := requestPath
+	var err error
+	if strings.HasSuffix(c.Path(), "*") {
+		p = c.Param("*")
+	}
+
+	p, err = url.PathUnescape(p)
+	if err != nil {
+		return err
+	}
+
+	name := filepath.Join(s.config.BasePath, path.Clean("/"+p))
+	if name == "/" || name == "\\" {
+		return s.serveIndex(c)
+	}
+
+	cleanPath := strings.Replace(requestPath, s.config.BasePath, "", -1)
+	localPath := filepath.Join(s.config.LocalBasePath, cleanPath)
+	if info, statErr := os.Stat(localPath); statErr == nil && !info.IsDir() {
+		if contains([]string{".js", ".css", ".png", ".woff", ".ttf", ".jpg", ".gif", ".svg", ".ico"}, cleanPath) {
+			c.Response().Header().Set("Vary", "Accept-Encoding")
+			c.Response().Header().Set("Cache-Control", "public, max-age=7776000")
+		}
+		return c.File(localPath)
+	}
+
+	if _, boxErr := s.box.Find(cleanPath); boxErr == nil {
+		return s.handler(c)
+	}
+
+	return s.serveIndex(c)
+}
+
 // MiddlewareHandler returns a middleware handler for the PackedSpaService
 // This middleware handler is for the most part a static middleware handler for handling static assets
 // The main difference between this middleware and a generic static middleware is that it provides assets that live
@@ -98,18 +150,7 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 
 			name := filepath.Join(s.config.BasePath, path.Clean("/"+p))
 			if name == "/" || name == "\\" {
-				// Serve index.html from local filesystem first, with no-cache
-				c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-				c.Response().Header().Set("Pragma", "no-cache")
-				localIndex := filepath.Join(s.config.LocalBasePath, s.config.SpaIndex)
-				if _, statErr := os.Stat(localIndex); statErr == nil {
-					return c.File(localIndex)
-				}
-				index, err := s.box.Find(s.config.SpaIndex)
-				if err != nil {
-					s.logger.Error().Err(err).Msg("error finding spa index")
-				}
-				return c.HTML(http.StatusOK, string(index))
+				return s.serveIndex(c)
 			}
 
 			// If we find a valid non-index file in the box, continue the request as normal
@@ -134,24 +175,7 @@ func (s Packer) MiddlewareHandler() echo.MiddlewareFunc {
 				return c.File(localPath)
 			}
 
-			// If we didn't find a non-index asset at this point, we need to return the
-			// spa index when nested SPA route requests are made
-			// eg: /spa/nested/route
-			// Try local index.html first, then fall back to packr box
-			c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			c.Response().Header().Set("Pragma", "no-cache")
-			localIndex := filepath.Join(s.config.LocalBasePath, s.config.SpaIndex)
-			if _, statErr := os.Stat(localIndex); statErr == nil {
-				return c.File(localIndex)
-			}
-
-			index, err := s.box.Find(s.config.SpaIndex)
-			if err != nil {
-				s.logger.Error().Err(err).Msg("error finding spa index")
-				return next(c)
-			}
-
-			return c.HTML(http.StatusOK, string(index))
+			return s.serveIndex(c)
 		}
 	}
 }

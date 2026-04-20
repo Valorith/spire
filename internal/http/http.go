@@ -116,7 +116,6 @@ func (c *Server) Serve(port uint) error {
 	// serve spa as embedded static assets
 	s := spa.NewSpa(c.logger)
 	e.GET("/*", s.Spa().Handler(), middleware.GzipWithConfig(middleware.GzipConfig{Level: 1}))
-	e.Use(s.Spa().MiddlewareHandler())
 
 	e.HTTPErrorHandler = errorHandler
 	e.HideBanner = true
