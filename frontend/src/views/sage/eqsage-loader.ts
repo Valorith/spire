@@ -21,6 +21,7 @@ const getEmbedCacheKey = () => {
     return embedCacheKey
   }
 
+  const sessionNonce = Date.now().toString(36)
   const scriptSources = Array.from(document.scripts)
     .map((script) => script.src || '')
     .filter(Boolean)
@@ -35,13 +36,13 @@ const getEmbedCacheKey = () => {
     for (const pattern of patterns) {
       const match = source.match(pattern)
       if (match?.[1]) {
-        embedCacheKey = match[1]
+        embedCacheKey = `${match[1]}-${sessionNonce}`
         return embedCacheKey
       }
     }
   }
 
-  embedCacheKey = 'embed'
+  embedCacheKey = `embed-${sessionNonce}`
   return embedCacheKey
 }
 
