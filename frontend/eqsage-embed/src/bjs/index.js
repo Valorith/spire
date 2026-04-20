@@ -1,52 +1,11 @@
 import { setGlobals } from 'sage-core';
 import { DracoCompression } from '@babylonjs/core/Meshes/Compression/dracoCompression';
 import dracoFallbackUrl from '@babylonjs/core/assets/Draco/draco_decoder_gltf.js?url';
-import dracoWasmWrapperSource from '@babylonjs/core/assets/Draco/draco_wasm_wrapper_gltf.js?raw';
+import dracoWasmWrapperUrl from '@babylonjs/core/assets/Draco/draco_wasm_wrapper_gltf.js?url';
 import dracoWasmBinaryUrl from '@babylonjs/core/assets/Draco/draco_decoder_gltf.wasm?url';
 
-let dracoWasmModuleFactoryPromise = null;
-let dracoWasmBinaryPromise = null;
 let initializePromise = null;
 let initializeComplete = false;
-
-const createDracoModuleFactory = (source) => {
-  const module = { exports: {} };
-  const exports = module.exports;
-  const factory = new Function(
-    'module',
-    'exports',
-    'globalThis',
-    `${source}\nreturn module.exports || exports.DracoDecoderModule || globalThis.DracoDecoderModule;`
-  );
-  const moduleFactory = factory(module, exports, globalThis);
-
-  if (typeof moduleFactory !== 'function') {
-    throw new Error('Unable to create an inline Draco decoder module factory');
-  }
-
-  return moduleFactory;
-};
-
-const getDracoWasmModuleFactory = async () => {
-  if (!dracoWasmModuleFactoryPromise) {
-    dracoWasmModuleFactoryPromise = Promise.resolve(
-      createDracoModuleFactory(dracoWasmWrapperSource)
-    );
-  }
-  return dracoWasmModuleFactoryPromise;
-};
-
-const getDracoWasmBinary = async () => {
-  if (!dracoWasmBinaryPromise) {
-    dracoWasmBinaryPromise = fetch(dracoWasmBinaryUrl).then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`Unable to load Draco WASM binary: ${response.status}`);
-      }
-      return response.arrayBuffer();
-    });
-  }
-  return dracoWasmBinaryPromise;
-};
 
 /**
  * @type {import ('@babylonjs/core')}
@@ -70,71 +29,55 @@ const exportObject = {
     };
     const addImport = promise => importPromises.push(promise.then(addExports));
 
-    const decoder = {
-      fallbackUrl: dracoFallbackUrl,
-      jsModule   : await getDracoWasmModuleFactory(),
-      wasmBinary : await getDracoWasmBinary(),
+    // Keep Babylon on explicit same-origin decoder URLs, but avoid eagerly
+    // fetching and instantiating Draco during initial app/bootstrap load.
+    DracoCompression.DefaultNumWorkers = 0;
+    DracoCompression.Configuration = {
+      decoder: {
+        wasmUrl      : dracoWasmWrapperUrl,
+        wasmBinaryUrl: dracoWasmBinaryUrl,
+        fallbackUrl  : dracoFallbackUrl,
+      },
     };
 
-    // Avoid Babylon's worker/script URL path inside the embedded library build.
-    // Supplying the module factory and wasm binary directly keeps Babylon from
-    // trying to resolve decoder assets from its default /static path.
-    DracoCompression.DefaultNumWorkers = 0;
-    DracoCompression.Configuration = { decoder };
-
-    // No exports
-    importPromises.push(import('@babylonjs/core/Meshes/meshSimplification.js'));
-    importPromises.push(import('@babylonjs/core/Meshes/meshSimplificationSceneComponent.js'));
+    // Keep startup focused on the viewer path. Exporters, particles, builders,
+    // and inspector-only surfaces can load later from their own feature code.
     importPromises.push(import('@babylonjs/loaders/glTF'));
     importPromises.push(import('@babylonjs/core/Materials/Textures/Loaders/envTextureLoader'));
     importPromises.push(import('@babylonjs/core/Helpers/sceneHelpers'));
     importPromises.push(import('@babylonjs/core/Rendering/edgesRenderer'));
 
-    // BJS exports
-    addImport(import('@babylonjs/core/Materials/PBR/pbrMaterial'));
-    addImport(import('@babylonjs/core/Meshes/subMesh'));
+    // BJS exports needed to construct the zone viewer controllers and load the
+    // first scene. Avoid pulling in the full Babylon surface here.
     addImport(import('@babylonjs/core/Maths/math.vector'));
     addImport(import('@babylonjs/core/Maths/math.color'));
-    addImport(import('@babylonjs/core/Buffers/buffer'));
-    addImport(import('@babylonjs/core/Misc/tools'));
-    addImport(import('@babylonjs/core/Materials/Textures/texture'));
-    addImport(import('@babylonjs/core/Meshes/mesh.vertexData'));
-    addImport(import('@babylonjs/core/Meshes/transformNode'));
-    addImport(import('@babylonjs/core/Meshes/mesh'));
-    addImport(import('@babylonjs/core/Materials/standardMaterial'));
-    addImport(import('@babylonjs/core/Meshes/meshBuilder'));
-    addImport(import('@babylonjs/core/Materials/Textures/dynamicTexture'));
-    addImport(import('@babylonjs/core/Meshes/Builders/boxBuilder'));
-    addImport(import('@babylonjs/core/Meshes/Builders/greasedLineBuilder'));
-    addImport(import('@babylonjs/core/Events/pointerEvents'));
     addImport(import('@babylonjs/core/Maths/math'));
-    addImport(import('@babylonjs/core/Misc/observable'));
+    addImport(import('@babylonjs/core/Misc/tools'));
+    addImport(import('@babylonjs/core/Misc/gradients'));
+    addImport(import('@babylonjs/core/Events/pointerEvents'));
     addImport(import('@babylonjs/core/Cameras/arcRotateCamera'));
     addImport(import('@babylonjs/core/Cameras/universalCamera'));
+    addImport(import('@babylonjs/core/Behaviors/Cameras/autoRotationBehavior'));
     addImport(import('@babylonjs/core/Engines/engine'));
     addImport(import('@babylonjs/core/Engines/thinEngine'));
     addImport(import('@babylonjs/core/Engines/webgpuEngine'));
     addImport(import('@babylonjs/core/Offline/database'));
     addImport(import('@babylonjs/core/Loading/sceneLoader'));
-    addImport(import('@babylonjs/loaders/glTF/2.0'));
     addImport(import('@babylonjs/core/scene'));
+    addImport(import('@babylonjs/core/Materials/Textures/texture'));
     addImport(import('@babylonjs/core/Materials/Textures/cubeTexture'));
-    addImport(import('@babylonjs/core/Misc/gradients'));
-    addImport(import('@babylonjs/core/Layers/glowLayer'));
     addImport(import('@babylonjs/core/Materials/material'));
+    addImport(import('@babylonjs/core/Materials/standardMaterial'));
     addImport(import('@babylonjs/core/Materials/multiMaterial'));
-    addImport(import('@babylonjs/core/Meshes/abstractMesh'));
-    addImport(import('@babylonjs/core/Lights/pointLight'));
-    addImport(import('@babylonjs/core/Behaviors/Meshes/pointerDragBehavior'));
-    addImport(import('@babylonjs/core/Behaviors/Cameras/autoRotationBehavior'));
+    addImport(import('@babylonjs/core/Meshes/subMesh'));
+    addImport(import('@babylonjs/core/Meshes/mesh.vertexData'));
+    addImport(import('@babylonjs/core/Meshes/transformNode'));
+    addImport(import('@babylonjs/core/Meshes/mesh'));
+    addImport(import('@babylonjs/core/Meshes/meshBuilder'));
+    addImport(import('@babylonjs/core/Meshes/Builders/boxBuilder'));
+    addImport(import('@babylonjs/core/Layers/glowLayer'));
     addImport(import('@babylonjs/core/Lights/light'));
-    addImport(import('@babylonjs/serializers'));
-    addImport(import('@babylonjs/core/Particles/particleSystem'));
-    addImport(import('@babylonjs/core/Particles/particleHelper'));
-    addImport(import('@babylonjs/core/Materials/effect'));
-    addImport(import('@babylonjs/core/PostProcesses/postProcess'));
-    addImport(import('@babylonjs/core/Animations/animation'));
-    addImport(import('@babylonjs/core/Cameras/'));
+    addImport(import('@babylonjs/core/Lights/pointLight'));
 
     await Promise.all(importPromises);
     setGlobals({ BABYLON: exportObject });
