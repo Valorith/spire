@@ -114,20 +114,18 @@ export const MainProvider = ({
   }, []);
 
   useEffect(() => {
-    setStatusDialogOpen(permissionStatus !== PermissionStatusTypes.Ready);
-    if (
-      permissionStatus === PermissionStatusTypes.Ready &&
-      !selectedZone &&
-      !zoneDialogOpen
-    ) {
-      setZoneDialogOpen(true);
-    } else if (
-      permissionStatus === PermissionStatusTypes.Ready &&
-      !selectedZone
-    ) {
-      setZoneDialogOpen(true);
+    const needsStatusDialog = permissionStatus !== PermissionStatusTypes.Ready;
+    if (statusDialogOpen !== needsStatusDialog) {
+      setStatusDialogOpen(needsStatusDialog);
     }
-  }, [permissionStatus, selectedZone, zoneDialogOpen]);
+
+    if (!selectedZone) {
+      const needsZoneDialog = permissionStatus === PermissionStatusTypes.Ready;
+      if (zoneDialogOpen !== needsZoneDialog) {
+        setZoneDialogOpen(needsZoneDialog);
+      }
+    }
+  }, [permissionStatus, selectedZone, statusDialogOpen, zoneDialogOpen]);
 
   useEffect(() => {
     markStage('main-provider:permission-effect', {

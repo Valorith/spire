@@ -1,9 +1,12 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Stack, ThemeProvider, Typography, createTheme } from '@mui/material';
 import { ConfirmProvider } from 'material-ui-confirm';
 import { useMainContext } from './context';
 import { BabylonZone } from '../zone/zone';
 import { ZoneProvider } from '../zone/zone-context';
+import { StatusDialog } from '../dialogs/status-dialog';
+import { ZoneChooserDialog } from '../dialogs/zone-chooser-dialog';
+import { LoadingDialog } from '../spire/dialogs/loading-dialog';
 import { GlobalStore } from '@/state';
 import { assetUrl } from '../../embed-config';
 
@@ -17,9 +20,6 @@ const CONSTANTS = {
 };
 
 const bgMax = 6;
-const StatusDialog = React.lazy(() => import('../dialogs/status-dialog').then((m) => ({ default: m.StatusDialog })));
-const ZoneChooserDialog = React.lazy(() => import('../dialogs/zone-chooser-dialog').then((m) => ({ default: m.ZoneChooserDialog })));
-const LoadingDialog = React.lazy(() => import('../spire/dialogs/loading-dialog').then((m) => ({ default: m.LoadingDialog })));
 
 const ZoneLoadingOverlay = ({
   title = 'Preparing Zone Editor',
@@ -138,9 +138,7 @@ export const Main = () => {
 
   return (
     <Box>
-      <Suspense fallback={null}>
-        <LoadingDialog />
-      </Suspense>
+      <LoadingDialog />
       {!unsupported ? (
         <ThemeProvider
           theme={createTheme({
@@ -195,21 +193,28 @@ export const Main = () => {
               }}
               className="sage-main"
             />
-            <Suspense fallback={null}>
-              {statusDialogOpen && (
-                <StatusDialog
-                  fsHandle={rootFileSystemHandle}
-                  onDrop={onDrop}
-                  permissionStatus={permissionStatus}
-                  open={true}
-                  requestPermissions={requestPermissions}
-                  onFolderSelected={onFolderSelected}
-                />
-              )}
-            </Suspense>
-            <Suspense fallback={null}>
-              {zoneDialogOpen && <ZoneChooserDialog open={true} />}
-            </Suspense>
+            {statusDialogOpen && (
+              <StatusDialog
+                fsHandle={rootFileSystemHandle}
+                onDrop={onDrop}
+                permissionStatus={permissionStatus}
+                open={true}
+                requestPermissions={requestPermissions}
+                onFolderSelected={onFolderSelected}
+              />
+            )}
+            {zoneDialogOpen && <ZoneChooserDialog open={true} />}
+            {!statusDialogOpen && !zoneDialogOpen && !selectedZone && (
+              <ZoneLoadingOverlay
+                title="Preparing Sage"
+                message={
+                  rootFileSystemHandle
+                    ? 'Restoring startup UI...'
+                    : 'Checking local EverQuest directory access...'
+                }
+                error="Startup did not reach the directory or zone chooser dialogs."
+              />
+            )}
             {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !gameController && (
               <ZoneLoadingOverlay
                 message={
