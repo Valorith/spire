@@ -6,6 +6,7 @@ import { debugSageLog, markStage } from '../../debug-stage';
 
 const MainContext = React.createContext({});
 let gameControllerImportPromise = null;
+let babylonRuntimePromise = null;
 
 /**
  * @typedef Spire
@@ -166,13 +167,29 @@ export const MainProvider = ({
     };
   }, [gameController, rootFileSystemHandle]);
 
+  const ensureBabylonRuntime = useCallback(async () => {
+    if (!babylonRuntimePromise) {
+      babylonRuntimePromise = import('@bjs')
+        .then(async ({ default: bjs }) => {
+          await bjs.initialize();
+          return bjs;
+        })
+        .catch((error) => {
+          babylonRuntimePromise = null;
+          throw error;
+        });
+    }
+    return babylonRuntimePromise;
+  }, []);
+
   const loadGameController = useCallback(async () => {
     if (gameController) {
       return gameController;
     }
     if (!gameControllerImportPromise) {
       setGameControllerLoading(true);
-      gameControllerImportPromise = import('../../viewer/controllers/GameController')
+      gameControllerImportPromise = ensureBabylonRuntime()
+        .then(() => import('../../viewer/controllers/GameController'))
         .then((module) => {
           const controller = module.gameController;
           if (window.__spireSageOpenAlert) {
@@ -193,7 +210,27 @@ export const MainProvider = ({
         });
     }
     return gameControllerImportPromise;
-  }, [gameController]);
+  }, [ensureBabylonRuntime, gameController]);
+
+  useEffect(() => {
+    if (
+      permissionStatus !== PermissionStatusTypes.Ready ||
+      statusDialogOpen ||
+      !zoneDialogOpen ||
+      !!gameController
+    ) {
+      return;
+    }
+    void ensureBabylonRuntime().catch((error) => {
+      console.error('[SageMainProvider] failed to preload Babylon runtime', error);
+    });
+  }, [
+    ensureBabylonRuntime,
+    gameController,
+    permissionStatus,
+    statusDialogOpen,
+    zoneDialogOpen,
+  ]);
 
   useEffect(() => {
     if (gameController) {
