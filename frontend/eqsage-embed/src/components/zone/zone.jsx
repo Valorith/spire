@@ -84,7 +84,18 @@ export const BabylonZone = () => {
   }, [canvasState, setCanvasState]);
   return (
     <OverlayProvider>
-      <SpireOverlay inZone={!!selectedZone} />
+      <Box
+        sx={{
+          position     : 'fixed',
+          inset        : 0,
+          zIndex       : 100000,
+          pointerEvents: 'none',
+        }}
+      >
+        <Box sx={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
+          <SpireOverlay inZone={!!selectedZone} />
+        </Box>
+      </Box>
       {canvasState && (
         <Box
           as="canvas"
