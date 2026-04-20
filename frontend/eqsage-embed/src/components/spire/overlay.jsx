@@ -31,6 +31,7 @@ import './overlay.scss';
 import Drawer from './drawer';
 
 export const SpireOverlay = ({ inZone }) => {
+  console.log('[SpireOverlayRender]', { inZone });
   const { toggleDialog, dialogState, closeDialogs } = useOverlayContext();
   const { selectedZone, setZoneDialogOpen, setSelectedZone } = useMainContext();
 

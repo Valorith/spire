@@ -23,6 +23,7 @@ const CONSTANTS = {
 const bgMax = 6;
 
 export const Main = () => {
+  console.log('[SageMainRender]');
   const {
     zoneDialogOpen,
     statusDialogOpen,

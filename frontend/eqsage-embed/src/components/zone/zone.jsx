@@ -12,6 +12,7 @@ import { sleep } from '@/viewer/util/util';
 import bjs from '@bjs';
 
 export const BabylonZone = () => {
+  console.log('[BabylonZoneRender]');
   const canvasRef = useRef();
   const {
     selectedZone,
