@@ -108,10 +108,19 @@ export const MainProvider = ({
 
   useEffect(() => {
     setStatusDialogOpen(permissionStatus !== PermissionStatusTypes.Ready);
-    if (permissionStatus === PermissionStatusTypes.Ready && !selectedZone) {
+    if (
+      permissionStatus === PermissionStatusTypes.Ready &&
+      !selectedZone &&
+      !zoneDialogOpen
+    ) {
+      setZoneDialogOpen(true);
+    } else if (
+      permissionStatus === PermissionStatusTypes.Ready &&
+      !selectedZone
+    ) {
       setZoneDialogOpen(true);
     }
-  }, [permissionStatus, selectedZone]);
+  }, [permissionStatus, selectedZone, zoneDialogOpen]);
 
   useEffect(() => {
     markStage('main-provider:permission-effect', {

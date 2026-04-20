@@ -110,6 +110,9 @@ export const ZoneChooserDialog = ({ open }) => {
 
   const selectAndExit = useCallback(
     (zone, save = true) => {
+      if (!zone?.short_name) {
+        return;
+      }
       if (save && !recentList.some((a) => a.short_name === zone.short_name)) {
         recentList.push(zone);
         localStorage.setItem('recent-zones', JSON.stringify(recentList));
@@ -288,10 +291,9 @@ export const ZoneChooserDialog = ({ open }) => {
                   }, false);
                 } else {
                   if (e.key === 'Enter') {
-                    const selected = filteredZoneList[values.id];
-                    selectAndExit(selected, true);
+                    selectAndExit(values.zone, true);
                   }
-                  setZone(filteredZoneList[values.id]);
+                  setZone(values.zone);
                 }
 
               }}
@@ -307,8 +309,9 @@ export const ZoneChooserDialog = ({ open }) => {
                   label: `${zone.long_name} - ${zone.short_name} ${
                     zone.version > 0 ? `[v${zone.version}]` : ''
                   }`.trim(),
-                  id : idx,
-                  key: `${zone.id}-${zone.zoneidnumber}`,
+                  id  : idx,
+                  key : `${zone.id}-${zone.zoneidnumber}`,
+                  zone,
                 };
               })}
               //  sx={{ width: 300 }}

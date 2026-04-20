@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useMainContext } from '../main/context';
 import { processZone } from './processZone';
-import { gameController } from '../../viewer/controllers/GameController';
 import { SpireOverlay } from '../spire/overlay';
 import { OverlayProvider } from '../spire/provider';
 import { useSettingsContext } from '../../context/settings';
@@ -21,13 +20,14 @@ export const BabylonZone = () => {
     rootFileSystemHandle,
     canvasState,
     setCanvasState,
+    gameController,
   } = useMainContext();
 
   const settings = useSettingsContext();
 
   useEffect(() => {
     (async () => {
-      if (!selectedZone) {
+      if (!selectedZone || !gameController) {
         return;
       }
       await bjs.initialize();
@@ -46,12 +46,13 @@ export const BabylonZone = () => {
       window.removeEventListener('keydown', gameController.keyDown);
     };
   }, [
+    gameController,
     selectedZone,
     settings?.webgpu,
   ]);
 
   useEffect(() => {
-    if (!selectedZone) {
+    if (!selectedZone || !gameController) {
       return;
     }
     let current = true;
@@ -76,7 +77,7 @@ export const BabylonZone = () => {
       );
     })();
     return () => (current = false);
-  }, [selectedZone]); // eslint-disable-line
+  }, [gameController, selectedZone]); // eslint-disable-line
 
   useEffect(() => {
     if (!canvasState) {
@@ -87,6 +88,40 @@ export const BabylonZone = () => {
   }, [canvasState, setCanvasState]);
   return (
     <OverlayProvider>
+      {!gameController && (
+        <Box
+          sx={{
+            position      : 'fixed',
+            inset         : 0,
+            zIndex        : 100001,
+            display       : 'flex',
+            alignItems    : 'center',
+            justifyContent: 'center',
+            pointerEvents : 'none',
+          }}
+        >
+          <Box
+            sx={{
+              minWidth     : 320,
+              border       : '1px solid rgba(221, 208, 160, 0.7)',
+              background   : 'linear-gradient(180deg, rgba(17, 24, 34, 0.98), rgba(9, 13, 19, 0.98))',
+              boxShadow    : '0 18px 48px rgba(0, 0, 0, 0.55)',
+              borderRadius : '6px',
+              color        : '#e8dcc0',
+              padding      : 3,
+              textAlign    : 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography sx={{ fontSize: 18, marginBottom: 1 }}>
+              Preparing Zone Editor
+            </Typography>
+            <Typography sx={{ fontSize: 15 }} color="text.secondary">
+              Loading viewer modules for {selectedZone?.long_name ?? selectedZone?.short_name}.
+            </Typography>
+          </Box>
+        </Box>
+      )}
       <Box
         sx={{
           position     : 'fixed',

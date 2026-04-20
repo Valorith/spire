@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useMainContext } from '../main/context';
-import { gameController } from '../../viewer/controllers/GameController';
 
 const ZoneContext = React.createContext({});
 export const useZoneContext = () => React.useContext(ZoneContext);
 
 export const ZoneProvider = ({ children }) => {
-  const { selectedZone, Spire } = useMainContext();
+  const { selectedZone, Spire, gameController } = useMainContext();
   const [spawns, setSpawns] = useState([]);
 
   const loadCallback = useCallback(
@@ -58,14 +57,14 @@ export const ZoneProvider = ({ children }) => {
   );
 
   useEffect(() => {
-    if (!Spire || !selectedZone) {
+    if (!Spire || !selectedZone || !gameController) {
       return;
     }
     gameController.ZoneController.addLoadCallback(loadCallback);
     return () => {
       gameController.ZoneController.removeLoadCallback(loadCallback);
     };
-  }, [loadCallback, selectedZone, Spire]);
+  }, [gameController, loadCallback, selectedZone, Spire]);
 
   return (
     <ZoneContext.Provider

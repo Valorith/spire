@@ -29,6 +29,7 @@ export const Main = () => {
     zoneDialogOpen,
     statusDialogOpen,
     rootFileSystemHandle,
+    gameController,
     onDrop,
     requestPermissions,
     permissionStatus,
@@ -65,6 +66,8 @@ export const Main = () => {
       permissionStatus,
       statusDialogOpen,
       zoneDialogOpen,
+      hasGameController: !!gameController,
+      selectedZone     : selectedZone?.short_name ?? null,
       hasRootHandle: !!rootFileSystemHandle,
       unsupported,
     });
@@ -72,12 +75,16 @@ export const Main = () => {
       permissionStatus,
       statusDialogOpen,
       zoneDialogOpen,
+      hasGameController: !!gameController,
+      selectedZone     : selectedZone?.short_name ?? null,
       hasRootHandle: !!rootFileSystemHandle,
       unsupported,
     });
   }, [
+    gameController,
     permissionStatus,
     rootFileSystemHandle,
+    selectedZone,
     statusDialogOpen,
     unsupported,
     zoneDialogOpen,
@@ -157,7 +164,41 @@ export const Main = () => {
             <Suspense fallback={null}>
               {zoneDialogOpen && <ZoneChooserDialog open={true} />}
             </Suspense>
-            {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && (
+            {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !gameController && (
+              <Box
+                sx={{
+                  position      : 'fixed',
+                  inset         : 0,
+                  zIndex        : 2400,
+                  display       : 'flex',
+                  alignItems    : 'center',
+                  justifyContent: 'center',
+                  padding       : 3,
+                  pointerEvents : 'none',
+                }}
+              >
+                <Box
+                  sx={{
+                    minWidth    : 320,
+                    border      : '1px solid rgba(221, 208, 160, 0.7)',
+                    background  : 'linear-gradient(180deg, rgba(17, 24, 34, 0.98), rgba(9, 13, 19, 0.98))',
+                    boxShadow   : '0 18px 48px rgba(0, 0, 0, 0.55)',
+                    borderRadius: '6px',
+                    color       : '#e8dcc0',
+                    padding     : 3,
+                    textAlign   : 'center',
+                  }}
+                >
+                  <Typography sx={{ fontSize: 18, marginBottom: 1 }}>
+                    Preparing Zone Editor
+                  </Typography>
+                  <Typography sx={{ fontSize: 15 }} color="text.secondary">
+                    Loading viewer modules for {selectedZone.long_name ?? selectedZone.short_name}.
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+            {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !!gameController && (
               <Suspense fallback={null}>
                 <ZoneProvider>
                   <BabylonZone />
