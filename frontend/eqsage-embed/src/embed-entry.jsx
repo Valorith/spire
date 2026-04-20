@@ -69,7 +69,9 @@ export const mountSpireZoneEditor = async (
 
   unmountSpireZoneEditor(container);
   setEmbedConfig(globalThis.__SPIRE_EQSAGE_EMBED_CONFIG__ ?? {});
-  await initializeBabylon();
+  initializeBabylon().catch((error) => {
+    console.error('Failed to initialize Babylon for the Sage embed', error);
+  });
   await renderApp(container, spireBridge, {
     initialRouteState,
     onChromeChange,

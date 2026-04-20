@@ -9,6 +9,7 @@ import { OverlayProvider } from '../spire/provider';
 import { useSettingsContext } from '../../context/settings';
 import { GlobalStore } from '../../state';
 import { sleep } from '@/viewer/util/util';
+import bjs from '@bjs';
 
 export const BabylonZone = () => {
   const canvasRef = useRef();
@@ -26,6 +27,7 @@ export const BabylonZone = () => {
       if (!selectedZone) {
         return;
       }
+      await bjs.initialize();
       while (!canvasRef.current) {
         await sleep(50);
       }

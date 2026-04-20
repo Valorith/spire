@@ -6,6 +6,8 @@ import dracoWasmBinaryUrl from '@babylonjs/core/assets/Draco/draco_decoder_gltf.
 
 let dracoWasmModuleFactoryPromise = null;
 let dracoWasmBinaryPromise = null;
+let initializePromise = null;
+let initializeComplete = false;
 
 const createDracoModuleFactory = (source) => {
   const module = { exports: {} };
@@ -51,6 +53,15 @@ const getDracoWasmBinary = async () => {
  */
 const exportObject = {
   async initialize() {
+    if (initializeComplete) {
+      return;
+    }
+    if (initializePromise) {
+      await initializePromise;
+      return;
+    }
+
+    initializePromise = (async () => {
     const importPromises = [];
     const addExports = m => {
       for (const [key, value] of Object.entries(m)) {
@@ -127,6 +138,15 @@ const exportObject = {
 
     await Promise.all(importPromises);
     setGlobals({ BABYLON: exportObject });
+    initializeComplete = true;
+    })();
+
+    try {
+      await initializePromise;
+    } catch (error) {
+      initializePromise = null;
+      throw error;
+    }
   }
 };
 
