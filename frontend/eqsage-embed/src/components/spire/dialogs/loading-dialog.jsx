@@ -7,7 +7,6 @@ import {
   DialogTitle,
   Typography,
 } from '@mui/material';
-import { gameController } from '../../../viewer/controllers/GameController';
 
 export const LoadingDialog = () => {
   const loading = useSelector(UiState.loading);
@@ -15,7 +14,9 @@ export const LoadingDialog = () => {
   const loadingTitle = useSelector(UiState.loadingTitle);
 
   useEffect(() => {
-    gameController.loading = loading;
+    if (window.gameController) {
+      window.gameController.loading = loading;
+    }
   }, [loading]);
 
   return loading ? (

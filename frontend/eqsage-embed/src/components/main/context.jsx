@@ -150,11 +150,17 @@ export const MainProvider = ({
   }, [gameController, rootFileSystemHandle]);
 
   useEffect(() => {
+    if (statusDialogOpen || gameController) {
+      return undefined;
+    }
     let current = true;
     import('../../viewer/controllers/GameController')
       .then((module) => {
         if (!current) {
           return;
+        }
+        if (window.__spireSageOpenAlert) {
+          module.gameController.openAlert = window.__spireSageOpenAlert;
         }
         setGameController(module.gameController);
       })
@@ -164,7 +170,7 @@ export const MainProvider = ({
     return () => {
       current = false;
     };
-  }, []);
+  }, [gameController, statusDialogOpen]);
 
   useEffect(() => {
     if (gameController) {

@@ -4,6 +4,7 @@ import Alert from '@mui/material/Alert';
 
 export const AlertContext = createContext({});
 export const useAlertContext = () => useContext(AlertContext);
+const OPEN_ALERT_KEY = '__spireSageOpenAlert';
 
 export const AlertProvider = ({ children }) => {
   const [open, setOpen] = useState(false);
@@ -24,20 +25,14 @@ export const AlertProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    let current = true;
-    import('../viewer/controllers/GameController')
-      .then((module) => {
-        if (!current) {
-          return;
-        }
-        module.gameController.openAlert = openAlert;
-        window.gameController = module.gameController;
-      })
-      .catch((error) => {
-        console.error('[AlertProvider] failed to load gameController', error);
-      });
+    window[OPEN_ALERT_KEY] = openAlert;
+    if (window.gameController) {
+      window.gameController.openAlert = openAlert;
+    }
     return () => {
-      current = false;
+      if (window[OPEN_ALERT_KEY] === openAlert) {
+        delete window[OPEN_ALERT_KEY];
+      }
     };
   }, [openAlert]);
 
