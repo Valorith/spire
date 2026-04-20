@@ -58,6 +58,7 @@ const exportObject = {
       addImport(import('@babylonjs/core/Engines/webgpuEngine'));
       addImport(import('@babylonjs/core/Offline/database'));
       addImport(import('@babylonjs/core/Loading/sceneLoader'));
+      addImport(import('@babylonjs/loaders/glTF'));
       addImport(import('@babylonjs/core/scene'));
       addImport(import('@babylonjs/core/Materials/Textures/texture'));
       addImport(import('@babylonjs/core/Materials/Textures/cubeTexture'));
@@ -97,7 +98,6 @@ const exportObject = {
     }
 
     zoneViewerPromise = Promise.all([
-      import('@babylonjs/loaders/glTF'),
       import('@babylonjs/core/Materials/Textures/Loaders/envTextureLoader'),
       import('@babylonjs/core/Helpers/sceneHelpers'),
       import('@babylonjs/core/Rendering/edgesRenderer'),

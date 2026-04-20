@@ -85,6 +85,7 @@ export const MainProvider = ({
   const [modelExporterLoaded, setModelExporterLoaded] = useState(false);
   const [gameController, setGameController] = useState(() => window.gameController ?? null);
   const [gameControllerLoading, setGameControllerLoading] = useState(false);
+  const [gameControllerLoadError, setGameControllerLoadError] = useState(null);
   const [controllerLoadStage, setControllerLoadStage] = useState('Waiting for zone selection');
   const { embeddedMode } = getEmbedConfig();
   const Spire = useMemo(
@@ -108,6 +109,7 @@ export const MainProvider = ({
     setCanvasState(false);
     setRightDrawerOpen(false);
     setQuailWorkspace(false);
+    setGameControllerLoadError(null);
     setControllerLoadStage('Waiting for zone selection');
   }, []);
 
@@ -190,6 +192,7 @@ export const MainProvider = ({
       return gameController;
     }
     if (!gameControllerImportPromise) {
+      setGameControllerLoadError(null);
       setGameControllerLoading(true);
       setControllerLoadStage('Loading Babylon runtime');
       gameControllerImportPromise = ensureBabylonRuntime()
@@ -210,6 +213,7 @@ export const MainProvider = ({
           return controller;
         })
         .catch((error) => {
+          setGameControllerLoadError(error);
           setControllerLoadStage('Failed to load viewer controller');
           console.error('[SageMainProvider] failed to load gameController', error);
           throw error;
@@ -249,7 +253,8 @@ export const MainProvider = ({
       zoneDialogOpen ||
       !selectedZone ||
       !!gameController ||
-      gameControllerLoading
+      gameControllerLoading ||
+      !!gameControllerLoadError
     ) {
       return;
     }
@@ -258,6 +263,7 @@ export const MainProvider = ({
     });
   }, [
     gameController,
+    gameControllerLoadError,
     gameControllerLoading,
     loadGameController,
     permissionStatus,
@@ -268,6 +274,7 @@ export const MainProvider = ({
 
   useEffect(() => {
     if (!selectedZone) {
+      setGameControllerLoadError(null);
       setControllerLoadStage('Waiting for zone selection');
     }
   }, [selectedZone]);
@@ -341,6 +348,7 @@ export const MainProvider = ({
         reset,
         gameController,
         gameControllerLoading,
+        gameControllerLoadError,
         controllerLoadStage,
         loadGameController,
       }}

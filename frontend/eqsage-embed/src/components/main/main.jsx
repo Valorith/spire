@@ -30,6 +30,7 @@ export const Main = () => {
     statusDialogOpen,
     rootFileSystemHandle,
     gameController,
+    gameControllerLoadError,
     controllerLoadStage,
     onDrop,
     requestPermissions,
@@ -196,6 +197,11 @@ export const Main = () => {
                   <Typography sx={{ fontSize: 15 }} color="text.secondary">
                     {controllerLoadStage || `Loading viewer modules for ${selectedZone.long_name ?? selectedZone.short_name}.`}
                   </Typography>
+                  {gameControllerLoadError && (
+                    <Typography sx={{ fontSize: 13, marginTop: 1.5 }} color="error.main">
+                      Viewer bootstrap failed. Reopen Sage or choose the zone again after refresh.
+                    </Typography>
+                  )}
                 </Box>
               </Box>
             )}
