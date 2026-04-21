@@ -38,16 +38,22 @@ export const BabylonZone = () => {
 
     (async () => {
       try {
-        setViewerStage('Loading viewer runtime');
-        const [{ default: bjs }, { processZone }] = await Promise.all([
-          import('@bjs'),
-          import('./processZone'),
-        ]);
+        setViewerStage('Loading zone processor');
+        const { processZone } = await import('./processZone');
         if (!current) {
           return;
         }
-        setViewerStage('Preparing viewer modules');
-        await bjs.prepareZoneViewer();
+        setViewerStage('Loading Babylon bridge');
+        const { default: bjs } = await import('@bjs');
+        if (!current) {
+          return;
+        }
+        setViewerStage('Loading viewer runtime');
+        await bjs.prepareZoneViewer((stage) => {
+          if (current) {
+            setViewerStage(stage);
+          }
+        });
         while (current && !canvasRef.current) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }

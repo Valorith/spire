@@ -13,7 +13,7 @@ let zoneViewerReady = false;
  * @type {import ('@babylonjs/core')}
  */
 const exportObject = {
-  async initialize() {
+  async initialize(reportStage = null) {
     if (initializeComplete) {
       return;
     }
@@ -23,13 +23,15 @@ const exportObject = {
     }
 
     initializePromise = (async () => {
-      const importPromises = [];
       const addExports = m => {
         for (const [key, value] of Object.entries(m)) {
           exportObject[key] = value;
         }
       };
-      const addImport = promise => importPromises.push(promise.then(addExports));
+      const loadBatch = async (label, promises) => {
+        reportStage?.(label);
+        await Promise.all(promises.map((promise) => promise.then(addExports)));
+      };
 
     // Keep Babylon on explicit same-origin decoder URLs, but avoid eagerly
     // fetching and instantiating Draco during initial app/bootstrap load.
@@ -44,38 +46,46 @@ const exportObject = {
 
       // BJS exports needed to construct the controller graph. Keep this as
       // lean as possible so zone selection remains responsive.
-      addImport(import('@babylonjs/core/Maths/math.vector'));
-      addImport(import('@babylonjs/core/Maths/math.color'));
-      addImport(import('@babylonjs/core/Maths/math'));
-      addImport(import('@babylonjs/core/Misc/tools'));
-      addImport(import('@babylonjs/core/Misc/gradients'));
-      addImport(import('@babylonjs/core/Events/pointerEvents'));
-      addImport(import('@babylonjs/core/Cameras/arcRotateCamera'));
-      addImport(import('@babylonjs/core/Cameras/universalCamera'));
-      addImport(import('@babylonjs/core/Behaviors/Cameras/autoRotationBehavior'));
-      addImport(import('@babylonjs/core/Engines/engine'));
-      addImport(import('@babylonjs/core/Engines/thinEngine'));
-      addImport(import('@babylonjs/core/Engines/webgpuEngine'));
-      addImport(import('@babylonjs/core/Offline/database'));
-      addImport(import('@babylonjs/core/Loading/sceneLoader'));
-      addImport(import('@babylonjs/loaders/glTF'));
-      addImport(import('@babylonjs/core/scene'));
-      addImport(import('@babylonjs/core/Materials/Textures/texture'));
-      addImport(import('@babylonjs/core/Materials/Textures/cubeTexture'));
-      addImport(import('@babylonjs/core/Materials/material'));
-      addImport(import('@babylonjs/core/Materials/standardMaterial'));
-      addImport(import('@babylonjs/core/Materials/multiMaterial'));
-      addImport(import('@babylonjs/core/Meshes/subMesh'));
-      addImport(import('@babylonjs/core/Meshes/mesh.vertexData'));
-      addImport(import('@babylonjs/core/Meshes/transformNode'));
-      addImport(import('@babylonjs/core/Meshes/mesh'));
-      addImport(import('@babylonjs/core/Meshes/meshBuilder'));
-      addImport(import('@babylonjs/core/Meshes/Builders/boxBuilder'));
-      addImport(import('@babylonjs/core/Layers/glowLayer'));
-      addImport(import('@babylonjs/core/Lights/light'));
-      addImport(import('@babylonjs/core/Lights/pointLight'));
+      await loadBatch('Loading Babylon math and tools', [
+        import('@babylonjs/core/Maths/math.vector'),
+        import('@babylonjs/core/Maths/math.color'),
+        import('@babylonjs/core/Maths/math'),
+        import('@babylonjs/core/Misc/tools'),
+        import('@babylonjs/core/Misc/gradients'),
+        import('@babylonjs/core/Events/pointerEvents'),
+      ]);
+      await loadBatch('Loading Babylon cameras and engines', [
+        import('@babylonjs/core/Cameras/arcRotateCamera'),
+        import('@babylonjs/core/Cameras/universalCamera'),
+        import('@babylonjs/core/Behaviors/Cameras/autoRotationBehavior'),
+        import('@babylonjs/core/Engines/engine'),
+        import('@babylonjs/core/Engines/thinEngine'),
+        import('@babylonjs/core/Engines/webgpuEngine'),
+        import('@babylonjs/core/Offline/database'),
+      ]);
+      await loadBatch('Loading Babylon scene and glTF support', [
+        import('@babylonjs/core/Loading/sceneLoader'),
+        import('@babylonjs/loaders/glTF'),
+        import('@babylonjs/core/scene'),
+      ]);
+      await loadBatch('Loading Babylon materials and meshes', [
+        import('@babylonjs/core/Materials/Textures/texture'),
+        import('@babylonjs/core/Materials/Textures/cubeTexture'),
+        import('@babylonjs/core/Materials/material'),
+        import('@babylonjs/core/Materials/standardMaterial'),
+        import('@babylonjs/core/Materials/multiMaterial'),
+        import('@babylonjs/core/Meshes/subMesh'),
+        import('@babylonjs/core/Meshes/mesh.vertexData'),
+        import('@babylonjs/core/Meshes/transformNode'),
+        import('@babylonjs/core/Meshes/mesh'),
+        import('@babylonjs/core/Meshes/meshBuilder'),
+        import('@babylonjs/core/Meshes/Builders/boxBuilder'),
+        import('@babylonjs/core/Layers/glowLayer'),
+        import('@babylonjs/core/Lights/light'),
+        import('@babylonjs/core/Lights/pointLight'),
+      ]);
 
-      await Promise.all(importPromises);
+      reportStage?.('Babylon core ready');
       setGlobals({ BABYLON: exportObject });
       initializeComplete = true;
     })();
@@ -87,8 +97,8 @@ const exportObject = {
       throw error;
     }
   },
-  async prepareZoneViewer() {
-    await exportObject.initialize();
+  async prepareZoneViewer(reportStage = null) {
+    await exportObject.initialize(reportStage);
     if (zoneViewerReady) {
       return;
     }
@@ -97,12 +107,14 @@ const exportObject = {
       return;
     }
 
+    reportStage?.('Loading Babylon zone viewer extras');
     zoneViewerPromise = Promise.all([
       import('@babylonjs/core/Materials/Textures/Loaders/envTextureLoader'),
       import('@babylonjs/core/Helpers/sceneHelpers'),
       import('@babylonjs/core/Rendering/edgesRenderer'),
     ])
       .then(() => {
+        reportStage?.('Babylon zone viewer ready');
         zoneViewerReady = true;
       })
       .catch((error) => {
