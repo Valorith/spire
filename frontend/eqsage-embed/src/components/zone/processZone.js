@@ -26,7 +26,11 @@ const getGlobalStore = async () => {
   return globalStorePromise;
 };
 
-export async function processGlobal(settings, rootFileSystemHandle, standalone = false, controller = null) {
+const emitStage = (reportStage, stage, detail = '') => {
+  reportStage?.(stage, detail);
+};
+
+export async function processGlobal(settings, rootFileSystemHandle, standalone = false, controller = null, reportStage = null) {
   const [{ EQFileHandle, getFilesRecursively, writeEQFile }, GlobalStore] = await Promise.all([
     getProcessingDeps(),
     getGlobalStore(),
@@ -41,9 +45,11 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
     // Preprocess globalload
     GlobalStore.actions.setLoadingTitle('Loading Global Dependencies');
   }
+  emitStage(reportStage, 'Checking global dependency archives');
   return new Promise(async (res) => {
     const handles = [];
     try {
+      emitStage(reportStage, 'Scanning global dependency archives');
       for await (const fileHandle of getFilesRecursively(rootFileSystemHandle, '', new RegExp('^global.*\\.s3d'))) {
         if (/global(?:\d+)?_chr/.test(fileHandle.name) || fileHandle.name.includes('global_obj')) {
           handles.push(await fileHandle.getFile()); 
@@ -53,6 +59,7 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
     } catch (e) {
       console.warn('Error', e, handles);
     }
+    emitStage(reportStage, 'Preparing global dependency archive', `${handles.length} matching files`);
     console.log(`Loading handles: ${handles.map(h => h.name)}`);
 
     const obj = new EQFileHandle(
@@ -61,8 +68,11 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
       rootFileSystemHandle,
       settings
     );
+    emitStage(reportStage, 'Initializing global dependency archive');
     await obj.initialize();
+    emitStage(reportStage, 'Processing global dependency archive');
     await obj.process();
+    emitStage(reportStage, 'Saving global dependency cache');
     await writeEQFile('data', 'global.json', JSON.stringify({ version: GLOBAL_VERSION }));
     if (standalone && activeGameController) {
       activeGameController.openAlert('Done processing global');
@@ -73,7 +83,7 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
   });
 }
 
-export async function processEquip(settings, rootFileSystemHandle, standalone = false, controller = null) {
+export async function processEquip(settings, rootFileSystemHandle, standalone = false, controller = null, reportStage = null) {
   const [{ EQFileHandle, getFilesRecursively, writeEQFile }, GlobalStore] = await Promise.all([
     getProcessingDeps(),
     getGlobalStore(),
@@ -88,9 +98,11 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
     // Preprocess globalload
     GlobalStore.actions.setLoadingTitle('Loading Global Equipment');
   }
+  emitStage(reportStage, 'Checking global equipment archives');
   return new Promise(async (res) => {
     const handles = [];
     try {
+      emitStage(reportStage, 'Scanning global equipment archives');
       for await (const fileHandle of getFilesRecursively(rootFileSystemHandle, '', new RegExp('^gequip.*\\.s3d'))) {
         if (fileHandle.name.includes('gequip')) {
           handles.push(await fileHandle.getFile()); 
@@ -106,14 +118,18 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
       console.warn('Error', e, handles);
     }
 
+    emitStage(reportStage, 'Preparing global equipment archive', `${handles.length} matching files`);
     const obj = new EQFileHandle(
       'gequip',
       handles, // handles.filter(h => h.name.endsWith('gequip.s3d')),
       rootFileSystemHandle,
       settings
     );
+    emitStage(reportStage, 'Initializing global equipment archive');
     await obj.initialize();
+    emitStage(reportStage, 'Processing global equipment archive');
     await obj.process();
+    emitStage(reportStage, 'Saving global equipment cache');
     await writeEQFile('data', 'gequip.json', JSON.stringify({ version: GLOBAL_VERSION }));
     if (standalone && activeGameController) {
       activeGameController.openAlert('Done processing gequip');
@@ -124,7 +140,7 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
   });
 }
 
-export async function processZone(zoneName, settings, rootFileSystemHandle, _onlyChr = false, controller = null) {
+export async function processZone(zoneName, settings, rootFileSystemHandle, _onlyChr = false, controller = null, reportStage = null) {
   const [{ EQFileHandle, getEQFile, getFilesRecursively }, GlobalStore] = await Promise.all([
     getProcessingDeps(),
     getGlobalStore(),
@@ -134,18 +150,22 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
     activeGameController.rootFileSystemHandle = rootFileSystemHandle;
   }
   GlobalStore.actions.setLoading(true);
+  emitStage(reportStage, 'Checking cached global dependencies');
   const v = await getEQFile('data', 'global.json', 'json');
   if (v?.version !== GLOBAL_VERSION) {
+    emitStage(reportStage, 'Refreshing global dependencies');
     await processGlobal(
       activeGameController?.settings ?? settings,
       activeGameController?.rootFileSystemHandle ?? rootFileSystemHandle,
       true,
-      activeGameController
+      activeGameController,
+      reportStage
     );
   }
   console.log('Zone name', zoneName);
   GlobalStore.actions.setLoadingTitle(`Processing Zone ${zoneName}`);
   GlobalStore.actions.setLoadingText('Loading Zone', zoneName);
+  emitStage(reportStage, `Scanning ${zoneName} zone archives`);
   let match = false;
   await new Promise(async (res) => {
     const handles = [];
@@ -160,13 +180,16 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
       console.warn('Error', e, handles);
     }
 
+    emitStage(reportStage, `Preparing ${zoneName} asset archive`, `${handles.length} matching files`);
     const obj = new EQFileHandle(
       zoneName,
       handles,
       rootFileSystemHandle,
       settings
     );
+    emitStage(reportStage, `Initializing ${zoneName} asset archive`);
     await obj.initialize();
+    emitStage(reportStage, `Processing ${zoneName} asset archive`);
     match = await obj.process();
     res();
   });

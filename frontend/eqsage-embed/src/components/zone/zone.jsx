@@ -24,6 +24,7 @@ export const BabylonZone = () => {
 
   const settings = useSettingsContext();
   const [viewerStage, setViewerStage] = useState('Preparing zone canvas');
+  const [viewerDetail, setViewerDetail] = useState('');
   const [viewerReady, setViewerReady] = useState(false);
   const [viewerError, setViewerError] = useState(null);
 
@@ -34,6 +35,7 @@ export const BabylonZone = () => {
     let current = true;
     setViewerReady(false);
     setViewerError(null);
+    setViewerDetail('');
     setViewerStage('Loading viewer modules');
 
     (async () => {
@@ -80,7 +82,14 @@ export const BabylonZone = () => {
           settings,
           rootFileSystemHandle,
           false,
-          gameController
+          gameController,
+          (stage, detail = '') => {
+            if (!current) {
+              return;
+            }
+            setViewerStage(stage);
+            setViewerDetail(detail);
+          }
         );
         if (!current) {
           return;
@@ -88,11 +97,13 @@ export const BabylonZone = () => {
         setViewerStage(
           `Loading ${selectedZone.long_name ?? selectedZone.short_name}`
         );
+        setViewerDetail('');
         await gameController.ZoneController.loadModel(selectedZone.short_name);
         if (!current) {
           return;
         }
         setViewerStage('Zone ready');
+        setViewerDetail('');
         setViewerReady(true);
       } catch (e) {
         if (!current) {
@@ -100,6 +111,7 @@ export const BabylonZone = () => {
         }
         setViewerError(e);
         setViewerStage('Failed to load zone viewer');
+        setViewerDetail('');
         gameController.openAlert?.(
           'Error loading zone. Check console output.',
           'warning'
@@ -163,6 +175,11 @@ export const BabylonZone = () => {
             <Typography sx={{ fontSize: 15 }} color="text.secondary">
               {viewerStage}
             </Typography>
+            {viewerDetail && (
+              <Typography sx={{ fontSize: 13, marginTop: 1 }} color="text.secondary">
+                {viewerDetail}
+              </Typography>
+            )}
             {viewerError && (
               <Typography sx={{ fontSize: 13, marginTop: 1.5 }} color="error.main">
                 Zone viewer failed to initialize. Reopen Sage or reselect the zone after refresh.
