@@ -2,12 +2,8 @@ import React, { Suspense, useEffect, useRef, useState } from 'react';
 
 import { Box, Typography } from '@mui/material';
 import { useMainContext } from '../main/context';
-import { processZone } from './processZone';
 import { OverlayProvider } from '../spire/provider';
 import { useSettingsContext } from '../../context/settings';
-import { GlobalStore } from '../../state';
-import { sleep } from '@/viewer/util/util';
-import bjs from '@bjs';
 import { debugSageLog, markStage } from '../../debug-stage';
 
 const SpireOverlay = React.lazy(() =>
@@ -42,9 +38,18 @@ export const BabylonZone = () => {
 
     (async () => {
       try {
+        setViewerStage('Loading viewer runtime');
+        const [{ default: bjs }, { processZone }] = await Promise.all([
+          import('@bjs'),
+          import('./processZone'),
+        ]);
+        if (!current) {
+          return;
+        }
+        setViewerStage('Preparing viewer modules');
         await bjs.prepareZoneViewer();
         while (current && !canvasRef.current) {
-          await sleep(50);
+          await new Promise((resolve) => setTimeout(resolve, 50));
         }
         if (!current) {
           return;
@@ -89,11 +94,12 @@ export const BabylonZone = () => {
         }
         setViewerError(e);
         setViewerStage('Failed to load zone viewer');
-        gameController.openAlert(
+        gameController.openAlert?.(
           'Error loading zone. Check console output.',
           'warning'
         );
         console.log('Error loading zone', e);
+        const { GlobalStore } = await import('../../state');
         GlobalStore.actions.setLoading(false);
       }
     })();
