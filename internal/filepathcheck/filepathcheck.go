@@ -23,7 +23,22 @@ func NormalizePath(input string) (string, error) {
 
 // IsWithinBaseDir ensures the path is within the allowed directory
 func IsWithinBaseDir(baseDir, absPath string) bool {
-	return strings.HasPrefix(absPath, baseDir)
+	baseAbs, err := NormalizePath(baseDir)
+	if err != nil {
+		return false
+	}
+
+	targetAbs, err := NormalizePath(absPath)
+	if err != nil {
+		return false
+	}
+
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return false
+	}
+
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // IsHiddenFile checks if the file is hidden (starts with ".")
