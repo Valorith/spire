@@ -1,12 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Box, Stack, ThemeProvider, Typography, createTheme } from '@mui/material';
 import { ConfirmProvider } from 'material-ui-confirm';
 import { useMainContext } from './context';
-import { BabylonZone } from '../zone/zone';
-import { ZoneProvider } from '../zone/zone-context';
-import { StatusDialog } from '../dialogs/status-dialog';
-import { ZoneChooserDialog } from '../dialogs/zone-chooser-dialog';
-import { LoadingDialog } from '../spire/dialogs/loading-dialog';
 import { GlobalStore } from '@/state';
 import { assetUrl } from '../../embed-config';
 
@@ -20,6 +15,21 @@ const CONSTANTS = {
 };
 
 const bgMax = 6;
+const BabylonZone = React.lazy(() =>
+  import('../zone/zone').then((module) => ({ default: module.BabylonZone }))
+);
+const ZoneProvider = React.lazy(() =>
+  import('../zone/zone-context').then((module) => ({ default: module.ZoneProvider }))
+);
+const StatusDialog = React.lazy(() =>
+  import('../dialogs/status-dialog').then((module) => ({ default: module.StatusDialog }))
+);
+const ZoneChooserDialog = React.lazy(() =>
+  import('../dialogs/zone-chooser-dialog').then((module) => ({ default: module.ZoneChooserDialog }))
+);
+const LoadingDialog = React.lazy(() =>
+  import('../spire/dialogs/loading-dialog').then((module) => ({ default: module.LoadingDialog }))
+);
 
 const ZoneLoadingOverlay = ({
   title = 'Preparing Zone Editor',
@@ -108,6 +118,14 @@ export const Main = ({ onBootStateChange } = {}) => {
   }, []);
 
   useEffect(() => {
+    onBootStateChange?.({
+      stage    : 'boot:main-ready',
+      detail   : 'Main view loaded',
+      uiVisible: true,
+    });
+  }, [onBootStateChange]);
+
+  useEffect(() => {
     markStage('main:state-effect', {
       permissionStatus,
       statusDialogOpen,
@@ -182,7 +200,9 @@ export const Main = ({ onBootStateChange } = {}) => {
 
   return (
     <Box>
-      <LoadingDialog />
+      <Suspense fallback={null}>
+        <LoadingDialog />
+      </Suspense>
       {!unsupported ? (
         <ThemeProvider
           theme={createTheme({
@@ -237,17 +257,26 @@ export const Main = ({ onBootStateChange } = {}) => {
               }}
               className="sage-main"
             />
-            {statusDialogOpen && (
-              <StatusDialog
-                fsHandle={rootFileSystemHandle}
-                onDrop={onDrop}
-                permissionStatus={permissionStatus}
-                open={true}
-                requestPermissions={requestPermissions}
-                onFolderSelected={onFolderSelected}
-              />
-            )}
-            {zoneDialogOpen && <ZoneChooserDialog open={true} />}
+            <Suspense
+              fallback={
+                <ZoneLoadingOverlay
+                  title="Preparing Sage"
+                  message="Loading startup dialog..."
+                />
+              }
+            >
+              {statusDialogOpen && (
+                <StatusDialog
+                  fsHandle={rootFileSystemHandle}
+                  onDrop={onDrop}
+                  permissionStatus={permissionStatus}
+                  open={true}
+                  requestPermissions={requestPermissions}
+                  onFolderSelected={onFolderSelected}
+                />
+              )}
+              {zoneDialogOpen && <ZoneChooserDialog open={true} />}
+            </Suspense>
             {!statusDialogOpen && !zoneDialogOpen && !selectedZone && (
               <ZoneLoadingOverlay
                 title="Preparing Sage"
@@ -273,9 +302,17 @@ export const Main = ({ onBootStateChange } = {}) => {
               />
             )}
             {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !!gameController && (
-              <ZoneProvider>
-                <BabylonZone />
-              </ZoneProvider>
+              <Suspense
+                fallback={
+                  <ZoneLoadingOverlay
+                    message="Loading zone view..."
+                  />
+                }
+              >
+                <ZoneProvider>
+                  <BabylonZone />
+                </ZoneProvider>
+              </Suspense>
             )}
           </ConfirmProvider>
         </ThemeProvider>
