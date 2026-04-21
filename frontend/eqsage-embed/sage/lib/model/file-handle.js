@@ -4,6 +4,13 @@ import { Document } from '@gltf-transform/core';
 import { EQGDecoder } from '../eqg/eqg-decoder';
 import { getEQFile, getEQFileExists } from '../util/fileHandler';
 
+const logFileHandleStep = (name, message, extra) => {
+  if (extra !== undefined) {
+    console.log(`[SageFileHandle:${name}] ${message}`, extra);
+    return;
+  }
+  console.log(`[SageFileHandle:${name}] ${message}`);
+};
 
 export class EQFileHandle {
   /**
@@ -67,11 +74,16 @@ export class EQFileHandle {
   
 
   async initialize() {
+    logFileHandleStep(this.name, 'initialize:start', {
+      handleCount: this.#fileHandles.length,
+      handles    : this.#fileHandles.slice(0, 12).map((file) => file.name),
+    });
     if (this.#fileHandles.length === 0) {
       console.warn('File handle length was 0!');
       return;
     }
     this.#initialized = true;
+    logFileHandleStep(this.name, 'initialize:done');
   }
 
   async process(doExport = true) {
@@ -79,26 +91,57 @@ export class EQFileHandle {
       console.warn('Was not initialized, cannot process');
       return;
     }
+    const startedAt = performance.now();
+    const type = this.#type;
+    logFileHandleStep(this.name, 'process:start', {
+      type,
+      doExport,
+      forceReload: !!this.#settings?.forceReload,
+    });
     const existingMetadata = await getEQFile('zones', `${this.name}.json`, 'json');
     const exists = await getEQFileExists('zones', `${this.name}.glb`);
+    logFileHandleStep(this.name, 'cache:checked', {
+      glbExists      : exists,
+      metadataVersion: existingMetadata?.version ?? null,
+      expectedVersion: VERSION,
+    });
     if (exists && existingMetadata?.version === VERSION && !this.#settings.forceReload) {
-      console.log('Had cached version, skipping translation');
+      logFileHandleStep(this.name, 'cache:hit, skipping translation');
       return;
     }
-    if (this.#type === FILE_TYPE.EQG) {
+    if (type === FILE_TYPE.EQG) {
+      logFileHandleStep(this.name, 'decoder:eqg:start');
       const eqgDecoder = new EQGDecoder(this, this.#options);
       await eqgDecoder.process();
+      logFileHandleStep(this.name, 'decoder:eqg:processed');
       if (doExport) {
+        logFileHandleStep(this.name, 'decoder:eqg:export:start');
         await eqgDecoder.export();
+        logFileHandleStep(this.name, 'decoder:eqg:export:done', {
+          seconds: ((performance.now() - startedAt) / 1000).toFixed(2),
+        });
         return true;
       }
-    } else if (this.#type === FILE_TYPE.S3D) {
+    } else if (type === FILE_TYPE.S3D) {
+      logFileHandleStep(this.name, 'decoder:s3d:start');
       const s3dDecoder = new S3DDecoder(this, this.#options);
       await s3dDecoder.process();
+      logFileHandleStep(this.name, 'decoder:s3d:processed');
       if (doExport) {
+        logFileHandleStep(this.name, 'decoder:s3d:export:start');
         await s3dDecoder.export();
+        logFileHandleStep(this.name, 'decoder:s3d:export:done', {
+          seconds: ((performance.now() - startedAt) / 1000).toFixed(2),
+        });
         return true;
       }
+    } else {
+      logFileHandleStep(this.name, 'decoder:none', {
+        availableHandles: this.#fileHandles.map((file) => file.name),
+      });
     }
+    logFileHandleStep(this.name, 'process:done', {
+      seconds: ((performance.now() - startedAt) / 1000).toFixed(2),
+    });
   }
 }
