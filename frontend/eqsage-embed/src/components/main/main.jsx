@@ -65,7 +65,7 @@ const ZoneLoadingOverlay = ({
   </Box>
 );
 
-export const Main = () => {
+export const Main = ({ onBootStateChange } = {}) => {
   markStage('main:render');
   debugSageLog('[SageMainRender]');
   const {
@@ -126,8 +126,52 @@ export const Main = () => {
       hasRootHandle: !!rootFileSystemHandle,
       unsupported,
     });
+
+    if (statusDialogOpen) {
+      onBootStateChange?.({
+        stage    : 'boot:status-dialog',
+        detail   : 'Waiting for EverQuest directory access',
+        uiVisible: true,
+      });
+      return;
+    }
+
+    if (zoneDialogOpen) {
+      onBootStateChange?.({
+        stage    : 'boot:zone-dialog',
+        detail   : 'Waiting for zone selection',
+        uiVisible: true,
+      });
+      return;
+    }
+
+    if (selectedZone && !gameController) {
+      onBootStateChange?.({
+        stage    : 'boot:controller-loading',
+        detail   : controllerLoadStage || 'Loading viewer controller',
+        uiVisible: true,
+      });
+      return;
+    }
+
+    if (selectedZone && gameController) {
+      onBootStateChange?.({
+        stage    : 'boot:zone-active',
+        detail   : `Launching ${selectedZone.long_name ?? selectedZone.short_name}`,
+        uiVisible: true,
+      });
+      return;
+    }
+
+    onBootStateChange?.({
+      stage    : 'boot:blank',
+      detail   : 'No startup dialog or zone state is active',
+      uiVisible: false,
+    });
   }, [
+    controllerLoadStage,
     gameController,
+    onBootStateChange,
     permissionStatus,
     rootFileSystemHandle,
     selectedZone,

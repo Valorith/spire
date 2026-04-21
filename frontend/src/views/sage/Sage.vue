@@ -1,6 +1,15 @@
 <template>
   <div class="sage-container">
     <div ref="sage-root" class="sage-root"></div>
+    <div v-if="showStartupOverlay" class="sage-startup-overlay">
+      <div class="sage-startup-card">
+        <div class="sage-startup-title">Preparing Sage</div>
+        <div class="sage-startup-stage">{{ startupStage }}</div>
+        <div v-if="startupDetail" class="sage-startup-detail">
+          {{ startupDetail }}
+        </div>
+      </div>
+    </div>
     <div v-if="loadError" class="sage-error">
       {{ loadError }}
     </div>
@@ -25,12 +34,26 @@ export default {
       mountAttempt: 0,
       tornDown: false,
       unmount: null,
+      startupStage: "Loading EQ Sage shell...",
+      startupDetail: "",
+      startupUiVisible: false,
+      startupTimeout: null,
     }
+  },
+
+  computed: {
+    showStartupOverlay() {
+      return !this.loadError && !this.startupUiVisible
+    },
   },
 
   beforeDestroy() {
     this.tornDown = true
     this.mountAttempt += 1
+    if (this.startupTimeout) {
+      window.clearTimeout(this.startupTimeout)
+      this.startupTimeout = null
+    }
     this.teardownSage()
   },
 
@@ -54,13 +77,56 @@ export default {
       }
       Navbar.expand()
     },
+
+    handleSageStage(state) {
+      if (!state) {
+        return
+      }
+
+      const stageLabels = {
+        "embed:mount": "Starting EQ Sage...",
+        "embed:config": "Loading Sage configuration...",
+        "embed:loading": "Loading EQ Sage shell...",
+        "embed:imports": "Loading EQ Sage modules...",
+        "embed:render": "Rendering EQ Sage...",
+        "embed:painted": "Waiting for startup UI...",
+        "embed:mounted": "EQ Sage mounted.",
+        "boot:blank": "Waiting for startup UI...",
+        "boot:status-dialog": "Waiting for EverQuest directory access",
+        "boot:zone-dialog": "Waiting for zone selection",
+        "boot:controller-loading": "Loading viewer controller",
+        "boot:zone-active": "Launching zone editor",
+      }
+
+      this.startupStage = stageLabels[state.stage] || state.detail || this.startupStage
+      this.startupDetail = state.detail || ""
+
+      if (state.uiVisible) {
+        this.startupUiVisible = true
+        if (this.startupTimeout) {
+          window.clearTimeout(this.startupTimeout)
+          this.startupTimeout = null
+        }
+      }
+    },
   },
 
   async mounted() {
     const mountAttempt = ++this.mountAttempt
     Navbar.collapse()
+    this.startupStage = "Loading EQ Sage shell..."
+    this.startupDetail = "Fetching embed bundle and startup state."
+    this.startupUiVisible = false
+    this.startupTimeout = window.setTimeout(() => {
+      if (!this.tornDown && !this.startupUiVisible && !this.loadError) {
+        this.startupStage = "Sage startup is taking longer than expected"
+        this.startupDetail = "Waiting for the startup UI to become interactive."
+      }
+    }, 8000)
 
     try {
+      this.startupStage = "Loading Sage loader..."
+      this.startupDetail = "Resolving the embedded zone editor module."
       const { mountSpireZoneEditor, unmountSpireZoneEditor } = await loadEqSageEmbed()
       if (this.tornDown || mountAttempt !== this.mountAttempt) {
         return
@@ -71,8 +137,11 @@ export default {
         return
       }
 
+      this.startupStage = "Mounting EQ Sage..."
+      this.startupDetail = "Creating the embedded zone editor shell."
       await mountSpireZoneEditor(container, {
         spireBridge: this.getSpireBridge(),
+        onStageChange: this.handleSageStage,
       })
       if (this.tornDown || mountAttempt !== this.mountAttempt) {
         unmountSpireZoneEditor(container)
@@ -88,6 +157,9 @@ export default {
       }
       console.error("Failed to mount EQ Sage embed", error)
       this.loadError = "Unable to load the EQ Sage zone editor bundle."
+      this.startupUiVisible = false
+      this.startupStage = "Failed to load EQ Sage"
+      this.startupDetail = error?.message || "The embedded zone editor failed to initialize."
       Navbar.expand()
     }
   },
@@ -109,6 +181,44 @@ export default {
   width: 100%;
   height: 100%;
   min-height: 100vh;
+}
+
+.sage-startup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  padding: 24px;
+}
+
+.sage-startup-card {
+  min-width: 320px;
+  max-width: 520px;
+  padding: 24px;
+  border: 1px solid rgba(221, 208, 160, 0.7);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(17, 24, 34, 0.98), rgba(9, 13, 19, 0.98));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  color: #e8dcc0;
+  text-align: center;
+}
+
+.sage-startup-title {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.sage-startup-stage {
+  font-size: 16px;
+}
+
+.sage-startup-detail {
+  margin-top: 12px;
+  font-size: 14px;
+  color: rgba(232, 220, 192, 0.78);
 }
 
 .sage-error {

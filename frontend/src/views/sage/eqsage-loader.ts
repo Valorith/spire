@@ -5,6 +5,11 @@ type EqSageEmbedModule = {
       spireBridge: unknown
       initialRouteState?: Record<string, unknown>
       onChromeChange?: (state: { immersive: boolean }) => void
+      onStageChange?: (state: {
+        stage: string
+        detail?: string
+        uiVisible?: boolean
+      }) => void
     }
   ) => Promise<void>
   unmountSpireZoneEditor: (container: HTMLElement) => void
