@@ -1,12 +1,36 @@
-import { EQFileHandle } from 'sage-core/model/file-handle';
-import { getEQFile, getFilesRecursively, writeEQFile } from 'sage-core/util/fileHandler';
-import { GlobalStore } from '../../state';
-
 export const GLOBAL_VERSION = 1.8;
 
 const getActiveController = (controller) => controller ?? window.gameController ?? null;
+let processingDepsPromise = null;
+let globalStorePromise = null;
+
+const getProcessingDeps = async () => {
+  if (!processingDepsPromise) {
+    processingDepsPromise = Promise.all([
+      import('sage-core/model/file-handle'),
+      import('sage-core/util/fileHandler'),
+    ]).then(([fileHandleModule, fileHandlerModule]) => ({
+      EQFileHandle       : fileHandleModule.EQFileHandle,
+      getEQFile          : fileHandlerModule.getEQFile,
+      getFilesRecursively: fileHandlerModule.getFilesRecursively,
+      writeEQFile        : fileHandlerModule.writeEQFile,
+    }));
+  }
+  return processingDepsPromise;
+};
+
+const getGlobalStore = async () => {
+  if (!globalStorePromise) {
+    globalStorePromise = import('../../state').then((module) => module.GlobalStore);
+  }
+  return globalStorePromise;
+};
 
 export async function processGlobal(settings, rootFileSystemHandle, standalone = false, controller = null) {
+  const [{ EQFileHandle, getFilesRecursively, writeEQFile }, GlobalStore] = await Promise.all([
+    getProcessingDeps(),
+    getGlobalStore(),
+  ]);
   const activeGameController = getActiveController(controller);
   if (activeGameController) {
     activeGameController.rootFileSystemHandle = rootFileSystemHandle;
@@ -50,6 +74,10 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
 }
 
 export async function processEquip(settings, rootFileSystemHandle, standalone = false, controller = null) {
+  const [{ EQFileHandle, getFilesRecursively, writeEQFile }, GlobalStore] = await Promise.all([
+    getProcessingDeps(),
+    getGlobalStore(),
+  ]);
   const activeGameController = getActiveController(controller);
   if (activeGameController) {
     activeGameController.rootFileSystemHandle = rootFileSystemHandle;
@@ -97,6 +125,10 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
 }
 
 export async function processZone(zoneName, settings, rootFileSystemHandle, _onlyChr = false, controller = null) {
+  const [{ EQFileHandle, getEQFile, getFilesRecursively }, GlobalStore] = await Promise.all([
+    getProcessingDeps(),
+    getGlobalStore(),
+  ]);
   const activeGameController = getActiveController(controller);
   if (activeGameController) {
     activeGameController.rootFileSystemHandle = rootFileSystemHandle;
