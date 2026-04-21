@@ -15,12 +15,6 @@ const CONSTANTS = {
 };
 
 const bgMax = 6;
-const BabylonZone = React.lazy(() =>
-  import('../zone/zone').then((module) => ({ default: module.BabylonZone }))
-);
-const ZoneProvider = React.lazy(() =>
-  import('../zone/zone-context').then((module) => ({ default: module.ZoneProvider }))
-);
 const StatusDialog = React.lazy(() =>
   import('../dialogs/status-dialog').then((module) => ({ default: module.StatusDialog }))
 );
@@ -92,6 +86,10 @@ export const Main = ({ onBootStateChange } = {}) => {
     onFolderSelected,
   } = useMainContext();
   const [unsupported, setUnsupported] = useState(false);
+  const [ZoneProviderComponent, setZoneProviderComponent] = useState(null);
+  const [BabylonZoneComponent, setBabylonZoneComponent] = useState(null);
+  const [zoneShellStage, setZoneShellStage] = useState('Waiting for zone launch');
+  const [zoneShellError, setZoneShellError] = useState(null);
   const [sessionBg] = useState(
     () =>
       `center no-repeat url('${assetUrl(
@@ -124,6 +122,54 @@ export const Main = ({ onBootStateChange } = {}) => {
       uiVisible: true,
     });
   }, [onBootStateChange]);
+
+  useEffect(() => {
+    let current = true;
+
+    if (!selectedZone || !gameController) {
+      setZoneProviderComponent(null);
+      setBabylonZoneComponent(null);
+      setZoneShellError(null);
+      setZoneShellStage('Waiting for zone launch');
+      return () => {
+        current = false;
+      };
+    }
+
+    setZoneProviderComponent(null);
+    setBabylonZoneComponent(null);
+    setZoneShellError(null);
+    setZoneShellStage('Loading zone context');
+
+    (async () => {
+      try {
+        const zoneContextModule = await import('../zone/zone-context');
+        if (!current) {
+          return;
+        }
+        setZoneProviderComponent(() => zoneContextModule.ZoneProvider);
+        setZoneShellStage('Loading zone viewer shell');
+
+        const zoneModule = await import('../zone/zone');
+        if (!current) {
+          return;
+        }
+        setBabylonZoneComponent(() => zoneModule.BabylonZone);
+        setZoneShellStage('Zone viewer shell ready');
+      } catch (error) {
+        if (!current) {
+          return;
+        }
+        setZoneShellError(error);
+        setZoneShellStage('Failed to load zone viewer shell');
+        console.error('[SageMain] failed to load zone view shell', error);
+      }
+    })();
+
+    return () => {
+      current = false;
+    };
+  }, [gameController, selectedZone]);
 
   useEffect(() => {
     markStage('main:state-effect', {
@@ -302,17 +348,22 @@ export const Main = ({ onBootStateChange } = {}) => {
               />
             )}
             {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !!gameController && (
-              <Suspense
-                fallback={
+              <>
+                {!ZoneProviderComponent || !BabylonZoneComponent ? (
                   <ZoneLoadingOverlay
-                    message="Loading zone view..."
+                    message={zoneShellStage || 'Loading zone view...'}
+                    error={
+                      zoneShellError
+                        ? 'Zone viewer shell failed to load. Refresh Sage and try the zone again.'
+                        : null
+                    }
                   />
-                }
-              >
-                <ZoneProvider>
-                  <BabylonZone />
-                </ZoneProvider>
-              </Suspense>
+                ) : (
+                  <ZoneProviderComponent>
+                    <BabylonZoneComponent />
+                  </ZoneProviderComponent>
+                )}
+              </>
             )}
           </ConfirmProvider>
         </ThemeProvider>
