@@ -26,7 +26,7 @@ func TestSelectTemplateRender(t *testing.T) {
 		}
 
 		result = string(render(s.Templates.active, values[0]))
-		exp = "\x1b[1m▸\x1b[0m \x1b[4mZero\x1b[0m"
+		exp = IconSelect + " " + Styler(FGUnderline)("Zero")
 		if result != exp {
 			t.Errorf("Expected active item to eq %q, got %q", exp, result)
 		}
@@ -38,7 +38,7 @@ func TestSelectTemplateRender(t *testing.T) {
 		}
 
 		result = string(render(s.Templates.selected, values[0]))
-		exp = "\x1b[32m\x1b[32m✔\x1b[0m \x1b[2mZero\x1b[0m"
+		exp = Styler(FGGreen)(IconGood) + " " + Styler(FGFaint)("Zero")
 		if result != exp {
 			t.Errorf("Expected selected item to eq %q, got %q", exp, result)
 		}
