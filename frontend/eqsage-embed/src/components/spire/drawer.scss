@@ -2,6 +2,7 @@
 .drawer-bg {
     border-width: 2px;
     position: fixed;
+    pointer-events: auto;
     border-style: solid;
     color: white;
     z-index: 100000 !important;

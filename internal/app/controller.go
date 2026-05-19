@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/EQEmuTools/spire/internal/database"
 	"github.com/EQEmuTools/spire/internal/env"
+	"github.com/EQEmuTools/spire/internal/filepathcheck"
 	"github.com/EQEmuTools/spire/internal/http/routes"
 	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/EQEmuTools/spire/internal/release"
@@ -14,9 +15,14 @@ import (
 	"github.com/EQEmuTools/spire/internal/user"
 	"github.com/labstack/echo/v4"
 	gocache "github.com/patrickmn/go-cache"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -58,6 +64,13 @@ func (d *Controller) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodGet, "app/env", d.env, nil),
 		routes.RegisterRoute(http.MethodPost, "app/update", d.update, nil),
 		routes.RegisterRoute(http.MethodPost, "app/sync", d.sync, nil),
+		routes.RegisterRoute(http.MethodPost, "app/sage-fs/validate", d.sageFsValidate, nil),
+		routes.RegisterRoute(http.MethodGet, "app/sage-fs/readdir", d.sageFsReadDir, nil),
+		routes.RegisterRoute(http.MethodGet, "app/sage-fs/read-file", d.sageFsReadFile, nil),
+		routes.RegisterRoute(http.MethodPost, "app/sage-fs/mkdir", d.sageFsMkdir, nil),
+		routes.RegisterRoute(http.MethodPost, "app/sage-fs/write-file", d.sageFsWriteFile, nil),
+		routes.RegisterRoute(http.MethodDelete, "app/sage-fs/delete-file", d.sageFsDeleteFile, nil),
+		routes.RegisterRoute(http.MethodDelete, "app/sage-fs/delete-folder", d.sageFsDeleteFolder, nil),
 	}
 }
 
@@ -201,4 +214,310 @@ func (d *Controller) update(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{"data": "Ok"})
+}
+
+type sageFsValidateRequest struct {
+	Root string `json:"root"`
+}
+
+type sageFsEntry struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	IsDirectory bool   `json:"isDirectory"`
+	IsFile      bool   `json:"isFile"`
+}
+
+var sageFsRootValidationCache sync.Map
+
+func (d *Controller) sageFsValidate(c echo.Context) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	var request sageFsValidateRequest
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Failed to bind request"})
+	}
+
+	root, err := normalizeSageFsRoot(request.Root)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+
+	if !isEverQuestClientDirectory(root) {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Selected directory does not look like an EverQuest client directory"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"root": filepath.ToSlash(root)})
+}
+
+func (d *Controller) sageFsReadDir(c echo.Context) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	_, target, err := resolveSageFsPath(c, false)
+	if err != nil {
+		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
+	}
+
+	entries, err := os.ReadDir(target)
+	if os.IsNotExist(err) {
+		return c.JSON(http.StatusOK, []sageFsEntry{})
+	}
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+
+	response := make([]sageFsEntry, 0, len(entries))
+	for _, entry := range entries {
+		entryPath := filepath.Join(target, entry.Name())
+		entryInfo, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		response = append(response, sageFsEntry{
+			Name:        entry.Name(),
+			Path:        filepath.ToSlash(entryPath),
+			IsDirectory: entryInfo.IsDir(),
+			IsFile:      entryInfo.Mode().IsRegular(),
+		})
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+func (d *Controller) sageFsReadFile(c echo.Context) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	_, target, err := resolveSageFsPath(c, false)
+	if err != nil {
+		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
+	}
+
+	fileInfo, err := os.Stat(target)
+	if os.IsNotExist(err) || (err == nil && !fileInfo.Mode().IsRegular()) {
+		c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		c.Response().Header().Set("X-Sage-Preview-Missing", "1")
+		return c.NoContent(http.StatusOK)
+	}
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+
+	file, err := os.Open(target)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+	defer file.Close()
+
+	c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	return c.Stream(http.StatusOK, "application/octet-stream", file)
+}
+
+func (d *Controller) sageFsMkdir(c echo.Context) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	_, target, err := resolveSageFsPath(c, true)
+	if err != nil {
+		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
+	}
+
+	if err := os.MkdirAll(target, 0755); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"ok": true})
+}
+
+func (d *Controller) sageFsWriteFile(c echo.Context) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	_, target, err := resolveSageFsPath(c, true)
+	if err != nil {
+		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
+	}
+
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+	if err := os.WriteFile(target, body, 0644); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"ok": true})
+}
+
+func (d *Controller) sageFsDeleteFile(c echo.Context) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	_, target, err := resolveSageFsPath(c, true)
+	if err != nil {
+		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
+	}
+
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"ok": true})
+}
+
+func (d *Controller) sageFsDeleteFolder(c echo.Context) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	_, target, err := resolveSageFsPath(c, true)
+	if err != nil {
+		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
+	}
+
+	if err := os.RemoveAll(target); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"ok": true})
+}
+
+func (d *Controller) requireLocalSageFsRequest(c echo.Context) error {
+	if !env.IsAppEnvLocal() {
+		return c.JSON(http.StatusForbidden, echo.Map{"error": "Sage filesystem bridge is only available in local mode"})
+	}
+
+	origin := c.Request().Header.Get("Origin")
+	if origin == "" {
+		return nil
+	}
+
+	originUrl, err := url.Parse(origin)
+	if err != nil || !isLoopbackHost(originUrl.Hostname()) {
+		return c.JSON(http.StatusForbidden, echo.Map{"error": "Sage filesystem bridge only accepts local browser origins"})
+	}
+
+	return nil
+}
+
+func resolveSageFsPath(c echo.Context, cacheOnly bool) (string, string, error) {
+	root, err := normalizeSageFsRoot(c.QueryParam("root"))
+	if err != nil {
+		return "", "", err
+	}
+	if !isEverQuestClientDirectory(root) {
+		return "", "", fmt.Errorf("selected directory does not look like an EverQuest client directory")
+	}
+
+	requestedPath := c.QueryParam("path")
+	if requestedPath == "" {
+		requestedPath = root
+	}
+
+	target := requestedPath
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(root, target)
+	}
+
+	target, err = filepath.Abs(filepath.Clean(target))
+	if err != nil {
+		return "", "", fmt.Errorf("invalid path")
+	}
+
+	allowedRoot := root
+	if cacheOnly {
+		allowedRoot = filepath.Join(root, "eqsage")
+	}
+
+	if !filepathcheck.IsWithinBaseDir(allowedRoot, target) {
+		return "", "", fmt.Errorf("path traversal detected")
+	}
+
+	return root, target, nil
+}
+
+func normalizeSageFsRoot(root string) (string, error) {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return "", fmt.Errorf("missing EverQuest directory")
+	}
+
+	absoluteRoot, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return "", fmt.Errorf("invalid EverQuest directory")
+	}
+
+	info, err := os.Stat(absoluteRoot)
+	if err != nil {
+		return "", fmt.Errorf("EverQuest directory is not accessible")
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("EverQuest directory is not a directory")
+	}
+
+	return absoluteRoot, nil
+}
+
+func isEverQuestClientDirectory(root string) bool {
+	if cached, ok := sageFsRootValidationCache.Load(root); ok {
+		return cached.(bool)
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		sageFsRootValidationCache.Store(root, false)
+		return false
+	}
+
+	hasClientMarker := false
+	hasAssetFile := false
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := strings.ToLower(entry.Name())
+		if name == "eqgame.exe" || name == "eqclient.ini" {
+			hasClientMarker = true
+		}
+		if strings.HasSuffix(name, ".s3d") || strings.HasSuffix(name, ".eqg") {
+			hasAssetFile = true
+		}
+		if hasClientMarker && hasAssetFile {
+			sageFsRootValidationCache.Store(root, true)
+			return true
+		}
+	}
+
+	sageFsRootValidationCache.Store(root, false)
+	return false
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	return host == "localhost" ||
+		host == "127.0.0.1" ||
+		host == "::1" ||
+		host == "[::1]" ||
+		host == "host.docker.internal"
+}
+
+func statusCodeForSageFsError(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	if strings.Contains(err.Error(), "traversal") {
+		return http.StatusForbidden
+	}
+	return http.StatusBadRequest
 }

@@ -5,12 +5,39 @@ import {ROUTE} from "@/routes";
 
 
 const PUBLIC_SPIRE = "https://spire.eqemu.dev/api/v1";
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/, "");
+
+const normalizeDevBackendBaseUrl = (value: string) => {
+  const trimmed = trimTrailingSlash(value);
+  if (process.env.NODE_ENV === "production") {
+    return trimmed;
+  }
+
+  try {
+    const backendUrl = new URL(trimmed, window.location.origin);
+    if (
+      LOOPBACK_HOSTS.has(backendUrl.hostname) &&
+      !LOOPBACK_HOSTS.has(window.location.hostname)
+    ) {
+      backendUrl.hostname = window.location.hostname;
+      return trimTrailingSlash(backendUrl.toString());
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+};
 
 export class SpireApi {
   static getBasePath() {
-    return process.env.VUE_APP_BACKEND_BASE_URL && process.env.NODE_ENV !== 'production' ?
-      process.env.VUE_APP_BACKEND_BASE_URL :
-      window.location.origin
+    return normalizeDevBackendBaseUrl(
+      process.env.VUE_APP_BACKEND_BASE_URL && process.env.NODE_ENV !== 'production' ?
+        process.env.VUE_APP_BACKEND_BASE_URL :
+        window.location.origin
+    )
   }
 
   static getPublicWithLocalFallbacks(): Array<any> {

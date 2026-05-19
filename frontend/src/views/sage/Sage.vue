@@ -50,6 +50,7 @@ export default {
   beforeDestroy() {
     this.tornDown = true
     this.mountAttempt += 1
+    window.removeEventListener('resize', this.forceFullViewportHost)
     if (this.startupTimeout) {
       window.clearTimeout(this.startupTimeout)
       this.startupTimeout = null
@@ -109,10 +110,37 @@ export default {
         }
       }
     },
+
+    forceFullViewportHost() {
+      document.documentElement.classList.add('sage-fullscreen-route')
+      document.body.classList.add('sage-fullscreen-route')
+
+      for (const element of [
+        document.documentElement,
+        document.body,
+        document.getElementById('app'),
+        document.getElementById('app')?.firstElementChild,
+      ]) {
+        if (!element) {
+          continue
+        }
+        element.style.setProperty('zoom', '1', 'important')
+        element.style.setProperty('transform', 'none', 'important')
+        element.style.setProperty('transform-origin', '0 0', 'important')
+        element.style.setProperty('width', '100vw', 'important')
+        element.style.setProperty('height', '100vh', 'important')
+        element.style.setProperty('max-width', 'none', 'important')
+        element.style.setProperty('max-height', 'none', 'important')
+        element.style.setProperty('overflow', 'hidden', 'important')
+      }
+    },
   },
 
   async mounted() {
     const mountAttempt = ++this.mountAttempt
+    this.forceFullViewportHost()
+    window.addEventListener('resize', this.forceFullViewportHost)
+    window.requestAnimationFrame(() => this.forceFullViewportHost())
     Navbar.collapse()
     this.startupStage = "Loading EQ Sage shell..."
     this.startupDetail = "Fetching embed bundle and startup state."
@@ -175,12 +203,61 @@ export default {
   min-height: 100vh;
   margin: 0;
   overflow: hidden;
+  transform: none !important;
+  zoom: 1 !important;
+  z-index: 2000;
+  background: #000;
 }
 
 .sage-root {
   width: 100%;
   height: 100%;
   min-height: 100vh;
+  overflow: hidden;
+  transform: none !important;
+  zoom: 1 !important;
+}
+
+.sage-root > * {
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+}
+
+html.sage-fullscreen-route,
+body.sage-fullscreen-route {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  transform: none !important;
+  zoom: 1 !important;
+}
+
+body.sage-fullscreen-route .main-content,
+body.sage-fullscreen-route .main-content > .content-area,
+body.sage-fullscreen-route .main-content > .content-area > .panel-body,
+body.sage-fullscreen-route .main-content > .content-area > .panel-body > .panel,
+body.sage-fullscreen-route .main-content > .content-area > .panel-body > .panel > .row,
+body.sage-fullscreen-route .main-content > .content-area > .panel-body > .panel > .row > .col-12,
+body.sage-fullscreen-route #app,
+body.sage-fullscreen-route #app > div {
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  transform: none !important;
+  zoom: 1 !important;
+}
+
+body.sage-fullscreen-route .dashboard-footer,
+body.sage-fullscreen-route footer,
+body.sage-fullscreen-route .btn-to-top {
+  display: none !important;
 }
 
 .sage-startup-overlay {

@@ -24,62 +24,24 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import BABYLON from '@bjs';
 import { gameController } from '../../../viewer/controllers/GameController';
-import { getEQDir, getEQFile, getFiles } from 'sage-core/util/fileHandler';
 import { useMainContext } from '@/components/main/context';
 import { useAlertContext } from '@/context/alerts';
+import {
+  loadDoorModelCatalog,
+  loadDoorsForZone,
+  degreesToEqHeading,
+  stripDoorEditorFields,
+  toDoorPlacement,
+  toDoorPayload,
+} from '../door-loader';
 
 const { Tools } = BABYLON;
 function getRandomNumber(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-const zb = gameController.ZoneBuilderController;
-
-const toDoorPlacement = (door) => ({
-  ...door,
-  rotateX: 0,
-  rotateY: door.heading ?? 0,
-  rotateZ: 0,
-  scale  : (door.size ?? 100) / 100,
-  x      : door.pos_y ?? 0,
-  y      : door.pos_z ?? 0,
-  z      : door.pos_x ?? 0,
-});
-
-const toDoorPayload = (doorEntry, zone, mesh = null) => {
-  const position = mesh?.position;
-  const rotation = mesh?.rotation;
-  const scaling = mesh?.scaling;
-
-  return {
-    ...doorEntry,
-    heading: doorEntry.rotateY ?? Tools.ToDegrees(rotation?.y ?? 0),
-    name   : doorEntry.name,
-    pos_x  : Math.round(position?.z ?? doorEntry.z ?? doorEntry.pos_x ?? 0),
-    pos_y  : Math.round(position?.x ?? doorEntry.x ?? doorEntry.pos_y ?? 0),
-    pos_z  : Math.round(position?.y ?? doorEntry.y ?? doorEntry.pos_z ?? 0),
-    size   : Math.max(
-      1,
-      Math.round(((doorEntry.scale ?? scaling?.y) ?? 1) * 100)
-    ),
-    version: zone?.version ?? doorEntry.version ?? 0,
-    zone   : zone?.short_name ?? doorEntry.zone,
-  };
-};
-
-const stripDoorEditorFields = (doorEntry) => {
-  const payload = { ...doorEntry };
-  delete payload.rotateX;
-  delete payload.rotateY;
-  delete payload.rotateZ;
-  delete payload.scale;
-  delete payload.x;
-  delete payload.y;
-  delete payload.z;
-  delete payload.dataContainerReference;
-  delete payload.dataReference;
-  return payload;
-};
+const getDoorController = () =>
+  window.gameController?.ZoneController ?? gameController.ZoneController;
 
 export const DoorsDrawer = ({ selectedObject }) => {
   const { openAlert } = useAlertContext();
@@ -92,9 +54,15 @@ export const DoorsDrawer = ({ selectedObject }) => {
   const [, forceRender] = useState({});
   const [objectMap, setObjectMap] = useState({});
   const [availableModels, setAvailableModels] = useState([]);
+  const [availableModelsLoaded, setAvailableModelsLoaded] = useState(false);
   const [selectedMesh, setSelectedMesh] = useState(selectedObject);
   const editing = useRef(false);
   const doorsRef = useRef([]);
+  const canTransformDoors = typeof getDoorController()?.editMesh === 'function';
+  const availableModelSet = useMemo(
+    () => new Set(availableModels.map((model) => model.toLowerCase())),
+    [availableModels]
+  );
 
   const createDoorApi = useCallback(() => {
     if (!Spire) {
@@ -109,44 +77,20 @@ export const DoorsDrawer = ({ selectedObject }) => {
       return [];
     }
 
-    const doorsApi = createDoorApi();
-    const queryBuilder = new Spire.SpireQueryBuilder();
-    queryBuilder.where('zone', '=', selectedZone.short_name);
-    queryBuilder.where('version', '=', selectedZone.version ?? 0);
-    queryBuilder.orderBy(['doorid']);
+    const { doors } = await loadDoorsForZone({
+      Spire,
+      selectedZone,
+      availableModelSet: availableModelsLoaded ? availableModelSet : null,
+    });
+    doorsRef.current = doors;
 
-    const { data: doors } = await doorsApi.listDoors(queryBuilder.get());
-    const normalizedDoors = Array.isArray(doors) ? doors : [];
-    doorsRef.current = normalizedDoors;
-
-    const { doorNode, instantiateObjects } = window.gameController.ZoneController;
-    if (!doorNode) {
-      return normalizedDoors;
-    }
-    doorNode.getChildMeshes().forEach((m) => m.dispose());
-
-    const doorMap = normalizedDoors.reduce((acc, door) => {
-      if (!acc[door.name]) {
-        acc[door.name] = [];
-      }
-      acc[door.name].push(toDoorPlacement(door));
-      return acc;
-    }, {});
-
-    for (const [modelName, placements] of Object.entries(doorMap)) {
-      for (const mesh of await instantiateObjects.apply(
-        window.gameController.ZoneController,
-        [modelName, placements]
-      )) {
-        if (!mesh) {
-          continue;
-        }
-        mesh.parent = doorNode;
-      }
-    }
-
-    return normalizedDoors;
-  }, [Spire, selectedZone, createDoorApi]);
+    return doors;
+  }, [
+    Spire,
+    selectedZone,
+    availableModelSet,
+    availableModelsLoaded,
+  ]);
 
   const persistDoor = useCallback(
     async (mesh = selectedMesh) => {
@@ -168,9 +112,13 @@ export const DoorsDrawer = ({ selectedObject }) => {
   );
 
   const editMesh = useCallback(() => {
+    const controller = getDoorController();
+    if (typeof controller?.editMesh !== 'function' || !selectedMesh) {
+      return;
+    }
     editing.current = true;
 
-    zb.editMesh(selectedMesh, (commit) => {
+    controller.editMesh(selectedMesh, (commit) => {
       editing.current = false;
       if (!commit) {
         return;
@@ -233,12 +181,15 @@ export const DoorsDrawer = ({ selectedObject }) => {
       if (editing.current) {
         return;
       }
-      if (mesh.parent === zb.objectContainer) {
+      const controller = getDoorController();
+      const objectContainer = controller?.doorNode ?? controller?.objectContainer;
+      if (objectContainer && mesh?.parent === objectContainer) {
         setSelectedMesh(mesh);
       }
     };
 
-    zb.addClickCallback(clickCallback);
+    const controller = getDoorController();
+    controller?.addClickCallback?.(clickCallback);
     const keydown = (e) => {
       if (e.key.toLowerCase() === 'r') {
         editMesh();
@@ -251,8 +202,8 @@ export const DoorsDrawer = ({ selectedObject }) => {
     document.addEventListener('keydown', keydown);
     return () => {
       document.removeEventListener('keydown', keydown);
-      zb.removeClickCallback(clickCallback);
-      zb.unassignGlow(selectedMesh);
+      controller?.removeClickCallback?.(clickCallback);
+      controller?.unassignGlow?.(selectedMesh);
     };
   }, [editMesh, selectedMesh, deleteMesh]);
 
@@ -276,34 +227,22 @@ export const DoorsDrawer = ({ selectedObject }) => {
 
     return () => {
       current = false;
-      const { doorNode } = window.gameController.ZoneController;
-      doorNode?.getChildMeshes().forEach((m) => m.dispose());
     };
   }, [Spire, selectedZone?.short_name, selectedZone?.version, openAlert, loadDoors]);
 
   useEffect(() => {
-    zb.assignGlow(selectedMesh);
+    const controller = getDoorController();
+    controller?.assignGlow?.(selectedMesh);
 
-    return () => zb.unassignGlow(selectedMesh);
+    return () => controller?.unassignGlow?.(selectedMesh);
   }, [selectedMesh]);
 
   useEffect(() => {
     (async () => {
-      const objectDir = await getEQDir('objects');
-      if (objectDir) {
-        const objectPaths = await getEQFile('data', 'objectPaths.json', 'json');
-        setObjectMap(objectPaths || {});
-        const modelNames = await getFiles(
-          objectDir,
-          (name) => name.toLowerCase().endsWith('.glb'),
-          true
-        );
-        setAvailableModels(
-          modelNames
-            .map((name) => name.replace(/\.glb$/i, ''))
-            .sort((a, b) => a.localeCompare(b))
-        );
-      }
+      const { objectMap, availableModels } = await loadDoorModelCatalog();
+      setObjectMap(objectMap || {});
+      setAvailableModels(availableModels);
+      setAvailableModelsLoaded(true);
     })();
   }, []);
 
@@ -311,60 +250,70 @@ export const DoorsDrawer = ({ selectedObject }) => {
     if (!selectedModel) {
       return;
     }
-    zb.pickRaycastForLoc({
+    const commitDoor = async (loc, mesh = null) => {
+      if (!loc) {
+        return;
+      }
+      const { x, y, z } = loc;
+      const rotationY = doRandom
+        ? getRandomNumber(rotateClamp[0], rotateClamp[1])
+        : Tools.ToDegrees(mesh?.rotation?.y ?? 0);
+      const scale = doRandom
+        ? getRandomNumber(scaleClamp[0], scaleClamp[1])
+        : mesh?.scaling?.y ?? 1;
+      const templateDoor = doorsRef.current[0] || {};
+      const nextDoorId =
+        Math.max(0, ...doorsRef.current.map((door) => door.doorid ?? 0)) + 1;
+      const draftDoor = toDoorPlacement({
+        ...templateDoor,
+        id     : undefined,
+        doorid : nextDoorId,
+        heading: degreesToEqHeading(rotationY),
+        name   : selectedModel,
+        pos_x  : Math.round(z),
+        pos_y  : Math.round(x),
+        pos_z  : Math.round(y),
+        size   : Math.max(1, Math.round(scale * 100)),
+        version: selectedZone?.version ?? 0,
+        zone   : selectedZone?.short_name,
+      });
+
+      const payload = stripDoorEditorFields(
+        toDoorPayload(draftDoor, selectedZone)
+      );
+
+      try {
+        const response = await createDoorApi().createDoor({ door: payload });
+        const createdDoor = Array.isArray(response?.data)
+          ? response.data[0]
+          : response?.data;
+        await loadDoors();
+        openAlert(`Created ${createdDoor?.name ?? selectedModel}`);
+      } catch (e) {
+        console.warn('Error creating door', e);
+        openAlert(`Error creating ${selectedModel}`, 'warning');
+      }
+    };
+
+    const controller = getDoorController();
+    if (typeof controller?.pickRaycastForLoc !== 'function') {
+      return;
+    }
+    if (typeof controller.editMesh === 'function') {
+      controller.pickRaycastForLoc({
       /**
        *
        * @param {{x: number, y: number, z: number} | null} loc
        * @param {import('@babylonjs/core/Meshes/mesh').Mesh} mesh
        * @returns
        */
-      async commitCallback(loc, mesh) {
-        if (!loc) {
-          return;
-        }
-        const { x, y, z } = loc;
-        const rotationY = doRandom
-          ? getRandomNumber(rotateClamp[0], rotateClamp[1])
-          : Tools.ToDegrees(mesh.rotation.y);
-        const scale = doRandom
-          ? getRandomNumber(scaleClamp[0], scaleClamp[1])
-          : mesh.scaling.y;
-        const templateDoor = doorsRef.current[0] || {};
-        const nextDoorId =
-          Math.max(0, ...doorsRef.current.map((door) => door.doorid ?? 0)) + 1;
-        const draftDoor = toDoorPlacement({
-          ...templateDoor,
-          id     : undefined,
-          doorid : nextDoorId,
-          heading: rotationY,
-          name   : selectedModel,
-          pos_x  : Math.round(z),
-          pos_y  : Math.round(x),
-          pos_z  : Math.round(y),
-          size   : Math.max(1, Math.round(scale * 100)),
-          version: selectedZone?.version ?? 0,
-          zone   : selectedZone?.short_name,
-        });
-
-        const payload = stripDoorEditorFields(
-          toDoorPayload(draftDoor, selectedZone)
-        );
-
-        try {
-          const response = await createDoorApi().createDoor({ door: payload });
-          const createdDoor = Array.isArray(response?.data)
-            ? response.data[0]
-            : response?.data;
-          await loadDoors();
-          openAlert(`Created ${createdDoor?.name ?? selectedModel}`);
-        } catch (e) {
-          console.warn('Error creating door', e);
-          openAlert(`Error creating ${selectedModel}`, 'warning');
-        }
-      },
+      commitCallback: commitDoor,
       modelName: selectedModel,
       extraHtml: '<p>Left Mouse: Rotate and [Shift] Scale</p>',
-    });
+      });
+      return;
+    }
+    controller.pickRaycastForLoc(commitDoor);
   }, [
     createDoorApi,
     doRandom,
@@ -416,7 +365,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
               fullWidth
               variant={'outlined'}
               sx={{ margin: '5px auto' }}
-              disabled={!selectedMesh}
+              disabled={!selectedMesh || !canTransformDoors}
               onClick={editMesh}
             >
               <Typography

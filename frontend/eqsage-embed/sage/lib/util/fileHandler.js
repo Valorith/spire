@@ -113,6 +113,98 @@ export async function deleteEqFileOrFolder(directory, name) {
 
 let cachedDirHandle = null;
 const handles = {};
+const previewReadCache = new Map();
+let previewReadCacheBytes = 0;
+const MAX_PREVIEW_READ_CACHE_BYTES = 32 * 1024 * 1024;
+const MAX_PREVIEW_READ_CACHE_ENTRY_BYTES = 4 * 1024 * 1024;
+
+const getCacheKey = (directory, name) => `${directory}/${name}`;
+
+const shouldCacheReads = () =>
+  typeof window !== 'undefined' && !!window.__spireSagePreview;
+
+const getByteLength = (contents) => {
+  if (contents instanceof ArrayBuffer) {
+    return contents.byteLength;
+  }
+  if (ArrayBuffer.isView(contents)) {
+    return contents.byteLength;
+  }
+  return 0;
+};
+
+const shouldCacheRead = (name, contents) => {
+  const byteLength = getByteLength(contents);
+  return (
+    shouldCacheReads() &&
+    contents instanceof ArrayBuffer &&
+    byteLength > 0 &&
+    byteLength <= MAX_PREVIEW_READ_CACHE_ENTRY_BYTES &&
+    !/\.glb$/i.test(name)
+  );
+};
+
+const deleteCachedRead = (key) => {
+  const existing = previewReadCache.get(key);
+  if (existing) {
+    previewReadCacheBytes -= getByteLength(existing);
+    previewReadCache.delete(key);
+  }
+};
+
+const trimPreviewReadCache = () => {
+  while (
+    previewReadCacheBytes > MAX_PREVIEW_READ_CACHE_BYTES &&
+    previewReadCache.size > 0
+  ) {
+    const oldestKey = previewReadCache.keys().next().value;
+    deleteCachedRead(oldestKey);
+  }
+};
+
+const cloneArrayBuffer = (buffer) => {
+  if (buffer instanceof ArrayBuffer) {
+    return buffer.slice(0);
+  }
+  if (ArrayBuffer.isView(buffer)) {
+    return buffer.buffer.slice(
+      buffer.byteOffset,
+      buffer.byteOffset + buffer.byteLength
+    );
+  }
+  if (typeof buffer === 'string') {
+    return new TextEncoder().encode(buffer).buffer;
+  }
+  return buffer;
+};
+
+const cacheRead = (directory, name, contents) => {
+  const key = getCacheKey(directory, name);
+  deleteCachedRead(key);
+  if (shouldCacheRead(name, contents)) {
+    previewReadCache.set(key, contents);
+    previewReadCacheBytes += contents.byteLength;
+    trimPreviewReadCache();
+  }
+};
+
+const getCachedRead = (directory, name) => {
+  if (!shouldCacheReads()) {
+    return null;
+  }
+  const key = getCacheKey(directory, name);
+  const contents = previewReadCache.get(key) ?? null;
+  if (contents) {
+    previewReadCache.delete(key);
+    previewReadCache.set(key, contents);
+  }
+  return contents;
+};
+
+export const clearPreviewReadCache = () => {
+  previewReadCache.clear();
+  previewReadCacheBytes = 0;
+};
 
 export const getEQSageDir = async () => {
   const rootHandle = getActiveRootHandle();
@@ -189,6 +281,9 @@ export const writeEQFile = async (directory, name, buffer, subdir = undefined) =
     await writable.write(buffer);
     await writable.getWriter().releaseLock();
     await writable.close();
+    if (!subdir) {
+      cacheRead(directory, name, cloneArrayBuffer(buffer));
+    }
     return true;
   }
   return false;
@@ -217,9 +312,14 @@ export const writeFile = async (dirHandle, name, data) => {
  * @returns {Promise<ArrayBuffer> | Promise<object>}
  */
 export const getEQFile = async (directory, name, type = 'arrayBuffer') => {
-  const dir = directory === 'root' ? getEQRootDir() : await getEQDir(directory);
-  const fh = await dir.getFileHandle(name).catch(() => undefined);
-  const contents = await fh?.getFile().then((f) => f.arrayBuffer());
+  let contents = getCachedRead(directory, name);
+  const fromCache = !!contents;
+  if (!fromCache) {
+    const dir = directory === 'root' ? getEQRootDir() : await getEQDir(directory);
+    const fh = await dir.getFileHandle(name).catch(() => undefined);
+    contents = await fh?.getFile().then((f) => f.arrayBuffer());
+    cacheRead(directory, name, contents);
+  }
   if (!contents) {
     return false;
   }
@@ -228,7 +328,7 @@ export const getEQFile = async (directory, name, type = 'arrayBuffer') => {
     case 'text':
       return new TextDecoder('utf-8').decode(new Uint8Array(contents));
     case 'arrayBuffer':
-      return contents;
+      return fromCache ? cloneArrayBuffer(contents) : contents;
     case 'json': {
       try {
         return contents

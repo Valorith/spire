@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import React, { Suspense, useEffect, useMemo } from 'react';
 
 import { Box, Button, Divider, Stack, Typography } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -6,30 +6,32 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HomeIcon from '@mui/icons-material/Home';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import BugReportIcon from '@mui/icons-material/BugReport';
 
 import { ZoneIcon } from '../common/icons/zone';
 import { SpawnIcon } from '../common/icons/spawn';
 import { DoorIcon } from '../common/icons/door';
 import { ItemIcon } from '../common/icons/item';
-import { RegionIcon } from '../common/icons/region';
 import { useOverlayContext } from './provider';
 import { OverlayDialogs } from './dialogs/dialogs';
 import { useSettingsHook } from './hooks';
-import SpawnNavBar from './nav-bar/spawn-nav/spawn-nav';
-import { Compass } from '../common/compass/component';
 import { NavLeft } from '../common/nav/nav-left';
 import { DrawerButton } from '../common/nav/drawer-button';
 import { NavHeader } from '../common/nav/nav-header';
 import { useMainContext } from '../main/context';
-import { getRootFiles } from 'sage-core/util/fileHandler';
-import { S3DDecoder } from 'sage-core/s3d/s3d-decoder';
-import { EQGDecoder } from 'sage-core/eqg/eqg-decoder';
 import { assetUrl } from '../../embed-config';
 
 import './overlay.scss';
-import Drawer from './drawer';
 import { debugSageLog, markStage } from '../../debug-stage';
+
+const Compass = React.lazy(() =>
+  import('../common/compass/component').then((module) => ({ default: module.Compass }))
+);
+const Drawer = React.lazy(() =>
+  import('./drawer').then((module) => ({ default: module.Drawer }))
+);
+const SpawnNavBar = React.lazy(() =>
+  import('./nav-bar/spawn-nav/spawn-nav').then((module) => ({ default: module.default }))
+);
 
 export const SpireOverlay = ({ inZone }) => {
   markStage('spire-overlay:render', { inZone });
@@ -72,16 +74,18 @@ export const SpireOverlay = ({ inZone }) => {
         width="155"
         height="155"
         style={{
-          left    : '1vw',
-          top     : '-20px',
-          position: 'fixed',
-          zIndex  : 10000,
+          left         : '1vw',
+          top          : '-20px',
+          position     : 'fixed',
+          zIndex       : 10000,
+          pointerEvents: 'none',
         }}
       />
       <Box 
         className="spire-left-nav"
         sx={{
-          width: '100vw'
+          width        : '100vw',
+          pointerEvents: 'none',
         }}>
         {/** Compass */}
         {inZone && <Compass />}
@@ -172,7 +176,8 @@ export const SpireOverlay = ({ inZone }) => {
       <Box
         className="spire-left-nav"
         sx={{
-          height: '100vh',
+          height       : '100vh',
+          pointerEvents: 'none',
         }}
       >
 
@@ -224,73 +229,13 @@ export const SpireOverlay = ({ inZone }) => {
             toggleDrawer={toggleDialog}
           />
 
-          {/* <DrawerButton
-            drawerState={dialogState}
-            drawer="regions"
-            disabled={!inZone}
-            text={'Regions'}
-            Icon={RegionIcon}
-            toggleDrawer={toggleDialog}
-          /> */}
-          {import.meta.env.VITE_LOCAL_DEV === 'true' && false ? (
-            <DrawerButton
-              drawerState={dialogState}
-              drawer="debug"
-              text={'Debug'}
-              Icon={BugReportIcon}
-              toggleDrawer={async () => {
-                const files = await getRootFiles((fileName) => {
-                  return ['_obj.s3d', '_chr.s3d', '_obj2.s3d', '.eqg'].some(
-                    (ending) => fileName.endsWith(ending)
-                  );
-                });
-                const modelMap = {};
-                for (const file of files) {
-                  try {
-                    if (file.name.endsWith('.s3d')) {
-                      const s3dDecoder = new S3DDecoder();
-                      await s3dDecoder.processS3D(await file.getFile(), true);
-                      console.log('s3d', s3dDecoder);
-                      for (const wld of s3dDecoder.wldFiles) {
-                        for (const obj of wld.objects ?? []) {
-                          const name = obj.name.split('_')[0];
-                          if (!modelMap[name]) {
-                            modelMap[name] = [];
-                          }
-                          modelMap[name].push(file.name);
-                        }
-                      }
-                      s3dDecoder.pfsArchive = null;
-                      s3dDecoder.wldFiles = [];
-                    } else {
-                      const eqg = new EQGDecoder();
-                      await eqg.processEQG(await file.getFile(), true);
-                      for (let model of Object.keys(eqg.models)) {
-                        if (!model.endsWith('.mod')) {
-                          continue;
-                        }
-                        model = model.replace('.mod', '');
-                        if (!modelMap[model]) {
-                          modelMap[model] = [];
-                        }
-                        modelMap[model].push(file.name);
-                      }
-                      eqg.pfsArchive = null;
-                      eqg.files = {};
-                    }
-                  } catch (e) {
-                    console.log('Interesting error', e);
-                  }
-                }
-                console.log('Model map', modelMap);
-              }}
-            />
-          ) : null}
         </NavLeft>
       </Box>
-      <OverlayDialogs />
-      <Drawer />
-      <SpawnNavBar />
+      <Suspense fallback={null}>
+        <OverlayDialogs />
+        <Drawer />
+        <SpawnNavBar />
+      </Suspense>
     </>
   );
 };

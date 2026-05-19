@@ -9,17 +9,47 @@ export const PermissionStatusTypes = {
   NeedRefresh   : 2,
 };
 
-const apiSupported =
-  typeof window.FileSystemHandle?.prototype?.queryPermission === 'function';
+const hasElectronFileBridge = () =>
+  !!window.electronFS &&
+  typeof window.electronAPI?.selectDirectory === 'function';
 
-let get, set, del;
-if (window.electronAPI) {
-  get = name => localStorage.getItem(name);
-  set = (name, val) => localStorage.setItem(name, val);
-  del = name => localStorage.removeItem(name);
-} else {
-  ({ get, set, del } = keyval);
-}
+const hasNativeFileSystemApi = () =>
+  typeof window.showDirectoryPicker === 'function' &&
+  typeof window.FileSystemHandle?.prototype?.queryPermission === 'function' &&
+  typeof window.FileSystemHandle?.prototype?.requestPermission === 'function';
+
+const hasUsableFileAccess = () =>
+  hasElectronFileBridge() || hasNativeFileSystemApi();
+
+const logPermissionStep = (message, extra) => {
+  if (extra !== undefined) {
+    console.log(`[SagePermissions] ${message}`, extra);
+    return;
+  }
+
+  console.log(`[SagePermissions] ${message}`);
+};
+
+const getStoredDirectory = async (name) =>
+  hasElectronFileBridge() ? localStorage.getItem(name) : keyval.get(name);
+
+const setStoredDirectory = async (name, value) => {
+  if (hasElectronFileBridge()) {
+    localStorage.setItem(name, value);
+    return;
+  }
+
+  await keyval.set(name, value);
+};
+
+const deleteStoredDirectory = async (name) => {
+  if (hasElectronFileBridge()) {
+    localStorage.removeItem(name);
+    return;
+  }
+
+  await keyval.del(name);
+};
 
 /**
  * Custom React hook to manage file system permissions and handle directory selection.
@@ -51,31 +81,43 @@ export const usePermissions = (name = 'eqdir') => {
     async (h) => {
       const handle = fsHandle || h;
       if (!handle) {
-        return;
+        return false;
       }
-      if (
-        (await handle.requestPermission({
-          mode: 'readwrite',
-        })) === 'granted'
-      ) {
+
+      const permission = await handle.requestPermission({
+        mode: 'readwrite',
+      }).catch(() => 'denied');
+
+      if (permission === 'granted') {
         setPermissionStatus(PermissionStatusTypes.Ready);
+        return true;
       }
+
+      setPermissionStatus(PermissionStatusTypes.NeedRefresh);
+      return false;
     },
     [fsHandle]
   );
 
   useEffect(() => {
-    if (!apiSupported) {
+    if (!hasUsableFileAccess()) {
       return;
     }
     (async () => {
-      let persistedDir = await get(name);
+      let persistedDir = await getStoredDirectory(name);
       if (!persistedDir) {
         setPermissionStatus(PermissionStatusTypes.NeedEQDir);
         return;
       }
-      if (window.electronAPI) {
+      if (hasElectronFileBridge()) {
         persistedDir = createDirectoryHandle(persistedDir);
+      } else if (
+        persistedDir.kind !== 'directory' ||
+        typeof persistedDir.queryPermission !== 'function'
+      ) {
+        await deleteStoredDirectory(name);
+        setPermissionStatus(PermissionStatusTypes.NeedEQDir);
+        return;
       }
       setFsHandle(persistedDir);
       setPermissionStatus(
@@ -91,8 +133,8 @@ export const usePermissions = (name = 'eqdir') => {
   const onDrop = useCallback(
     async (e) => {
       if (e?.kind === 'directory') {
-        await del(name);
-        await set(name, e);
+        await deleteStoredDirectory(name);
+        await setStoredDirectory(name, e);
 
         setFsHandle(e);
         setPermissionStatus(PermissionStatusTypes.NeedRefresh);
@@ -100,16 +142,16 @@ export const usePermissions = (name = 'eqdir') => {
       }
       e.preventDefault();
       e.stopPropagation();
-      if (!apiSupported) {
+      if (!hasUsableFileAccess()) {
         return;
       }
       if (e.dataTransfer.items?.length) {
         const first = e.dataTransfer.items[0];
-        if (window.electronAPI) {
+        if (hasElectronFileBridge()) {
           const path = window.electronAPI.getPath(e.dataTransfer.files[0]);
           setFsHandle(createDirectoryHandle(path));
           setPermissionStatus(PermissionStatusTypes.Ready);
-          await set(name, path);
+          await setStoredDirectory(name, path);
   
           return;
         }
@@ -122,8 +164,8 @@ export const usePermissions = (name = 'eqdir') => {
 
               if (handle.kind === 'file') {
               } else if (handle.kind === 'directory') {
-                await del(name);
-                await set(name, handle);
+                await deleteStoredDirectory(name);
+                await setStoredDirectory(name, handle);
                 setFsHandle(handle);
                 setPermissionStatus(PermissionStatusTypes.NeedRefresh);
               }
@@ -140,33 +182,60 @@ export const usePermissions = (name = 'eqdir') => {
   );
 
   const unlink = useCallback(async () => {
-    await del(name);
+    await deleteStoredDirectory(name);
     setFsHandle(null);
     setPermissionStatus(PermissionStatusTypes.NeedEQDir);
   }, [name]);
 
   const onFolderSelected = useCallback(async () => {
-    if (window.electronAPI) {
+    logPermissionStep('folder selection requested', {
+      electronBridge: hasElectronFileBridge(),
+      nativeApi     : hasNativeFileSystemApi(),
+    });
+
+    if (hasElectronFileBridge()) {
       const selectedPath = await window.electronAPI.selectDirectory();
-      set(name, selectedPath);
+      if (!selectedPath) {
+        logPermissionStep('electron directory selection cancelled');
+        return;
+      }
       const handle = createDirectoryHandle(selectedPath);
       setFsHandle(handle);
       setPermissionStatus(PermissionStatusTypes.Ready);
+      await setStoredDirectory(name, selectedPath).catch((error) => {
+        console.warn('[SagePermissions] failed to persist electron directory', error);
+      });
+      logPermissionStep('electron directory selection ready', selectedPath);
       return;
     }
 
-    if (!apiSupported) {
+    if (!hasNativeFileSystemApi()) {
       console.warn('File System Access API is not supported in this browser.');
       return;
     }
     try {
-      const handle = await window.showDirectoryPicker();
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
       if (handle.kind === 'directory') {
-        await del(name);
-        await set(name, handle);
         setFsHandle(handle);
-        checkHandlePermissions(handle);
         setPermissionStatus(PermissionStatusTypes.NeedRefresh);
+        logPermissionStep('native directory handle selected', {
+          name: handle.name,
+          kind: handle.kind,
+        });
+        await deleteStoredDirectory(name).catch((error) => {
+          console.warn('[SagePermissions] failed to clear persisted directory', error);
+        });
+        await setStoredDirectory(name, handle).catch((error) => {
+          console.warn('[SagePermissions] failed to persist native directory handle', error);
+        });
+        const granted = await checkHandlePermissions(handle);
+        if (!granted) {
+          setPermissionStatus(PermissionStatusTypes.NeedRefresh);
+        }
+        logPermissionStep('native directory permission result', {
+          name: handle.name,
+          granted,
+        });
       } else {
         console.warn('Selected handle is not a directory.');
       }
@@ -179,15 +248,15 @@ export const usePermissions = (name = 'eqdir') => {
   }, [name, checkHandlePermissions]);
 
   const informFsHandle = useCallback(async handle => {
-    await set(name, handle);
+    await setStoredDirectory(name, handle);
     setFsHandle(handle);
-    checkHandlePermissions(handle);
+    await checkHandlePermissions(handle);
   }, [checkHandlePermissions, name]);
   
   return [
-    permissionStatus === PermissionStatusTypes.NeedRefresh && window.electronAPI
+    permissionStatus === PermissionStatusTypes.NeedRefresh && hasElectronFileBridge()
       ? PermissionStatusTypes.Ready
-      : apiSupported
+      : hasUsableFileAccess()
         ? permissionStatus
         : PermissionStatusTypes.ApiUnavailable,
     onDrop,

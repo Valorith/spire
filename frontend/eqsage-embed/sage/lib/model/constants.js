@@ -748,3 +748,4 @@ export const modelDefinitions = {
 
 };
 export const VERSION = 2.05;
+export const ZONE_VERSION = 2.08;

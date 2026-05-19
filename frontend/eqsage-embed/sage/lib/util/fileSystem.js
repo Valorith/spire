@@ -56,13 +56,16 @@ if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScop
       writeFile: async (filePath, data) => await fs.writeFile(filePath, data),
     };
   }
-} else if (window.electronAPI) { // We're in electron but not in worker scope
+} else if (window.electronAPI && window.electronFS) { // We're in Sage electron but not in worker scope
   fsInterface = window.electronFS;
-  window.electronAPI.onMessage((_event, message) => {
+  window.electronAPI.onMessage?.((_event, message) => {
     console.log('Electron error', message);
     window.gameController.openAlert(`Got error from Electron: ${message}.`, 'warning');
   });
   
+  const isSpirePreview =
+    typeof window !== 'undefined' && window.__spireSageDisableHostZoom;
+
   // Debounce helper function
   function debounce(fn, delay) {
     let timer;
@@ -113,13 +116,15 @@ if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScop
     }, 300);
   }
 
-  // Create a debounced version to avoid rapid firing
-  const debouncedAdjustZoom = debounce(adjustZoomByAspectRatio, 50);
+  if (!isSpirePreview) {
+    // Create a debounced version to avoid rapid firing
+    const debouncedAdjustZoom = debounce(adjustZoomByAspectRatio, 50);
 
-  // Initial call on load
-  adjustZoomByAspectRatio();
-  // Listen for window resize events using the debounced function
-  window.addEventListener('resize', debouncedAdjustZoom);
+    // Initial call on load
+    adjustZoomByAspectRatio();
+    // Listen for window resize events using the debounced function
+    window.addEventListener('resize', debouncedAdjustZoom);
+  }
 }
 
 class SageFileSystemFileHandle {
@@ -176,8 +181,11 @@ export class SageFileSystemDirectoryHandle {
     return this.#path;
   }
   async queryPermission() {
-    console.log('Query my perms');
-    return true;
+    return 'granted';
+  }
+
+  async requestPermission() {
+    return 'granted';
   }
 
   async *values() {
@@ -194,8 +202,19 @@ export class SageFileSystemDirectoryHandle {
     }
   }
 
-  async getFileHandle(name) {
-    return new SageFileSystemFileHandle(`${this.#path}/${name}`);
+  async getFileHandle(name, options = {}) {
+    const fullPath = `${this.#path}/${name}`;
+    if (!options?.create) {
+      const entries = await fsInterface.readDir(this.#path).catch(() => []);
+      const fileEntry = entries.find((entry) => entry.name === name && entry.isFile);
+      if (!fileEntry) {
+        throw new DOMException(
+          `File not found: ${fullPath}`,
+          'NotFoundError'
+        );
+      }
+    }
+    return new SageFileSystemFileHandle(fullPath);
   }
 
   async removeEntry(path) {

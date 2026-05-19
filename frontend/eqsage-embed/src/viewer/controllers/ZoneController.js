@@ -5,6 +5,7 @@ import { getEQFile, writeEQFile } from 'sage-core/util/fileHandler';
 import { GlobalStore } from '../../state';
 import { assetUrl } from '../../embed-config';
 import { createGltfTransformIo, loadGltfTransformModules } from '../../util/gltf-transform';
+import { clampFlySpeed } from '../common/cameraSettings';
 
 const {
   Color3,
@@ -15,6 +16,7 @@ const {
   Mesh,
   StandardMaterial,
   PointLight,
+  HemisphericLight,
   PointerEventTypes,
   SceneLoader,
   Tools,
@@ -29,6 +31,142 @@ const {
   GLTF2Export,
   STLExport,
 } = BABYLON;
+
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
+const scheduleZoneLoadCallback = (callback) => {
+  setTimeout(() => {
+    Promise.resolve()
+      .then(() => callback())
+      .catch((error) => {
+        console.warn('Error running zone load callback', error);
+      });
+  }, 0);
+};
+const logPreviewZoneLoad = (...args) => {
+  if (window.__spireSagePreview) {
+    console.log('[SageZoneLoad]', ...args);
+  }
+};
+
+const hasBoundaryMaterial = (material) => {
+  if (!material) {
+    return false;
+  }
+
+  const materialName = `${material.name ?? ''}`;
+  return (
+    /^m000\d+/i.test(materialName) ||
+    material.metadata?.gltf?.extras?.boundary === true ||
+    material.metadata?.extras?.boundary === true
+  );
+};
+
+const hasPassThroughMaterial = (material) => {
+  if (!material) {
+    return false;
+  }
+
+  return (
+    material.metadata?.gltf?.extras?.passThrough === true ||
+    material.metadata?.extras?.passThrough === true
+  );
+};
+
+const isBoundaryMesh = (mesh) => {
+  if (!mesh) {
+    return false;
+  }
+
+  const meshName = `${mesh.name ?? ''}`;
+  if (/^m000\d+/i.test(meshName) || /-boundary$/i.test(meshName)) {
+    return true;
+  }
+
+  const material = mesh.material;
+  if (hasBoundaryMaterial(material)) {
+    return true;
+  }
+  return material?.subMaterials?.some?.(hasBoundaryMaterial) === true;
+};
+
+const isPassThroughMesh = (mesh) => {
+  if (!mesh) {
+    return false;
+  }
+
+  const meshName = `${mesh.name ?? ''}`;
+  if (/-passthrough(?:$|[._-])/i.test(meshName)) {
+    return true;
+  }
+
+  const material = mesh.material;
+  if (hasPassThroughMaterial(material)) {
+    return true;
+  }
+  return material?.subMaterials?.some?.(hasPassThroughMaterial) === true;
+};
+
+const isHiddenZoneMesh = (mesh) =>
+  isBoundaryMesh(mesh) || isPassThroughMesh(mesh);
+
+const reframePreviewCamera = (camera, zoneMesh) => {
+  if (!window.__spireSagePreview || !camera || !zoneMesh) {
+    return;
+  }
+
+  try {
+    zoneMesh.computeWorldMatrix?.(true);
+    zoneMesh.refreshBoundingInfo?.(true, true);
+    const boundingBox = zoneMesh.getBoundingInfo?.()?.boundingBox;
+    const center = boundingBox?.centerWorld;
+    const minimum = boundingBox?.minimumWorld;
+    const maximum = boundingBox?.maximumWorld;
+    if (!center || !minimum || !maximum) {
+      return;
+    }
+
+    const span = maximum.subtract(minimum);
+    const maxDimension = Math.max(span.x, span.y, span.z, 1);
+    const diagonal = Math.max(span.length(), maxDimension);
+    const distance = Math.max(diagonal * 0.42, maxDimension * 0.7, 125);
+    const verticalOffset = Math.max(span.y * 1.1, distance * 0.32, 60);
+    camera.position.set(
+      center.x + distance,
+      center.y + verticalOffset,
+      center.z + distance
+    );
+    camera.maxZ = Math.max(camera.maxZ ?? 10000, distance * 4);
+    camera.speed = clampFlySpeed(camera.speed);
+
+    camera.setTarget(center);
+    window.__spireSageCameraFraming = {
+      mode: 'overview',
+      camera: {
+        x: camera.position.x,
+        y: camera.position.y,
+        z: camera.position.z,
+      },
+      target: {
+        x: center.x,
+        y: center.y,
+        z: center.z,
+      },
+      zoneCenter: {
+        x: center.x,
+        y: center.y,
+        z: center.z,
+      },
+      zoneExtents: {
+        x: span.x,
+        y: span.y,
+        z: span.z,
+      },
+    };
+  } catch (error) {
+    console.warn('[SageCamera] failed to reframe preview camera', error);
+  }
+};
+
 class ZoneController extends GameControllerChild {
   /**
    * @type {import('@babylonjs/core/scene').Scene}
@@ -48,6 +186,8 @@ class ZoneController extends GameControllerChild {
   objectCullRange = 2000;
   /** @type {RecastJSPlugin} */
   navigationPlugin = null;
+  pointerObserver = null;
+  renderObserver = null;
 
   loadCallbacks = [];
   clickCallbacks = [];
@@ -64,8 +204,13 @@ class ZoneController extends GameControllerChild {
     this.clickCallbacks = this.clickCallbacks.filter((l) => l !== cb);
   };
 
-  addLoadCallback = (cb) => {
-    this.loadCallbacks.push(cb);
+  addLoadCallback = (cb, options = {}) => {
+    if (!this.loadCallbacks.includes(cb)) {
+      this.loadCallbacks.push(cb);
+    }
+    if (this.zoneLoaded && !options.skipImmediate) {
+      scheduleZoneLoadCallback(cb);
+    }
   };
   removeLoadCallback = (cb) => {
     this.loadCallbacks = this.loadCallbacks.filter((l) => l !== cb);
@@ -73,10 +218,16 @@ class ZoneController extends GameControllerChild {
   dispose() {
     this.SpawnController.dispose();
     if (this.scene) {
-      this.scene.onPointerObservable.remove(this.onClick.bind(this));
-      this.scene.onBeforeRenderObservable.remove(this.renderHook.bind(this));
+      if (this.pointerObserver) {
+        this.scene.onPointerObservable.remove(this.pointerObserver);
+      }
+      if (this.renderObserver) {
+        this.scene.onBeforeRenderObservable.remove(this.renderObserver);
+      }
       this.scene.dispose();
     }
+    this.pointerObserver = null;
+    this.renderObserver = null;
     this.scene = null;
     this.hadStoredScene = false;
     this.zoneLoaded = false;
@@ -175,69 +326,88 @@ class ZoneController extends GameControllerChild {
     this.scene.onPointerDown = this.sceneMouseDown;
     this.scene.onPointerUp = this.sceneMouseUp;
 
-    this.CameraController.createCamera(new Vector3(0, 250, 0));
-    this.CameraController.camera.rotation = new Vector3(1.57, 1.548, 0);
-    const glowLayer = new GlowLayer('glow', this.scene, {
-      blurKernelSize: 10,
-    });
-    this.glowLayer = glowLayer;
-    glowLayer.intensity = 0.7;
-    glowLayer.customEmissiveColorSelector = function (
-      mesh,
-      subMesh,
-      material,
-      result
-    ) {
-      if (mesh?.metadata?.emissiveColor) {
-        result.set(
-          mesh?.metadata?.emissiveColor.r,
-          mesh?.metadata?.emissiveColor.g,
-          mesh?.metadata?.emissiveColor.b,
-          0.5
-        );
-        if (mesh?.metadata?.occludedColor) {
-          if (mesh.isOccluded) {
-            result.set(
-              mesh?.metadata?.occludedColor.r,
-              mesh?.metadata?.occludedColor.g,
-              mesh?.metadata?.occludedColor.b,
-              0.5
-            );
+    const zoneInfo = this.state.zoneInfo ?? {};
+    const safePoint = [zoneInfo.safe_x, zoneInfo.safe_y, zoneInfo.safe_z].map(Number);
+    if (window.__spireSagePreview && safePoint.every((coordinate) => Number.isFinite(coordinate))) {
+      this.CameraController.createCamera();
+    } else {
+      this.CameraController.createCamera(new Vector3(0, 250, 0));
+      this.CameraController.camera.rotation = new Vector3(1.57, 1.548, 0);
+    }
+    if (window.__spireSagePreview) {
+      this.glowLayer = {
+        intensity: 0,
+        addIncludedOnlyMesh() {},
+        removeIncludedOnlyMesh() {},
+      };
+    } else {
+      const glowLayer = new GlowLayer('glow', this.scene, {
+        blurKernelSize: 10,
+      });
+      this.glowLayer = glowLayer;
+      glowLayer.intensity = this.gc.settings?.glow === false ? 0 : 0.7;
+      glowLayer.customEmissiveColorSelector = function (
+        mesh,
+        subMesh,
+        material,
+        result
+      ) {
+        if (mesh?.metadata?.emissiveColor) {
+          result.set(
+            mesh?.metadata?.emissiveColor.r,
+            mesh?.metadata?.emissiveColor.g,
+            mesh?.metadata?.emissiveColor.b,
+            0.5
+          );
+          if (mesh?.metadata?.occludedColor) {
+            if (mesh.isOccluded) {
+              result.set(
+                mesh?.metadata?.occludedColor.r,
+                mesh?.metadata?.occludedColor.g,
+                mesh?.metadata?.occludedColor.b,
+                0.5
+              );
+            }
+          }
+          if (mesh?.metadata?.onlyOccluded) {
+            if (mesh.isOccluded) {
+              result.set(
+                mesh?.metadata?.emissiveColor.r,
+                mesh?.metadata?.emissiveColor.g,
+                mesh?.metadata?.emissiveColor.b,
+                0.5
+              );
+            } else {
+              result.set(
+                mesh?.metadata?.emissiveColor.r,
+                mesh?.metadata?.emissiveColor.g,
+                mesh?.metadata?.emissiveColor.b,
+                0.0
+              );
+            }
           }
         }
-        if (mesh?.metadata?.onlyOccluded) {
-          if (mesh.isOccluded) {
-            result.set(
-              mesh?.metadata?.emissiveColor.r,
-              mesh?.metadata?.emissiveColor.g,
-              mesh?.metadata?.emissiveColor.b,
-              0.5
-            );
-          } else {
-            result.set(
-              mesh?.metadata?.emissiveColor.r,
-              mesh?.metadata?.emissiveColor.g,
-              mesh?.metadata?.emissiveColor.b,
-              0.0
-            );
-          }
-        }
-      }
-    };
+      };
+    }
     this.regionMaterial = new StandardMaterial('region-material', this.scene);
 
     this.regionMaterial.alpha = 0.3;
     this.regionMaterial.diffuseColor = new Color3(0, 127, 65); // Red color
     this.regionMaterial.emissiveColor = new Color4(0, 127, 65, 0.3); // Red color
-    const hdrTexture = CubeTexture.CreateFromPrefilteredData(
-      assetUrl('static/environment.env'),
-      this.scene
-    );
-    this.scene.environmentTexture = hdrTexture;
-    this.scene.environmentIntensity = 1.0;
+    if (!window.__spireSagePreview) {
+      const hdrTexture = CubeTexture.CreateFromPrefilteredData(
+        assetUrl('static/environment.env'),
+        this.scene
+      );
+      this.scene.environmentTexture = hdrTexture;
+      this.scene.environmentIntensity = 1.0;
+    }
 
     // Click events
-    this.scene.onPointerObservable.add(this.onClick.bind(this));
+    if (this.pointerObserver) {
+      this.scene.onPointerObservable.remove(this.pointerObserver);
+    }
+    this.pointerObserver = this.scene.onPointerObservable.add(this.onClick);
 
     // Setups
     this.SpawnController.setupSpawnController();
@@ -249,24 +419,26 @@ class ZoneController extends GameControllerChild {
    *
    * @param {PointerInfo} pointerInfo
    */
-  onClick(pointerInfo) {
+  onClick = (pointerInfo) => {
     switch (pointerInfo.type) {
       case PointerEventTypes.POINTERDOWN:
+        const spawn = pointerInfo.pickInfo.pickedMesh?.metadata?.spawn;
         if (
           pointerInfo.pickInfo.hit &&
-          (pointerInfo.pickInfo.pickedMesh?.metadata?.spawn ?? null) !== null
+          spawn &&
+          typeof spawn === 'object'
         ) {
           this.clickCallbacks.forEach((c) =>
-            c(pointerInfo.pickInfo.pickedMesh?.metadata?.spawn)
+            c(spawn)
           );
         }
         break;
       default:
         break;
     }
-  }
+  };
 
-  renderHook() {
+  renderHook = () => {
     if (window.aabbPerf === undefined) {
       window.aabbPerf = 0;
     }
@@ -274,7 +446,7 @@ class ZoneController extends GameControllerChild {
       window.aabbs = [];
     }
     this.skybox.position = this.CameraController.camera.position;
-  }
+  };
 
   showRegions(value) {
     this.regionsShown = value;
@@ -387,11 +559,11 @@ class ZoneController extends GameControllerChild {
   }
 
   setFlySpeed(value) {
-    this.cameraFlySpeed = value;
+    this.cameraFlySpeed = clampFlySpeed(value);
     if (!this.CameraController?.camera) {
       return;
     }
-    this.CameraController.camera.speed = value;
+    this.CameraController.camera.speed = this.cameraFlySpeed;
   }
 
   setClipPlane(value) {
@@ -490,7 +662,9 @@ class ZoneController extends GameControllerChild {
     return newMergedMesh;
   };
 
-  async loadModel(name) {
+  async loadModel(name, cachedMetadata = null) {
+    logPreviewZoneLoad('load:start', name);
+    this.zoneLoaded = false;
     GlobalStore.actions.setLoading(true);
     GlobalStore.actions.setLoadingTitle(`Loading ${name}`);
     GlobalStore.actions.setLoadingText(`Loading ${name} zone`);
@@ -499,10 +673,17 @@ class ZoneController extends GameControllerChild {
       GlobalStore.actions.setLoading(false);
       return;
     }
-    if (this.cameraFlySpeed !== undefined && this.CameraController?.camera) {
-      this.CameraController.camera.speed = this.cameraFlySpeed;
+    this.zoneName = name;
+    const configuredFlySpeed = Number(
+      this.cameraFlySpeed ?? this.gc.settings?.flySpeed
+    );
+    if (this.CameraController?.camera && Number.isFinite(configuredFlySpeed)) {
+      this.setFlySpeed(configuredFlySpeed);
     }
-    this.scene.onBeforeRenderObservable.add(this.renderHook.bind(this));
+    if (this.renderObserver) {
+      this.scene.onBeforeRenderObservable.remove(this.renderObserver);
+    }
+    this.renderObserver = this.scene.onBeforeRenderObservable.add(this.renderHook);
     // Skybox
     const skybox = MeshBuilder.CreateBox(
       'skyBox',
@@ -513,52 +694,114 @@ class ZoneController extends GameControllerChild {
     const skyboxMaterial = new StandardMaterial('skyBox', this.scene);
     skyboxMaterial.backFaceCulling = false;
 
-    const png_array = [];
-    const map = ['px', 'py', 'pz', 'nx', 'ny', 'nz'];
-    for (let i = 0; i < 6; i++) {
-      png_array.push(assetUrl(`static/skybox_${map[i]}.jpg`));
+    if (window.__spireSagePreview) {
+      skyboxMaterial.diffuseColor = new Color3(0.015, 0.018, 0.025);
+    } else {
+      const png_array = [];
+      const map = ['px', 'py', 'pz', 'nx', 'ny', 'nz'];
+      for (let i = 0; i < 6; i++) {
+        png_array.push(assetUrl(`static/skybox_${map[i]}.jpg`));
+      }
+      skyboxMaterial.reflectionTexture = new CubeTexture(
+        '/',
+        this.scene,
+        [],
+        false,
+        png_array,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        '.jpg'
+      );
+      skyboxMaterial.reflectionTexture.coordinatesMode = Texture.SKYBOX_MODE;
+      skyboxMaterial.diffuseColor = new Color3Gradient(0, 0, 0);
     }
-    skyboxMaterial.reflectionTexture = new CubeTexture(
-      '/',
-      this.scene,
-      [],
-      false,
-      png_array,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      '.jpg'
-    );
-    skyboxMaterial.reflectionTexture.coordinatesMode = Texture.SKYBOX_MODE;
-    skyboxMaterial.diffuseColor = new Color3Gradient(0, 0, 0);
     skyboxMaterial.specularColor = new Color3(0, 0, 0);
     skybox.material = skyboxMaterial;
+    if (window.__spireSagePreview) {
+      const previewLight = new HemisphericLight(
+        'preview-zone-light',
+        new Vector3(0, 1, 0),
+        this.scene
+      );
+      previewLight.intensity = 0.85;
+      previewLight.groundColor = new Color3(0.25, 0.23, 0.2);
+    }
 
-    const zone = await SceneLoader.ImportMeshAsync(
-      '',
-      '/eq/zones/',
-      `${name}.glb`,
-      this.scene,
-      undefined,
-      '.glb'
-    ).catch((e) => {
+    const metadata = cachedMetadata || (await getEQFile('zones', `${name}.json`, 'json'));
+    let zoneRootUrl = '/eq/zones/';
+    let zoneFileName = `${name}.glb`;
+    let zoneObjectUrl = null;
+    if (window.__spireSagePreview) {
+      const zoneBuffer =
+        (await this.gc.loadEQGltfFile?.('zones', `${name}.glb`)) ||
+        (await getEQFile('zones', `${name}.glb`));
+      if (!zoneBuffer) {
+        throw new Error(`Generated zone geometry is missing for ${name}`);
+      }
+      logPreviewZoneLoad('import:buffer', name, {
+        bytes: zoneBuffer.byteLength ?? zoneBuffer.length ?? 0,
+      });
+      zoneObjectUrl = URL.createObjectURL(
+        new Blob([zoneBuffer], { type: 'model/gltf-binary' })
+      );
+      zoneRootUrl = '';
+      zoneFileName = zoneObjectUrl;
+    }
+    let zone = null;
+    try {
+      zone = await SceneLoader.ImportMeshAsync(
+        '',
+        zoneRootUrl,
+        zoneFileName,
+        this.scene,
+        undefined,
+        '.glb'
+      );
+    } catch (e) {
       console.log('Error while loading zone', e);
+      throw e;
+    } finally {
+      if (zoneObjectUrl) {
+        URL.revokeObjectURL(zoneObjectUrl);
+      }
+    }
+    if (!zone?.meshes?.length) {
+      throw new Error(`No zone meshes were loaded for ${name}`);
+    }
+    logPreviewZoneLoad('import:done', name, {
+      meshCount: zone.meshes.length,
+      metadata : !!metadata,
     });
-    console.log('settings', this.gc.settings);
-    if (!this.gc.settings.importBoundary) {
-      console.log('Disposing');
-      zone.meshes.forEach((m) => {
-        if (m.material?.metadata?.gltf?.extras?.boundary) {
-          m.dispose();
-        }
+    const shouldImportBoundary =
+      !window.__spireSagePreview && this.gc.settings.importBoundary;
+
+    if (!shouldImportBoundary) {
+      const hiddenZoneMeshes = zone.meshes.filter(isHiddenZoneMesh);
+      logPreviewZoneLoad('hidden-zone-meshes:dispose', name, {
+        count : hiddenZoneMeshes.length,
+        meshes: hiddenZoneMeshes.map((mesh) => mesh.name).slice(0, 10),
+      });
+      hiddenZoneMeshes.forEach((m) => {
+        m.setEnabled?.(false);
+        m.isVisible = false;
+        m.visibility = 0;
+        m.dispose(false, true);
       });
     }
 
     // const zoneMesh = this.mergeMeshesWithMaterials(zone.meshes.filter((m) => m.getTotalVertices() > 0), this.currentScene);
     if (import.meta.env.VITE_LOCAL_DEV !== 'true') {
+      const renderMeshes = zone.meshes.filter(
+        (m) =>
+          (shouldImportBoundary || !isHiddenZoneMesh(m)) &&
+          !m.isDisposed?.() &&
+          !m._isDisposed &&
+          m.getTotalVertices() > 0
+      );
       const zoneMesh = Mesh.MergeMeshes(
-        zone.meshes.filter((m) => m.getTotalVertices() > 0),
+        renderMeshes,
         true,
         true,
         undefined,
@@ -567,9 +810,12 @@ class ZoneController extends GameControllerChild {
       );
       zoneMesh.name = 'zone';
       zoneMesh.isPickable = false;
+      if (window.__spireSagePreview) {
+        reframePreviewCamera(this.CameraController?.camera, zoneMesh);
+      }
     }
 
-    const metadata = await getEQFile('zones', `${name}.json`, 'json');
+    await yieldToBrowser();
     if (metadata) {
       this.metadata = metadata;
       this.objectContainer = new TransformNode(
@@ -577,12 +823,18 @@ class ZoneController extends GameControllerChild {
         this.currentScene
       );
 
-      for (const [key, value] of Object.entries(metadata.objects)) {
-        for (const mesh of await this.instantiateObjects(key, value)) {
-          if (!mesh) {
-            continue;
+      const shouldLoadStaticObjects =
+        !window.__spireSagePreview || this.gc.settings.loadStaticObjects === true;
+      if (shouldLoadStaticObjects) {
+        for (const [key, value] of Object.entries(metadata.objects)) {
+          await yieldToBrowser();
+          for (const mesh of await this.instantiateObjects(key, value)) {
+            if (!mesh) {
+              continue;
+            }
+            mesh.parent = this.objectContainer;
           }
-          mesh.parent = this.objectContainer;
+          await yieldToBrowser();
         }
       }
 
@@ -593,7 +845,6 @@ class ZoneController extends GameControllerChild {
       this.doorNode = doorNode;
 
       regionNode.setEnabled(!!this.regionsShown);
-      console.log('Unoptimized', metadata.unoptimizedRegions);
       if (!metadata.regions?.length && metadata.unoptimizedRegions?.length) {
         metadata.regions = await optimizeBoundingBoxes(
           metadata.unoptimizedRegions
@@ -601,7 +852,6 @@ class ZoneController extends GameControllerChild {
         delete metadata.unoptimizedRegions;
         await writeEQFile('zones', `${name}.json`, JSON.stringify(metadata));
       }
-      console.log('Regions', metadata.regions);
       let idx = 0;
 
       // Build out geometry, will have an option to toggle this on or off in the gui
@@ -646,22 +896,39 @@ class ZoneController extends GameControllerChild {
         box.parent = regionNode;
       }
     }
-    await this.addTextureAnimations();
+    await yieldToBrowser();
+    if (!window.__spireSagePreview) {
+      await this.addTextureAnimations();
+    }
 
-    this.loadCallbacks.forEach((l) => l());
     this.zoneLoaded = true;
+    this.loadCallbacks.forEach((callback) => {
+      scheduleZoneLoadCallback(callback);
+    });
 
     GlobalStore.actions.setLoading(false);
   }
 
   async instantiateObjects(modelName, model) {
+    const objectBuffer =
+      (await this.gc.loadEQGltfFile?.('objects', `${modelName}.glb`)) ||
+      (await getEQFile('objects', `${modelName}.glb`));
+    if (!objectBuffer) {
+      return [];
+    }
+
+    const objectUrl = URL.createObjectURL(
+      new Blob([objectBuffer], { type: 'model/gltf-binary' })
+    );
     const container = await SceneLoader.LoadAssetContainerAsync(
-      '/eq/objects/',
-      `${modelName}.glb`,
+      '',
+      objectUrl,
       this.scene,
       undefined,
       '.glb'
-    ).catch((_e) => null);
+    )
+      .catch((_e) => null)
+      .finally(() => URL.revokeObjectURL(objectUrl));
     if (!container) {
       return [];
     }

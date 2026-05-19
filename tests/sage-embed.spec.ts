@@ -48,7 +48,7 @@ async function mockBaseApis(page: Page) {
 }
 
 async function mockEqSageEmbed(page: Page) {
-  await page.route('**/eqsage-embed/eqsage-embed.css', route =>
+  await page.route(/\/eqsage-embed\/eqsage-embed\.css(?:\?|$)/, route =>
     route.fulfill({
       status: 200,
       contentType: 'text/css',
@@ -56,7 +56,7 @@ async function mockEqSageEmbed(page: Page) {
     })
   );
 
-  await page.route('**/eqsage-embed/eqsage-embed.js', route =>
+  await page.route(/\/eqsage-embed\/eqsage-embed\.js(?:\?|$)/, route =>
     route.fulfill({
       status: 200,
       contentType: 'application/javascript',

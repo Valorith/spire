@@ -292,9 +292,13 @@ export class SkeletonHierarchy extends WldFragment {
       this.animations[track.animationName] = new Animation();
     }
 
+    const stripModelBase =
+      track.modelName && track.modelName !== this.modelBase
+        ? track.modelName
+        : this.modelBase;
     this.animations[track.animationName]
       .addTrack(track, track.name, Animation.CleanBoneName(track.pieceName),
-        Animation.CleanBoneAndStripBase(track.pieceName, this.modelBase));
+        Animation.CleanBoneAndStripBase(track.pieceName, stripModelBase));
     track.trackDefFragment.isAssigned = true;
     track.isProcessed = true;
   }

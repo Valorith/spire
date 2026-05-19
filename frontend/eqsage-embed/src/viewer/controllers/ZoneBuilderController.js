@@ -6,6 +6,7 @@ import { instantiate3dMover, teardown3dMover } from '../util/babylonUtil';
 import { flipImageX } from 'sage-core/util/util';
 import { getEQFile } from 'sage-core/util/fileHandler';
 import { createGltfTransformIo } from '../../util/gltf-transform';
+import { clampFlySpeed } from '../common/cameraSettings';
 
 const {
   AbstractMesh,
@@ -605,11 +606,11 @@ class ZoneBuilderController extends GameControllerChild {
   }
 
   setFlySpeed(value) {
-    this.cameraFlySpeed = value;
+    this.cameraFlySpeed = clampFlySpeed(value);
     if (!this.CameraController?.camera) {
       return;
     }
-    this.CameraController.camera.speed = value;
+    this.CameraController.camera.speed = this.cameraFlySpeed;
   }
 
   setClipPlane(value) {
@@ -711,7 +712,7 @@ class ZoneBuilderController extends GameControllerChild {
       return;
     }
     if (this.cameraFlySpeed !== undefined && this.CameraController?.camera) {
-      this.CameraController.camera.speed = this.cameraFlySpeed;
+      this.CameraController.camera.speed = clampFlySpeed(this.cameraFlySpeed);
     }
     // Skybox
     const skybox = MeshBuilder.CreateBox(

@@ -37,6 +37,6 @@ export const BabylonViewer = ({ zoneName = '' }) => {
       >
         {zoneName}
       </Typography>
-      <Box as='canvas' sx={{ flexGrow: '1' }} ref={canvasRef} id="renderCanvas" width="100%" height="100%" /></>
+      <Box component="canvas" sx={{ flexGrow: '1' }} ref={canvasRef} id="renderCanvas" width="100%" height="100%" /></>
   );
 };

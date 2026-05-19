@@ -1,5 +1,8 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test'
 import type { APIRequestContext } from '@playwright/test'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
 
 const { createPreviewServer } = require('../scripts/serve-sage-preview.js')
 
@@ -237,5 +240,42 @@ test.describe('Sage preview API', () => {
     )
     expect(deletedDoorResponse.ok()).toBeTruthy()
     expect(await deletedDoorResponse.json()).toEqual([])
+  })
+
+  test('serves local Sage filesystem bridge endpoints', async () => {
+    const eqRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'spire-sage-eq-'))
+    const cacheFile = path.join(eqRoot, 'eqsage', 'data', 'version.json')
+
+    try {
+      await fs.promises.writeFile(path.join(eqRoot, 'eqgame.exe'), '')
+      await fs.promises.writeFile(path.join(eqRoot, 'tutorial.s3d'), new Uint8Array([0, 1, 2, 3]))
+
+      const validateResponse = await api.post('/api/v1/app/sage-fs/validate', {
+        data: { root: eqRoot },
+      })
+      expect(validateResponse.ok()).toBeTruthy()
+      const validatePayload = await validateResponse.json()
+      expect(validatePayload.root.replace(/\\/g, '/')).toBe(eqRoot.replace(/\\/g, '/'))
+
+      const readdirParams = new URLSearchParams({ root: eqRoot, path: eqRoot })
+      const readdirResponse = await api.get(`/api/v1/app/sage-fs/readdir?${readdirParams}`)
+      expect(readdirResponse.ok()).toBeTruthy()
+      const entries = await readdirResponse.json()
+      expect(entries.map((entry: any) => entry.name)).toEqual(
+        expect.arrayContaining(['eqgame.exe', 'tutorial.s3d'])
+      )
+
+      const writeParams = new URLSearchParams({ root: eqRoot, path: cacheFile })
+      const writeResponse = await api.post(`/api/v1/app/sage-fs/write-file?${writeParams}`, {
+        data: JSON.stringify({ version: 2.05 }),
+      })
+      expect(writeResponse.ok()).toBeTruthy()
+
+      const readResponse = await api.get(`/api/v1/app/sage-fs/read-file?${writeParams}`)
+      expect(readResponse.ok()).toBeTruthy()
+      expect((await readResponse.body()).toString('utf8')).toBe('{"version":2.05}')
+    } finally {
+      await fs.promises.rm(eqRoot, { force: true, recursive: true })
+    }
   })
 })

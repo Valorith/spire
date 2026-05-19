@@ -1,7 +1,11 @@
-export const GLOBAL_VERSION = 1.8;
+import { ZONE_VERSION } from 'sage-core/model/constants';
+
+export const GLOBAL_VERSION = 2.0;
+export const PREVIEW_CHARACTER_CACHE_VERSION = 12;
 
 const getActiveController = (controller) => controller ?? window.gameController ?? null;
 let processingDepsPromise = null;
+let fileHandlerDepsPromise = null;
 let globalStorePromise = null;
 
 const getProcessingDeps = async () => {
@@ -12,11 +16,23 @@ const getProcessingDeps = async () => {
     ]).then(([fileHandleModule, fileHandlerModule]) => ({
       EQFileHandle       : fileHandleModule.EQFileHandle,
       getEQFile          : fileHandlerModule.getEQFile,
+      getEQFileExists    : fileHandlerModule.getEQFileExists,
       getFilesRecursively: fileHandlerModule.getFilesRecursively,
       writeEQFile        : fileHandlerModule.writeEQFile,
     }));
   }
   return processingDepsPromise;
+};
+
+const getFileHandlerDeps = async () => {
+  if (!fileHandlerDepsPromise) {
+    fileHandlerDepsPromise = import('sage-core/util/fileHandler').then((fileHandlerModule) => ({
+      getEQFile      : fileHandlerModule.getEQFile,
+      getEQFileExists: fileHandlerModule.getEQFileExists,
+      writeEQFile    : fileHandlerModule.writeEQFile,
+    }));
+  }
+  return fileHandlerDepsPromise;
 };
 
 const getGlobalStore = async () => {
@@ -30,12 +46,52 @@ const emitStage = (reportStage, stage, detail = '') => {
   reportStage?.(stage, detail);
 };
 
-const logZoneStep = (scope, message, extra) => {
-  if (extra !== undefined) {
-    console.log(`[SageZone:${scope}] ${message}`, extra);
+const logZoneStep = () => {};
+
+const isPreviewBridge = () =>
+  typeof window !== 'undefined' && !!window.__spireSagePreview;
+
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const collectMatchingRootFiles = async (
+  rootFileSystemHandle,
+  nameCheck,
+  filter = () => true,
+  onProgress = null
+) => {
+  const handles = [];
+  let scanned = 0;
+
+  for await (const fileHandle of rootFileSystemHandle.values()) {
+    scanned++;
+    if (scanned % 250 === 0) {
+      onProgress?.(scanned, handles.length, fileHandle.name);
+      await yieldToBrowser();
+    }
+    if (fileHandle.kind !== 'file' || !nameCheck.test(fileHandle.name)) {
+      continue;
+    }
+    if (!filter(fileHandle.name)) {
+      continue;
+    }
+    handles.push(await fileHandle.getFile());
+    onProgress?.(scanned, handles.length, fileHandle.name);
+  }
+
+  return handles;
+};
+
+const primeCachedZoneAssets = async (zoneName, metadata, getEQFile, reportStage) => {
+  if (!isPreviewBridge()) {
     return;
   }
-  console.log(`[SageZone:${scope}] ${message}`);
+
+  emitStage(reportStage, `Loading cached ${zoneName} geometry`);
+  await getEQFile('zones', `${zoneName}.glb`);
+
+  // Static object models are loaded by the viewer after the zone is ready.
+  // The preview bridge only needs the primary zone geometry primed before
+  // Babylon starts its render loop.
 };
 
 const summarizeHandles = (handles) => ({
@@ -56,7 +112,7 @@ const withStageContext = async (stage, work, reportStage, detail = '') => {
 };
 
 export async function processGlobal(settings, rootFileSystemHandle, standalone = false, controller = null, reportStage = null) {
-  const [{ EQFileHandle, getFilesRecursively, writeEQFile }, GlobalStore] = await Promise.all([
+  const [{ EQFileHandle, writeEQFile }, GlobalStore] = await Promise.all([
     getProcessingDeps(),
     getGlobalStore(),
   ]);
@@ -81,12 +137,23 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
     const handles = [];
     try {
       emitStage(reportStage, 'Scanning global dependency archives');
-      for await (const fileHandle of getFilesRecursively(rootFileSystemHandle, '', new RegExp('^global.*\\.s3d'))) {
-        if (/global(?:\d+)?_chr/.test(fileHandle.name) || fileHandle.name.includes('global_obj')) {
-          handles.push(await fileHandle.getFile()); 
+      handles.push(...await collectMatchingRootFiles(
+        rootFileSystemHandle,
+        new RegExp('^global.*\\.s3d', 'i'),
+        (name) => {
+          const lowerName = name.toLowerCase();
+          return /^global.*_chr\d*\.s3d$/.test(lowerName) || lowerName.includes('global_obj');
+        },
+        (scanned, found, latest) => {
+          if (found <= 5 || scanned % 1000 === 0) {
+            emitStage(
+              reportStage,
+              'Scanning global dependency archives',
+              `${found} matches after ${scanned} root entries${latest ? ` (${latest})` : ''}`
+            );
+          }
         }
-      
-      }
+      ));
     } catch (e) {
       console.warn('Error', e, handles);
       emitStage(reportStage, 'Scanning global dependency archives failed', e?.message || String(e));
@@ -119,7 +186,16 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
     logZoneStep('global', 'Writing dependency cache marker');
     await withStageContext(
       'Saving global dependency cache',
-      () => writeEQFile('data', 'global.json', JSON.stringify({ version: GLOBAL_VERSION })),
+      () => writeEQFile(
+        'data',
+        'global.json',
+        JSON.stringify({
+          spireCharacterModels  : true,
+          spireCharacterTextures: true,
+          spireCharacterCacheVersion: PREVIEW_CHARACTER_CACHE_VERSION,
+          version               : GLOBAL_VERSION,
+        })
+      ),
       reportStage
     );
     if (standalone && activeGameController) {
@@ -137,7 +213,7 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
 }
 
 export async function processEquip(settings, rootFileSystemHandle, standalone = false, controller = null, reportStage = null) {
-  const [{ EQFileHandle, getFilesRecursively, writeEQFile }, GlobalStore] = await Promise.all([
+  const [{ EQFileHandle, writeEQFile }, GlobalStore] = await Promise.all([
     getProcessingDeps(),
     getGlobalStore(),
   ]);
@@ -162,17 +238,26 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
     const handles = [];
     try {
       emitStage(reportStage, 'Scanning global equipment archives');
-      for await (const fileHandle of getFilesRecursively(rootFileSystemHandle, '', new RegExp('^gequip.*\\.s3d'))) {
-        if (fileHandle.name.includes('gequip')) {
-          handles.push(await fileHandle.getFile()); 
+      handles.push(...await collectMatchingRootFiles(
+        rootFileSystemHandle,
+        new RegExp('^gequip.*\\.s3d'),
+        (name) => name.includes('gequip'),
+        (scanned, found, latest) => {
+          if (found <= 5 || scanned % 1000 === 0) {
+            emitStage(
+              reportStage,
+              'Scanning global equipment archives',
+              `${found} matches after ${scanned} root entries${latest ? ` (${latest})` : ''}`
+            );
+          }
         }
-      }
+      ));
 
-      for await (const fileHandle of getFilesRecursively(rootFileSystemHandle, '', new RegExp('^global.*_amr\\.s3d'))) {
-        if (fileHandle.name.includes('_amr.s3d')) {
-          handles.push(await fileHandle.getFile());
-        }
-      }
+      handles.push(...await collectMatchingRootFiles(
+        rootFileSystemHandle,
+        new RegExp('^global.*_amr\\.s3d'),
+        (name) => name.includes('_amr.s3d')
+      ));
     } catch (e) {
       console.warn('Error', e, handles);
       emitStage(reportStage, 'Scanning global equipment archives failed', e?.message || String(e));
@@ -223,8 +308,8 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
 }
 
 export async function processZone(zoneName, settings, rootFileSystemHandle, _onlyChr = false, controller = null, reportStage = null) {
-  const [{ EQFileHandle, getEQFile, getFilesRecursively }, GlobalStore] = await Promise.all([
-    getProcessingDeps(),
+  const [{ getEQFile, getEQFileExists, writeEQFile }, GlobalStore] = await Promise.all([
+    getFileHandlerDeps(),
     getGlobalStore(),
   ]);
   const startedAt = performance.now();
@@ -238,47 +323,100 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
     webgpu     : !!settings?.webgpu,
   });
   GlobalStore.actions.setLoading(true);
-  emitStage(reportStage, 'Checking cached global dependencies');
-  const v = await getEQFile('data', 'global.json', 'json');
-  logZoneStep(zoneName, 'Global cache status', v || null);
-  if (v?.version !== GLOBAL_VERSION) {
-    emitStage(reportStage, 'Refreshing global dependencies');
-    logZoneStep(zoneName, 'Global cache missing or stale, refreshing dependencies', {
-      expectedVersion: GLOBAL_VERSION,
-      actualVersion  : v?.version ?? null,
-    });
-    await processGlobal(
-      activeGameController?.settings ?? settings,
-      activeGameController?.rootFileSystemHandle ?? rootFileSystemHandle,
-      true,
-      activeGameController,
-      reportStage
-    );
-  }
-  const watchdog = window.setInterval(() => {
-    logZoneStep(
-      zoneName,
-      `Still processing zone assets after ${((performance.now() - startedAt) / 1000).toFixed(1)}s`
-    );
-  }, 10000);
-  GlobalStore.actions.setLoadingTitle(`Processing Zone ${zoneName}`);
-  GlobalStore.actions.setLoadingText('Loading Zone', zoneName);
-  emitStage(reportStage, `Scanning ${zoneName} zone archives`);
+  let watchdog = null;
   let match = false;
   try {
+    emitStage(reportStage, 'Checking cached global dependencies');
+    const [v, fallbackModelExists] = await Promise.all([
+      getEQFile('data', 'global.json', 'json'),
+      getEQFileExists('models', 'hum.glb'),
+    ]);
+    logZoneStep(zoneName, 'Global cache status', {
+      ...(v || {}),
+      fallbackModelExists,
+    });
+    const globalCharacterCacheReady =
+      !isPreviewBridge() ||
+      (
+        v?.spireCharacterModels === true &&
+        v?.spireCharacterTextures === true &&
+        v?.spireCharacterCacheVersion === PREVIEW_CHARACTER_CACHE_VERSION
+      );
+    if (v?.version !== GLOBAL_VERSION || !fallbackModelExists || !globalCharacterCacheReady) {
+      emitStage(reportStage, 'Refreshing global dependencies');
+      logZoneStep(zoneName, 'Global cache missing or stale, refreshing dependencies', {
+        expectedVersion    : GLOBAL_VERSION,
+        actualVersion      : v?.version ?? null,
+        fallbackModelExists,
+        globalCharacterCacheReady,
+      });
+      await processGlobal(
+        activeGameController?.settings ?? settings,
+        activeGameController?.rootFileSystemHandle ?? rootFileSystemHandle,
+        true,
+        activeGameController,
+        reportStage
+      );
+    }
+
+    emitStage(reportStage, `Checking cached ${zoneName} zone assets`);
+    const [existingMetadata, exists] = await Promise.all([
+      getEQFile('zones', `${zoneName}.json`, 'json'),
+      getEQFileExists('zones', `${zoneName}.glb`),
+    ]);
+    logZoneStep(zoneName, 'Zone cache status', {
+      glbExists      : exists,
+      metadataVersion: existingMetadata?.version ?? null,
+      expectedVersion: ZONE_VERSION,
+    });
+    const previewCharacterCacheReady =
+      !isPreviewBridge() ||
+      (
+        existingMetadata?.spireCharacterModels === true &&
+        existingMetadata?.spireCharacterTextures === true &&
+        existingMetadata?.spireCharacterCacheVersion === PREVIEW_CHARACTER_CACHE_VERSION
+      );
+    if (
+      exists &&
+      existingMetadata?.version === ZONE_VERSION &&
+      previewCharacterCacheReady &&
+      !settings?.forceReload
+    ) {
+      emitStage(reportStage, `Using cached ${zoneName} zone assets`);
+      logZoneStep(zoneName, 'Zone cache hit, skipping archive scan');
+      await primeCachedZoneAssets(zoneName, existingMetadata, getEQFile, reportStage);
+      return existingMetadata;
+    }
+
+    const { EQFileHandle } = await getProcessingDeps();
+    watchdog = window.setInterval(() => {
+      logZoneStep(
+        zoneName,
+        `Still processing zone assets after ${((performance.now() - startedAt) / 1000).toFixed(1)}s`
+      );
+    }, 10000);
+    GlobalStore.actions.setLoadingTitle(`Processing Zone ${zoneName}`);
+    GlobalStore.actions.setLoadingText('Loading Zone', zoneName);
+    emitStage(reportStage, `Scanning ${zoneName} zone archives`);
     const handles = [];
     try {
-      for await (const fileHandle of getFilesRecursively(rootFileSystemHandle, '', new RegExp(`^${zoneName}[_\\.].*`))) {
-        // if (onlyChr && !(fileHandle.name.includes('_chr') || fileHandle.name.includes('_obj'))) {
-        //   continue;
-        // }
-        handles.push(await fileHandle.getFile()); 
-        if (handles.length <= 5 || handles.length % 25 === 0) {
+      handles.push(...await collectMatchingRootFiles(
+        rootFileSystemHandle,
+        new RegExp(`^${zoneName}[_\\.].*`, 'i'),
+        () => true,
+        (_scanned, found, latest) => {
+          if (found <= 5 || found % 25 === 0) {
+            emitStage(
+              reportStage,
+              `Scanning ${zoneName} zone archives`,
+              `${found} matching files${latest ? ` (${latest})` : ''}`
+            );
+          }
           logZoneStep(zoneName, `Discovered ${handles.length} matching zone files`, {
-            latest: fileHandle.name,
+            latest,
           });
         }
-      }
+      ));
     } catch (e) {
       console.warn('Error', e, handles);
       emitStage(reportStage, `Scanning ${zoneName} zone archives failed`, e?.message || String(e));
@@ -307,14 +445,29 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
       () => obj.process(),
       reportStage
     );
+    if (isPreviewBridge()) {
+      const metadata = (await getEQFile('zones', `${zoneName}.json`, 'json')) || {};
+      await writeEQFile(
+        'zones',
+        `${zoneName}.json`,
+        JSON.stringify({
+          ...metadata,
+          spireCharacterModels  : true,
+          spireCharacterTextures: true,
+          spireCharacterCacheVersion: PREVIEW_CHARACTER_CACHE_VERSION,
+        })
+      );
+    }
     logZoneStep(zoneName, 'Zone archive processing completed', { match });
   } finally {
-    window.clearInterval(watchdog);
+    if (watchdog) {
+      window.clearInterval(watchdog);
+    }
     GlobalStore.actions.setLoading(false);
     logZoneStep(
       zoneName,
       `Finished zone processing in ${((performance.now() - startedAt) / 1000).toFixed(2)}s`
     );
   }
-  return match;
+  return (await getEQFile('zones', `${zoneName}.json`, 'json')) || match;
 }

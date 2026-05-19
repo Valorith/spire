@@ -4,11 +4,16 @@ import { Zone } from "./zone/zone";
 import { ZoneData } from "./zone/v4-zone";
 import { Model, Animation, Lit } from "./model/model";
 import { Eco } from "./eco/eco";
-import { exportv4 } from "./gltf-export/v4";
-import { exportv3 } from "./gltf-export/v3";
-import { writeModels } from "./gltf-export/common";
 import { PFSArchive } from "../pfs/pfs";
 import {  deleteEqFileOrFolder, writeEQFile } from "../util/fileHandler";
+
+const getImageProcessor = async () => {
+  if (typeof window !== 'undefined' && window.imageProcessor) {
+    return window.imageProcessor;
+  }
+  const { imageProcessor } = await import('../../../src/util/image/image-processor');
+  return imageProcessor;
+};
 
 export class EQGDecoder {
   #options = {
@@ -163,7 +168,8 @@ export class EQGDecoder {
     if (this.#options.rawImageWrite) {
       console.log('Using raw image write');
     } else if (!skipImages) {
-      await window.imageProcessor.parseImages(images, this.#fileHandle.rootFileHandle);
+      const imageProcessor = await getImageProcessor();
+      await imageProcessor.parseImages(images, this.#fileHandle.rootFileHandle);
       console.log("Done processing images");
     }
   }
@@ -184,6 +190,7 @@ export class EQGDecoder {
    * @param {import('./common/models').PlaceableGroup} p
    */
   async writeModels(p, zoneMetadata, modelFile, writtenModels, mod, v3) {
+    const { writeModels } = await import("./gltf-export/common");
     return writeModels.apply(this, [
       p,
       zoneMetadata,
@@ -203,8 +210,10 @@ export class EQGDecoder {
       }
     }
     if (this.zone?.header?.version === 4) {
+      const { exportv4 } = await import("./gltf-export/v4");
       return exportv4.apply(this, [`${this.#fileHandle.name}`]);
     }
+    const { exportv3 } = await import("./gltf-export/v3");
     return exportv3.apply(this, [`${this.#fileHandle.name}`]);
   }
 

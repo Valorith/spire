@@ -7,7 +7,6 @@ import {
   KHRMaterialsUnlit,
 } from '@gltf-transform/extensions';
 import { Document } from '@gltf-transform/core';
-import draco3d from 'draco3dgltf';
 import { ShaderType } from './materials/material';
 import {
   appendObjectMetadata,
@@ -17,7 +16,7 @@ import {
   getEQRootDir,
   writeEQFile,
 } from '../util/fileHandler';
-import { VERSION } from '../model/constants';
+import { VERSION, ZONE_VERSION } from '../model/constants';
 import { fragmentNameCleaner } from '../util/util';
 import { S3DAnimationWriter, animationMap } from '../util/animation-helper';
 import { EQGDecoder } from '../eqg/eqg-decoder';
@@ -27,22 +26,105 @@ import { Wld, WldType } from './wld/wld';
 import { ActorType } from './animation/actor';
 import { globals } from '../globals';
 import { optimizeBoundingBoxes } from './bsp/region-utils';
-import { locateStaticAsset } from '../../../src/static-assets';
 
-const io = new WebIO()
-  .registerDependencies({
-    'draco3d.decoder': await draco3d.createDecoderModule({
-      locateFile: locateStaticAsset,
-      print   : console.log,
-      printErr: console.error,
-    }),
-    'draco3d.encoder': await draco3d.createEncoderModule({
-      locateFile: locateStaticAsset,
-      print   : console.log,
-      printErr: console.error,
-    }),
-  })
-  .registerExtensions(ALL_EXTENSIONS);
+const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
+
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const isSpirePreview = () =>
+  typeof window !== 'undefined' && !!window.__spireSagePreview;
+
+const getActiveSettings = () =>
+  globals.gameController?.settings ??
+  (typeof window !== 'undefined' ? window.gameController?.settings : null) ??
+  {};
+
+const shouldBuildRegionMetadata = () => {
+  if (!isSpirePreview()) {
+    return true;
+  }
+  const settings = getActiveSettings();
+  return settings.showRegions === true || settings.importBoundary === true;
+};
+
+const isCharacterArchive = (fileName) =>
+  /_chr\d*\.s3d$/i.test(fileName) || /^global.*_chr\d*\.s3d$/i.test(fileName);
+
+const isZoneObjectArchive = (fileName) => /_obj\d*\.s3d$/i.test(fileName);
+
+const shouldSkipPreviewImages = (fileName, zoneName) =>
+  isSpirePreview() &&
+  fileName !== `${zoneName}.s3d` &&
+  !isCharacterArchive(fileName) &&
+  !isZoneObjectArchive(fileName);
+
+const CLASSIC_MALE_LEG_SPIKE_MODELS = new Set(['bam', 'erm', 'hum']);
+const CLASSIC_HEAD_TEXTURE_V_PRESERVE_MODELS = new Set([
+  'baf',
+  'bam',
+  'daf',
+  'dam',
+  'dwf',
+  'dwm',
+  'elf',
+  'elm',
+  'erf',
+  'erm',
+  'gnf',
+  'gnm',
+  'haf',
+  'ham',
+  'hif',
+  'him',
+  'hof',
+  'hom',
+  'huf',
+  'hum',
+  'ikf',
+  'ikm',
+  'ogf',
+  'ogm',
+  'trf',
+  'trm',
+]);
+const CHARACTER_HEAD_TEXTURE_PATTERN =
+  /^[a-z0-9]{3}(?:he(?:\d{2}|sk)\d{2}|fa\d{4})$/i;
+
+const shouldPreserveClassicHeadTextureV = (materialName) => {
+  const name = `${materialName ?? ''}`.toLowerCase();
+  const modelName = name.slice(0, 3);
+  return (
+    CLASSIC_HEAD_TEXTURE_V_PRESERVE_MODELS.has(modelName) &&
+    CHARACTER_HEAD_TEXTURE_PATTERN.test(name)
+  );
+};
+
+const shouldFlipSkinnedMeshV = (materialName) =>
+  !shouldPreserveClassicHeadTextureV(materialName);
+
+const getClassicMaleLegSpikeModel = (materialName) => {
+  const match = `${materialName ?? ''}`.match(/^([a-z0-9]{3})lg000[12]$/i);
+  return match?.[1]?.toLowerCase() ?? null;
+};
+
+const isClassicMaleLegSpikeTriangle = (materialName, positions) => {
+  const modelName = getClassicMaleLegSpikeModel(materialName);
+  if (!CLASSIC_MALE_LEG_SPIKE_MODELS.has(modelName)) {
+    return false;
+  }
+
+  return positions.some(
+    ([, y, z]) => Math.abs(y) > 5 || Math.abs(z) > 5
+  );
+};
+
+const getImageProcessor = async () => {
+  if (typeof window !== 'undefined' && window.imageProcessor) {
+    return window.imageProcessor;
+  }
+  const { imageProcessor } = await import('../../../src/util/image/image-processor');
+  return imageProcessor;
+};
 
 
 export class S3DDecoder {
@@ -131,8 +213,9 @@ export class S3DDecoder {
     console.log(`Processed - ${file.name}`);
     if (this.options.rawImageWrite) {
       console.log('Using raw image write');
-    } else if (!skipImages) {
-      await window.imageProcessor.parseImages(images);
+    } else if (!skipImages && images.length) {
+      const imageProcessor = await getImageProcessor();
+      await imageProcessor.parseImages(images);
       console.log(`Done processing images ${file.name} - ${images.length}`);
     }
   }
@@ -265,6 +348,7 @@ export class S3DDecoder {
         };
         for (let i = 0; i < mat.polygonCount; i++) {
           const idc = mesh.indices[polygonIndex];
+          const flipV = shouldFlipSkinnedMeshV(name);
 
           const idxArr = [idc.v1, idc.v2, idc.v3];
 
@@ -276,6 +360,17 @@ export class S3DDecoder {
           const [u1, u2, u3] = idxArr.map(
             (idx) => mesh.textureUvCoordinates[idx]
           );
+          const transformedPositions = [v1, v2, v3].map((v) => [
+            -1 * (v[0] + mesh.center[0]),
+            v[2] + mesh.center[2],
+            v[1] + mesh.center[1],
+          ]);
+          if (
+            isClassicMaleLegSpikeTriangle(name, transformedPositions)
+          ) {
+            polygonIndex++;
+            continue;
+          }
 
           const { vecs, normals, uv } = sharedPrimitive;
           const ln = sharedPrimitive.indices.length;
@@ -285,15 +380,12 @@ export class S3DDecoder {
           const newJoints = [b1, 0, 0, 0, b2, 0, 0, 0, b3, 0, 0, 0];
           sharedPrimitive.joints.push(...newJoints);
 
-          vecs.push(
-            ...[v1, v2, v3].flatMap((v) => [
-              -1 * (v[0] + mesh.center[0]),
-              v[2] + mesh.center[2],
-              v[1] + mesh.center[1],
-            ])
-          );
+          vecs.push(...transformedPositions.flat());
           normals.push(...[n1, n2, n3].flatMap((v) => [v[0] * -1, v[2], v[1]]));
-          uv.push(...[u1, u2, u3].flatMap((v) => [v[0], -1 * v[1]]));
+          uv.push(...[u1, u2, u3].flatMap((v) => [
+            v[0],
+            flipV ? -1 * v[1] : v[1],
+          ]));
           polygonIndex++;
         }
       }
@@ -705,9 +797,18 @@ export class S3DDecoder {
         continue;
       }
       const modelBase = skeleton.modelBase;
+      const mappedAnimationSource = animationMap[modelBase];
+      const hasMappedSkeleton = mappedAnimationSource
+        ? wld.skeletons.some((source) => source?.modelBase === mappedAnimationSource)
+        : false;
+      const hasDirectTracks = wld.tracks.some(
+        (track) => !track.isPoseAnimation && track.modelName === modelBase
+      );
       const alternateModel = AnimationSources.hasOwnProperty(modelBase)
         ? AnimationSources[modelBase]
-        : modelBase;
+        : !hasDirectTracks && mappedAnimationSource && !hasMappedSkeleton
+          ? mappedAnimationSource
+          : modelBase;
       globals.GlobalStore.actions.setLoadingText(`Exporting model ${modelBase}`);
       await new Promise((res) => setTimeout(res, 0));
       // TODO: Alternate model bases
@@ -741,12 +842,14 @@ export class S3DDecoder {
       }
     }
 
-    for (const track of wld.tracks) {
-      if (track.isPoseAnimation || track.isProcessed) {
-        continue;
-      }
-
-      console.warn(`WldFileCharacters: Track not assigned: ${track.name}`);
+    const unassignedTracks = wld.tracks.filter(
+      (track) => !track.isPoseAnimation && !track.isProcessed
+    );
+    if (unassignedTracks.length > 0) {
+      console.warn('WldFileCharacters: tracks not assigned', {
+        count: unassignedTracks.length,
+        sample: unassignedTracks.slice(0, 12).map((track) => track.name),
+      });
     }
 
     for (const skeleton of wld.skeletons) {
@@ -1099,14 +1202,21 @@ export class S3DDecoder {
 
     // Build zone metadata.
     const zoneMetadata = {
-      version: VERSION,
+      version: ZONE_VERSION,
       objects: {},
       lights : [],
       sounds : [],
       regions: [],
     };
 
-    wld.bspTree?.constructRegions(wld);
+    const buildRegionMetadata = shouldBuildRegionMetadata();
+    if (buildRegionMetadata) {
+      globals.GlobalStore.actions.setLoadingTitle('Preparing zone regions');
+      globals.GlobalStore.actions.setLoadingText('Building BSP region metadata...');
+      await yieldToBrowser();
+      wld.bspTree?.constructRegions(wld);
+      await yieldToBrowser();
+    }
 
     // Process lights.
     const lightWld = this.wldFiles.find((f) => f.type === WldType.Lights);
@@ -1125,27 +1235,30 @@ export class S3DDecoder {
       zoneMetadata.sounds = this.sound.sounds;
     }
 
-    // BSP regions.
-    const regions = [];
-    for (const leafNode of wld.bspTree?.leafNodes ?? []) {
-      regions.push({
-        region   : leafNode.region.regionType,
-        minVertex: [
-          leafNode.boundingBoxMin[0],
-          leafNode.boundingBoxMin[2],
-          leafNode.boundingBoxMin[1],
-        ],
-        maxVertex: [
-          leafNode.boundingBoxMax[0],
-          leafNode.boundingBoxMax[2],
-          leafNode.boundingBoxMax[1],
-        ],
-        center: [leafNode.center[0], leafNode.center[2], leafNode.center[1]],
-      });
+    if (buildRegionMetadata) {
+      // BSP regions.
+      const regions = [];
+      for (const leafNode of wld.bspTree?.leafNodes ?? []) {
+        regions.push({
+          region   : leafNode.region.regionType,
+          minVertex: [
+            leafNode.boundingBoxMin[0],
+            leafNode.boundingBoxMin[2],
+            leafNode.boundingBoxMin[1],
+          ],
+          maxVertex: [
+            leafNode.boundingBoxMax[0],
+            leafNode.boundingBoxMax[2],
+            leafNode.boundingBoxMax[1],
+          ],
+          center: [leafNode.center[0], leafNode.center[2], leafNode.center[1]],
+        });
+      }
+      zoneMetadata.regions = await optimizeBoundingBoxes(
+        regions
+      );
+      await yieldToBrowser();
     }
-    zoneMetadata.regions = await optimizeBoundingBoxes(
-      regions
-    );
 
     // Process object instances.
     const objWld = this.wldFiles.find((f) => f.type === WldType.ZoneObjects);
@@ -1183,7 +1296,12 @@ export class S3DDecoder {
     );
 
     // Loop over each mesh in the zone.
+    let processedMeshes = 0;
     for (const mesh of wld.meshes) {
+      if (processedMeshes++ % 3 === 0) {
+        globals.GlobalStore.actions.setLoadingText(`Exporting zone mesh ${processedMeshes} of ${wld.meshes.length}`);
+        await yieldToBrowser();
+      }
       let polygonIndex = 0;
       // Process each material group within the mesh.
       for (const mat of mesh.materialGroups) {
@@ -1271,11 +1389,12 @@ export class S3DDecoder {
           const triangleIndices = [];
           // Deduplicate each vertex.
           for (let k = 0; k < 3; k++) {
-            // Build the deduplication key including UV (without flipping).
+            const transformedUv = [uvs[k][0], -uvs[k][1]];
+            // Build the deduplication key including the exported UV.
             const key = JSON.stringify({
               pos : transformedPositions[k],
               norm: transformedNormals[k],
-              uv  : uvs[k],
+              uv  : transformedUv,
             });
             let dedupIndex;
             if (sharedPrimitive.vertexDedupMap.has(key)) {
@@ -1287,8 +1406,7 @@ export class S3DDecoder {
               // Add the transformed position and normal.
               sharedPrimitive.vecs.push(...transformedPositions[k]);
               sharedPrimitive.normals.push(...transformedNormals[k]);
-              // Use UV exactly as in the original function.
-              sharedPrimitive.uv.push(uvs[k][0], uvs[k][1]);
+              sharedPrimitive.uv.push(...transformedUv);
             }
             triangleIndices.push(dedupIndex);
           }
@@ -1299,10 +1417,15 @@ export class S3DDecoder {
     }
 
     // Create accessors for each primitive.
+    let processedPrimitives = 0;
     for (const [
       name,
       { gltfPrim, indices, vecs, normals, uv },
     ] of Object.entries(primitiveMap)) {
+      if (processedPrimitives++ % 10 === 0) {
+        globals.GlobalStore.actions.setLoadingText(`Preparing zone geometry ${processedPrimitives}`);
+        await yieldToBrowser();
+      }
       const primIndices = document
         .createAccessor()
         .setType(Accessor.Type.SCALAR)
@@ -1471,6 +1594,7 @@ export class S3DDecoder {
         case WldType.Characters:
           globals.GlobalStore.actions.setLoadingText('Exporting zone models');
           await this.exportModels(wld);
+          await this.exportObjects(wld, 'models');
           break;
         case WldType.Equipment:
           await this.exportObjects(wld, 'items', true);
@@ -1502,7 +1626,11 @@ export class S3DDecoder {
       const extension = file.name.split('.').pop();
       switch (extension) {
         case 's3d':
-          await this.processS3D(file);
+          await this.processS3D(
+            file,
+            shouldSkipPreviewImages(file.name, this.#fileHandle.name)
+          );
+          await yieldToBrowser();
           break;
         case 'txt':
           if (file.name.endsWith('_assets.txt') && !this.options.skipSubload) {

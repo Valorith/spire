@@ -39,7 +39,7 @@ export const ZoneBuilder = ({ zone, goHome }) => {
   return (
     <>
       <Box
-        as="canvas"
+        component="canvas"
         sx={{ flexGrow: '1', position: 'fixed' }}
         ref={canvasRef}
         id="renderCanvasZb"

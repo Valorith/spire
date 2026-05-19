@@ -24,6 +24,9 @@ const ZoneChooserDialog = React.lazy(() =>
 const LoadingDialog = React.lazy(() =>
   import('../spire/dialogs/loading-dialog').then((module) => ({ default: module.LoadingDialog }))
 );
+const SageValidationHarness = React.lazy(() =>
+  import('../validation/validation-harness').then((module) => ({ default: module.SageValidationHarness }))
+);
 
 const ZoneLoadingOverlay = ({
   title = 'Preparing Zone Editor',
@@ -98,7 +101,11 @@ export const Main = ({ onBootStateChange } = {}) => {
   );
 
   useEffect(() => {
-    if (window.electronAPI) {
+    if (
+      window.electronAPI &&
+      !window.__spireSagePreview &&
+      typeof window.electronAPI.hasStandalone === 'function'
+    ) {
       (async () => {
         const hasStandalone = await window.electronAPI?.hasStandalone?.();
         if (!hasStandalone) {
@@ -286,6 +293,9 @@ export const Main = ({ onBootStateChange } = {}) => {
           })}
         >
           <ConfirmProvider>
+            <Suspense fallback={null}>
+              <SageValidationHarness />
+            </Suspense>
             <Stack
               onDragOver={(e) => {
                 e.stopPropagation();

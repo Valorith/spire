@@ -8,7 +8,7 @@
     <keypress-commands-modal/>
     <router-view></router-view>
     <app-update-modal
-      v-if="showUpdateModal"
+      v-if="showUpdateModal && !isSageRoute"
       :release="release"
       @close="showUpdateModal = false"
       :current-version="currentVersion"
@@ -49,15 +49,21 @@ export default {
     }
   },
 
-  async mounted() {
-    let vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0)
-    let vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0)
+  computed: {
+    isSageRoute() {
+      return this.isCurrentSageRoute()
+    },
+  },
 
-    // 78vh
-    if (vw < 1500 && vw > 1000) {
-      // add zoom 80% to body
-      WindowManager.applyZoom(.8);
-    }
+  watch: {
+    $route() {
+      this.applyResponsiveZoom()
+    },
+  },
+
+  async mounted() {
+    this.applyResponsiveZoom()
+    window.addEventListener('resize', this.applyResponsiveZoom)
 
     WindowManager.hookListeners();
 
@@ -96,12 +102,68 @@ export default {
     SpireWebsocket.addEventListener('message', this.handleWebsocketMessage);
   },
   destroyed() {
+    window.removeEventListener('resize', this.applyResponsiveZoom)
     EventBus.$off("SPELL_LEGACY_ICONS_ENABLED", this.loadSpellIconSettings);
     EventBus.$off("CHECK_SPIRE_UPDATE", this.checkSpireUpdate);
     SpireWebsocket.removeEventListener('message', this.handleWebsocketMessage);
   },
 
   methods: {
+
+    applyResponsiveZoom() {
+      const isSageRoute = this.isCurrentSageRoute()
+      const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0)
+      const shouldScaleBody = !isSageRoute && vw < 1500 && vw > 1000
+
+      document.documentElement.classList.toggle('sage-fullscreen-route', isSageRoute)
+      document.body.classList.toggle('sage-fullscreen-route', isSageRoute)
+
+      if (isSageRoute) {
+        WindowManager.applyZoom(1)
+        for (const element of [
+          document.documentElement,
+          document.body,
+          document.getElementById('app'),
+        ]) {
+          if (!element) {
+            continue
+          }
+          element.style.setProperty('zoom', '1', 'important')
+          element.style.setProperty('transform', 'none', 'important')
+          element.style.setProperty('transform-origin', '0 0', 'important')
+          element.style.setProperty('overflow', 'hidden', 'important')
+          element.style.setProperty('width', '100vw', 'important')
+          element.style.setProperty('height', '100vh', 'important')
+          element.style.setProperty('max-width', 'none', 'important')
+          element.style.setProperty('max-height', 'none', 'important')
+        }
+        return
+      }
+
+      for (const element of [
+        document.documentElement,
+        document.body,
+        document.getElementById('app'),
+      ]) {
+        if (!element) {
+          continue
+        }
+        element.style.removeProperty('zoom')
+        element.style.removeProperty('transform')
+        element.style.removeProperty('transform-origin')
+        element.style.removeProperty('overflow')
+        element.style.removeProperty('width')
+        element.style.removeProperty('height')
+        element.style.removeProperty('max-width')
+        element.style.removeProperty('max-height')
+      }
+      WindowManager.applyZoom(shouldScaleBody ? .8 : 1)
+    },
+
+    isCurrentSageRoute() {
+      const routePath = this.$route?.path || window.location.pathname || ''
+      return routePath.startsWith(ROUTE.SAGE)
+    },
 
     async checkIfUserNeedsToAuth() {
       if (AppEnv.isSpireInitialized() &&

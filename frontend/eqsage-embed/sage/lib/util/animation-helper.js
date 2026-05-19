@@ -120,6 +120,22 @@ const loopedAnimationKeys = [
   'sky',
 ];
 
+const HEAD_POSE_LOCKED_CHARACTER_MODELS = new Set([
+  'erf',
+  'erm',
+  'gnf',
+  'gnm',
+  'huf',
+  'hum',
+]);
+
+const shouldUsePoseForCharacterHeadBone = (skeleton, boneName, animationKey) =>
+  animationKey !== 'pos' &&
+  HEAD_POSE_LOCKED_CHARACTER_MODELS.has(
+    `${skeleton?.modelBase ?? ''}`.toLowerCase()
+  ) &&
+  /^(?:ne|neneck|he|fa|head_point|hair_point)/i.test(boneName);
+
 /**
  *
  * @param {SkeletonHierarchy} skeletonModelBase
@@ -319,14 +335,18 @@ export class S3DAnimationWriter {
         )
         : Animation.CleanBoneName(skeleton.boneMapping[i]);
 
-      if (staticPose || !trackArray.hasOwnProperty(boneName)) {
+      if (
+        staticPose ||
+        shouldUsePoseForCharacterHeadBone(skeleton, boneName, animationKey) ||
+        !trackArray.hasOwnProperty(boneName)
+      ) {
         if (!poseArray.hasOwnProperty(boneName)) {
-          return;
+          continue;
         }
 
         const poseTransform = poseArray[boneName].trackDefFragment.frames[0];
         if (poseTransform === null) {
-          return;
+          continue;
         }
         // poseTransform.Translation = new vec3(poseTransform.Translation.x * -1, poseTransform.Translation.y, poseTransform.Translation.z);
         this.applyBoneTransformation(
@@ -381,7 +401,7 @@ export class S3DAnimationWriter {
         );
 
         if (
-          frame === animation.frameCount.length - 1 &&
+          frame === animation.frameCount - 1 &&
           loopedAnimationKeys.includes(animationKey)
         ) {
           this.applyBoneTransformation(

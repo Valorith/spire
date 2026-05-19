@@ -32,12 +32,18 @@ export const NpcDialog = ({ onClose }) => {
   const { openAlert } = useAlertContext();
   const [hidden, setHidden] = useState(false);
   const filteredSpawns = useMemo(
-    () =>
-      spawns.filter((s) =>
+    () => {
+      const normalizedFilter = spawnFilter?.trim()?.toLowerCase();
+      if (!normalizedFilter) {
+        return spawns;
+      }
+
+      return spawns.filter((s) =>
         s.spawnentries?.some((e) =>
-          e?.npc_type?.name?.toLowerCase()?.includes(spawnFilter?.toLowerCase())
+          e?.npc_type?.name?.toLowerCase()?.includes(normalizedFilter)
         )
-      ),
+      );
+    },
     [spawns, spawnFilter]
   );
 
@@ -148,19 +154,26 @@ export const NpcDialog = ({ onClose }) => {
 function Row(props) {
   const { spawn } = props;
   const [open, setOpen] = useState(false);
+  const spawnEntries = useMemo(
+    () => Array.isArray(spawn.spawnentries)
+      ? spawn.spawnentries.filter(Boolean)
+      : [],
+    [spawn.spawnentries]
+  );
   const spawnName = useMemo(() => {
-    if (!Array.isArray(spawn.spawnentries)) {
+    if (spawnEntries.length === 0) {
       return 'No associated spawns';
     }
-    return spawn.spawnentries.length === 1
-      ? spawn.spawnentries[0].npc_type.name
-      : `${spawn.spawnentries[0].npc_type.name} + ${
-          spawn.spawnentries.length - 1
+    const firstName = spawnEntries[0]?.npc_type?.name ?? 'Unknown NPC';
+    return spawnEntries.length === 1
+      ? firstName
+      : `${firstName} + ${
+          spawnEntries.length - 1
         } more`;
-  }, [spawn.spawnentries]);
+  }, [spawnEntries]);
   const hasMultipleEntries = useMemo(
-    () => Array.isArray(spawn.spawnentries) && spawn.spawnentries.length > 1,
-    [spawn.spawnentries]
+    () => spawnEntries.length > 1,
+    [spawnEntries]
   );
   return (
     <React.Fragment>
@@ -215,7 +228,7 @@ function Row(props) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {spawn.spawnentries.map((entry) => (
+                    {spawnEntries.map((entry) => (
                       <TableRow key={entry.npc_id}>
                         <TableCell component="th" scope="row">
                           {entry.npc_type?.name}

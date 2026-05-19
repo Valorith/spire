@@ -4,6 +4,11 @@ import { Document } from '@gltf-transform/core';
 import { EQGDecoder } from '../eqg/eqg-decoder';
 import { getEQFile, getEQFileExists } from '../util/fileHandler';
 
+const PREVIEW_CHARACTER_CACHE_VERSION = 12;
+
+const isSpirePreview = () =>
+  typeof window !== 'undefined' && !!window.__spireSagePreview;
+
 const logFileHandleStep = (name, message, extra) => {
   if (extra !== undefined) {
     console.log(`[SageFileHandle:${name}] ${message}`, extra);
@@ -100,12 +105,25 @@ export class EQFileHandle {
     });
     const existingMetadata = await getEQFile('zones', `${this.name}.json`, 'json');
     const exists = await getEQFileExists('zones', `${this.name}.glb`);
+    const previewCharacterCacheReady =
+      !isSpirePreview() ||
+      (
+        existingMetadata?.spireCharacterModels === true &&
+        existingMetadata?.spireCharacterTextures === true &&
+        existingMetadata?.spireCharacterCacheVersion === PREVIEW_CHARACTER_CACHE_VERSION
+      );
     logFileHandleStep(this.name, 'cache:checked', {
       glbExists      : exists,
       metadataVersion: existingMetadata?.version ?? null,
+      previewCharacterCacheReady,
       expectedVersion: VERSION,
     });
-    if (exists && existingMetadata?.version === VERSION && !this.#settings.forceReload) {
+    if (
+      exists &&
+      existingMetadata?.version === VERSION &&
+      previewCharacterCacheReady &&
+      !this.#settings.forceReload
+    ) {
       logFileHandleStep(this.name, 'cache:hit, skipping translation');
       return;
     }

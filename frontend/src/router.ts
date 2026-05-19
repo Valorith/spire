@@ -54,6 +54,11 @@ const router = new Router({
   },
   routes: [
     {
+      path: ROUTE.SAGE,
+      component: () => import('./views/sage/Sage.vue'),
+      meta: {title: "Sage"},
+    },
+    {
       path: '/',
       component: () => import('./components/layout/MainLayout.vue'),
       children: [
@@ -282,11 +287,6 @@ const router = new Router({
           path: ROUTE.QUEST_API_EXPLORER,
           component: () => import('./views/quest-api-explorer/QuestApiExplorer.vue'),
           meta: {title: "Quest API Explorer"},
-        },
-        {
-          path: ROUTE.SAGE,
-          component: () => import('./views/sage/Sage.vue'),
-          meta: {title: "Sage"},
         },
         {
           path: '/calculators',

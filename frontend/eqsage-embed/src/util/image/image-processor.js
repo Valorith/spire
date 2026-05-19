@@ -5,6 +5,37 @@ import { SageFileSystemDirectoryHandle } from 'sage-core/util/fileSystem';
 import { normalizeTextureName, parseTexture } from './shared';
 import ImageWorker from './worker?worker&inline';
 
+const isSpirePreview = () =>
+  typeof window !== 'undefined' && !!window.__spireSagePreview;
+
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
+const PREVIEW_IMAGE_TIMEOUT_MS = 180000;
+
+const getWorkerCount = () => {
+  const hardwareConcurrency = Number(navigator.hardwareConcurrency) || 4;
+  const maxWorkers = isSpirePreview() ? 1 : 4;
+  return Math.max(1, Math.min(maxWorkers, hardwareConcurrency));
+};
+
+const withPreviewTimeout = async (promise, label) => {
+  if (!isSpirePreview()) {
+    return promise;
+  }
+
+  let timeoutId = null;
+  const timeout = new Promise((resolve) => {
+    timeoutId = window.setTimeout(() => {
+      console.warn(`[ImageProcessor] timed out processing ${label}`);
+      resolve(null);
+    }, PREVIEW_IMAGE_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
 
 function chunkArray(array, numChunks) {
   if (numChunks < 1) {
@@ -49,7 +80,8 @@ class ImageProcessor {
    * @property {ArrayBuffer} data
    */
 
-  initializeWorkers(workers = Math.min(4, navigator.hardwareConcurrency ?? 4)) {
+  initializeWorkers(workers = getWorkerCount()) {
+    workers = Math.max(1, Number(workers) || getWorkerCount());
     console.log(`Initializing ${workers} image workers`);
     if (this.#workers.length) {
       console.log('Reusing initialized workers');
@@ -79,7 +111,10 @@ class ImageProcessor {
    * @param {ArrayBuffer} buffer
    */
   async compressImage(arr, name) {
-    const idx = this.currentWorkerIdx % 4;
+    if (!this.babylonWorkers.length) {
+      this.initializeWorkers();
+    }
+    const idx = this.currentWorkerIdx % this.babylonWorkers.length;
     const worker = this.babylonWorkers[idx];
     this.currentWorker++;
     const newBuffer = new ArrayBuffer(arr.byteLength);
@@ -116,14 +151,22 @@ class ImageProcessor {
     };
 
     const rootHandle = globals.gameController.rootFileSystemHandle;
-    if (!(rootHandle instanceof SageFileSystemDirectoryHandle)) {
+    if (
+      isSpirePreview() ||
+      !(rootHandle instanceof SageFileSystemDirectoryHandle) ||
+      !this.#workers.length
+    ) {
       for (const { name, data, shaderType } of unionImages) {
         const normalizedName = normalizeTextureName(name);
-        const parsedImage = await parseTexture(normalizedName, shaderType, data);
+        const parsedImage = await withPreviewTimeout(
+          parseTexture(normalizedName, shaderType, data),
+          normalizedName
+        );
         if (parsedImage) {
           await writeEQFile('textures', normalizedName, parsedImage);
         }
         updateProgress();
+        await yieldToBrowser();
       }
       this.current++;
       return;
@@ -135,7 +178,7 @@ class ImageProcessor {
       Comlink.expose(incrementContainer, worker);
     }
 
-    await Promise.all(
+    await withPreviewTimeout(Promise.all(
       imageChunks.map((imgs, idx) =>
         this.babylonWorkers[idx].parseTextures(
           Comlink.transfer(
@@ -146,7 +189,7 @@ class ImageProcessor {
           idx
         )
       )
-    );
+    ), `${unionImages.length} image batch`);
     this.current++;
   }
 }

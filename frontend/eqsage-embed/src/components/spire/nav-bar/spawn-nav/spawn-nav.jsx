@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   FormControl,
@@ -40,6 +40,7 @@ function SpawnNavBar() {
   const [gridLoading, setGridLoading] = useState(false);
   const [selectedGridIdx, setSelectedGridIdx] = useState(0);
   const [addEditDialogOpen, setAddEditDialogOpen] = useState(false);
+  const selectionRunRef = useRef(0);
   const confirm = useConfirm();
 
   const pickRaycast = useCallback(() => {
@@ -53,7 +54,8 @@ function SpawnNavBar() {
 
   useEffect(() => {
     if (!open) {
-      gameController.SpawnController.showSpawnPath([]);
+      selectionRunRef.current += 1;
+      gameController.SpawnController.clearSpawnSelection();
     }
     setRightDrawerOpen(open);
   }, [open, setRightDrawerOpen]);
@@ -105,22 +107,30 @@ function SpawnNavBar() {
         return;
       }
 
+      const selectionRun = selectionRunRef.current + 1;
+      selectionRunRef.current = selectionRun;
       gameController.SpawnController.npcLight(spawn);
       const s = JSON.parse(JSON.stringify(spawn));
+      if (!s.pathgrid) {
+        s.grid = [];
+      }
       const gridApi = new Spire.SpireApiTypes.GridEntryApi(
         ...Spire?.SpireApi.cfg()
       );
       const builder = new Spire.SpireQueryBuilder();
-      builder.where('gridid', '=', s.pathgrid);
-      builder.where('zoneid', '=', selectedZone.zoneidnumber);
-
-      delete s.grid;
+      if (s.pathgrid) {
+        builder.where('gridid', '=', s.pathgrid);
+        builder.where('zoneid', '=', selectedZone.zoneidnumber);
+      }
 
       if (s.pathgrid) {
         const gridApi = new Spire.SpireApiTypes.GridApi(
           ...Spire?.SpireApi.cfg()
         );
         const entry = await gridApi.getGrid({ id: s.pathgrid });
+        if (selectionRun !== selectionRunRef.current) {
+          return;
+        }
         setGrid(entry.data);
       } else {
         setGrid(null);
@@ -135,10 +145,18 @@ function SpawnNavBar() {
       setSelectedGridIdx(0);
       setOpen(true);
 
-      const gridEntries = await gridApi.listGridEntries(builder.get());
-      if (gridEntries.data?.length) {
-        setSelectedSpawn((s) => ({ ...s, grid: gridEntries.data }));
+      if (!s.pathgrid) {
+        return;
       }
+
+      const gridEntries = await gridApi.listGridEntries(builder.get());
+      if (selectionRun !== selectionRunRef.current) {
+        return;
+      }
+      const gridData = gridEntries.data ?? [];
+      setSelectedSpawn((current) =>
+        current?.id === s.id ? { ...current, grid: gridData } : current
+      );
     };
 
     const keyHandle = (e) => {

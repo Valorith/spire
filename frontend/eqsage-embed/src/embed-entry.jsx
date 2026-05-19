@@ -8,6 +8,7 @@ import { setEmbedConfig } from './embed-config';
 import { debugSageLog, markStage } from './debug-stage';
 
 const roots = new WeakMap();
+const SPIRE_SAGE_EMBED_BUILD = 'spire-sage-qa-cache-v2';
 
 const notifyStage = (options, stage, detail = '', extras = {}) => {
   options?.onStageChange?.({
@@ -98,6 +99,7 @@ export const mountSpireZoneEditor = async (
   notifyStage({ onStageChange }, 'embed:mount', 'Starting EQ Sage mount');
   markStage('mount:start');
   debugSageLog('[SageEmbed]', 'mount:start');
+  globalThis.__spireSageEmbedBuild = SPIRE_SAGE_EMBED_BUILD;
   if (!container) {
     throw new Error('mountSpireZoneEditor requires a container element');
   }

@@ -37,11 +37,38 @@ export const BabylonZone = () => {
     setViewerError(null);
     setViewerDetail('');
     setViewerStage('Loading viewer modules');
+    const loadSettings = { ...settings };
 
     (async () => {
+      let rendererPaused = false;
       try {
+        let zoneMetadata = null;
+        gameController.settings = loadSettings;
+        gameController.actions?.setZoneInfo?.({
+          ...selectedZone,
+          shortName: selectedZone.shortName ?? selectedZone.short_name,
+          longName : selectedZone.longName ?? selectedZone.long_name,
+        });
         setViewerStage('Loading zone processor');
         const { processZone } = await import('./processZone');
+        if (!current) {
+          return;
+        }
+        setViewerStage('Processing zone assets');
+        zoneMetadata = await processZone(
+          selectedZone.short_name,
+          loadSettings,
+          rootFileSystemHandle,
+          false,
+          gameController,
+          (stage, detail = '') => {
+            if (!current) {
+              return;
+            }
+            setViewerStage(stage);
+            setViewerDetail(detail);
+          }
+        );
         if (!current) {
           return;
         }
@@ -64,44 +91,28 @@ export const BabylonZone = () => {
         }
         debugSageLog('Ref', canvasRef.current);
         setViewerStage('Initializing Babylon renderer');
-        await gameController.loadEngine(canvasRef.current, settings.webgpu);
-        if (!current) {
-          return;
-        }
-        setViewerStage('Creating zone scene');
-        await gameController.ZoneController.loadViewerScene();
+        await gameController.loadEngine(canvasRef.current, loadSettings.webgpu);
+        gameController.setLoading(true);
+        rendererPaused = true;
         if (!current) {
           return;
         }
         window.addEventListener('resize', gameController.resize);
         window.addEventListener('keydown', gameController.keyDown);
 
-        setViewerStage('Processing zone assets');
-        await processZone(
-          selectedZone.short_name,
-          settings,
-          rootFileSystemHandle,
-          false,
-          gameController,
-          (stage, detail = '') => {
-            if (!current) {
-              return;
-            }
-            setViewerStage(stage);
-            setViewerDetail(detail);
-          }
-        );
-        if (!current) {
-          return;
-        }
         setViewerStage(
           `Loading ${selectedZone.long_name ?? selectedZone.short_name}`
         );
         setViewerDetail('');
-        await gameController.ZoneController.loadModel(selectedZone.short_name);
+        await gameController.ZoneController.loadModel(
+          selectedZone.short_name,
+          zoneMetadata && typeof zoneMetadata === 'object' ? zoneMetadata : null
+        );
         if (!current) {
           return;
         }
+        gameController.setLoading(false);
+        rendererPaused = false;
         setViewerStage('Zone ready');
         setViewerDetail('');
         setViewerReady(true);
@@ -111,7 +122,12 @@ export const BabylonZone = () => {
         }
         setViewerError(e);
         setViewerStage('Failed to load zone viewer');
-        setViewerDetail('');
+        const errorDetail = e?.message || `${e}`;
+        window.__spireSageViewerError = {
+          message: errorDetail,
+          stack  : e?.stack ?? null,
+        };
+        setViewerDetail(errorDetail);
         gameController.openAlert?.(
           'Error loading zone. Check console output.',
           'warning'
@@ -119,6 +135,13 @@ export const BabylonZone = () => {
         console.log('Error loading zone', e);
         const { GlobalStore } = await import('../../state');
         GlobalStore.actions.setLoading(false);
+        if (rendererPaused) {
+          gameController.setLoading(false);
+        }
+      } finally {
+        if (rendererPaused) {
+          gameController.setLoading(false);
+        }
       }
     })();
 
@@ -132,7 +155,7 @@ export const BabylonZone = () => {
     rootFileSystemHandle,
     selectedZone,
     settings?.webgpu,
-    settings,
+    settings?.forceReload,
   ]);
 
   useEffect(() => {
@@ -197,23 +220,35 @@ export const BabylonZone = () => {
         }}
       >
         <Suspense fallback={null}>
-          <Box sx={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
+          <Box sx={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
             <SpireOverlay inZone={!!selectedZone} />
           </Box>
         </Suspense>
       </Box>
       {canvasState && (
         <Box
-          as="canvas"
+          component="canvas"
           sx={{
             display : 'block',
             position: 'fixed',
+            right   : 0,
+            bottom  : 0,
             top     : 0,
             left    : 0,
             width   : '100vw',
             height  : '100vh',
+            minWidth: '100vw',
+            minHeight: '100vh',
+            maxWidth: 'none',
+            maxHeight: 'none',
             zIndex  : 1,
+            outline : 'none',
           }}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+          }}
+          onContextMenu={(event) => event.preventDefault()}
           ref={canvasRef}
           id="renderCanvas"
         />

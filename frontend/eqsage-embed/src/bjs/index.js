@@ -50,6 +50,7 @@ const exportObject = {
         import('@babylonjs/core/Maths/math.vector'),
         import('@babylonjs/core/Maths/math.color'),
         import('@babylonjs/core/Maths/math'),
+        import('@babylonjs/core/Culling/ray'),
         import('@babylonjs/core/Misc/tools'),
         import('@babylonjs/core/Misc/gradients'),
         import('@babylonjs/core/Events/pointerEvents'),
@@ -70,6 +71,7 @@ const exportObject = {
       ]);
       await loadBatch('Loading Babylon materials and meshes', [
         import('@babylonjs/core/Materials/Textures/texture'),
+        import('@babylonjs/core/Materials/Textures/dynamicTexture'),
         import('@babylonjs/core/Materials/Textures/cubeTexture'),
         import('@babylonjs/core/Materials/material'),
         import('@babylonjs/core/Materials/standardMaterial'),
@@ -83,6 +85,7 @@ const exportObject = {
         import('@babylonjs/core/Layers/glowLayer'),
         import('@babylonjs/core/Lights/light'),
         import('@babylonjs/core/Lights/pointLight'),
+        import('@babylonjs/core/Lights/hemisphericLight'),
       ]);
 
       reportStage?.('Babylon core ready');

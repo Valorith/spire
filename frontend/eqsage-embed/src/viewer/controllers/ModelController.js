@@ -2,6 +2,7 @@ import BABYLON from '@bjs';
 import { GameControllerChild } from './GameControllerChild';
 import { GlobalStore } from '../../state';
 import { assetUrl } from '../../embed-config';
+import { clampFlySpeed } from '../common/cameraSettings';
 
 const {
   Texture,
@@ -185,7 +186,7 @@ class ModelController extends GameControllerChild {
       return;
     }
     if (this.cameraFlySpeed !== undefined && this.CameraController?.camera) {
-      this.CameraController.camera.speed = this.cameraFlySpeed;
+      this.CameraController.camera.speed = clampFlySpeed(this.cameraFlySpeed);
     }
     this.scene.onBeforeRenderObservable.add(this.renderHook.bind(this));
     // Skybox

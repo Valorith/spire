@@ -185,7 +185,7 @@ export const StatusDialog = ({
               </Typography>
               <Button
                 onClick={async () => {
-                  onFolderSelected();
+                  await onFolderSelected();
                 }}
                 variant={'outlined'}
                 sx={{ margin: '0 auto' }}

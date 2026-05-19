@@ -12,6 +12,19 @@ import { CommonDialog } from './common';
 import { useSettingsContext } from '../../../context/settings';
 import { useDebouncedCallback } from 'use-debounce';
 import { useMainContext } from '../../main/context';
+import {
+  CAMERA_FLY_SPEED_MAX,
+  CAMERA_FLY_SPEED_MIN,
+  CAMERA_FLY_SPEED_STEP,
+  clampFlySpeed,
+} from '../../../viewer/common/cameraSettings';
+
+const sliderValue = (value, fallback = 0) => {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  const numberValue = Number(rawValue);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+};
+
 export const SettingsDialog = ({ onClose }) => {
   const {
     setOption,
@@ -21,14 +34,23 @@ export const SettingsDialog = ({ onClose }) => {
     webgpu = false,
     forceReload = false,
     clipPlane = 10000,
-    spawnLOD = 500,
+    spawnLOD = 50000,
     remoteUrl = '',
     importBoundary = false,
     showSpawns = true,
     disableAnimations = false,
     exportObjects = false,
   } = useSettingsContext();
-  const { embeddedMode } = useMainContext();
+  const { embeddedMode, gameController } = useMainContext();
+
+  const updateFlySpeed = (value) => {
+    const speed = clampFlySpeed(sliderValue(value, flySpeed));
+    setOption('flySpeed', speed);
+    if (gameController) {
+      gameController.settings = { ...gameController.settings, flySpeed: speed };
+      gameController.ZoneController?.setFlySpeed?.(speed);
+    }
+  };
 
   return (
     <CommonDialog onClose={onClose} title={'Settings'}>
@@ -38,14 +60,14 @@ export const SettingsDialog = ({ onClose }) => {
           color="text.secondary"
           gutterBottom
         >
-          Camera Fly Speed: {flySpeed}
+          Camera Fly Speed: {clampFlySpeed(flySpeed).toFixed(2)}
         </Typography>
         <Slider
-          value={flySpeed}
-          onChange={(e) => setOption('flySpeed', +e.target.value)}
-          step={0.01}
-          min={0.01}
-          max={20}
+          value={clampFlySpeed(flySpeed)}
+          onChange={(_event, value) => updateFlySpeed(value)}
+          step={CAMERA_FLY_SPEED_STEP}
+          min={CAMERA_FLY_SPEED_MIN}
+          max={CAMERA_FLY_SPEED_MAX}
         />
       </FormControl>
       <FormControl sx={{}} fullWidth>
@@ -58,7 +80,9 @@ export const SettingsDialog = ({ onClose }) => {
         </Typography>
         <Slider
           value={clipPlane}
-          onChange={(e) => setOption('clipPlane', +e.target.value)}
+          onChange={(_event, value) =>
+            setOption('clipPlane', sliderValue(value, clipPlane))
+          }
           step={1}
           min={5}
           max={30000}
@@ -75,12 +99,13 @@ export const SettingsDialog = ({ onClose }) => {
         <Slider
           value={spawnLOD}
           onChange={useDebouncedCallback(
-            (e) => setOption('spawnLOD', +e.target.value),
+            (_event, value) =>
+              setOption('spawnLOD', sliderValue(value, spawnLOD)),
             100
           )}
           step={1}
           min={0}
-          max={1000}
+          max={50000}
         />
       </FormControl>
 

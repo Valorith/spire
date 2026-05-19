@@ -39,10 +39,22 @@ import { AboutDialog } from './about-dialog';
 import { assetUrl } from '../../embed-config';
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
+const POPUP_Z_INDEX = 2600;
 const MenuProps = {
+  sx: {
+    zIndex: POPUP_Z_INDEX,
+  },
+  slotProps: {
+    root: {
+      sx: {
+        zIndex: POPUP_Z_INDEX,
+      },
+    },
+  },
   PaperProps: {
     style: {
       maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
+      zIndex   : POPUP_Z_INDEX,
       width    : 250,
     },
   },
@@ -67,6 +79,7 @@ export const ZoneChooserDialog = ({ open }) => {
   const [enteringZone, setEnteringZone] = useState(false);
 
   const autocompleteRef = useRef(null);
+  const previewAutoEnterRef = useRef(false);
   const filteredZoneList = useMemo(() => {
     if (expansionFilter.length === 0) {
       return zoneList;
@@ -134,6 +147,27 @@ export const ZoneChooserDialog = ({ open }) => {
   );
 
   useEffect(() => {
+    const previewZoneName = window.__spireSagePreviewZone;
+    if (
+      !previewZoneName ||
+      previewAutoEnterRef.current ||
+      selectedZone ||
+      enteringZone ||
+      !zoneList.length
+    ) {
+      return;
+    }
+
+    const previewZone = zoneList.find((z) => z.short_name === previewZoneName);
+    if (!previewZone) {
+      return;
+    }
+
+    previewAutoEnterRef.current = true;
+    void selectAndExit(previewZone);
+  }, [enteringZone, selectedZone, selectAndExit, zoneList]);
+
+  useEffect(() => {
     if (open) {
       setTimeout(() => {
         autocompleteRef.current?.querySelector('input')?.focus();
@@ -172,7 +206,7 @@ export const ZoneChooserDialog = ({ open }) => {
       title      : 'Unlink EQ Directory',
     })
       .then(() => {
-        if (window.electronAPI) {
+        if (window.electronAPI && window.electronFS) {
           localStorage.removeItem('eqdir');
           window.location.reload();
         } else {
@@ -235,7 +269,7 @@ export const ZoneChooserDialog = ({ open }) => {
             title="About / Contact"
           />
           <FlyoutButton
-            disabled={selectedZone}
+            disabled={!!selectedZone}
             onClick={unlinkDir}
             Icon={LinkOffIcon}
             title="Unlink EQ Directory"
@@ -286,6 +320,13 @@ export const ZoneChooserDialog = ({ open }) => {
               size="small"
               freeSolo
               sx={{ margin: '15px 0' }}
+              slotProps={{
+                popper: {
+                  sx: {
+                    zIndex: POPUP_Z_INDEX,
+                  },
+                },
+              }}
               id="combo-box-demo"
               isOptionEqualToValue={(option, value) => option.key === value.key}
               noOptionsText={'Enter Custom File and Press Return'}
