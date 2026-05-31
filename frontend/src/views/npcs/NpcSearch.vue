@@ -272,7 +272,7 @@ import NpcPopover from "../../components/NpcPopover";
 import {NpcTypeApi} from "../../app/api";
 import {SpireApi} from "../../app/api/spire-api";
 import {SpireQueryBuilder} from "../../app/api/spire-query-builder";
-import {DB_CLASSES} from "../../app/constants/eq-classes-constants";
+import {DB_CLASSES, DB_PLAYER_CLASSES} from "../../app/constants/eq-classes-constants";
 import {DB_RACE_NAMES, RACE_MASTER_DATA} from "../../app/constants/eq-races-constants";
 import {BODYTYPES} from "../../app/constants/eq-bodytype-constants";
 import {DbSchema} from "../../app/db-schema";
@@ -336,14 +336,13 @@ export default {
 
   computed: {
     classOptions() {
-      return Object.keys(this.classes)
+      return Object.keys(DB_PLAYER_CLASSES)
         .map(id => {
           return {
             id: parseInt(id),
-            name: this.getClassName(id),
+            name: DB_PLAYER_CLASSES[id],
           };
-        })
-        .filter(option => option.id > 0);
+        });
     },
   },
 
