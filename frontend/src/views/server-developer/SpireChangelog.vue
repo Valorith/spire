@@ -14,7 +14,7 @@
         <div class="d-flex flex-wrap align-items-center changelog-status">
           <span :class="sourceBadgeClass">{{ source || "unknown" }}</span>
           <span :class="writableBadgeClass">{{ writable ? "writable" : "read-only" }}</span>
-          <span class="badge badge-dark">version {{ packageVersion || "-" }}</span>
+          <span class="badge changelog-version-badge">version {{ packageVersion || "-" }}</span>
           <span class="badge badge-secondary">{{ releaseRepository || "release repo unset" }}</span>
         </div>
       </div>
@@ -474,6 +474,13 @@ export default {
 <style scoped>
 .changelog-status {
   gap: 4px;
+}
+
+.changelog-version-badge {
+  background: #f5f9ff;
+  color: #07182a;
+  border: 1px solid rgba(255, 255, 255, .55);
+  font-weight: 700;
 }
 
 .markdown-toolbar {
