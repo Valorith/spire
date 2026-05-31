@@ -141,8 +141,8 @@
             :inputData.sync="selectedRaces"
             :mask="selectedRaces"
           />
-          <div style="display: inline-block; margin-left: 15px; position: relative; bottom: 5px;">
-            <select v-model="selectedRaceDropdown" @change="selectedRaces = 0; searchNpcs()" class="eq-input" style="min-width: 160px; font-size: 12px;">
+          <div class="npc-other-race-filter">
+            <select v-model="selectedRaceDropdown" @change="selectedRaces = 0; searchNpcs()" class="form-control npc-other-race-select">
               <option :value="0">-- Other Races --</option>
               <option v-for="(name, id) in allRaces" :key="id" :value="parseInt(id)">{{ id }}) {{ name }}</option>
             </select>
@@ -615,4 +615,13 @@ export default {
 .eq-table td {
   white-space: nowrap;
 }
+
+.npc-other-race-filter {
+  display: inline-block;
+  margin-left: 15px;
+  min-width: 160px;
+  position: relative;
+  bottom: 5px;
+}
+
 </style>
