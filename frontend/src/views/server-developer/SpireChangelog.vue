@@ -152,6 +152,7 @@
 
 <script>
 import EqWindow from "@/components/eq-ui/EQWindow.vue";
+import EqWindowSimple from "@/components/eq-ui/EQWindowSimple.vue";
 import InfoErrorBanner from "@/components/InfoErrorBanner.vue";
 import {SpireApi} from "@/app/api/spire-api";
 import Clipboard from "@/app/clipboard/clipboard";
@@ -179,6 +180,7 @@ export default {
   name: "SpireChangelog",
   components: {
     EqWindow,
+    EqWindowSimple,
     InfoErrorBanner
   },
   data() {

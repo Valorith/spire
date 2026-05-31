@@ -352,21 +352,34 @@ export default {
       let latest = "0.0.0";
       const releaseRepository = AppEnv.getReleaseRepository() || "Valorith/spire"
 
-      const url = `https://api.github.com/repos/${releaseRepository}/releases/latest`
+      const url = `https://api.github.com/repos/${releaseRepository}/releases?per_page=10`
       fetch(url)
         .then(async response => {
           if (!response.ok) {
-            throw new Error(`Failed to fetch latest release: ${response.status}`)
+            throw new Error(`Failed to fetch releases: ${response.status}`)
           }
           return response.json()
         })
         .then(data => {
-          if (!data || typeof data.tag_name !== "string") {
+          const latestRelease = Array.isArray(data) ? data.find(release => !release.draft && !release.prerelease) : null;
+          if (!latestRelease) {
+            console.log("no releases found for [%s]", releaseRepository)
+            if (force) {
+              Notify.toast("No releases found for configured Spire repository.");
+            }
+            LocalSettings.setLastCheckedUpdateTime(new Date().getTime() / 1000)
+            LocalSettings.setLatestUpdateVersion(latest)
+            LocalSettings.setLatestReleasePayload(JSON.stringify({}))
+            this.currentVersion = current
+            return
+          }
+
+          if (typeof latestRelease.tag_name !== "string") {
             throw new Error("Latest release payload is missing tag_name")
           }
 
-          latest = data.tag_name.replace("v", "")
-          this.release = data
+          latest = latestRelease.tag_name.replace("v", "")
+          this.release = latestRelease
           const ignoredUpdateVersion = LocalSettings.getIgnoredUpdateVersion()
 
           if (semver.gt(latest, current)) {
@@ -383,7 +396,7 @@ export default {
 
           LocalSettings.setLastCheckedUpdateTime(new Date().getTime() / 1000)
           LocalSettings.setLatestUpdateVersion(latest)
-          LocalSettings.setLatestReleasePayload(JSON.stringify(data))
+          LocalSettings.setLatestReleasePayload(JSON.stringify(latestRelease))
 
           this.currentVersion = current
         })
