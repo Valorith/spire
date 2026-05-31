@@ -676,6 +676,7 @@ export default {
       let manualRoutes = [
         { name: "Coffee", route: ROUTE.COFFEE },
         { name: "Tasks", route: ROUTE.TASKS },
+        { name: "Spire Changelog Editor", route: ROUTE.SPIRE_CHANGELOG, keywords: "change log changelog release notes" },
         { name: "Spells", route: ROUTE.SPELLS_LIST },
         { name: "[Quest API] Explorer", route: ROUTE.QUEST_API_EXPLORER },
         { name: "[Quest API] Explorer (Perl)", route: `${ROUTE.QUEST_API_EXPLORER}?lang=perl` },
@@ -685,7 +686,7 @@ export default {
 
       for (let m of manualRoutes) {
         keys.push({
-          id: m.name, title: m.name, handler: () => {
+          id: m.name, title: m.name, keywords: m.keywords, handler: () => {
             this.$router.push(m.route).catch((e) => {
             })
           }
