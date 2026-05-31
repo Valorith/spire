@@ -6,11 +6,14 @@ import (
 	"strings"
 )
 
-const DefaultRepository = "EQEmuTools/spire"
+const DefaultRepository = "Valorith/spire"
 
 var githubRepoRegexp = regexp.MustCompile(`github\.com[/:]([^/]+)/([^/]+?)(?:\.git)?$`)
 
 type packageJSON struct {
+	Spire struct {
+		ReleaseRepository string `json:"release_repository"`
+	} `json:"spire"`
 	Repository struct {
 		URL string `json:"url"`
 	} `json:"repository"`
@@ -51,14 +54,25 @@ func RepositoryFromPackageJSON(raw []byte) string {
 		return ""
 	}
 
-	return NormalizeGitHubRepository(pkg.Repository.URL)
+	if repo := NormalizeGitHubRepository(pkg.Spire.ReleaseRepository); repo != "" {
+		return repo
+	}
+
+	return ""
 }
 
-func ResolveRepositoryDetails(override string, packageJSONRaw []byte, remoteLookup RemoteLookup) Resolution {
-	if repo := NormalizeGitHubRepository(override); repo != "" {
+func ResolveRepositoryDetailsWithConfig(envOverride string, configOverride string, packageJSONRaw []byte, remoteLookup RemoteLookup) Resolution {
+	if repo := NormalizeGitHubRepository(envOverride); repo != "" {
 		return Resolution{
 			Repository: repo,
 			Source:     "env",
+		}
+	}
+
+	if repo := NormalizeGitHubRepository(configOverride); repo != "" {
+		return Resolution{
+			Repository: repo,
+			Source:     "config",
 		}
 	}
 
@@ -89,6 +103,10 @@ func ResolveRepositoryDetails(override string, packageJSONRaw []byte, remoteLook
 		Repository: DefaultRepository,
 		Source:     "default",
 	}
+}
+
+func ResolveRepositoryDetails(override string, packageJSONRaw []byte, remoteLookup RemoteLookup) Resolution {
+	return ResolveRepositoryDetailsWithConfig(override, "", packageJSONRaw, remoteLookup)
 }
 
 func ResolveRepository(override string, packageJSONRaw []byte, remoteLookup RemoteLookup) string {

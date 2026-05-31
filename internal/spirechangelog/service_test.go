@@ -324,7 +324,7 @@ func TestGenerateDraftUsesLatestLocalTag(t *testing.T) {
 func TestLoadStateIncludesConfiguredReleaseRepositoryAndCandidates(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, "CHANGELOG.md"), "## [1.0.0] 1/1/2026\n\n* Existing entry\n")
-	mustWriteFile(t, filepath.Join(dir, "package.json"), "{\n  \"name\": \"spire\",\n  \"version\": \"1.0.0\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/ConfiguredOrg/spire.git\"\n  }\n}\n")
+	mustWriteFile(t, filepath.Join(dir, "package.json"), "{\n  \"name\": \"spire\",\n  \"version\": \"1.0.0\",\n  \"spire\": {\n    \"release_repository\": \"ConfiguredOrg/spire\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/EQEmuTools/spire.git\"\n  }\n}\n")
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.name", "Codex")
 	runGit(t, dir, "config", "user.email", "codex@example.com")
@@ -390,8 +390,50 @@ func TestUpdateReleaseRepositoryWritesLivePackageJSON(t *testing.T) {
 		t.Fatalf("failed reading package.json: %v", err)
 	}
 
-	if !strings.Contains(string(body), "\"url\": \"https://github.com/Valorith/spire.git\"") {
+	if !strings.Contains(string(body), "\"release_repository\": \"Valorith/spire\"") {
 		t.Fatalf("expected package.json repository update, got %q", string(body))
+	}
+}
+
+func TestSaveContentWritesEntireChangelog(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "CHANGELOG.md"), "## [1.0.0] 1/1/2026\n\n* Existing entry\n")
+	mustWriteFile(t, filepath.Join(dir, "package.json"), "{\n  \"name\": \"spire\",\n  \"version\": \"1.0.0\",\n  \"spire\": {\n    \"release_repository\": \"Valorith/spire\"\n  }\n}\n")
+
+	oldWD, _ := os.Getwd()
+	defer os.Chdir(oldWD)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	t.Setenv("APP_ENV", "local")
+
+	svc := NewService(gocache.New(0, 0))
+	updated := "## [1.0.1] 1/2/2026\n\n* New entry\n\n## [1.0.0] 1/1/2026\n\n* Existing entry"
+	state, err := svc.SaveContent(SaveContentRequest{Content: updated})
+	if err != nil {
+		t.Fatalf("SaveContent returned error: %v", err)
+	}
+
+	if state.TopRelease.Version != "1.0.1" {
+		t.Fatalf("expected top release 1.0.1, got %s", state.TopRelease.Version)
+	}
+
+	body, err := os.ReadFile(filepath.Join(dir, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatalf("failed reading CHANGELOG.md: %v", err)
+	}
+	if string(body) != updated+"\n" {
+		t.Fatalf("expected full changelog rewrite, got %q", string(body))
+	}
+}
+
+func TestValidateCurrentDocumentAllowsUnreleasedDraft(t *testing.T) {
+	svc := NewService(gocache.New(0, 0))
+	content := "## [Unreleased] 1/2/2026\n\n* New entry\n\n## [1.0.0] 1/1/2026\n\n* Existing entry\n"
+
+	issues := svc.ValidateCurrentDocument(content, "1.0.0")
+	if len(issues) > 0 {
+		t.Fatalf("expected no validation issues for unreleased draft, got %v", issues)
 	}
 }
 

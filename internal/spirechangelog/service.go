@@ -17,8 +17,9 @@ import (
 
 var releaseHeadingRegexp = regexp.MustCompile(`(?m)^## \[([^\]]+)\] ([^\n]+)$`)
 var packageVersionRegexp = regexp.MustCompile(`(?m)("version"\s*:\s*")([^"]+)(")`)
-var packageRepositoryURLRegexp = regexp.MustCompile(`(?s)("repository"\s*:\s*\{.*?"url"\s*:\s*")([^"]+)(")`)
-var packageRepositoryStringRegexp = regexp.MustCompile(`(?m)("repository"\s*:\s*")([^"]+)(")`)
+var packageSpireReleaseRepositoryRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*\{[^}]*"release_repository"\s*:\s*")([^"]+)(")`)
+var packageSpireEmptyObjectRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*)\{\s*\}`)
+var packageSpireObjectOpenRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*\{)`)
 var semverRegexp = regexp.MustCompile(`^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$`)
 
 type Service struct {
@@ -64,6 +65,10 @@ type SaveRequest struct {
 	Version     string `json:"version"`
 	ReleaseDate string `json:"release_date"`
 	Body        string `json:"body"`
+}
+
+type SaveContentRequest struct {
+	Content string `json:"content"`
 }
 
 type UpdatePackageVersionRequest struct {
@@ -365,6 +370,32 @@ func (s *Service) SaveRelease(req SaveRequest) (*LoadState, error) {
 	return s.LoadState()
 }
 
+func (s *Service) SaveContent(req SaveContentRequest) (*LoadState, error) {
+	path, ok := s.liveChangelogPath()
+	if !ok {
+		return nil, errors.New("live CHANGELOG.md is unavailable in this environment")
+	}
+
+	if !s.IsWritable() {
+		return nil, errors.New("CHANGELOG.md is read-only in this environment")
+	}
+
+	content := req.Content
+	if strings.TrimSpace(content) == "" {
+		return nil, errors.New("CHANGELOG.md content is required")
+	}
+
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	if err := writeFileAtomically(path, content); err != nil {
+		return nil, err
+	}
+
+	return s.LoadState()
+}
+
 func (s *Service) ValidateCurrentDocument(content string, packageVersion string) []string {
 	var issues []string
 	top := s.ParseTopRelease(content)
@@ -374,7 +405,7 @@ func (s *Service) ValidateCurrentDocument(content string, packageVersion string)
 		if strings.TrimSpace(top.Body) == "" {
 			issues = append(issues, "The top changelog release section is empty.")
 		}
-		if packageVersion != "" && top.Version != packageVersion {
+		if packageVersion != "" && top.Version != packageVersion && !strings.EqualFold(top.Version, "Unreleased") {
 			issues = append(issues, fmt.Sprintf("Top changelog version [%s] does not match package.json version [%s].", top.Version, packageVersion))
 		}
 	}
@@ -438,7 +469,7 @@ func (s *Service) ParseTopRelease(content string) ReleaseSection {
 
 func (s *Service) BuildReleasePayload(release ReleaseSection) ReleasePayload {
 	version := strings.TrimSpace(release.Version)
-	if version == "" {
+	if version == "" || strings.EqualFold(version, "Unreleased") {
 		return ReleasePayload{}
 	}
 
@@ -696,19 +727,40 @@ func setPackageRepository(raw []byte, repository string) ([]byte, bool, error) {
 		return nil, false, errors.New("package.json content is empty")
 	}
 
-	repositoryURL := fmt.Sprintf("https://github.com/%s.git", repository)
+	repository = release.NormalizeGitHubRepository(repository)
+	if repository == "" {
+		return nil, false, errors.New("Release repository must use owner/repo format or a GitHub repository URL.")
+	}
+
 	content := string(raw)
 
-	if packageRepositoryURLRegexp.MatchString(content) {
-		updated := packageRepositoryURLRegexp.ReplaceAllString(content, `${1}`+repositoryURL+`${3}`)
+	if packageSpireReleaseRepositoryRegexp.MatchString(content) {
+		updated := packageSpireReleaseRepositoryRegexp.ReplaceAllString(content, `${1}`+repository+`${3}`)
 		if updated == content {
 			return raw, false, nil
 		}
 		return []byte(updated), true, nil
 	}
 
-	if packageRepositoryStringRegexp.MatchString(content) {
-		updated := packageRepositoryStringRegexp.ReplaceAllString(content, `${1}`+repositoryURL+`${3}`)
+	if packageSpireEmptyObjectRegexp.MatchString(content) {
+		updated := packageSpireEmptyObjectRegexp.ReplaceAllString(
+			content,
+			fmt.Sprintf(`${1}{
+    "release_repository": "%s"
+  }`, repository),
+		)
+		if updated == content {
+			return raw, false, nil
+		}
+		return []byte(updated), true, nil
+	}
+
+	if packageSpireObjectOpenRegexp.MatchString(content) {
+		updated := packageSpireObjectOpenRegexp.ReplaceAllString(
+			content,
+			fmt.Sprintf(`${1}
+    "release_repository": "%s",`, repository),
+		)
 		if updated == content {
 			return raw, false, nil
 		}
@@ -716,15 +768,15 @@ func setPackageRepository(raw []byte, repository string) ([]byte, bool, error) {
 	}
 
 	if packageVersionRegexp.MatchString(content) {
-		repositoryBlock := fmt.Sprintf("${1}${2}${3},\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"%s\"\n  }", repositoryURL)
-		updated := packageVersionRegexp.ReplaceAllString(content, repositoryBlock)
+		spireBlock := fmt.Sprintf("${1}${2}${3},\n  \"spire\": {\n    \"release_repository\": \"%s\"\n  }", repository)
+		updated := packageVersionRegexp.ReplaceAllString(content, spireBlock)
 		if updated == content {
 			return raw, false, nil
 		}
 		return []byte(updated), true, nil
 	}
 
-	return nil, false, errors.New("Unable to locate package.json repository field.")
+	return nil, false, errors.New("Unable to locate package.json version field.")
 }
 
 func normalizeDraftSubject(subject string) (string, bool) {

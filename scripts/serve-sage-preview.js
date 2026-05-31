@@ -1319,7 +1319,7 @@ const appEnvPayload = {
     is_hosted_read_only_mode_enabled : false,
     is_spire_initialized             : true,
     os                               : 'windows',
-    release_repository               : 'EQEmuTools/spire',
+    release_repository               : 'Valorith/spire',
     settings                         : [],
     version                          : readPreviewVersion(),
   },

@@ -19,9 +19,21 @@ func TestNormalizeGitHubRepository(t *testing.T) {
 }
 
 func TestResolveRepositoryFallsBackToPackageJSON(t *testing.T) {
-	raw := []byte(`{"repository":{"url":"https://github.com/Valorith/spire.git"}}`)
+	raw := []byte(`{"spire":{"release_repository":"Valorith/spire"},"repository":{"url":"https://github.com/EQEmuTools/spire.git"}}`)
 	if got := ResolveRepository("", raw, nil); got != "Valorith/spire" {
 		t.Fatalf("ResolveRepository() = %q, want %q", got, "Valorith/spire")
+	}
+}
+
+func TestResolveRepositoryPrefersConfigOverride(t *testing.T) {
+	raw := []byte(`{"spire":{"release_repository":"Valorith/spire"}}`)
+
+	details := ResolveRepositoryDetailsWithConfig("", "ConfiguredOrg/spire", raw, nil)
+	if details.Repository != "ConfiguredOrg/spire" {
+		t.Fatalf("ResolveRepositoryDetailsWithConfig().Repository = %q, want %q", details.Repository, "ConfiguredOrg/spire")
+	}
+	if details.Source != "config" {
+		t.Fatalf("ResolveRepositoryDetailsWithConfig().Source = %q, want %q", details.Source, "config")
 	}
 }
 
@@ -43,7 +55,7 @@ func TestResolveRepositoryFallsBackToGitRemotes(t *testing.T) {
 }
 
 func TestResolveRepositoryPrefersEnvOverride(t *testing.T) {
-	raw := []byte(`{"repository":{"url":"https://github.com/Valorith/spire.git"}}`)
+	raw := []byte(`{"spire":{"release_repository":"Valorith/spire"}}`)
 	lookup := func(name string) (string, error) {
 		return "git@github.com:ExampleOrg/spire.git", nil
 	}
@@ -54,5 +66,11 @@ func TestResolveRepositoryPrefersEnvOverride(t *testing.T) {
 	}
 	if details.Source != "env" {
 		t.Fatalf("ResolveRepositoryDetails().Source = %q, want %q", details.Source, "env")
+	}
+}
+
+func TestResolveRepositoryDefaultIsValorithSpire(t *testing.T) {
+	if got := ResolveRepository("", nil, nil); got != "Valorith/spire" {
+		t.Fatalf("ResolveRepository() = %q, want %q", got, "Valorith/spire")
 	}
 }

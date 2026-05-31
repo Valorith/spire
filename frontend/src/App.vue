@@ -350,7 +350,7 @@ export default {
       }
 
       let latest = "0.0.0";
-      const releaseRepository = AppEnv.getReleaseRepository() || "EQEmuTools/spire"
+      const releaseRepository = AppEnv.getReleaseRepository() || "Valorith/spire"
 
       const url = `https://api.github.com/repos/${releaseRepository}/releases/latest`
       fetch(url)

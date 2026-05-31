@@ -1,6 +1,9 @@
 {
   "name": "spire",
   "version": "4.23.5",
+  "spire": {
+    "release_repository": "Valorith/spire"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/EQEmuTools/spire.git"

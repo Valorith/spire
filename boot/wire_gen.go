@@ -92,7 +92,7 @@ func InitializeApplication() (App, error) {
 	examplesGithubSourcer := questapi.NewExamplesGithubSourcer(cache, sourceDownloader)
 	questapiController := questapi.NewController(parseService, examplesGithubSourcer)
 	spirechangelogService := spirechangelog.NewService(cache)
-	appController := app.NewController(cache, init, userUser, settings, resolver, spirechangelogService)
+	appController := app.NewController(cache, init, userUser, settings, resolver, spirechangelogService, config)
 	queryController := query.NewController(resolver, appLogger)
 	exporter := clientfiles.NewExporter(appLogger)
 	importer := clientfiles.NewImporter(appLogger)

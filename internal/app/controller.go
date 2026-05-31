@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/EQEmuTools/spire/internal/database"
 	"github.com/EQEmuTools/spire/internal/env"
+	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
 	"github.com/EQEmuTools/spire/internal/filepathcheck"
 	"github.com/EQEmuTools/spire/internal/http/routes"
 	"github.com/EQEmuTools/spire/internal/models"
@@ -34,6 +35,7 @@ type Controller struct {
 	settings         *spire.Settings
 	db               *database.Resolver
 	changelogService *spirechangelog.Service
+	serverConfig     *eqemuserverconfig.Config
 }
 
 // NewController returns a new app controller
@@ -44,6 +46,7 @@ func NewController(
 	settings *spire.Settings,
 	db *database.Resolver,
 	changelog *spirechangelog.Service,
+	serverConfig *eqemuserverconfig.Config,
 ) *Controller {
 	return &Controller{
 		cache:            cache,
@@ -52,6 +55,7 @@ func NewController(
 		settings:         settings,
 		db:               db,
 		changelogService: changelog,
+		serverConfig:     serverConfig,
 	}
 }
 
@@ -123,12 +127,25 @@ func (d *Controller) env(c echo.Context) error {
 		}
 
 		version := pkg.Version
-		releaseRepository := release.ResolveRepository(os.Getenv("SPIRE_RELEASE_REPO"), pJson, nil)
+		configReleaseRepository := ""
+		if d.serverConfig != nil {
+			if config, err := d.serverConfig.Get(); err == nil {
+				configReleaseRepository = config.Spire.ReleaseRepository
+			}
+		}
+		releaseRepository := release.ResolveRepositoryDetailsWithConfig(
+			os.Getenv("SPIRE_RELEASE_REPO"),
+			configReleaseRepository,
+			pJson,
+			nil,
+		).Repository
+		hasRuntimeReleaseRepositoryOverride := release.NormalizeGitHubRepository(os.Getenv("SPIRE_RELEASE_REPO")) != "" ||
+			release.NormalizeGitHubRepository(configReleaseRepository) != ""
 		if stateErr == nil && state != nil {
 			if state.PackageVersion != "" {
 				version = state.PackageVersion
 			}
-			if state.ReleaseRepository != "" {
+			if state.ReleaseRepository != "" && !hasRuntimeReleaseRepositoryOverride {
 				releaseRepository = state.ReleaseRepository
 			}
 		}

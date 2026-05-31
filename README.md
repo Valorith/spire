@@ -65,7 +65,7 @@ Built for the long haul with code generation to make keeping things up to date f
 
 ## Using Spire - Locally
 
-Download the [latest release](https://github.com/EQEmuTools/spire/releases). for your operating system.
+Download the [latest release](https://github.com/Valorith/spire/releases). for your operating system.
 
 Place the executable in your EverQuest Emulator Server directory and simply run it.
 
@@ -166,21 +166,26 @@ Want to help contribute to Spire? Anyone can submit [pull requests](https://gith
 
 ### Contributing - Cutting a Release
 
-When looking to cut a new release of Spire, use `/dev/spirechangelog` from a live repo checkout to manage the release draft. The tool can bump `package.json`, scaffold the next top section in `CHANGELOG.md`, generate a draft from recent commits, and preview the exact GitHub release payload that will be published.
+When looking to cut a new release of Spire, update `CHANGELOG.md` from `/dev/spirechangelog` in a live repo checkout. The tool is a manual markdown editor with validation and preview helpers. Use the `Release` button to create a top `## [Unreleased] M/D/YYYY` section, then write the release notes there.
 
 `CHANGELOG.md` is the source of truth for the main page and for GitHub release notes. During release publishing, the top changelog section is exported and synced to the GitHub Release body so the desktop updater modal and homepage stay aligned.
 
-The target GitHub repository for publishing and updater checks is resolved in this order:
+To publish a release, run the `Manual Release` GitHub Actions workflow and choose `patch`, `minor`, or `major`. The workflow stamps the top `Unreleased` changelog section with the computed version, updates `package.json` and `package-lock.json`, builds the release assets, commits the version metadata, and publishes the GitHub Release. Once the release is published, Spire's update check reads that repository's latest GitHub release and offers the new version to users.
+
+The runtime app updater checks GitHub releases from the first configured repository in this order:
 1. `SPIRE_RELEASE_REPO`
-2. `package.json.repository.url`
-3. `git remote upstream`
-4. `git remote origin`
-5. fallback to `EQEmuTools/spire`
+2. `eqemu_config.json` `spire.release_repository`
+3. `package.json` `spire.release_repository`
+4. `git remote upstream`
+5. `git remote origin`
+6. fallback to `Valorith/spire`
+
+Release publishing scripts use the same default and `package.json` setting, with `SPIRE_RELEASE_REPO` as the CI override.
 
 ![image](https://user-images.githubusercontent.com/3319450/192076389-0c18c58c-21de-4319-b5eb-d41801a0a063.png)
 
 
-When the changes are committed to `master` the Drone CI pipeline will automatically take care of the rest and publish the release to the [releases page](https://github.com/EQEmuTools/spire/releases)
+The release is published to the [releases page](https://github.com/Valorith/spire/releases), which is the same source Spire checks for updates by default.
 
   ![image](https://user-images.githubusercontent.com/3319450/192076335-f5e0b810-1240-45e9-91e1-52def88845fb.png)
 
