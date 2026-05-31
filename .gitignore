@@ -60,4 +60,9 @@ frontend/.env.production
 # Playwright test artifacts
 test-results/
 frontend/test-results/
+output/
+frontend/eqsage-embed/output/
 node_modules/
+
+# Local scratch images created during browser/UI debugging
+tmp-*.png
