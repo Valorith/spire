@@ -25,9 +25,9 @@
             v-model="selectedClass"
             @change="searchNpcs()"
           >
-            <option value="0">-- All --</option>
-            <option v-for="(data, id) in classes" :value="id" :key="id">
-              {{ id }}) {{ data.class }}
+            <option :value="0">-- All --</option>
+            <option v-for="option in classOptions" :value="option.id" :key="option.id">
+              {{ option.id }}) {{ option.name }}
             </option>
           </select>
         </div>
@@ -334,10 +334,24 @@ export default {
     }
   },
 
+  computed: {
+    classOptions() {
+      return Object.keys(this.classes)
+        .map(id => {
+          return {
+            id: parseInt(id),
+            name: this.getClassName(id),
+          };
+        })
+        .filter(option => option.id > 0);
+    },
+  },
+
   methods: {
     loadFromQuery() {
       const q = this.$route.query;
       if (q.name) this.npcName = q.name;
+      if (q.class) this.selectedClass = parseInt(q.class);
       if (q.classes) this.selectedClasses = parseInt(q.classes);
       if (q.races) this.selectedRaces = parseInt(q.races);
       if (q.classSelectOnly) this.selectOnlyClassEnabled = true;
@@ -349,7 +363,7 @@ export default {
       if (q.orderBy) this.sortField = q.orderBy;
       if (q.orderDirection) this.sortDirection = q.orderDirection;
 
-      if (q.name || q.classes || q.races || q.raceId || q.level || q.bodytype) {
+      if (q.name || q.class || q.classes || q.races || q.raceId || q.level || q.bodytype) {
         this.searchNpcs();
       }
     },
@@ -357,6 +371,7 @@ export default {
     updateQueryState() {
       let queryState = {};
       if (this.npcName) queryState.name = this.npcName;
+      if (parseInt(this.selectedClass) > 0) queryState.class = this.selectedClass;
       if (this.selectedClasses > 0) queryState.classes = this.selectedClasses;
       if (this.selectedRaces > 0) queryState.races = this.selectedRaces;
       if (this.selectOnlyClassEnabled) queryState.classSelectOnly = 1;
@@ -402,6 +417,11 @@ export default {
       // Bodytype filter
       if (parseInt(this.selectedBodytype) >= 0) {
         builder.where("bodytype", "=", this.selectedBodytype);
+      }
+
+      // Class filter (from dropdown)
+      if (parseInt(this.selectedClass) > 0) {
+        builder.where("class", "=", this.selectedClass);
       }
 
       // Class filter (from icon selector)
@@ -523,6 +543,7 @@ export default {
 
     resetForm() {
       this.npcName = "";
+      this.selectedClass = 0;
       this.selectedClasses = 0;
       this.selectedRaces = 0;
       this.selectOnlyClassEnabled = false;
