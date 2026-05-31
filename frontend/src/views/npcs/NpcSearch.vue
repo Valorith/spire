@@ -123,7 +123,7 @@
             :display-all-none="true"
             :add-only-button-enabled="true"
             :add-only-state-enabled="selectOnlyClassEnabled"
-            @fired="searchNpcs()"
+            @fired="handleClassBitmaskFired()"
             @selectOnly="selectOnlyClassEnabled = $event"
             :inputData.sync="selectedClasses"
             :mask="selectedClasses"
@@ -137,12 +137,12 @@
           <race-bitmask-calculator
             :centered-buttons="false"
             :display-all-none="true"
-            @fired="selectedRaceDropdown = 0; searchNpcs()"
+            @fired="handleRaceBitmaskFired()"
             :inputData.sync="selectedRaces"
             :mask="selectedRaces"
           />
           <div class="npc-other-race-filter">
-            <select v-model="selectedRaceDropdown" @change="selectedRaces = 0; searchNpcs()" class="form-control npc-other-race-select">
+            <select v-model="selectedRaceDropdown" @change="handleRaceDropdownChanged()" class="form-control npc-other-race-select">
               <option :value="0">-- Other Races --</option>
               <option v-for="(name, id) in allRaces" :key="id" :value="parseInt(id)">{{ id }}) {{ name }}</option>
             </select>
@@ -313,6 +313,8 @@ export default {
       allRaces: DB_RACE_NAMES,
       selectedClasses: 0,
       selectedRaces: 0,
+      selectedClassBitmaskActive: false,
+      selectedRaceBitmaskActive: false,
       selectOnlyClassEnabled: false,
       selectedRaceDropdown: 0,
     }
@@ -349,20 +351,24 @@ export default {
   methods: {
     loadFromQuery() {
       const q = this.$route.query;
-      if (q.name) this.npcName = q.name;
-      if (q.class) this.selectedClass = parseInt(q.class);
-      if (q.classes) this.selectedClasses = parseInt(q.classes);
-      if (q.races) this.selectedRaces = parseInt(q.races);
-      if (q.classSelectOnly) this.selectOnlyClassEnabled = true;
-      if (q.raceId) this.selectedRaceDropdown = parseInt(q.raceId);
-      if (q.level) this.selectedLevel = parseInt(q.level);
-      if (q.levelType) this.selectedLevelType = parseInt(q.levelType);
-      if (q.bodytype) this.selectedBodytype = parseInt(q.bodytype);
-      if (q.limit) this.limit = parseInt(q.limit);
-      if (q.orderBy) this.sortField = q.orderBy;
-      if (q.orderDirection) this.sortDirection = q.orderDirection;
+      const hasQuery = (key) => Object.prototype.hasOwnProperty.call(q, key);
 
-      if (q.name || q.class || q.classes || q.races || q.raceId || q.level || q.bodytype) {
+      this.npcName = hasQuery("name") ? q.name : "";
+      this.selectedClass = hasQuery("class") ? parseInt(q.class) : 0;
+      this.selectedClasses = hasQuery("classes") ? parseInt(q.classes) : 0;
+      this.selectedRaces = hasQuery("races") ? parseInt(q.races) : 0;
+      this.selectedClassBitmaskActive = hasQuery("classes");
+      this.selectedRaceBitmaskActive = hasQuery("races");
+      this.selectOnlyClassEnabled = hasQuery("classSelectOnly");
+      this.selectedRaceDropdown = hasQuery("raceId") ? parseInt(q.raceId) : 0;
+      this.selectedLevel = hasQuery("level") ? parseInt(q.level) : 0;
+      this.selectedLevelType = hasQuery("levelType") ? parseInt(q.levelType) : 0;
+      this.selectedBodytype = hasQuery("bodytype") ? parseInt(q.bodytype) : -1;
+      this.limit = hasQuery("limit") ? parseInt(q.limit) : 100;
+      this.sortField = hasQuery("orderBy") ? q.orderBy : "id";
+      this.sortDirection = hasQuery("orderDirection") ? q.orderDirection : "asc";
+
+      if (q.name || q.class || hasQuery("classes") || hasQuery("races") || q.raceId || q.level || q.bodytype) {
         this.searchNpcs();
       }
     },
@@ -371,8 +377,8 @@ export default {
       let queryState = {};
       if (this.npcName) queryState.name = this.npcName;
       if (parseInt(this.selectedClass) > 0) queryState.class = this.selectedClass;
-      if (this.selectedClasses > 0) queryState.classes = this.selectedClasses;
-      if (this.selectedRaces > 0) queryState.races = this.selectedRaces;
+      if (this.selectedClassBitmaskActive || this.selectedClasses > 0) queryState.classes = this.selectedClasses;
+      if (this.selectedRaceBitmaskActive || this.selectedRaces > 0) queryState.races = this.selectedRaces;
       if (this.selectOnlyClassEnabled) queryState.classSelectOnly = 1;
       if (this.selectedRaceDropdown > 0) queryState.raceId = this.selectedRaceDropdown;
       if (parseInt(this.selectedLevel) > 0) queryState.level = this.selectedLevel;
@@ -395,6 +401,15 @@ export default {
 
       const builder = new SpireQueryBuilder();
       const api = (new NpcTypeApi(...SpireApi.cfg()));
+
+      if (
+        (this.selectedClassBitmaskActive && parseInt(this.selectedClasses) === 0) ||
+        (this.selectedRaceBitmaskActive && parseInt(this.selectedRaces) === 0 && parseInt(this.selectedRaceDropdown) === 0)
+      ) {
+        this.npcs = [];
+        this.loaded = true;
+        return;
+      }
 
       // Name or ID search
       if (this.npcName) {
@@ -528,6 +543,23 @@ export default {
       return this.sortDirection === 'asc' ? 'fa fa-sort-asc sort-icon sort-icon--active' : 'fa fa-sort-desc sort-icon sort-icon--active'
     },
 
+    handleClassBitmaskFired() {
+      this.selectedClassBitmaskActive = true;
+      this.searchNpcs();
+    },
+
+    handleRaceBitmaskFired() {
+      this.selectedRaceDropdown = 0;
+      this.selectedRaceBitmaskActive = true;
+      this.searchNpcs();
+    },
+
+    handleRaceDropdownChanged() {
+      this.selectedRaces = 0;
+      this.selectedRaceBitmaskActive = false;
+      this.searchNpcs();
+    },
+
     editNpc(id) {
       this.$router.push({path: "/npc/" + id});
     },
@@ -545,6 +577,8 @@ export default {
       this.selectedClass = 0;
       this.selectedClasses = 0;
       this.selectedRaces = 0;
+      this.selectedClassBitmaskActive = false;
+      this.selectedRaceBitmaskActive = false;
       this.selectOnlyClassEnabled = false;
       this.selectedRaceDropdown = 0;
       this.selectedLevel = 0;
