@@ -187,8 +187,6 @@
             <th class="sortable-th" style="text-align: center;" @click="sortBy('hp')">HP <i :class="sortIconClass('hp')"/></th>
             <th class="sortable-th" style="text-align: center;" @click="sortBy('mindmg')">Min Dmg <i :class="sortIconClass('mindmg')"/></th>
             <th class="sortable-th" style="text-align: center;" @click="sortBy('maxdmg')">Max Dmg <i :class="sortIconClass('maxdmg')"/></th>
-            <th class="sortable-th" style="text-align: center;" @click="sortBy('aggroradius')">Aggro <i :class="sortIconClass('aggroradius')"/></th>
-            <th class="sortable-th" style="text-align: center;" @click="sortBy('loottable_id')">Loot Table <i :class="sortIconClass('loottable_id')"/></th>
           </tr>
           </thead>
           <tbody>
@@ -248,8 +246,6 @@
             <td style="text-align: right;">{{ formatNumber(npc.hp) }}</td>
             <td style="text-align: center;">{{ npc.mindmg }}</td>
             <td style="text-align: center;">{{ npc.maxdmg }}</td>
-            <td style="text-align: center;">{{ npc.aggroradius }}</td>
-            <td style="text-align: center;">{{ npc.loottable_id > 0 ? npc.loottable_id : '' }}</td>
           </tr>
           </tbody>
         </table>
@@ -482,9 +478,8 @@ export default {
       // Select relevant columns
       builder.select([
         "id", "name", "level", "class", "race", "bodytype",
-        "hp", "mana", "mindmg", "maxdmg", "aggroradius",
-        "assistradius", "loottable_id", "npc_spells_id",
-        "npc_faction_id", "texture", "helmtexture", "gender",
+        "hp", "mana", "mindmg", "maxdmg", "assistradius",
+        "npc_spells_id", "npc_faction_id", "texture", "helmtexture", "gender",
       ]);
 
       builder.orderBy([this.sortField]);
