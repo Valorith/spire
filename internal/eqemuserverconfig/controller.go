@@ -65,6 +65,7 @@ type LauncherConfig struct {
 	MinZoneProcesses            int    `json:"minZoneProcesses"`
 	StaticZones                 string `json:"staticZones"`
 	UpdateOpcodesOnStart        bool   `json:"updateOpcodesOnStart"`
+	OpcodeSource                string `json:"opcodeSource"`
 	DeleteLogFilesOlderThanDays int    `json:"deleteLogFilesOlderThanDays"`
 }
 
@@ -80,6 +81,7 @@ func (a *Controller) getLauncherConfig(c echo.Context) error {
 		MinZoneProcesses:            cfg.WebAdmin.Launcher.MinZoneProcesses,
 		StaticZones:                 cfg.WebAdmin.Launcher.StaticZones,
 		UpdateOpcodesOnStart:        cfg.WebAdmin.Launcher.UpdateOpcodesOnStart,
+		OpcodeSource:                cfg.WebAdmin.Launcher.OpcodeSource,
 		DeleteLogFilesOlderThanDays: cfg.WebAdmin.Launcher.DeleteLogFilesOlderThanDays,
 	}
 
@@ -102,6 +104,7 @@ func (a *Controller) saveLauncherConfig(c echo.Context) error {
 	cfg.WebAdmin.Launcher.MinZoneProcesses = config.MinZoneProcesses
 	cfg.WebAdmin.Launcher.StaticZones = config.StaticZones
 	cfg.WebAdmin.Launcher.UpdateOpcodesOnStart = config.UpdateOpcodesOnStart
+	cfg.WebAdmin.Launcher.OpcodeSource = config.OpcodeSource
 	cfg.WebAdmin.Launcher.DeleteLogFilesOlderThanDays = config.DeleteLogFilesOlderThanDays
 	cfg.Spire.LauncherStart = config.SpireLauncherStart
 

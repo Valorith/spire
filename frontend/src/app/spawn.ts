@@ -3,12 +3,13 @@ import {SpireApi} from "./api/spire-api";
 import {SpireQueryBuilder} from "@/app/api/spire-query-builder";
 
 export class Spawn {
-  public static async getByZone(zoneShortName: string, version: number, withRelations: boolean = false) {
+  public static async getByZone(zoneShortName: string, version: number = 0, withRelations: boolean = false) {
     const spawn2Api = (new Spawn2Api(...SpireApi.cfg()))
     const builder   = (new SpireQueryBuilder())
+    const zoneVersion = Number.isFinite(Number(version)) ? Number(version) : 0
 
     builder.where("zone", "=", zoneShortName)
-    builder.where("version", "=", version)
+    builder.where("version", "=", zoneVersion)
 
     let includes = [
       "Spawnentries.NpcType"

@@ -690,7 +690,7 @@ func (c *ScrapeCommand) parseRecipePage(r ExpansionRecipe) {
 				noFail = true
 				trivialInt, err = strconv.Atoi(trivial)
 				if err != nil {
-					fmt.Println("error parsing trivial [%v] err [%v]", trivial, err.Error())
+					fmt.Printf("error parsing trivial [%v] err [%v]\n", trivial, err.Error())
 				}
 			} else if strings.Contains(trivial, "no fail") {
 				noFail = true
@@ -733,7 +733,7 @@ func (c *ScrapeCommand) parseRecipePage(r ExpansionRecipe) {
 
 					quantity, err = strconv.Atoi(qty)
 					if err != nil {
-						fmt.Println("error parsing component quantity [%v] err [%v]", qty, err.Error())
+						fmt.Printf("error parsing component quantity [%v] err [%v]\n", qty, err.Error())
 					}
 				}
 
@@ -800,7 +800,7 @@ func (c *ScrapeCommand) parseRecipePage(r ExpansionRecipe) {
 			if len(yield) > 0 {
 				yieldInt, err = strconv.Atoi(yield)
 				if err != nil {
-					fmt.Println("error parsing yield [%v] for recipe [%v] err [%v]", yield, recipeName, err.Error())
+					fmt.Printf("error parsing yield [%v] for recipe [%v] err [%v]\n", yield, recipeName, err.Error())
 				}
 			}
 
@@ -820,7 +820,7 @@ func (c *ScrapeCommand) parseRecipePage(r ExpansionRecipe) {
 					qty := c.getStringInBetween(s, "(", ")")
 					quantity, err = strconv.Atoi(qty)
 					if err != nil {
-						fmt.Println("error parsing returns quantity [%v] err [%v]", qty, err.Error())
+						fmt.Printf("error parsing returns quantity [%v] err [%v]\n", qty, err.Error())
 					}
 				}
 
@@ -852,7 +852,7 @@ func (c *ScrapeCommand) parseRecipePage(r ExpansionRecipe) {
 					qty := c.getStringInBetween(s, "(", ")")
 					quantity, err = strconv.Atoi(qty)
 					if err != nil {
-						fmt.Println("error parsing failure quantity [%v] err [%v]", qty, err.Error())
+						fmt.Printf("error parsing failure quantity [%v] err [%v]\n", qty, err.Error())
 					}
 				}
 

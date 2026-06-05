@@ -22,7 +22,21 @@
             v-model="launcher.updateOpcodesOnStart"
             @change="saveLauncherOptions()"
           />
-          Update Server Patches (Opcodes) On Start)
+          Update Server Patches (Opcodes) On Start
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="mb-2">Opcode Update Source</div>
+          <p class="text-muted mb-2">
+            Leave blank to use the default EQEmu upstream source. Set this to the base URL containing the
+            `patch_*.conf`, `opcodes.conf`, and `mail_opcodes.conf` files.
+          </p>
+          <b-form-input
+            v-model.trim="launcher.opcodeSource"
+            @change="saveLauncherOptions()"
+            placeholder="https://raw.githubusercontent.com/EQEmu/Server/master/utils/patches"
+          />
         </td>
       </tr>
       <tr>
@@ -185,6 +199,7 @@ export default {
         runQueryServ: false,
         runUcs: true,
         updateOpcodesOnStart: true,
+        opcodeSource: "",
         staticZones: ""
       },
 
@@ -201,6 +216,10 @@ export default {
 
     if (typeof this.launcher.updateOpcodesOnStart === 'undefined') {
       this.launcher.updateOpcodesOnStart = true
+    }
+
+    if (typeof this.launcher.opcodeSource === 'undefined') {
+      this.launcher.opcodeSource = ""
     }
 
     if (typeof this.launcher.deleteLogFilesOlderThanDays !== 'undefined' && this.launcher.deleteLogFilesOlderThanDays === 0) {
@@ -235,6 +254,8 @@ export default {
         if (this.staticZones && this.staticZones.length > 0) {
           this.launcher.staticZones = this.staticZones.join(",")
         }
+
+        this.launcher.opcodeSource = (this.launcher.opcodeSource || "").trim()
 
         try {
           await SpireApi.v1().post('admin/launcherconfig', this.launcher)

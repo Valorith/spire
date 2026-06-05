@@ -81,8 +81,8 @@ func (s *Updater) getAppVersion() (error, EnvResponse) {
 
 // CheckForUpdates checks for updates to the app
 func (s *Updater) CheckForUpdates(interactive bool) bool {
-	config, err := s.serverconfig.Get()
-	if err == nil && config.Spire.DisableAutoUpdates && interactive {
+	config, configErr := s.serverconfig.Get()
+	if configErr == nil && config.Spire.DisableAutoUpdates && interactive {
 		s.logger.Info().
 			Any("spire.disable_auto_updates", config.Spire.DisableAutoUpdates).
 			Msg("Auto updates are disabled via config")
@@ -128,7 +128,16 @@ func (s *Updater) CheckForUpdates(interactive bool) bool {
 	s.logger.Info().Any("executableName", executableName).Msg("Running as binary")
 	s.logger.Debug().Any("executableName", executableName).Msg("Checking for updates")
 
-	releaseRepo := release.ResolveRepository(os.Getenv("SPIRE_RELEASE_REPO"), s.packageJson, nil)
+	configReleaseRepository := ""
+	if configErr == nil {
+		configReleaseRepository = config.Spire.ReleaseRepository
+	}
+	releaseRepo := release.ResolveRepositoryDetailsWithConfig(
+		os.Getenv("SPIRE_RELEASE_REPO"),
+		configReleaseRepository,
+		s.packageJson,
+		nil,
+	).Repository
 	repoParts := strings.SplitN(releaseRepo, "/", 2)
 	if len(repoParts) != 2 {
 		s.logger.Info().Any("repository", releaseRepo).Msg("Failed to resolve release repository")

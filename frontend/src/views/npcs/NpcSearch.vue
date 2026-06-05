@@ -25,9 +25,9 @@
             v-model="selectedClass"
             @change="searchNpcs()"
           >
-            <option value="0">-- All --</option>
-            <option v-for="(data, id) in classes" :value="id" :key="id">
-              {{ id }}) {{ data.class }}
+            <option :value="0">-- All --</option>
+            <option v-for="option in classOptions" :value="option.id" :key="option.id">
+              {{ option.id }}) {{ option.name }}
             </option>
           </select>
         </div>
@@ -123,7 +123,7 @@
             :display-all-none="true"
             :add-only-button-enabled="true"
             :add-only-state-enabled="selectOnlyClassEnabled"
-            @fired="searchNpcs()"
+            @fired="handleClassBitmaskFired()"
             @selectOnly="selectOnlyClassEnabled = $event"
             :inputData.sync="selectedClasses"
             :mask="selectedClasses"
@@ -137,12 +137,12 @@
           <race-bitmask-calculator
             :centered-buttons="false"
             :display-all-none="true"
-            @fired="selectedRaceDropdown = 0; searchNpcs()"
+            @fired="handleRaceBitmaskFired()"
             :inputData.sync="selectedRaces"
             :mask="selectedRaces"
           />
-          <div style="display: inline-block; margin-left: 15px; position: relative; bottom: 5px;">
-            <select v-model="selectedRaceDropdown" @change="selectedRaces = 0; searchNpcs()" class="eq-input" style="min-width: 160px; font-size: 12px;">
+          <div class="npc-other-race-filter">
+            <select v-model="selectedRaceDropdown" @change="handleRaceDropdownChanged()" class="form-control npc-other-race-select">
               <option :value="0">-- Other Races --</option>
               <option v-for="(name, id) in allRaces" :key="id" :value="parseInt(id)">{{ id }}) {{ name }}</option>
             </select>
@@ -187,8 +187,6 @@
             <th class="sortable-th" style="text-align: center;" @click="sortBy('hp')">HP <i :class="sortIconClass('hp')"/></th>
             <th class="sortable-th" style="text-align: center;" @click="sortBy('mindmg')">Min Dmg <i :class="sortIconClass('mindmg')"/></th>
             <th class="sortable-th" style="text-align: center;" @click="sortBy('maxdmg')">Max Dmg <i :class="sortIconClass('maxdmg')"/></th>
-            <th class="sortable-th" style="text-align: center;" @click="sortBy('aggroradius')">Aggro <i :class="sortIconClass('aggroradius')"/></th>
-            <th class="sortable-th" style="text-align: center;" @click="sortBy('loottable_id')">Loot Table <i :class="sortIconClass('loottable_id')"/></th>
           </tr>
           </thead>
           <tbody>
@@ -248,8 +246,6 @@
             <td style="text-align: right;">{{ formatNumber(npc.hp) }}</td>
             <td style="text-align: center;">{{ npc.mindmg }}</td>
             <td style="text-align: center;">{{ npc.maxdmg }}</td>
-            <td style="text-align: center;">{{ npc.aggroradius }}</td>
-            <td style="text-align: center;">{{ npc.loottable_id > 0 ? npc.loottable_id : '' }}</td>
           </tr>
           </tbody>
         </table>
@@ -272,7 +268,7 @@ import NpcPopover from "../../components/NpcPopover";
 import {NpcTypeApi} from "../../app/api";
 import {SpireApi} from "../../app/api/spire-api";
 import {SpireQueryBuilder} from "../../app/api/spire-query-builder";
-import {DB_CLASSES} from "../../app/constants/eq-classes-constants";
+import {DB_CLASSES, DB_PLAYER_CLASSES} from "../../app/constants/eq-classes-constants";
 import {DB_RACE_NAMES, RACE_MASTER_DATA} from "../../app/constants/eq-races-constants";
 import {BODYTYPES} from "../../app/constants/eq-bodytype-constants";
 import {DbSchema} from "../../app/db-schema";
@@ -313,6 +309,8 @@ export default {
       allRaces: DB_RACE_NAMES,
       selectedClasses: 0,
       selectedRaces: 0,
+      selectedClassBitmaskActive: false,
+      selectedRaceBitmaskActive: false,
       selectOnlyClassEnabled: false,
       selectedRaceDropdown: 0,
     }
@@ -334,22 +332,39 @@ export default {
     }
   },
 
+  computed: {
+    classOptions() {
+      return Object.keys(DB_PLAYER_CLASSES)
+        .map(id => {
+          return {
+            id: parseInt(id),
+            name: DB_PLAYER_CLASSES[id],
+          };
+        });
+    },
+  },
+
   methods: {
     loadFromQuery() {
       const q = this.$route.query;
-      if (q.name) this.npcName = q.name;
-      if (q.classes) this.selectedClasses = parseInt(q.classes);
-      if (q.races) this.selectedRaces = parseInt(q.races);
-      if (q.classSelectOnly) this.selectOnlyClassEnabled = true;
-      if (q.raceId) this.selectedRaceDropdown = parseInt(q.raceId);
-      if (q.level) this.selectedLevel = parseInt(q.level);
-      if (q.levelType) this.selectedLevelType = parseInt(q.levelType);
-      if (q.bodytype) this.selectedBodytype = parseInt(q.bodytype);
-      if (q.limit) this.limit = parseInt(q.limit);
-      if (q.orderBy) this.sortField = q.orderBy;
-      if (q.orderDirection) this.sortDirection = q.orderDirection;
+      const hasQuery = (key) => Object.prototype.hasOwnProperty.call(q, key);
 
-      if (q.name || q.classes || q.races || q.raceId || q.level || q.bodytype) {
+      this.npcName = hasQuery("name") ? q.name : "";
+      this.selectedClass = hasQuery("class") ? parseInt(q.class) : 0;
+      this.selectedClasses = hasQuery("classes") ? parseInt(q.classes) : 0;
+      this.selectedRaces = hasQuery("races") ? parseInt(q.races) : 0;
+      this.selectedClassBitmaskActive = hasQuery("classes");
+      this.selectedRaceBitmaskActive = hasQuery("races");
+      this.selectOnlyClassEnabled = hasQuery("classSelectOnly");
+      this.selectedRaceDropdown = hasQuery("raceId") ? parseInt(q.raceId) : 0;
+      this.selectedLevel = hasQuery("level") ? parseInt(q.level) : 0;
+      this.selectedLevelType = hasQuery("levelType") ? parseInt(q.levelType) : 0;
+      this.selectedBodytype = hasQuery("bodytype") ? parseInt(q.bodytype) : -1;
+      this.limit = hasQuery("limit") ? parseInt(q.limit) : 100;
+      this.sortField = hasQuery("orderBy") ? q.orderBy : "id";
+      this.sortDirection = hasQuery("orderDirection") ? q.orderDirection : "asc";
+
+      if (q.name || q.class || hasQuery("classes") || hasQuery("races") || q.raceId || q.level || q.bodytype) {
         this.searchNpcs();
       }
     },
@@ -357,8 +372,9 @@ export default {
     updateQueryState() {
       let queryState = {};
       if (this.npcName) queryState.name = this.npcName;
-      if (this.selectedClasses > 0) queryState.classes = this.selectedClasses;
-      if (this.selectedRaces > 0) queryState.races = this.selectedRaces;
+      if (parseInt(this.selectedClass) > 0) queryState.class = this.selectedClass;
+      if (this.selectedClassBitmaskActive || this.selectedClasses > 0) queryState.classes = this.selectedClasses;
+      if (this.selectedRaceBitmaskActive || this.selectedRaces > 0) queryState.races = this.selectedRaces;
       if (this.selectOnlyClassEnabled) queryState.classSelectOnly = 1;
       if (this.selectedRaceDropdown > 0) queryState.raceId = this.selectedRaceDropdown;
       if (parseInt(this.selectedLevel) > 0) queryState.level = this.selectedLevel;
@@ -382,6 +398,15 @@ export default {
       const builder = new SpireQueryBuilder();
       const api = (new NpcTypeApi(...SpireApi.cfg()));
 
+      if (
+        (this.selectedClassBitmaskActive && parseInt(this.selectedClasses) === 0) ||
+        (this.selectedRaceBitmaskActive && parseInt(this.selectedRaces) === 0 && parseInt(this.selectedRaceDropdown) === 0)
+      ) {
+        this.npcs = [];
+        this.loaded = true;
+        return;
+      }
+
       // Name or ID search
       if (this.npcName) {
         if (!isNaN(this.npcName) && this.npcName.trim() !== "") {
@@ -402,6 +427,11 @@ export default {
       // Bodytype filter
       if (parseInt(this.selectedBodytype) >= 0) {
         builder.where("bodytype", "=", this.selectedBodytype);
+      }
+
+      // Class filter (from dropdown)
+      if (parseInt(this.selectedClass) > 0) {
+        builder.where("class", "=", this.selectedClass);
       }
 
       // Class filter (from icon selector)
@@ -448,9 +478,8 @@ export default {
       // Select relevant columns
       builder.select([
         "id", "name", "level", "class", "race", "bodytype",
-        "hp", "mana", "mindmg", "maxdmg", "aggroradius",
-        "assistradius", "loottable_id", "npc_spells_id",
-        "npc_faction_id", "texture", "helmtexture", "gender",
+        "hp", "mana", "mindmg", "maxdmg", "assistradius",
+        "npc_spells_id", "npc_faction_id", "texture", "helmtexture", "gender",
       ]);
 
       builder.orderBy([this.sortField]);
@@ -509,6 +538,23 @@ export default {
       return this.sortDirection === 'asc' ? 'fa fa-sort-asc sort-icon sort-icon--active' : 'fa fa-sort-desc sort-icon sort-icon--active'
     },
 
+    handleClassBitmaskFired() {
+      this.selectedClassBitmaskActive = true;
+      this.searchNpcs();
+    },
+
+    handleRaceBitmaskFired() {
+      this.selectedRaceDropdown = 0;
+      this.selectedRaceBitmaskActive = true;
+      this.searchNpcs();
+    },
+
+    handleRaceDropdownChanged() {
+      this.selectedRaces = 0;
+      this.selectedRaceBitmaskActive = false;
+      this.searchNpcs();
+    },
+
     editNpc(id) {
       this.$router.push({path: "/npc/" + id});
     },
@@ -523,8 +569,11 @@ export default {
 
     resetForm() {
       this.npcName = "";
+      this.selectedClass = 0;
       this.selectedClasses = 0;
       this.selectedRaces = 0;
+      this.selectedClassBitmaskActive = false;
+      this.selectedRaceBitmaskActive = false;
       this.selectOnlyClassEnabled = false;
       this.selectedRaceDropdown = 0;
       this.selectedLevel = 0;
@@ -595,4 +644,13 @@ export default {
 .eq-table td {
   white-space: nowrap;
 }
+
+.npc-other-race-filter {
+  display: inline-block;
+  margin-left: 15px;
+  min-width: 160px;
+  position: relative;
+  bottom: 5px;
+}
+
 </style>

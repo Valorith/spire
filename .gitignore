@@ -2,6 +2,8 @@
 vendor/
 .idea
 spire
+!frontend/eqsage-embed/src/components/spire/
+!frontend/eqsage-embed/src/components/spire/**
 data/
 _data/
 bin/
@@ -12,6 +14,9 @@ internal/generators/config/database-schema-reference.yml
 
 docs-quest-api
 public/
+# Generated EQ Sage embed bundle. Source assets live under frontend/eqsage-embed/public
+# and the build writes the emitted bundle here before the Vue app build copies it to dist.
+frontend/public/eqsage-embed/
 spire*.exe
 spire.exe~
 
@@ -55,4 +60,9 @@ frontend/.env.production
 # Playwright test artifacts
 test-results/
 frontend/test-results/
+output/
+frontend/eqsage-embed/output/
 node_modules/
+
+# Local scratch images created during browser/UI debugging
+tmp-*.png

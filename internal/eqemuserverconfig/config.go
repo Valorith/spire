@@ -43,6 +43,7 @@ type WebAdminLauncherConfig struct {
 	MinZoneProcesses            int    `json:"minZoneProcesses,omitempty"`
 	StaticZones                 string `json:"staticZones,omitempty"`
 	UpdateOpcodesOnStart        bool   `json:"updateOpcodesOnStart"`
+	OpcodeSource                string `json:"opcodeSource,omitempty"`
 	DeleteLogFilesOlderThanDays int    `json:"deleteLogFilesOlderThanDays"`
 
 	// leaf nodes do not run any process but zones
@@ -192,6 +193,7 @@ type EQEmuConfigJson struct {
 		HttpPort           int    `json:"http_port,omitempty"`
 		LauncherStart      bool   `json:"launcher_start"`                 // starts server launcher
 		DisableAutoUpdates bool   `json:"disable_auto_updates,omitempty"` // disable auto updates
+		ReleaseRepository  string `json:"release_repository,omitempty"`   // GitHub owner/repo used for Spire app update checks
 	} `json:"spire,omitempty"`
 }
 

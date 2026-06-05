@@ -22,7 +22,7 @@ endif
 
 DRUNPREFIX=
 ifeq ($(OS),Windows_NT)
-    DRUNPREFIX = winpty
+	DRUNPREFIX = $(shell where winpty >NUL 2>NUL && echo winpty)
 endif
 
 COMPOSE_COMMAND=docker-compose
@@ -34,10 +34,17 @@ endif
 # Terminal
 #----------------------
 
-GREEN  := $(shell tput -Txterm setaf 2)
-WHITE  := $(shell tput -Txterm setaf 7)
-YELLOW := $(shell tput -Txterm setaf 3)
-RESET  := $(shell tput -Txterm sgr0)
+ifeq ($(OS),Windows_NT)
+	GREEN  :=
+	WHITE  :=
+	YELLOW :=
+	RESET  :=
+else
+	GREEN  := $(shell tput -Txterm setaf 2)
+	WHITE  := $(shell tput -Txterm setaf 7)
+	YELLOW := $(shell tput -Txterm setaf 3)
+	RESET  := $(shell tput -Txterm sgr0)
+endif
 
 #------------------------------------------------------------------
 # - Add the following 'help' target to your Makefile

@@ -1,10 +1,19 @@
 <template>
-  <eq-progress-bar :percent="progress"/>
+  <div class="loader-fake-progress">
+    <div
+      class="loader-fake-progress-fill"
+      :style="{ clipPath: `inset(0 ${100 - progress}% 0 0)` }"
+    />
+    <span
+      v-if="progress > 0"
+      class="loader-fake-progress-label"
+    >
+      {{ progress }}%
+    </span>
+  </div>
 </template>
 
 <script>
-import EqProgressBar from "./eq-ui/EQProgressBar";
-
 export default {
   name: 'loader-fake-progress',
   data() {
@@ -14,7 +23,6 @@ export default {
       interval: null,
     }
   },
-  components: { EqProgressBar },
   props: {
     intervalMs: {
       type: Number,
@@ -56,3 +64,44 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.loader-fake-progress {
+  position: relative;
+  height: 6px;
+  width: 100%;
+  margin: 0 auto;
+  background-image: url('./eq-ui/images/progress_bar_bottom.png');
+  background-size: 100% 100%;
+  line-height: 10px;
+}
+
+.loader-fake-progress-fill {
+  position: absolute;
+  inset: 0;
+  background-color: yellow;
+  transition: clip-path .3s;
+}
+
+.loader-fake-progress-fill::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -4px;
+  width: calc(100% + 8px);
+  height: 10px;
+  background-image: url('./eq-ui/images/progress_bar_top.png');
+  background-size: 100% 100%;
+}
+
+.loader-fake-progress-label {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #ffffff;
+  text-shadow: -2px 2px 3px #000;
+  z-index: 1;
+  pointer-events: none;
+}
+</style>

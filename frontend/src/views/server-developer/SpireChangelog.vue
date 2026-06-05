@@ -2,58 +2,218 @@
   <div>
     <app-loader :is-loading="loading"/>
 
-    <eq-window title="Spire Changelog Authoring" class="p-3" v-if="!loading">
-      <div class="row">
-        <div class="col-12 col-lg-8">
-          <div class="eq-alert mb-3">
-            Manage the main-page Spire changelog from the repo checkout. This page can bump <code>package.json</code>, draft a new top release section, preview the rendered markdown, and save <code>CHANGELOG.md</code> when a live checkout is available. Embedded environments stay read-only.
+    <b-modal
+      id="spire-release-process-modal"
+      centered
+      content-class="release-process-modal-shell"
+      no-fade
+      size="xl"
+      title="Cutting a Spire Release"
+      @shown="onReleaseProcessShown"
+      @hidden="onReleaseProcessHidden"
+    >
+      <div class="release-process-modal">
+        <div v-if="releaseStateVisible" :class="['release-status-panel', releaseStatusClass]" aria-live="polite">
+          <div class="release-status-indicator" aria-hidden="true"></div>
+          <div class="release-status-copy">
+            <span>Release status</span>
+            <strong>{{ releaseStatusLabel }}</strong>
+            <p>{{ releaseStatusDescription }}</p>
+          </div>
+          <div class="release-status-actions">
+            <a
+              v-if="releasePrimaryLink.url"
+              class="btn btn-sm btn-dark"
+              :href="releasePrimaryLink.url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {{ releasePrimaryLink.label }}
+            </a>
+            <button
+              class="btn btn-sm btn-secondary release-refresh-button"
+              @click="fetchReleaseStatus"
+              :disabled="releaseStatusLoading"
+              v-b-tooltip.hover.v-dark.top
+              title="Refresh release status"
+              aria-label="Refresh release status"
+            >
+              <i :class="['fe', releaseStatusLoading ? 'fe-loader' : 'fe-refresh-cw']" aria-hidden="true"></i>
+            </button>
           </div>
         </div>
-        <div class="col-12 col-lg-4">
-          <div class="eq-window-simple p-3 small">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <strong>Package Version</strong>
-              <span class="badge badge-secondary">{{ packageVersion || "-" }}</span>
-            </div>
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div>
-                <strong>Release Repo</strong>
-                <i
-                  class="fa fa-question-circle text-muted ml-1"
-                  v-b-tooltip.hover.v-dark.top
-                  title="This is the GitHub repository used for release publishing and updater checks."
-                ></i>
-              </div>
-              <span class="badge badge-dark">{{ releaseRepository || "-" }}</span>
-            </div>
-            <div class="small text-muted mb-2">
-              Source: {{ releaseRepositorySourceLabel }}
-            </div>
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div>
-                <strong>Source</strong>
-                <i
-                  class="fa fa-question-circle text-muted ml-1"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Live means the repo checkout file is being edited directly. Embedded means the page is read-only and showing the baked-in changelog."
-                ></i>
-              </div>
-              <span :class="sourceBadgeClass">{{ source || "-" }}</span>
-            </div>
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <strong>Writable</strong>
-              <span :class="writableBadgeClass">{{ writable ? "Yes" : "No" }}</span>
-            </div>
-            <div><strong>Current Top Release</strong> {{ currentTopLabel }}</div>
-            <div class="small text-muted mt-2" v-if="!writable">
-              This environment is read-only. Use a local or dev checkout to bump versions and save release notes.
-            </div>
+
+        <div :class="['release-process-context', releaseStateVisible ? 'release-process-context-live' : 'release-process-context-basic']">
+          <div>
+            <span>Target repo</span>
+            <strong>{{ releaseRepository || "unset" }}</strong>
           </div>
+          <div>
+            <span>Release branch</span>
+            <strong>{{ releaseBranch }}</strong>
+          </div>
+          <div>
+            <span>Package version</span>
+            <strong>{{ packageVersion || "-" }}</strong>
+          </div>
+          <div>
+            <span>Top release</span>
+            <strong>{{ topReleaseLabel }}</strong>
+          </div>
+          <div v-if="releaseStateVisible">
+            <span>Latest GitHub</span>
+            <strong>{{ releaseLatestReleaseLabel }}</strong>
+          </div>
+        </div>
+
+        <div class="release-process-meta" v-if="releaseStateVisible">
+          <span>Checkout: {{ currentBranchLabel }}</span>
+          <span>Workflow: {{ releaseWorkflowLabel }}</span>
+          <span>Checked: {{ releaseStatusCheckedLabel }}</span>
+        </div>
+
+        <div class="release-status-error" v-if="releaseStateVisible && (releaseStatusError || releaseStatusIssues.length > 0)">
+          <i class="fe fe-alert-triangle" aria-hidden="true"></i>
+          <div>
+            <div v-if="releaseStatusError">{{ releaseStatusError }}</div>
+            <div v-for="issue in releaseStatusIssues" :key="issue">{{ issue }}</div>
+          </div>
+        </div>
+
+        <div :class="['github-token-panel', githubTokenPanelTone]">
+          <i class="fe fe-key" aria-hidden="true"></i>
+          <div class="github-token-body">
+            <div class="github-token-header">
+              <div>
+                <div class="github-token-title">{{ githubTokenTitle }}</div>
+                <p>{{ githubTokenHelpText }}</p>
+              </div>
+              <button v-if="!githubAuthNeedsToken" class="btn btn-sm btn-dark" type="button" @click="toggleGitHubTokenPanel">
+                {{ githubTokenFormVisible ? "Hide" : githubTokenActionLabel }}
+              </button>
+            </div>
+            <form v-if="githubTokenFormVisible" class="github-token-form" @submit.prevent="saveGitHubToken">
+              <div class="github-token-input-wrap">
+                <input
+                  v-model="githubTokenInput"
+                  :type="githubTokenVisible ? 'text' : 'password'"
+                  class="form-control form-control-sm github-token-input"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  placeholder="GitHub personal access token"
+                  :disabled="githubTokenSaving"
+                  aria-label="GitHub personal access token"
+                />
+                <button
+                  class="btn btn-sm btn-secondary github-token-icon-button github-token-paste-button"
+                  type="button"
+                  :disabled="githubTokenSaving || githubTokenPasting"
+                  @click="pasteGitHubToken"
+                  v-b-tooltip.hover.v-dark.top
+                  title="Use token from clipboard"
+                  aria-label="Use token from clipboard"
+                >
+                  <i :class="['fe', githubTokenPasting ? 'fe-loader' : 'fe-clipboard']" aria-hidden="true"></i>
+                </button>
+                <button
+                  class="btn btn-sm btn-secondary github-token-icon-button github-token-visibility-button"
+                  type="button"
+                  :disabled="githubTokenSaving"
+                  @click="githubTokenVisible = !githubTokenVisible"
+                  v-b-tooltip.hover.v-dark.top
+                  :title="githubTokenVisible ? 'Hide token' : 'Show token'"
+                  :aria-label="githubTokenVisible ? 'Hide token' : 'Show token'"
+                >
+                  <i :class="['fe', githubTokenVisible ? 'fe-eye-off' : 'fe-eye']" aria-hidden="true"></i>
+                </button>
+              </div>
+              <button class="btn btn-sm btn-primary" type="submit" :disabled="githubTokenSaving || !githubTokenInput.trim()">
+                {{ githubTokenSaving ? "Saving..." : "Use token" }}
+              </button>
+            </form>
+            <div class="github-token-message text-danger" v-if="githubTokenError">{{ githubTokenError }}</div>
+            <div class="github-token-message text-success" v-if="githubTokenNotice">{{ githubTokenNotice }}</div>
+          </div>
+        </div>
+
+        <ol class="release-process-list">
+          <li
+            v-for="(step, index) in releaseProcessSteps"
+            :key="step.id"
+            :class="releaseProcessStatic ? ['release-step', 'release-step-static'] : ['release-step', `release-step-${step.status}`]"
+          >
+            <div class="release-step-marker">
+              <span v-if="releaseProcessStatic">{{ index + 1 }}</span>
+              <i v-else :class="releaseStepIcon(step.status)" aria-hidden="true"></i>
+            </div>
+            <div class="release-step-body">
+              <div class="release-step-heading">
+                <div class="release-step-title">{{ step.title }}</div>
+                <span v-if="!releaseProcessStatic" class="release-step-state">{{ releaseStepStatusLabel(step.status) }}</span>
+              </div>
+              <p>{{ step.detail }}</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="release-process-note">
+          <i class="fe fe-info" aria-hidden="true"></i>
+          <span>Manual releases are cut from <code>{{ releaseBranch }}</code>. The GitHub release body comes from the first <code>## [...]</code> section in <code>CHANGELOG.md</code>.</span>
+        </div>
+      </div>
+
+      <template #modal-footer>
+        <button class="btn btn-sm btn-dark" @click="$bvModal.hide('spire-release-process-modal')">
+          Close
+        </button>
+      </template>
+    </b-modal>
+
+    <eq-window title="Spire Changelog" class="p-3" v-if="!loading">
+      <div class="d-flex flex-wrap align-items-start justify-content-between mb-3">
+        <div class="mr-3 mb-2">
+          <div class="editor-title-row">
+            <div class="h4 mb-1">Manual CHANGELOG.md Editor</div>
+            <button
+              :class="releaseInfoButtonClasses"
+              @click="showReleaseProcess"
+              aria-label="Show Spire release process"
+            >
+              <i class="fe fe-info" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="text-muted small">
+            Edit the changelog directly, preview the rendered markdown, then save the full file back to the live repo checkout.
+          </div>
+        </div>
+
+        <div class="changelog-status" aria-label="Changelog file status">
+          <span :class="['status-pill', source === 'live' ? 'status-pill-good' : 'status-pill-muted']">
+            <span class="status-pill-label">Source</span>
+            <span class="status-pill-value">{{ source || "unknown" }}</span>
+          </span>
+          <span :class="['status-pill', writable ? 'status-pill-good' : 'status-pill-warning']">
+            <span class="status-pill-label">Access</span>
+            <span class="status-pill-value">{{ writable ? "writable" : "read-only" }}</span>
+          </span>
+          <span class="status-pill status-pill-version">
+            <span class="status-pill-label">Version</span>
+            <span class="status-pill-value">{{ packageVersion || "-" }}</span>
+          </span>
+          <span class="status-pill status-pill-repo">
+            <span class="status-pill-label">Repo</span>
+            <span class="status-pill-value">{{ releaseRepository || "unset" }}</span>
+          </span>
+          <span :class="['status-pill', releaseBranchAligned ? 'status-pill-good' : 'status-pill-warning']">
+            <span class="status-pill-label">Branch</span>
+            <span class="status-pill-value">{{ currentBranchLabel }}</span>
+          </span>
         </div>
       </div>
 
       <info-error-banner
-        class="mt-3"
         :slim="true"
         :notification="notification"
         :error="error"
@@ -61,342 +221,124 @@
         @dismiss-notification="notification = ''"
       />
 
-      <div
-        class="eq-window-simple p-3 mt-3 guided-callout"
-        :class="nextActionFocus === 'status' ? 'guided-callout-active' : ''"
-      >
-        <div class="d-flex flex-wrap align-items-start justify-content-between">
-          <div class="mr-3">
-            <div class="d-flex align-items-center mb-1">
-              <span class="badge badge-warning mr-2">Do This Next</span>
-              <span class="small text-muted">Step {{ nextActionStepLabel }}</span>
-            </div>
-            <div class="font-weight-bold">{{ nextActionTitle }}</div>
-            <div class="small text-muted mt-1">{{ nextActionMessage }}</div>
-            <ul class="small text-muted mt-2 mb-0 pl-3" v-if="nextActionChecklist.length > 0">
-              <li v-for="item in nextActionChecklist" :key="item">{{ item }}</li>
-            </ul>
-          </div>
-          <div class="small text-muted mt-2 mt-md-0">
-            {{ nextActionContext }}
-          </div>
-        </div>
+      <div class="alert alert-warning mt-3 mb-0" v-if="!writable">
+        This page is showing embedded changelog data. Open Spire from a local or dev checkout to save edits.
       </div>
 
-      <div class="eq-window-simple p-3 mt-3">
-        <div class="font-weight-bold mb-2">Release Flow</div>
-        <div class="row">
-          <div class="col-12 col-md-6 col-xl-3 mb-2 mb-xl-0" v-for="step in workflowSteps" :key="step.title">
-            <div class="workflow-step" :class="workflowStepClass(step)">
-              <div class="workflow-step-number">{{ step.number }}</div>
-              <div>
-                <div class="font-weight-bold">{{ step.title }}</div>
-                <div class="small text-muted">{{ step.description }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="alert alert-danger mt-3 mb-0" v-if="documentValidationErrors.length > 0 || editorValidationErrors.length > 0">
-        <div class="font-weight-bold mb-2">Validation Issues</div>
+      <div class="alert alert-danger mt-3 mb-0" v-if="validationIssues.length > 0">
+        <div class="font-weight-bold mb-2">Changelog Checks</div>
         <ul class="mb-0 pl-3">
-          <li v-for="issue in combinedValidationErrors" :key="issue">{{ issue }}</li>
+          <li v-for="issue in validationIssues" :key="issue">{{ issue }}</li>
         </ul>
       </div>
 
       <div class="row mt-3">
-        <div class="col-12 col-xl-6">
+        <div class="col-12 col-xl-7 mb-3 mb-xl-0">
           <eq-window-simple class="p-3 h-100">
-            <div class="guided-section mb-3" :class="sectionStateClass('version')">
-              <div class="font-weight-bold mb-2 d-flex align-items-center justify-content-between">
-                <span>Step 1: Choose The Release Target And Version</span>
-                <span class="small guided-step-indicator" :class="stepIndicatorClass(1)">{{ stepIndicatorLabel(1) }}</span>
-              </div>
-              <div class="small text-muted mb-3">
-                Confirm which GitHub repository this release should publish to, then pick the version you want to ship.
-              </div>
-              <div class="d-flex flex-wrap align-items-center mb-2 action-row" :class="actionRowClass('repository')">
-                <button
-                  class="btn btn-sm btn-dark mr-2 mb-2"
-                  :class="buttonHighlightClass('repository')"
-                  @click="releaseRepositoryDraft = releaseRepository || releaseRepositoryDraft"
-                  :disabled="!writable || repositoryActionPending || !releaseRepository"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Copy the currently active release repo into the editable field below."
-                >
-                  <i class="fa fa-crosshairs mr-1"></i> Use Active Repo
-                </button>
-                <button
-                  class="btn btn-sm btn-secondary mr-2 mb-2"
-                  :class="buttonHighlightClass('repository')"
-                  @click="releaseRepositoryDraft = configuredReleaseRepository || releaseRepositoryDraft"
-                  :disabled="!writable || repositoryActionPending || !configuredReleaseRepository"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Restore the repo currently saved in package.json."
-                >
-                  <i class="fa fa-history mr-1"></i> Use Saved Repo
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-light mb-2"
-                  :class="buttonHighlightClass('repository')"
-                  @click="applyReleaseRepository()"
-                  :disabled="!canApplyReleaseRepository"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Save the selected GitHub repository into package.json so release publishing and updater checks use the same target."
-                >
-                  <i class="fa fa-github mr-1"></i> {{ repositoryActionPending ? "Applying..." : "Apply Release Repo" }}
-                </button>
-              </div>
-
-              <div class="form-group" :class="fieldHighlightClass('repository')">
-                <label class="font-weight-bold">
-                  Release Repository
-                  <i
-                    class="fa fa-question-circle text-muted ml-1"
-                    v-b-tooltip.hover.v-dark.right
-                    title="Use owner/repo format like EQEmuTools/spire or paste a GitHub repository URL. This controls where releases are published and what repo the updater checks."
-                  ></i>
-                </label>
-                <input
-                  v-model.trim="releaseRepositoryDraft"
-                  type="text"
-                  class="form-control"
-                  list="release-repository-candidates"
-                  placeholder="EQEmuTools/spire"
-                >
-                <datalist id="release-repository-candidates">
-                  <option v-for="candidate in releaseRepositoryCandidates" :key="candidate" :value="candidate"></option>
-                </datalist>
-                <small class="form-text text-muted">
-                  {{ repositoryStatusText }}
-                </small>
-                <small class="form-text text-warning" v-if="releaseRepositoryOverride">
-                  Environment override active: <code>SPIRE_RELEASE_REPO={{ releaseRepositoryOverride }}</code>. Changing package.json updates the saved default, but the active repo stays overridden until that env var is removed.
-                </small>
-              </div>
-
-              <div class="d-flex flex-wrap align-items-center mb-2 action-row" :class="actionRowClass('version')">
-                <button
-                  class="btn btn-sm btn-dark mr-2 mb-2"
-                  :class="buttonHighlightClass('version')"
-                  @click="prepareVersionBump('patch')"
-                  :disabled="!writable || versionActionPending || repositoryActionPending"
-                  v-b-tooltip.hover.v-dark.top
-                  :title="patchTooltip"
-                >
-                  <i class="fa fa-level-up mr-1"></i> Patch Release
-                </button>
-                <button
-                  class="btn btn-sm btn-dark mr-2 mb-2"
-                  :class="buttonHighlightClass('version')"
-                  @click="prepareVersionBump('minor')"
-                  :disabled="!writable || versionActionPending || repositoryActionPending"
-                  v-b-tooltip.hover.v-dark.top
-                  :title="minorTooltip"
-                >
-                  <i class="fa fa-level-up mr-1"></i> Minor Release
-                </button>
-                <button
-                  class="btn btn-sm btn-dark mr-2 mb-2"
-                  :class="buttonHighlightClass('version')"
-                  @click="prepareVersionBump('major')"
-                  :disabled="!writable || versionActionPending || repositoryActionPending"
-                  v-b-tooltip.hover.v-dark.top
-                  :title="majorTooltip"
-                >
-                  <i class="fa fa-level-up mr-1"></i> Major Release
-                </button>
-                <button
-                  class="btn btn-sm btn-secondary mr-2 mb-2"
-                  :class="buttonHighlightClass('version')"
-                  @click="startNewRelease()"
-                  :disabled="!writable || versionActionPending || repositoryActionPending"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Draft a release using the current package.json version without bumping it."
-                >
-                  <i class="fa fa-plus mr-1"></i> Use Current Version
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-light mb-2"
-                  :class="buttonHighlightClass('version')"
-                  @click="applyVersion()"
-                  :disabled="!writable || versionActionPending || repositoryActionPending || !version"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Write the version field into package.json so the release pipeline and updater checks point at the same version."
-                >
-                  <i class="fa fa-tag mr-1"></i> {{ versionActionPending ? "Applying..." : "Apply Version" }}
-                </button>
-              </div>
-
-              <div class="form-group" :class="fieldHighlightClass('version')">
-                <label class="font-weight-bold">
-                  Version
-                  <i
-                    class="fa fa-question-circle text-muted ml-1"
-                    v-b-tooltip.hover.v-dark.right
-                    title="Use semantic versions like 4.23.6. Saving will also sync package.json to this version."
-                  ></i>
-                </label>
-                <input v-model.trim="version" type="text" class="form-control" @input="handleDraftInputChange()">
-                <small class="form-text text-muted">
-                  {{ versionStatusText }}
-                </small>
-              </div>
-
-              <div class="form-group mb-0" :class="fieldHighlightClass('date')">
-                <label class="font-weight-bold">
-                  Release Date
-                  <i
-                    class="fa fa-question-circle text-muted ml-1"
-                    v-b-tooltip.hover.v-dark.right
-                    title="Shown in the top changelog heading. Use M/D/YYYY, for example 3/25/2026."
-                  ></i>
-                </label>
-                <input v-model.trim="releaseDate" type="text" class="form-control" placeholder="3/25/2026" @input="handleDraftInputChange()">
-                <small class="form-text text-muted">
-                  This date is used in both the main-page changelog heading and the GitHub release payload.
-                </small>
-              </div>
-            </div>
-
-            <div class="guided-section mb-3" :class="sectionStateClass('draft')">
-              <div class="font-weight-bold mb-2 d-flex align-items-center justify-content-between">
-                <span>Step 2: Generate Or Edit The Draft</span>
-                <span class="small guided-step-indicator" :class="stepIndicatorClass(2)">{{ stepIndicatorLabel(2) }}</span>
-              </div>
-              <div class="small text-muted mb-3">
-                Generate starter bullets from recent Spire commits, then edit them into the release notes you want users to read.
-              </div>
-
-              <div class="d-flex flex-wrap align-items-center mb-3 action-row" :class="actionRowClass('draft')">
-                <button
-                  class="btn btn-sm btn-primary mr-2 mb-2"
-                  :class="buttonHighlightClass('draft')"
-                  @click="generateDraft()"
-                  :disabled="!canGenerateDraft"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Build starter release bullets from local git history since the latest v* tag."
-                >
-                  <i class="fa fa-magic mr-1"></i> Generate Draft
-                </button>
-                <span class="small text-muted mb-2">
-                  {{ draftHelperText }}
-                </span>
-              </div>
-
-              <div class="form-group mb-0" :class="fieldHighlightClass('draft')">
-                <label class="font-weight-bold">
-                  Release Notes Body
-                  <i
-                    class="fa fa-question-circle text-muted ml-1"
-                    v-b-tooltip.hover.v-dark.right
-                    title="This body becomes the top CHANGELOG.md section and the GitHub release notes shown in the app updater modal after publish."
-                  ></i>
-                </label>
-                <b-textarea
-                  v-model="body"
-                  rows="18"
-                  max-rows="24"
-                  no-resize
-                  @input="handleDraftInputChange()"
-                />
-                <small class="form-text text-muted">
-                  Keep the bullets user-facing. The right side previews both the homepage markdown rendering and the GitHub release payload.
-                </small>
-              </div>
-            </div>
-
-            <div class="guided-section mb-0" :class="sectionStateClass('review')">
-              <div class="font-weight-bold mb-2 d-flex align-items-center justify-content-between">
-                <span>Step 3: Review And Save</span>
-                <span class="small guided-step-indicator" :class="stepIndicatorClass(3)">{{ stepIndicatorLabel(3) }}</span>
-              </div>
-              <div class="small text-muted mb-3">
-                Confirm the updater release payload and homepage preview on the right, then write the new top section into <code>CHANGELOG.md</code>.
-              </div>
-
-              <div class="review-checklist mb-3" :class="fieldHighlightClass('review')">
-                <b-form-checkbox v-model="reviewedPayload" :disabled="!hasDraftBody">
-                  I reviewed the GitHub release payload on the right.
-                </b-form-checkbox>
-                <b-form-checkbox v-model="reviewedHomepagePreview" :disabled="!hasDraftBody">
-                  I reviewed the homepage preview on the right.
-                </b-form-checkbox>
-                <div class="small text-muted mt-2">
-                  Saving stays disabled until both review checks are complete.
+            <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
+              <div>
+                <div class="font-weight-bold">Editor</div>
+                <div class="small text-muted">
+                  {{ lineCount }} lines, {{ wordCount }} words
+                  <span v-if="isDirty" class="text-warning ml-2">Unsaved changes</span>
                 </div>
               </div>
 
-              <div class="d-flex flex-wrap align-items-center action-row" :class="actionRowClass('save')">
-                <button
-                  class="btn btn-sm btn-success mb-2 mr-2"
-                  :class="buttonHighlightClass('save')"
-                  @click="saveRelease()"
-                  :disabled="!writable || saving || versionActionPending || repositoryActionPending || !isReadyToSave"
-                  v-b-tooltip.hover.v-dark.top
-                  title="Prepends the new top release section to CHANGELOG.md and keeps package.json aligned."
-                >
-                  <i class="fa fa-save mr-1"></i> {{ saving ? "Saving..." : "Save CHANGELOG.md" }}
+              <div class="btn-toolbar mt-2 mt-md-0" role="toolbar">
+                <button class="btn btn-sm btn-dark mr-2 mb-2" @click="saveContent" :disabled="!canSave">
+                  <i class="fe fe-save mr-1"></i> {{ saving ? "Saving..." : "Save" }}
                 </button>
-                <span class="small text-muted mb-2">{{ saveHelperText }}</span>
+                <button class="btn btn-sm btn-secondary mr-2 mb-2" @click="reloadContent" :disabled="saving">
+                  <i class="fe fe-refresh-cw mr-1"></i> Reload
+                </button>
+                <button class="btn btn-sm btn-secondary mr-2 mb-2" @click="copyContent" :disabled="!content">
+                  <i class="fe fe-copy mr-1"></i> Copy
+                </button>
+                <button class="btn btn-sm btn-secondary mb-2" @click="downloadMarkdown" :disabled="!content">
+                  <i class="fe fe-download mr-1"></i> Download
+                </button>
               </div>
             </div>
+
+            <div class="markdown-toolbar mb-2">
+              <button class="btn btn-sm btn-outline-light" @click="insertReleaseHeading" :disabled="!canEdit">
+                <i class="fe fe-plus mr-1"></i> Release
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="wrapSelection('**', '**', 'bold text')" :disabled="!canEdit">
+                <strong>B</strong>
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="wrapSelection('*', '*', 'italic text')" :disabled="!canEdit">
+                <em>I</em>
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="wrapSelection('`', '`', 'code')" :disabled="!canEdit">
+                <i class="fe fe-code"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="insertLinePrefix('* ')" :disabled="!canEdit">
+                <i class="fe fe-list mr-1"></i> Bullet
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="insertLinePrefix('1. ')" :disabled="!canEdit">
+                <i class="fe fe-list mr-1"></i> Number
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="insertLinePrefix('> ')" :disabled="!canEdit">
+                <i class="fe fe-corner-down-right mr-1"></i> Quote
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="insertLink" :disabled="!canEdit">
+                <i class="fe fe-link"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="insertBlock('```\\n', '\\n```', 'code block')" :disabled="!canEdit">
+                <i class="fe fe-terminal"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-light" @click="insertAtCursor(today)" :disabled="!canEdit">
+                <i class="fe fe-calendar mr-1"></i> Date
+              </button>
+            </div>
+
+            <textarea
+              ref="editor"
+              v-model="content"
+              class="form-control changelog-editor"
+              spellcheck="true"
+              :readonly="!canEdit"
+              @input="markDirty"
+              @keydown="handleEditorKeydown"
+            ></textarea>
           </eq-window-simple>
         </div>
 
-        <div class="col-12 col-xl-6 mt-3 mt-xl-0">
-          <eq-window-simple class="p-3 mb-3" :class="sectionStateClass('review')">
-            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-              <div>
-                <div class="font-weight-bold">GitHub Release Payload</div>
-                <div class="small text-muted">This is the tag, title, and body that will be published to the configured release repo.</div>
-              </div>
-              <button
-                class="btn btn-sm btn-outline-light mt-2 mt-md-0"
-                @click="copyReleaseBody()"
-                :disabled="!releasePayloadPreview.body"
-                v-b-tooltip.hover.v-dark.left
-                title="Copy the GitHub release body to the clipboard."
-              >
-                <i class="fa fa-clipboard mr-1"></i> Copy Body
-              </button>
-            </div>
-            <div class="small mb-2 d-flex align-items-center justify-content-between">
-              <div><strong>Tag</strong> {{ releasePayloadPreview.tag_name || "-" }}</div>
-              <button
-                class="btn btn-sm btn-dark py-0 px-2"
-                @click="copyToClipboard(releasePayloadPreview.tag_name, 'Copied release tag to clipboard!')"
-                :disabled="!releasePayloadPreview.tag_name"
-              >
-                <i class="fa fa-clipboard"></i>
-              </button>
-            </div>
-            <div class="small mb-3 d-flex align-items-center justify-content-between">
-              <div><strong>Title</strong> {{ releasePayloadPreview.title || "-" }}</div>
-              <button
-                class="btn btn-sm btn-dark py-0 px-2"
-                @click="copyToClipboard(releasePayloadPreview.title, 'Copied release title to clipboard!')"
-                :disabled="!releasePayloadPreview.title"
-              >
-                <i class="fa fa-clipboard"></i>
-              </button>
-            </div>
-            <div class="form-group mb-0">
-              <label class="font-weight-bold small">Release Body</label>
-              <b-textarea
-                :value="releasePayloadPreview.body || ''"
-                rows="10"
-                max-rows="16"
-                no-resize
-                readonly
-              />
+        <div class="col-12 col-xl-5">
+          <eq-window-simple class="p-3 mb-3">
+            <div class="font-weight-bold mb-2">File Status</div>
+            <div class="status-grid small">
+              <span>Source</span>
+              <strong>{{ source || "-" }}</strong>
+              <span>Writable</span>
+              <strong>{{ writable ? "Yes" : "No" }}</strong>
+              <span>Top Release</span>
+              <strong>{{ topReleaseLabel }}</strong>
+              <span>Release Repo</span>
+              <strong>{{ releaseRepository || "-" }}</strong>
+              <span>Repo Source</span>
+              <strong>{{ releaseRepositorySourceLabel }}</strong>
             </div>
           </eq-window-simple>
 
-          <eq-window-simple class="p-3" :class="sectionStateClass('review')">
-            <div class="font-weight-bold mb-1">Homepage Preview</div>
-            <div class="small text-muted mb-3">This uses the same markdown rendering logic as the Spire main page changelog window.</div>
+          <eq-window-simple class="p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2 preview-header">
+              <div class="preview-header-copy">
+                <div class="font-weight-bold">Preview</div>
+                <div class="small text-muted">Rendered with the same markdown helper used by the changelog display.</div>
+              </div>
+              <button
+                class="btn btn-sm btn-secondary copy-preview-button"
+                @click="copyPreviewText"
+                :disabled="!content"
+                v-b-tooltip.hover.v-dark.top
+                title="Copy preview text"
+                aria-label="Copy preview text"
+              >
+                <i class="fe fe-copy" aria-hidden="true"></i>
+              </button>
+            </div>
             <div
               ref="previewRoot"
               class="changelog markdown-body spire-changelog-preview"
@@ -411,77 +353,154 @@
 
 <script>
 import EqWindow from "@/components/eq-ui/EQWindow.vue";
+import EqWindowSimple from "@/components/eq-ui/EQWindowSimple.vue";
 import InfoErrorBanner from "@/components/InfoErrorBanner.vue";
 import {SpireApi} from "@/app/api/spire-api";
 import Clipboard from "@/app/clipboard/clipboard";
 import {decorateChangelogDom, renderChangelogMarkdown} from "@/app/changelog/changelog-renderer";
 import {Notify} from "@/app/Notify";
-import {AppEnv} from "@/app/env/app-env";
 
 function todaysDate() {
   const now = new Date();
   return `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
 }
 
+function parseTopRelease(content) {
+  const match = (content || "").match(/^## \[([^\]]+)] ([^\n]+)/m);
+  if (!match) {
+    return {version: "", releaseDate: ""};
+  }
+  return {version: match[1].trim(), releaseDate: match[2].trim()};
+}
+
+function isUnreleasedVersion(version) {
+  return (version || "").toLowerCase() === "unreleased";
+}
+
+function containsTokenLikeSecret(value) {
+  return /(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|Authorization:\s*Bearer\s+[A-Za-z0-9._-]{20,})/i.test(value || "");
+}
+
+const fallbackReleaseProcessSteps = [
+  {
+    id: "sync_checkout",
+    title: "Move the release contents onto master.",
+    detail: "Merge or cherry-pick the work that should ship, then pull master current before editing release notes.",
+    status: "pending"
+  },
+  {
+    id: "open_editor",
+    title: "Open this editor from the master checkout.",
+    detail: "The editor should be live, writable, and pointed at the GitHub repo that receives releases before you save release notes.",
+    status: "pending"
+  },
+  {
+    id: "prepare_notes",
+    title: "Prepare the top CHANGELOG.md section.",
+    detail: "Put the notes that should become the GitHub release body in the first heading. Drafts can use [Unreleased]; the workflow replaces it with the final version and date.",
+    status: "pending"
+  },
+  {
+    id: "validate_changelog",
+    title: "Save and review CHANGELOG.md.",
+    detail: "Save the file, clear changelog checks, and compare the preview against the release notes you intend to publish.",
+    status: "pending"
+  },
+  {
+    id: "run_workflow",
+    title: "Run Manual Release on master.",
+    detail: "Open GitHub Actions, select the master branch, choose patch/minor/major, and use the repo override only when intentionally publishing elsewhere.",
+    status: "pending"
+  },
+  {
+    id: "publish_release",
+    title: "Let the workflow create the release.",
+    detail: "It updates version metadata, stamps changelog notes, builds assets, commits release metadata back to master, and publishes GitHub.",
+    status: "pending"
+  },
+  {
+    id: "verify_release",
+    title: "Verify the published release.",
+    detail: "Confirm the latest GitHub release tag, notes, assets, and updater metadata match the intended release.",
+    status: "pending"
+  }
+];
+
 export default {
   name: "SpireChangelog",
   components: {
     EqWindow,
+    EqWindowSimple,
     InfoErrorBanner
   },
   data() {
     return {
       loading: false,
       saving: false,
-      repositoryActionPending: false,
-      versionActionPending: false,
       notification: "",
       error: "",
-      version: "",
-      releaseDate: "",
-      body: "",
-      currentContent: "",
+      content: "",
+      originalContent: "",
       packageVersion: "",
       releaseRepository: "",
-      configuredReleaseRepository: "",
       releaseRepositorySource: "",
       releaseRepositoryOverride: "",
-      releaseRepositoryCandidates: [],
-      releaseRepositoryDraft: "",
+      releaseBranch: "master",
+      currentBranch: "",
       writable: false,
       source: "",
-      currentTopRelease: {},
-      currentReleasePayload: {},
-      documentValidationErrors: [],
-      draftStarted: false,
-      reviewedPayload: false,
-      reviewedHomepagePreview: false,
+      isDirty: false,
+      releaseStatus: null,
+      releaseStatusLoading: false,
+      releaseStatusError: "",
+      releaseStatusTimer: null,
+      githubTokenInput: "",
+      githubTokenExpanded: false,
+      githubTokenVisible: false,
+      githubTokenPasting: false,
+      githubTokenSaving: false,
+      githubTokenError: "",
+      githubTokenNotice: "",
     };
   },
   computed: {
-    currentTopLabel() {
-      if (this.currentTopRelease && this.currentTopRelease.version) {
-        return `${this.currentTopRelease.version} (${this.currentTopRelease.release_date})`;
+    today() {
+      return todaysDate();
+    },
+    canSave() {
+      return this.writable && this.isDirty && !this.saving && this.content.trim().length > 0;
+    },
+    canEdit() {
+      return this.writable && !this.saving;
+    },
+    lineCount() {
+      if (!this.content) {
+        return 0;
       }
-      return "-";
+      return this.content.split(/\r?\n/).length;
     },
-    canGenerateDraft() {
-      return this.writable &&
-        !this.versionActionPending &&
-        !this.repositoryActionPending &&
-        !this.hasPendingRepositoryChange &&
-        !this.hasInvalidReleaseRepositoryDraft;
+    wordCount() {
+      const words = (this.content || "").trim().match(/\S+/g);
+      return words ? words.length : 0;
     },
-    sourceBadgeClass() {
-      return this.source === "live" ? "badge badge-success" : "badge badge-secondary";
+    topRelease() {
+      return parseTopRelease(this.content);
     },
-    writableBadgeClass() {
-      return this.writable ? "badge badge-success" : "badge badge-warning";
+    topReleaseLabel() {
+      if (!this.topRelease.version) {
+        return "-";
+      }
+      return `${this.topRelease.version} (${this.topRelease.releaseDate || "no date"})`;
+    },
+    previewHtml() {
+      return renderChangelogMarkdown(this.content);
     },
     releaseRepositorySourceLabel() {
       switch (this.releaseRepositorySource) {
       case "env":
-        return "env override";
+        return "SPIRE_RELEASE_REPO";
+      case "config":
+        return "eqemu_config.json";
       case "package_json":
         return "package.json";
       case "git_remote_upstream":
@@ -489,355 +508,181 @@ export default {
       case "git_remote_origin":
         return "git remote origin";
       case "default":
-        return "default fallback";
+        return "default";
       default:
-        return this.releaseRepositorySource || "unknown";
+        return this.releaseRepositorySource || "-";
       }
     },
-    normalizedReleaseRepositoryDraft() {
-      return this.normalizeRepository(this.releaseRepositoryDraft);
+    currentBranchLabel() {
+      return this.currentBranch || "unknown";
     },
-    hasInvalidReleaseRepositoryDraft() {
-      return !!this.releaseRepositoryDraft && !this.normalizedReleaseRepositoryDraft;
+    releaseBranchAligned() {
+      return !!this.currentBranch && this.currentBranch === this.releaseBranch;
     },
-    hasPendingRepositoryChange() {
-      return !!this.normalizedReleaseRepositoryDraft && this.normalizedReleaseRepositoryDraft !== this.configuredReleaseRepository;
+    releaseStatusSummary() {
+      if (this.releaseStatusLoading && !this.releaseStatus) {
+        return "checking";
+      }
+      return this.releaseStatus?.summary || "unknown";
     },
-    canApplyReleaseRepository() {
-      return this.writable &&
-        !this.repositoryActionPending &&
-        !!this.normalizedReleaseRepositoryDraft &&
-        this.hasPendingRepositoryChange;
+    releaseStatusLabel() {
+      if (this.releaseStatusLoading && !this.releaseStatus) {
+        return "Checking";
+      }
+      return this.releaseStatus?.summary_label || "GitHub status unknown";
     },
-    repositoryStatusText() {
-      if (!this.releaseRepositoryDraft) {
-        return "Choose the GitHub owner/repo that releases should publish to. The updater will also check this repo for releases.";
-      }
-      if (this.hasInvalidReleaseRepositoryDraft) {
-        return "Use owner/repo format like EQEmuTools/spire or paste a GitHub repository URL.";
-      }
-      if (this.hasPendingRepositoryChange) {
-        return `Apply to save ${this.normalizedReleaseRepositoryDraft} into package.json.`;
-      }
-      if (this.releaseRepositorySource === "package_json") {
-        return `package.json currently controls the active release repo (${this.releaseRepository || "-"})`;
-      }
-      if (this.releaseRepositorySource && this.releaseRepositorySource.indexOf("git_remote_") === 0) {
-        const remoteName = this.releaseRepositorySource.replace("git_remote_", "");
-        return `No repo override is saved in package.json, so the active repo currently falls back to git remote ${remoteName}.`;
-      }
-      if (this.releaseRepositorySource === "env") {
-        return `An environment override is currently controlling the active release repo (${this.releaseRepository || "-"})`;
-      }
-      return `Active release repo: ${this.releaseRepository || "-"}`;
+    releaseStatusClass() {
+      return `release-status-${this.releaseStatusSummary}`;
     },
-    versionStepComplete() {
-      return !this.hasPendingRepositoryChange &&
-        !this.hasInvalidReleaseRepositoryDraft &&
-        !!this.version &&
-        !!this.releaseDate;
-    },
-    editorValidationErrors() {
-      if (!this.draftStarted && !this.body) {
-        return [];
+    releaseInfoButtonClasses() {
+      if (this.githubAuthNeedsToken) {
+        return ["btn", "release-info-button", "release-info-token"];
       }
-
+      if (this.releaseProcessStatic) {
+        return ["btn", "release-info-button", "release-info-basic"];
+      }
+      return ["btn", "release-info-button", `release-info-${this.releaseStatusSummary}`];
+    },
+    githubAuthNeedsToken() {
+      return !!this.releaseStatus?.github_auth?.needs_token;
+    },
+    githubTokenFormVisible() {
+      return this.githubAuthNeedsToken || this.githubTokenExpanded || !!this.githubTokenError;
+    },
+    githubTokenPanelTone() {
+      if (this.githubAuthNeedsToken || this.githubTokenError) {
+        return "github-token-warning";
+      }
+      if (this.githubTokenNotice) {
+        return "github-token-success";
+      }
+      return "github-token-idle";
+    },
+    githubTokenTitle() {
+      return this.githubAuthNeedsToken ? "GitHub token needed" : "GitHub access";
+    },
+    githubTokenActionLabel() {
+      return this.githubAuthNeedsToken ? "Add token" : "Update token";
+    },
+    githubTokenHelpText() {
+      return this.releaseStatus?.github_auth?.message || "Set a GitHub token for live release status.";
+    },
+    releaseStateUnavailable() {
+      return !!this.releaseStatus?.github_error && !this.releaseStatus?.workflow && !this.releaseStatus?.latest_release;
+    },
+    releaseStateVisible() {
+      return !!this.releaseStatus && !this.releaseStatusError && !this.releaseStateUnavailable;
+    },
+    releaseProcessStatic() {
+      return !this.releaseStateVisible;
+    },
+    releaseStatusDescription() {
+      if (this.releaseStatusLoading && !this.releaseStatus) {
+        return "Checking the saved changelog, Manual Release workflow, and latest GitHub release.";
+      }
+      if (!this.releaseStatus) {
+        return "Open the release process to check the saved changelog and GitHub release state.";
+      }
+      if (this.releaseStatus.summary === "needs_attention") {
+        return this.releaseStatusIssues[0] || "Resolve the highlighted item before starting the workflow.";
+      }
+      if (this.releaseStatus.summary === "running") {
+        return this.releaseStatus.workflow
+          ? `Manual Release #${this.releaseStatus.workflow.run_number} is ${this.releaseStatus.workflow.status}.`
+          : "Manual Release is running.";
+      }
+      if (this.releaseStatus.summary === "failed") {
+        return this.releaseStatus.workflow
+          ? `Manual Release #${this.releaseStatus.workflow.run_number} ended with ${this.releaseStatus.workflow.conclusion || "a failure"}.`
+          : "The latest Manual Release workflow failed.";
+      }
+      if (this.releaseStatus.summary === "published") {
+        return this.releaseStatus.latest_release
+          ? `Latest GitHub release ${this.releaseStatus.latest_release.tag_name} is published.`
+          : "The expected release is published.";
+      }
+      if (this.releaseStatus.summary === "unknown") {
+        return "Local checks are clear, but GitHub status could not be read.";
+      }
+      return `${this.releaseBranch} checks are clear; run Manual Release on ${this.releaseBranch} when the notes are final.`;
+    },
+    releaseStatusIssues() {
+      return this.releaseStatus?.issues || [];
+    },
+    releaseProcessSteps() {
+      if (!this.releaseProcessStatic && this.releaseStatus?.steps?.length) {
+        return this.releaseStatus.steps;
+      }
+      return fallbackReleaseProcessSteps;
+    },
+    releaseLatestReleaseLabel() {
+      const latest = this.releaseStatus?.latest_release;
+      if (!latest) {
+        return "-";
+      }
+      return latest.tag_name || latest.name || "-";
+    },
+    releaseWorkflowLabel() {
+      const workflow = this.releaseStatus?.workflow;
+      if (!workflow) {
+        return "No recent run";
+      }
+      const conclusion = workflow.conclusion ? ` / ${workflow.conclusion}` : "";
+      return `#${workflow.run_number} ${workflow.status}${conclusion}`;
+    },
+    releaseStatusCheckedLabel() {
+      return this.formatReleaseTimestamp(this.releaseStatus?.checked_at);
+    },
+    releasePrimaryLink() {
+      if (this.releaseStatus?.workflow?.html_url && (this.releaseStatus.summary === "running" || this.releaseStatus.summary === "failed")) {
+        return {label: "Open workflow", url: this.releaseStatus.workflow.html_url};
+      }
+      if (this.releaseStatus?.latest_release?.html_url && this.releaseStatus.summary === "published") {
+        return {label: "Open release", url: this.releaseStatus.latest_release.html_url};
+      }
+      if (this.releaseRepository) {
+        return {
+          label: "Open master workflow",
+          url: `https://github.com/${this.releaseRepository}/actions/workflows/manual-release.yml?query=branch%3A${encodeURIComponent(this.releaseBranch)}`
+        };
+      }
+      return {label: "", url: ""};
+    },
+    validationIssues() {
       const issues = [];
+      const text = this.content || "";
+      const top = this.topRelease;
 
-      if (!this.version) {
-        issues.push("Version is required.");
+      if (!text.trim()) {
+        issues.push("CHANGELOG.md cannot be empty.");
+        return issues;
       }
-      if (!this.releaseDate) {
-        issues.push("Release date is required.");
-      } else if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(this.releaseDate)) {
-        issues.push("Release date must use M/D/YYYY format.");
+      if (containsTokenLikeSecret(text)) {
+        issues.push("CHANGELOG.md appears to contain a token-like secret. Remove it before saving or publishing release notes.");
       }
-      if (!this.body || !this.body.trim()) {
-        issues.push("Release notes body is required.");
+
+      if (!top.version) {
+        issues.push("The first release heading should use the format: ## [1.2.3] M/D/YYYY.");
+      } else if (isUnreleasedVersion(top.version)) {
+        // Draft sections are stamped by the manual GitHub release workflow.
+      } else if (this.packageVersion && top.version !== this.packageVersion) {
+        issues.push(`Top changelog version [${top.version}] does not match package.json version [${this.packageVersion}].`);
       }
-      if (this.version && this.existingVersions.includes(this.version)) {
-        issues.push(`Changelog version [${this.version}] already exists.`);
+
+      const versions = [];
+      const releaseHeadingRegexp = /^## \[([^\]]+)] /gm;
+      let match = releaseHeadingRegexp.exec(text);
+      while (match) {
+        versions.push(match[1]);
+        match = releaseHeadingRegexp.exec(text);
       }
+
+      const duplicates = versions.filter((version, index) => versions.indexOf(version) !== index);
+      Array.from(new Set(duplicates)).forEach((version) => {
+        issues.push(`Duplicate changelog version [${version}] detected.`);
+      });
 
       return issues;
-    },
-    combinedValidationErrors() {
-      return [...this.documentValidationErrors, ...this.editorValidationErrors];
-    },
-    existingVersions() {
-      const matches = this.currentContent.match(/^## \[([^\]]+)\] /gm) || [];
-      return matches.map((line) => line.replace(/^## \[([^\]]+)\] .*/, "$1"));
-    },
-    previewMarkdown() {
-      if (!this.version && !this.releaseDate && !this.body) {
-        return this.currentContent;
-      }
-
-      const section = `## [${this.version || "version"}] ${this.releaseDate || "M/D/YYYY"}\n\n${(this.body || "").trim()}`;
-      if (!this.currentContent) {
-        return section;
-      }
-
-      return `${section}\n\n${this.currentContent}`;
-    },
-    previewHtml() {
-      return renderChangelogMarkdown(this.previewMarkdown);
-    },
-    releasePayloadPreview() {
-      const version = (this.version || "").trim();
-      const releaseDate = (this.releaseDate || "").trim();
-      const body = (this.body || "").trim();
-
-      if (!version && !releaseDate && !body) {
-        return this.currentReleasePayload || {};
-      }
-
-      const fallbackVersion = this.currentTopRelease && this.currentTopRelease.version ? this.currentTopRelease.version : "";
-      const fallbackDate = this.currentTopRelease && this.currentTopRelease.release_date ? this.currentTopRelease.release_date : "";
-      const fallbackBody = this.currentTopRelease && this.currentTopRelease.body ? this.currentTopRelease.body : "";
-
-      return this.buildReleasePayload(
-        version || this.packageVersion || fallbackVersion,
-        releaseDate || fallbackDate,
-        body || fallbackBody
-      );
-    },
-    versionStatusText() {
-      if (!this.version) {
-        return "Choose a semantic version. Saving will keep package.json and CHANGELOG.md aligned.";
-      }
-      if (this.packageVersion === this.version) {
-        return `Version is in sync with package.json (${this.packageVersion}).`;
-      }
-      return `Version differs from package.json (${this.packageVersion || "unset"}). Saving will sync package.json first.`;
-    },
-    patchTooltip() {
-      return this.nextVersion("patch") ? `Bump ${this.packageVersion} to ${this.nextVersion("patch")}.` : "Current package version could not be parsed.";
-    },
-    minorTooltip() {
-      return this.nextVersion("minor") ? `Bump ${this.packageVersion} to ${this.nextVersion("minor")}.` : "Current package version could not be parsed.";
-    },
-    majorTooltip() {
-      return this.nextVersion("major") ? `Bump ${this.packageVersion} to ${this.nextVersion("major")}.` : "Current package version could not be parsed.";
-    },
-    hasDraftBody() {
-      return !!(this.body && this.body.trim());
-    },
-    isReadyToSave() {
-      return !this.hasPendingRepositoryChange &&
-        !this.hasInvalidReleaseRepositoryDraft &&
-        this.editorValidationErrors.length === 0 &&
-        this.hasDraftBody &&
-        this.reviewedPayload &&
-        this.reviewedHomepagePreview;
-    },
-    saveHelperText() {
-      if (!this.writable) {
-        return "Saving is disabled in embedded/read-only environments.";
-      }
-      if (this.editorValidationErrors.length > 0) {
-        return "Resolve the validation issues above before saving.";
-      }
-      if (this.hasInvalidReleaseRepositoryDraft) {
-        return "Fix the release repository format before saving.";
-      }
-      if (this.hasPendingRepositoryChange) {
-        return "Apply the release repository change before saving so publishing and updater checks stay aligned.";
-      }
-      if (!this.hasDraftBody) {
-        return "Add release notes or generate a draft before saving.";
-      }
-      if (!this.reviewedPayload || !this.reviewedHomepagePreview) {
-        return "Review the GitHub payload and homepage preview, then check both review boxes.";
-      }
-      return "Ready to save. This will update CHANGELOG.md and keep the release version in sync.";
-    },
-    draftHelperText() {
-      if (!this.writable) {
-        return "Draft generation only runs in a live repo checkout.";
-      }
-      if (this.hasInvalidReleaseRepositoryDraft) {
-        return "Fix the release repo format before generating a draft.";
-      }
-      if (this.hasPendingRepositoryChange) {
-        return "Apply the release repo change first so the draft reflects the target you intend to publish.";
-      }
-      return "Drafts are built from local git history since the latest tagged release.";
-    },
-    workflowSteps() {
-      return [
-        {
-          number: "1",
-          title: "Target + Version",
-          description: this.versionStepComplete ?
-            `Release target ${this.releaseRepository || this.configuredReleaseRepository || "-"} and version ${this.version} are ready.` :
-            "Choose the release repo, then pick a patch, minor, major, or custom version.",
-          complete: this.versionStepComplete
-        },
-        {
-          number: "2",
-          title: "Draft Notes",
-          description: this.hasDraftBody ? "Release notes body is ready to review." : "Generate a draft or write the notes manually.",
-          complete: this.hasDraftBody
-        },
-        {
-          number: "3",
-          title: "Review Payload",
-          description: this.reviewedPayload && this.reviewedHomepagePreview ?
-            "Both review checks are complete." :
-            "Review the payload and homepage preview, then confirm both.",
-          complete: this.reviewedPayload && this.reviewedHomepagePreview
-        },
-        {
-          number: "4",
-          title: "Save Changelog",
-          description: this.isReadyToSave ? "Everything is ready to be written to CHANGELOG.md." : "Save becomes available once the draft is valid.",
-          complete: this.isReadyToSave
-        }
-      ];
-    },
-    nextAction() {
-      if (!this.writable) {
-        return {
-          step: 0,
-          focus: "status",
-          title: "Move to a writable local or dev checkout",
-          message: "This page is read-only because it is using embedded changelog data. The next real action is to open Spire in a local/dev repo checkout where Source becomes live and Writable becomes Yes.",
-          checklist: [
-            "Open a local or dev Spire checkout.",
-            "Return here and confirm Source is live.",
-            "Then start with Step 1 below."
-          ],
-          context: `Current source: ${this.source || "unknown"}`
-        };
-      }
-      if (this.hasInvalidReleaseRepositoryDraft) {
-        return {
-          step: 1,
-          focus: "repository",
-          title: "Fix the release repository format",
-          message: "Enter the GitHub repo in owner/repo format or paste a GitHub URL, then apply it.",
-          checklist: [
-            "Example: EQEmuTools/spire",
-            "Click Apply Release Repo after updating the field."
-          ],
-          context: `Current draft: ${this.releaseRepositoryDraft || "unset"}`
-        };
-      }
-      if (this.hasPendingRepositoryChange) {
-        return {
-          step: 1,
-          focus: "repository",
-          title: "Apply the release repository change",
-          message: this.releaseRepositoryOverride ?
-            "You picked a different GitHub repo. Apply it to save the new default into package.json. The active repo will keep using the environment override until that override is removed." :
-            "You picked a different GitHub repo. Apply it so package.json, release publishing, and updater checks all point at the same place.",
-          checklist: [
-            `Apply ${this.normalizedReleaseRepositoryDraft}.`,
-            this.releaseRepositoryOverride ? "Confirm the saved repo is updated for future releases." : "Confirm the Release Repo badge updates.",
-            "Then continue with the version and notes."
-          ],
-          context: this.releaseRepositoryOverride ?
-            `Active override: ${this.releaseRepositoryOverride}` :
-            `Active repo: ${this.releaseRepository || "-"}`
-        };
-      }
-      if (!this.version) {
-        return {
-          step: 1,
-          focus: "version",
-          title: "Choose the release version",
-          message: "Start with Patch Release, Minor Release, Major Release, or type a semantic version and click Apply Version.",
-          checklist: [
-            "Pick an automatic bump or type a custom version.",
-            "Make sure the version field looks correct.",
-            "The tool will keep package.json aligned."
-          ],
-          context: `Current package.json version: ${this.packageVersion || "unset"}`
-        };
-      }
-      if (!this.releaseDate) {
-        return {
-          step: 1,
-          focus: "date",
-          title: "Set the release date",
-          message: "Add the release date that should appear in the top changelog heading and GitHub release payload.",
-          checklist: [
-            "Use M/D/YYYY format.",
-            "Example: 3/25/2026."
-          ],
-          context: `Selected version: ${this.version}`
-        };
-      }
-      if (!this.hasDraftBody) {
-        return {
-          step: 2,
-          focus: "draft",
-          title: "Create the release notes draft",
-          message: "Generate a draft from local git history or write the release notes manually in the body field.",
-          checklist: [
-            "Click Generate Draft for a starting point.",
-            "Edit the notes until they read well for users."
-          ],
-          context: `Release target: v${this.version}`
-        };
-      }
-      if (this.editorValidationErrors.length > 0) {
-        return {
-          step: 2,
-          focus: "draft",
-          title: "Fix the draft validation issues",
-          message: this.editorValidationErrors[0],
-          checklist: [
-            "Resolve the highlighted issue.",
-            "Then review the payload and preview."
-          ],
-          context: `Validation issues: ${this.editorValidationErrors.length}`
-        };
-      }
-      if (!this.reviewedPayload || !this.reviewedHomepagePreview) {
-        return {
-          step: 3,
-          focus: "review",
-          title: "Review the release outputs",
-          message: "Check the GitHub release payload and homepage preview on the right, then confirm both review checkboxes.",
-          checklist: [
-            this.reviewedPayload ? "GitHub payload review is complete." : "Review the GitHub release payload.",
-            this.reviewedHomepagePreview ? "Homepage preview review is complete." : "Review the homepage preview.",
-            "Check both boxes when you are satisfied."
-          ],
-          context: `GitHub tag preview: ${this.releasePayloadPreview.tag_name || "-"}`
-        };
-      }
-      return {
-        step: 4,
-        focus: "save",
-        title: "Save the new top changelog entry",
-        message: "Everything is ready. Save CHANGELOG.md to prepend the new release section and keep package.json aligned.",
-        checklist: [
-          "Click Save CHANGELOG.md.",
-          "After saving, verify the top release and release payload."
-        ],
-        context: `Ready to publish ${this.releasePayloadPreview.tag_name || ""}`.trim()
-      };
-    },
-    nextActionTitle() {
-      return this.nextAction.title;
-    },
-    nextActionMessage() {
-      return this.nextAction.message;
-    },
-    nextActionChecklist() {
-      return this.nextAction.checklist || [];
-    },
-    nextActionContext() {
-      return this.nextAction.context || "";
-    },
-    nextActionFocus() {
-      return this.nextAction.focus;
-    },
-    nextActionStepLabel() {
-      return this.nextAction.step === 0 ? "Blocked" : `${this.nextAction.step} of 4`;
     }
   },
   watch: {
@@ -848,7 +693,21 @@ export default {
     }
   },
   mounted() {
-    this.fetchState();
+    this.fetchState().then(() => {
+      this.fetchReleaseStatus(false);
+    });
+    window.addEventListener("beforeunload", this.handleBeforeUnload);
+  },
+  destroyed() {
+    window.removeEventListener("beforeunload", this.handleBeforeUnload);
+    this.stopReleaseStatusPolling();
+  },
+  beforeRouteLeave(to, from, next) {
+    if (this.isDirty && !window.confirm("Discard unsaved changelog changes?")) {
+      next(false);
+      return;
+    }
+    next();
   },
   methods: {
     async fetchState() {
@@ -864,435 +723,1046 @@ export default {
       }
     },
     applyState(state) {
-      this.currentContent = state.content || "";
+      this.content = state.content || "";
+      this.originalContent = this.content;
       this.packageVersion = state.package_version || "";
       this.releaseRepository = state.release_repository || "";
-      this.configuredReleaseRepository = state.configured_release_repository || "";
       this.releaseRepositorySource = state.release_repository_source || "";
       this.releaseRepositoryOverride = state.release_repository_override || "";
-      this.releaseRepositoryCandidates = state.release_repository_candidates || [];
-      this.releaseRepositoryDraft = state.configured_release_repository || state.release_repository || "";
+      this.releaseBranch = state.release_branch || "master";
+      this.currentBranch = state.current_branch || "";
       this.writable = !!state.writable;
       this.source = state.source || "";
-      this.currentTopRelease = state.top_release || {};
-      this.currentReleasePayload = state.release_payload || {};
-      this.documentValidationErrors = state.validation_errors || [];
-      AppEnv.setVersion(this.packageVersion);
-      AppEnv.setReleaseRepository(this.releaseRepository);
-      this.reviewedPayload = false;
-      this.reviewedHomepagePreview = false;
-    },
-    workflowStepClass(step) {
-      return {
-        "workflow-step-complete": step.complete,
-        "workflow-step-current": this.nextAction.step === parseInt(step.number, 10),
-        "workflow-step-pending": !step.complete && this.nextAction.step !== parseInt(step.number, 10)
-      };
-    },
-    stepIndicatorLabel(step) {
-      if (this.nextAction.step === step) {
-        return "Next";
-      }
-      if (step === 4 && this.isReadyToSave) {
-        return "Ready";
-      }
-      if (step === 1 && this.versionStepComplete) {
-        return "Done";
-      }
-      if (step === 2 && this.hasDraftBody && this.editorValidationErrors.length === 0) {
-        return "Done";
-      }
-      if (step === 3 && this.reviewedPayload && this.reviewedHomepagePreview) {
-        return "Done";
-      }
-      return "Pending";
-    },
-    stepIndicatorClass(step) {
-      if (this.nextAction.step === step) {
-        return "guided-step-current";
-      }
-      if (this.stepIndicatorLabel(step) === "Done" || this.stepIndicatorLabel(step) === "Ready") {
-        return "guided-step-done";
-      }
-      return "guided-step-pending";
-    },
-    sectionStateClass(section) {
-      return {
-        "guided-section-active": this.nextActionFocus === section ||
-          (section === "version" && this.nextActionFocus === "repository"),
-        "guided-section-complete": section === "version" ? this.versionStepComplete :
-          section === "draft" ? this.hasDraftBody && this.editorValidationErrors.length === 0 :
-            section === "review" ? this.reviewedPayload && this.reviewedHomepagePreview :
-              section === "save" ? this.isReadyToSave : false
-      };
-    },
-    actionRowClass(section) {
-      return {
-        "action-row-active": this.nextActionFocus === section
-      };
-    },
-    buttonHighlightClass(section) {
-      return {
-        "action-highlight": this.nextActionFocus === section
-      };
-    },
-    fieldHighlightClass(section) {
-      return {
-        "field-highlight": this.nextActionFocus === section
-      };
-    },
-    handleDraftInputChange() {
-      this.reviewedPayload = false;
-      this.reviewedHomepagePreview = false;
-    },
-    normalizeRepository(value) {
-      const repo = (value || "").trim();
-      if (!repo) {
-        return "";
-      }
-
-      const shortMatch = repo.match(/^([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
-      if (shortMatch) {
-        return `${shortMatch[1]}/${shortMatch[2]}`.replace(/\.git$/, "");
-      }
-
-      const urlMatch = repo.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/);
-      if (urlMatch) {
-        return `${urlMatch[1]}/${urlMatch[2]}`.replace(/\.git$/, "");
-      }
-
-      return "";
-    },
-    startNewRelease() {
-      this.draftStarted = true;
-      this.version = this.packageVersion || this.version;
-      this.releaseDate = todaysDate();
-      this.body = "";
-      this.handleDraftInputChange();
-      this.notification = "Ready to draft a new top release section.";
-      this.error = "";
-    },
-    nextVersion(kind) {
-      const parsed = this.parseVersion(this.packageVersion);
-      if (!parsed) {
-        return "";
-      }
-
-      const next = {...parsed};
-      if (kind === "patch") {
-        next.patch += 1;
-      }
-      if (kind === "minor") {
-        next.minor += 1;
-        next.patch = 0;
-      }
-      if (kind === "major") {
-        next.major += 1;
-        next.minor = 0;
-        next.patch = 0;
-      }
-
-      return `${next.major}.${next.minor}.${next.patch}`;
-    },
-    parseVersion(version) {
-      const match = (version || "").trim().match(/^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
-      if (!match) {
-        return null;
-      }
-
-      return {
-        major: parseInt(match[1], 10),
-        minor: parseInt(match[2], 10),
-        patch: parseInt(match[3], 10),
-      };
-    },
-    buildReleasePayload(version, releaseDate, body) {
-      const cleanVersion = (version || "").trim();
-      if (!cleanVersion) {
-        return {};
-      }
-
-      const cleanDate = (releaseDate || "").trim();
-      const cleanBody = (body || "").trim();
-
-      return {
-        version: cleanVersion,
-        tag_name: `v${cleanVersion}`,
-        title: `Spire v${cleanVersion}`,
-        release_date: cleanDate,
-        body: `## [${cleanVersion}] ${cleanDate || "M/D/YYYY"}\n\n${cleanBody}`.trim()
-      };
-    },
-    copyToClipboard(value, message = "Copied to clipboard!") {
-      if (!value) {
-        return;
-      }
-
-      Clipboard.copyFromText(value);
-      Notify.toast(message);
-    },
-    copyReleaseBody() {
-      this.copyToClipboard(this.releasePayloadPreview.body, "Copied release body to clipboard!");
-    },
-    async applyReleaseRepository() {
-      const repository = this.normalizedReleaseRepositoryDraft;
-      if (!repository) {
-        this.error = "Release repository must use owner/repo format or a GitHub repository URL.";
-        return false;
-      }
-
-      this.repositoryActionPending = true;
-      this.error = "";
-
-      try {
-        const response = await SpireApi.v1().post("spirechangelog/repository", {
-          repository
-        });
-
-        this.applyState(response.data.data);
-        this.notification = this.releaseRepositoryOverride ?
-          `Saved ${repository} into package.json. The active repo is still overridden by SPIRE_RELEASE_REPO.` :
-          `Release repository saved to ${repository}.`;
-        return true;
-      } catch (e) {
-        this.error = e.response?.data?.error || "Failed to update package.json release repository.";
-        return false;
-      } finally {
-        this.repositoryActionPending = false;
-      }
-    },
-    async prepareVersionBump(kind) {
-      const nextVersion = this.nextVersion(kind);
-      if (!nextVersion) {
-        this.error = "Current package version could not be parsed for automatic bumping.";
-        return;
-      }
-
-      this.version = nextVersion;
-      await this.applyVersion({
-        versionOverride: nextVersion,
-        notification: `package.json bumped to ${nextVersion}. Ready to draft a new release.`,
-        resetBody: true
+      this.isDirty = false;
+      this.$nextTick(() => {
+        decorateChangelogDom(this.$refs.previewRoot);
       });
     },
-    async applyVersion(options = {}) {
-      const version = (options.versionOverride || this.version || "").trim();
-      if (!version) {
-        this.error = "Version is required.";
-        return false;
+    applyReleaseStatus(status) {
+      this.releaseStatus = status;
+      if (!status) {
+        return;
       }
-
-      this.versionActionPending = true;
-      this.error = "";
-
-      try {
-        const response = await SpireApi.v1().post("spirechangelog/version", {
-          version
-        });
-
-        this.applyState(response.data.data);
-        this.draftStarted = true;
-        this.version = version;
-        this.releaseDate = this.releaseDate || todaysDate();
-        if (options.resetBody) {
-          this.body = "";
-        }
-        this.handleDraftInputChange();
-        this.notification = options.notification || `package.json updated to ${version}.`;
-        return true;
-      } catch (e) {
-        this.error = e.response?.data?.error || "Failed to update package.json version.";
-        return false;
-      } finally {
-        this.versionActionPending = false;
-      }
+      this.releaseBranch = status.release_branch || this.releaseBranch || "master";
+      this.currentBranch = status.local?.current_branch || this.currentBranch || "";
     },
-    async generateDraft() {
-      this.error = "";
-      this.draftStarted = true;
-      try {
-        if (!this.version) {
-          this.version = this.packageVersion || "";
-        }
-        if (!this.releaseDate) {
-          this.releaseDate = todaysDate();
-        }
-
-        const response = await SpireApi.v1().post("spirechangelog/draft");
-        this.body = response.data.data.body || "";
-        this.handleDraftInputChange();
-        this.notification = response.data.data.latest_tag ?
-          `Draft generated from commits since ${response.data.data.latest_tag}.` :
-          "Draft generated from local git history.";
-      } catch (e) {
-        this.error = e.response?.data?.error || "Failed to generate changelog draft.";
-      }
-    },
-    async saveRelease() {
-      this.draftStarted = true;
-      if (this.editorValidationErrors.length > 0) {
-        this.error = this.editorValidationErrors[0];
+    async fetchReleaseStatus(showSpinner = true) {
+      if (this.releaseStatusLoading) {
         return;
       }
 
-      if (this.packageVersion && this.version && this.packageVersion !== this.version) {
-        const synced = await this.applyVersion({
-          versionOverride: this.version,
-          notification: `package.json updated to ${this.version}.`
+      this.releaseStatusLoading = showSpinner || !this.releaseStatus;
+      this.releaseStatusError = "";
+      if (!this.githubTokenSaving) {
+        this.githubTokenError = "";
+      }
+      try {
+        const response = await SpireApi.v1().get("spirechangelog/release-status");
+        this.applyReleaseStatus(response.data.data);
+        if (this.githubAuthNeedsToken) {
+          this.githubTokenExpanded = true;
+        }
+      } catch (e) {
+        this.releaseStatusError = e.response?.data?.error || "Failed to load GitHub release status.";
+      } finally {
+        this.releaseStatusLoading = false;
+      }
+    },
+    async saveGitHubToken() {
+      const token = this.githubTokenInput.trim();
+      if (!token) {
+        this.githubTokenError = "GitHub token is required.";
+        return;
+      }
+
+      await this.saveGitHubTokenValue(token, "GitHub token saved on this machine.");
+    },
+    async saveGitHubTokenValue(token, notice) {
+      this.githubTokenSaving = true;
+      this.githubTokenError = "";
+      this.githubTokenNotice = "";
+      try {
+        const response = await SpireApi.v1().post("spirechangelog/github-token", {
+          token
         });
-        if (!synced) {
+        this.applyReleaseStatus(response.data.data);
+        this.githubTokenInput = "";
+        this.githubTokenExpanded = false;
+        this.githubTokenVisible = false;
+        this.githubTokenNotice = notice;
+        Notify.toast(notice);
+      } catch (e) {
+        this.githubTokenError = e.response?.data?.error || "Failed to validate GitHub token.";
+      } finally {
+        this.githubTokenSaving = false;
+      }
+    },
+    async pasteGitHubToken() {
+      if (this.githubTokenSaving || this.githubTokenPasting) {
+        return;
+      }
+
+      this.githubTokenPasting = true;
+      this.githubTokenError = "";
+      this.githubTokenNotice = "";
+      try {
+        let text = "";
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.readText) {
+          try {
+            text = (await navigator.clipboard.readText()).trim();
+          } catch (e) {
+            text = "";
+          }
+        }
+
+        if (text) {
+          await this.saveGitHubTokenValue(text, "GitHub token saved from clipboard on this machine.");
           return;
         }
+
+        this.githubTokenSaving = true;
+        const response = await SpireApi.v1().post("spirechangelog/github-token/clipboard");
+        this.applyReleaseStatus(response.data.data);
+        this.githubTokenInput = "";
+        this.githubTokenExpanded = false;
+        this.githubTokenVisible = false;
+        this.githubTokenNotice = "GitHub token saved from local clipboard on this machine.";
+        Notify.toast("GitHub token saved from local clipboard on this machine.");
+      } catch (e) {
+        this.githubTokenError = e.response?.data?.error || "Clipboard token could not be used. Copy the token, then try again.";
+      } finally {
+        this.githubTokenSaving = false;
+        this.githubTokenPasting = false;
+      }
+    },
+    toggleGitHubTokenPanel() {
+      if (this.githubTokenFormVisible) {
+        this.githubTokenExpanded = false;
+        this.githubTokenInput = "";
+        this.githubTokenVisible = false;
+        if (!this.githubAuthNeedsToken) {
+          this.githubTokenError = "";
+        }
+        return;
+      }
+
+      this.githubTokenExpanded = true;
+    },
+    onReleaseProcessShown() {
+      this.fetchReleaseStatus();
+      this.startReleaseStatusPolling();
+    },
+    onReleaseProcessHidden() {
+      this.stopReleaseStatusPolling();
+    },
+    startReleaseStatusPolling() {
+      this.stopReleaseStatusPolling();
+      const refreshSeconds = this.releaseStatus?.refresh_after_seconds || 20;
+      this.releaseStatusTimer = window.setInterval(() => {
+        this.fetchReleaseStatus(false);
+      }, refreshSeconds * 1000);
+    },
+    stopReleaseStatusPolling() {
+      if (this.releaseStatusTimer) {
+        window.clearInterval(this.releaseStatusTimer);
+        this.releaseStatusTimer = null;
+      }
+    },
+    markDirty() {
+      this.isDirty = this.content !== this.originalContent;
+    },
+    async saveContent() {
+      if (!this.canSave) {
+        return;
       }
 
       this.saving = true;
       this.error = "";
+      this.notification = "";
       try {
-        const response = await SpireApi.v1().post("spirechangelog/save", {
-          version: this.version,
-          release_date: this.releaseDate,
-          body: this.body
+        const response = await SpireApi.v1().post("spirechangelog/content", {
+          content: this.content
         });
-
         this.applyState(response.data.data);
-        this.notification = response.data.message || "Spire changelog saved successfully.";
-        this.draftStarted = false;
-        this.version = "";
-        this.releaseDate = "";
-        this.body = "";
+        this.notification = "CHANGELOG.md saved.";
+        Notify.toast("CHANGELOG.md saved.");
+        this.fetchReleaseStatus(false);
       } catch (e) {
         this.error = e.response?.data?.error || "Failed to save CHANGELOG.md.";
       } finally {
         this.saving = false;
       }
+    },
+    async reloadContent() {
+      if (this.isDirty && !window.confirm("Reload CHANGELOG.md and discard unsaved edits?")) {
+        return;
+      }
+      await this.fetchState();
+      this.fetchReleaseStatus(false);
+      this.notification = "CHANGELOG.md reloaded.";
+    },
+    copyContent() {
+      Clipboard.copyFromText(this.content);
+      Notify.toast("Copied CHANGELOG.md to clipboard.");
+    },
+    copyPreviewText() {
+      Clipboard.copyFromText(this.content);
+      Notify.toast("Copied changelog markdown to clipboard.");
+    },
+    showReleaseProcess() {
+      this.$bvModal.show("spire-release-process-modal");
+    },
+    releaseStepIcon(status) {
+      switch (status) {
+      case "done":
+        return "fe fe-check";
+      case "running":
+        return "fe fe-loader";
+      case "current":
+        return "fe fe-arrow-right";
+      case "attention":
+      case "failed":
+        return "fe fe-alert-triangle";
+      default:
+        return "fe fe-circle";
+      }
+    },
+    releaseStepStatusLabel(status) {
+      switch (status) {
+      case "done":
+        return "Done";
+      case "running":
+        return "Running";
+      case "current":
+        return "Current";
+      case "attention":
+        return "Attention";
+      case "failed":
+        return "Failed";
+      default:
+        return "Pending";
+      }
+    },
+    formatReleaseTimestamp(value) {
+      if (!value) {
+        return "-";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "-";
+      }
+      return date.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      });
+    },
+    downloadMarkdown() {
+      const blob = new Blob([this.content], {type: "text/markdown;charset=utf-8"});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "CHANGELOG.md";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    },
+    handleBeforeUnload(event) {
+      if (!this.isDirty) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    },
+    handleEditorKeydown(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        this.saveContent();
+      }
+    },
+    insertReleaseHeading() {
+      if (!this.canEdit) {
+        return;
+      }
+
+      const heading = `## [Unreleased] ${this.today}\n\n* \n\n`;
+      this.content = heading + this.content.replace(/^\s+/, "");
+      this.markDirty();
+      this.$nextTick(() => {
+        const editor = this.$refs.editor;
+        if (editor) {
+          editor.focus();
+          const pos = heading.indexOf("* ") + 2;
+          editor.setSelectionRange(pos, pos);
+        }
+      });
+    },
+    insertLinePrefix(prefix) {
+      if (!this.canEdit) {
+        return;
+      }
+
+      const editor = this.$refs.editor;
+      if (!editor) {
+        return;
+      }
+      const start = editor.selectionStart || 0;
+      const lineStart = this.content.lastIndexOf("\n", start - 1) + 1;
+      this.content = this.content.slice(0, lineStart) + prefix + this.content.slice(lineStart);
+      this.markDirty();
+      this.$nextTick(() => {
+        editor.focus();
+        editor.setSelectionRange(start + prefix.length, start + prefix.length);
+      });
+    },
+    insertLink() {
+      this.insertBlock("[", "](https://example.com)", "link text");
+    },
+    wrapSelection(before, after, placeholder) {
+      this.insertBlock(before, after, placeholder);
+    },
+    insertAtCursor(value) {
+      this.insertBlock(value, "", "");
+    },
+    insertBlock(before, after, placeholder) {
+      if (!this.canEdit) {
+        return;
+      }
+
+      const editor = this.$refs.editor;
+      if (!editor) {
+        return;
+      }
+
+      const start = editor.selectionStart || 0;
+      const end = editor.selectionEnd || start;
+      const selected = this.content.slice(start, end) || placeholder;
+      const inserted = before + selected + after;
+      this.content = this.content.slice(0, start) + inserted + this.content.slice(end);
+      this.markDirty();
+
+      this.$nextTick(() => {
+        editor.focus();
+        const selectionStart = start + before.length;
+        const selectionEnd = selectionStart + selected.length;
+        editor.setSelectionRange(selectionStart, selectionEnd);
+      });
     }
   }
-}
+};
 </script>
 
 <style scoped>
-.spire-changelog-preview {
-  min-height: 65vh;
-  max-height: 65vh;
-  overflow-y: auto;
-}
-
-.workflow-step {
-  display: flex;
-  align-items: flex-start;
-  min-height: 84px;
-  padding: 0.75rem;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.18);
-}
-
-.workflow-step-complete {
-  border-color: rgba(40, 167, 69, 0.55);
-}
-
-.workflow-step-current {
-  border-color: rgba(255, 210, 79, 0.7);
-  box-shadow: 0 0 0 1px rgba(255, 210, 79, 0.25);
-}
-
-.workflow-step-pending {
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.workflow-step-number {
-  min-width: 28px;
-  height: 28px;
-  margin-right: 0.75rem;
-  border-radius: 999px;
-  display: inline-flex;
+.editor-title-row {
   align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.release-info-button {
+  align-items: center;
+  background: rgba(18, 38, 63, .28);
+  border: 1px solid rgba(149, 170, 201, .28);
+  border-radius: 4px;
+  color: #9fb0c8;
+  display: inline-flex;
+  flex: 0 0 24px;
+  height: 24px;
   justify-content: center;
-  font-weight: bold;
-  background: rgba(255, 255, 255, 0.12);
+  padding: 0;
+  position: relative;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+  width: 24px;
 }
 
-.guided-callout {
-  border: 1px solid rgba(255, 210, 79, 0.2);
+.release-info-button:hover,
+.release-info-button:focus {
+  border-color: rgba(246, 195, 67, .62);
+  box-shadow: 0 0 0 1px rgba(246, 195, 67, .1);
+  color: #f6c343;
 }
 
-.guided-callout-active {
-  box-shadow: 0 0 0 1px rgba(255, 210, 79, 0.25);
+.release-info-button i {
+  font-size: 13px;
+  line-height: 1;
 }
 
-.guided-section {
-  padding: 1rem;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.12);
+.release-info-button::after {
+  border: 1px solid rgba(8, 17, 29, .9);
+  border-radius: 50%;
+  bottom: -2px;
+  content: "";
+  height: 8px;
+  position: absolute;
+  right: -2px;
+  width: 8px;
 }
 
-.guided-section-active {
-  border-color: rgba(255, 210, 79, 0.75);
-  box-shadow: 0 0 0 1px rgba(255, 210, 79, 0.3);
+.release-info-basic::after {
+  display: none;
 }
 
-.guided-section-complete {
-  border-color: rgba(40, 167, 69, 0.45);
+.release-info-token::after {
+  background: #f6c343;
 }
 
-.guided-step-indicator {
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
+.release-info-checking::after,
+.release-info-unknown::after {
+  background: #95aac9;
 }
 
-.guided-step-current {
-  background: rgba(255, 210, 79, 0.15);
-  color: #ffd24f;
+.release-info-ready::after {
+  background: #f6c343;
 }
 
-.guided-step-done {
-  background: rgba(40, 167, 69, 0.15);
-  color: #87d596;
+.release-info-running::after {
+  background: #2c7be5;
 }
 
-.guided-step-pending {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.65);
+.release-info-published::after {
+  background: #00d97e;
 }
 
-.action-row-active {
-  padding: 0.5rem 0.5rem 0.25rem;
-  margin-left: -0.5rem;
-  margin-right: -0.5rem;
-  border-radius: 8px;
-  background: rgba(255, 210, 79, 0.08);
+.release-info-needs_attention::after,
+.release-info-failed::after {
+  background: #e63757;
 }
 
-.action-highlight {
-  box-shadow: 0 0 0 1px rgba(255, 210, 79, 0.45), 0 0 16px rgba(255, 210, 79, 0.12);
-  animation: pulse-action 1.8s ease-in-out infinite;
+::v-deep .release-process-modal-shell {
+  background: #08111d;
+  border: 1px solid rgba(197, 176, 120, .5);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .58);
+  color: #edf2f9;
 }
 
-.field-highlight {
-  padding: 0.75rem;
-  margin-left: -0.75rem;
-  margin-right: -0.75rem;
-  border-radius: 8px;
-  background: rgba(255, 210, 79, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 210, 79, 0.25);
+::v-deep .release-process-modal-shell .modal-header,
+::v-deep .release-process-modal-shell .modal-footer {
+  border-color: rgba(197, 176, 120, .28);
 }
 
-.review-checklist {
-  padding: 0.75rem;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.14);
+::v-deep .release-process-modal-shell .modal-title {
+  color: #f3f7fb;
+  font-weight: 700;
 }
 
-@keyframes pulse-action {
-  0% {
-    box-shadow: 0 0 0 1px rgba(255, 210, 79, 0.35), 0 0 0 rgba(255, 210, 79, 0);
+::v-deep .release-process-modal-shell .close {
+  color: #edf2f9;
+  opacity: .8;
+  text-shadow: none;
+}
+
+.release-process-modal {
+  color: #d9e2ef;
+}
+
+.release-status-panel {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(21, 35, 53, .96), rgba(9, 17, 28, .96));
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.release-status-indicator {
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+}
+
+.release-status-copy {
+  min-width: 0;
+}
+
+.release-status-copy span {
+  color: #95aac9;
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.release-status-copy strong {
+  color: #f3f7fb;
+  display: block;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.release-status-copy p {
+  color: #c8d4e4;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.release-status-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.release-refresh-button {
+  align-items: center;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.release-status-checking .release-status-indicator,
+.release-status-unknown .release-status-indicator {
+  background: #95aac9;
+  box-shadow: 0 0 10px rgba(149, 170, 201, .28);
+}
+
+.release-status-ready .release-status-indicator {
+  background: #f6c343;
+  box-shadow: 0 0 10px rgba(246, 195, 67, .28);
+}
+
+.release-status-running .release-status-indicator {
+  background: #2c7be5;
+  box-shadow: 0 0 10px rgba(44, 123, 229, .35);
+}
+
+.release-status-published .release-status-indicator {
+  background: #00d97e;
+  box-shadow: 0 0 10px rgba(0, 217, 126, .32);
+}
+
+.release-status-needs_attention .release-status-indicator,
+.release-status-failed .release-status-indicator {
+  background: #e63757;
+  box-shadow: 0 0 10px rgba(230, 55, 87, .3);
+}
+
+.release-process-context {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.release-process-context-basic {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.release-process-context-live {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.release-process-context > div {
+  background: linear-gradient(180deg, rgba(21, 35, 53, .96), rgba(9, 17, 28, .94));
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.release-process-context span {
+  color: #95aac9;
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.release-process-context strong {
+  color: #f3f7fb;
+  display: block;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-process-meta {
+  color: #95aac9;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.release-status-error {
+  align-items: flex-start;
+  background: rgba(230, 55, 87, .1);
+  border: 1px solid rgba(230, 55, 87, .32);
+  border-radius: 4px;
+  color: #f3f7fb;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  line-height: 1.35;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+}
+
+.release-status-error i {
+  color: #ff6b80;
+  margin-top: 2px;
+}
+
+.github-token-panel {
+  align-items: flex-start;
+  background: rgba(55, 136, 230, .08);
+  border: 1px solid rgba(55, 136, 230, .28);
+  border-radius: 4px;
+  color: #f3f7fb;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.github-token-panel > i {
+  color: #77b7ff;
+  margin-top: 3px;
+}
+
+.github-token-warning {
+  background: rgba(246, 195, 67, .08);
+  border-color: rgba(246, 195, 67, .3);
+}
+
+.github-token-warning > i {
+  color: #f6c343;
+}
+
+.github-token-success {
+  background: rgba(0, 217, 126, .07);
+  border-color: rgba(0, 217, 126, .25);
+}
+
+.github-token-success > i {
+  color: #00d97e;
+}
+
+.github-token-body {
+  min-width: 0;
+  width: 100%;
+}
+
+.github-token-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.github-token-header > div {
+  min-width: 0;
+}
+
+.github-token-header .btn {
+  flex: 0 0 auto;
+}
+
+.github-token-title {
+  color: #f3f7fb;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.github-token-body p {
+  color: #d9e2ef;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.github-token-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.github-token-input-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.github-token-input {
+  background: rgba(0, 0, 0, .32);
+  border-color: rgba(255, 255, 255, .18);
+  color: #f3f7fb;
+  min-width: 0;
+  padding-right: 70px;
+  width: 100%;
+}
+
+.github-token-input:focus {
+  background: rgba(0, 0, 0, .4);
+  border-color: rgba(246, 195, 67, .55);
+  box-shadow: 0 0 0 1px rgba(246, 195, 67, .12);
+  color: #f3f7fb;
+}
+
+.github-token-icon-button {
+  align-items: center;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+}
+
+.github-token-paste-button {
+  right: 34px;
+}
+
+.github-token-visibility-button {
+  right: 3px;
+}
+
+.github-token-icon-button i {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.github-token-message {
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+.release-process-list {
+  counter-reset: release-step;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.release-process-list li {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  padding: 0 0 16px;
+  position: relative;
+}
+
+.release-process-list li:not(:last-child)::after {
+  background: rgba(197, 176, 120, .22);
+  bottom: 2px;
+  content: "";
+  left: 14px;
+  position: absolute;
+  top: 32px;
+  width: 1px;
+}
+
+.release-step-marker {
+  align-items: center;
+  background: rgba(149, 170, 201, .12);
+  border: 1px solid rgba(149, 170, 201, .32);
+  border-radius: 4px;
+  color: #9fb0c8;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  height: 30px;
+  justify-content: center;
+  position: relative;
+  width: 30px;
+  z-index: 1;
+}
+
+.release-step-static .release-step-marker {
+  background: rgba(44, 123, 229, .16);
+  border-color: rgba(44, 123, 229, .42);
+  color: #f3f7fb;
+}
+
+.release-step-done .release-step-marker {
+  background: rgba(0, 217, 126, .12);
+  border-color: rgba(0, 217, 126, .38);
+  color: #8ff3c1;
+}
+
+.release-step-running .release-step-marker,
+.release-step-current .release-step-marker {
+  background: rgba(44, 123, 229, .16);
+  border-color: rgba(44, 123, 229, .42);
+  color: #9cc7ff;
+}
+
+.release-step-attention .release-step-marker,
+.release-step-failed .release-step-marker {
+  background: rgba(230, 55, 87, .12);
+  border-color: rgba(230, 55, 87, .42);
+  color: #ff9baa;
+}
+
+.release-step-body {
+  background: rgba(10, 18, 30, .58);
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.release-step-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.release-step-title {
+  color: #f3f7fb;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.release-step-state {
+  border: 1px solid rgba(149, 170, 201, .3);
+  border-radius: 3px;
+  color: #95aac9;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 6px;
+  text-transform: uppercase;
+}
+
+.release-step-done .release-step-state {
+  border-color: rgba(0, 217, 126, .38);
+  color: #8ff3c1;
+}
+
+.release-step-running .release-step-state,
+.release-step-current .release-step-state {
+  border-color: rgba(44, 123, 229, .42);
+  color: #9cc7ff;
+}
+
+.release-step-attention .release-step-state,
+.release-step-failed .release-step-state {
+  border-color: rgba(230, 55, 87, .42);
+  color: #ff9baa;
+}
+
+.release-step-body p {
+  color: #c8d4e4;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.release-process-modal code {
+  background: rgba(44, 123, 229, .14);
+  border: 1px solid rgba(44, 123, 229, .2);
+  border-radius: 3px;
+  color: #9cc7ff;
+  font-size: 12px;
+  padding: 1px 4px;
+}
+
+.release-process-note {
+  align-items: flex-start;
+  background: rgba(246, 195, 67, .08);
+  border: 1px solid rgba(246, 195, 67, .28);
+  border-radius: 4px;
+  color: #f3f7fb;
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px 12px;
+}
+
+.release-process-note i {
+  color: #f6c343;
+  margin-top: 2px;
+}
+
+@media (max-width: 767.98px) {
+  .release-status-panel {
+    grid-template-columns: 14px minmax(0, 1fr);
   }
-  50% {
-    box-shadow: 0 0 0 1px rgba(255, 210, 79, 0.7), 0 0 18px rgba(255, 210, 79, 0.18);
+
+  .release-status-actions {
+    grid-column: 2;
+    justify-content: flex-start;
   }
-  100% {
-    box-shadow: 0 0 0 1px rgba(255, 210, 79, 0.35), 0 0 0 rgba(255, 210, 79, 0);
+
+  .release-process-context {
+    grid-template-columns: 1fr;
   }
+
+  .release-step-heading {
+    display: block;
+  }
+
+  .release-step-state {
+    display: inline-block;
+    margin-top: 6px;
+  }
+
+  .github-token-form {
+    display: block;
+  }
+
+  .github-token-form > .btn {
+    margin-top: 8px;
+    width: 100%;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .release-process-context {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.changelog-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 680px;
+}
+
+.status-pill {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(21, 35, 53, .96), rgba(9, 17, 28, .94));
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 1px 8px rgba(0, 0, 0, .22);
+  color: #f3f7fb;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 34px;
+  max-width: 220px;
+  padding: 7px 10px;
+}
+
+.status-pill-label {
+  color: #9fb0c8;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.status-pill-value {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-pill-good {
+  border-color: rgba(0, 217, 126, .45);
+}
+
+.status-pill-warning {
+  border-color: rgba(246, 195, 67, .62);
+}
+
+.status-pill-muted {
+  border-color: rgba(149, 170, 201, .38);
+}
+
+.status-pill-version {
+  border-color: rgba(237, 242, 249, .38);
+}
+
+.status-pill-repo {
+  border-color: rgba(44, 123, 229, .48);
+}
+
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.changelog-editor {
+  min-height: 68vh;
+  resize: vertical;
+  font-family: Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, .36);
+  color: #f3f5f7;
+  border-color: rgba(255, 255, 255, .18);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 6px 12px;
+}
+
+.status-grid strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.preview-header {
+  gap: 12px;
+}
+
+.preview-header-copy {
+  min-width: 0;
+}
+
+.btn.copy-preview-button {
+  align-items: center;
+  border-color: rgba(255, 255, 255, .22);
+  display: inline-flex;
+  flex: 0 0 32px;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+  width: 32px;
+}
+
+.btn.copy-preview-button:not(:disabled):hover,
+.btn.copy-preview-button:focus {
+  border-color: rgba(246, 195, 67, .7);
+  box-shadow: 0 0 0 1px rgba(246, 195, 67, .12), 0 0 10px rgba(44, 123, 229, .18);
+}
+
+.btn.copy-preview-button i {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.spire-changelog-preview {
+  max-height: 74vh;
+  overflow: auto;
+  padding-right: 8px;
+}
+
+::v-deep .spire-changelog-preview img {
+  max-width: 100%;
 }
 </style>

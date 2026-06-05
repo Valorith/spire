@@ -17,9 +17,13 @@ import (
 
 var releaseHeadingRegexp = regexp.MustCompile(`(?m)^## \[([^\]]+)\] ([^\n]+)$`)
 var packageVersionRegexp = regexp.MustCompile(`(?m)("version"\s*:\s*")([^"]+)(")`)
-var packageRepositoryURLRegexp = regexp.MustCompile(`(?s)("repository"\s*:\s*\{.*?"url"\s*:\s*")([^"]+)(")`)
-var packageRepositoryStringRegexp = regexp.MustCompile(`(?m)("repository"\s*:\s*")([^"]+)(")`)
+var packageSpireReleaseRepositoryRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*\{[^}]*"release_repository"\s*:\s*")([^"]+)(")`)
+var packageSpireEmptyObjectRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*)\{\s*\}`)
+var packageSpireObjectOpenRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*\{)`)
 var semverRegexp = regexp.MustCompile(`^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$`)
+var tokenLikeSecretRegexp = regexp.MustCompile(`(?i)(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|Authorization:\s*Bearer\s+[A-Za-z0-9._-]{20,})`)
+
+const spireReleaseBranch = "master"
 
 type Service struct {
 	cache *cache.Cache
@@ -47,6 +51,8 @@ type LoadState struct {
 	ReleaseRepositorySource     string         `json:"release_repository_source"`
 	ReleaseRepositoryOverride   string         `json:"release_repository_override"`
 	ReleaseRepositoryCandidates []string       `json:"release_repository_candidates"`
+	ReleaseBranch               string         `json:"release_branch"`
+	CurrentBranch               string         `json:"current_branch"`
 	Writable                    bool           `json:"writable"`
 	Source                      string         `json:"source"`
 	TopRelease                  ReleaseSection `json:"top_release"`
@@ -64,6 +70,10 @@ type SaveRequest struct {
 	Version     string `json:"version"`
 	ReleaseDate string `json:"release_date"`
 	Body        string `json:"body"`
+}
+
+type SaveContentRequest struct {
+	Content string `json:"content"`
 }
 
 type UpdatePackageVersionRequest struct {
@@ -109,6 +119,8 @@ func (s *Service) LoadState() (*LoadState, error) {
 		ReleaseRepositorySource:     releaseResolution.Source,
 		ReleaseRepositoryOverride:   release.NormalizeGitHubRepository(os.Getenv("SPIRE_RELEASE_REPO")),
 		ReleaseRepositoryCandidates: s.releaseRepositoryCandidates(packageJSONRaw),
+		ReleaseBranch:               spireReleaseBranch,
+		CurrentBranch:               s.currentGitBranch(),
 		Writable:                    s.IsWritable(),
 		Source:                      source,
 		TopRelease:                  s.ParseTopRelease(content),
@@ -365,8 +377,41 @@ func (s *Service) SaveRelease(req SaveRequest) (*LoadState, error) {
 	return s.LoadState()
 }
 
+func (s *Service) SaveContent(req SaveContentRequest) (*LoadState, error) {
+	path, ok := s.liveChangelogPath()
+	if !ok {
+		return nil, errors.New("live CHANGELOG.md is unavailable in this environment")
+	}
+
+	if !s.IsWritable() {
+		return nil, errors.New("CHANGELOG.md is read-only in this environment")
+	}
+
+	content := req.Content
+	if strings.TrimSpace(content) == "" {
+		return nil, errors.New("CHANGELOG.md content is required")
+	}
+	if containsTokenLikeSecret(content) {
+		return nil, errors.New(tokenLikeSecretIssue())
+	}
+
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	if err := writeFileAtomically(path, content); err != nil {
+		return nil, err
+	}
+
+	return s.LoadState()
+}
+
 func (s *Service) ValidateCurrentDocument(content string, packageVersion string) []string {
 	var issues []string
+	if containsTokenLikeSecret(content) {
+		issues = append(issues, tokenLikeSecretIssue())
+	}
+
 	top := s.ParseTopRelease(content)
 	if top.Version == "" {
 		issues = append(issues, "Unable to parse the top changelog release heading.")
@@ -374,7 +419,7 @@ func (s *Service) ValidateCurrentDocument(content string, packageVersion string)
 		if strings.TrimSpace(top.Body) == "" {
 			issues = append(issues, "The top changelog release section is empty.")
 		}
-		if packageVersion != "" && top.Version != packageVersion {
+		if packageVersion != "" && top.Version != packageVersion && !strings.EqualFold(top.Version, "Unreleased") {
 			issues = append(issues, fmt.Sprintf("Top changelog version [%s] does not match package.json version [%s].", top.Version, packageVersion))
 		}
 	}
@@ -407,6 +452,9 @@ func (s *Service) ValidateProposedRelease(req SaveRequest, currentContent string
 	if body == "" {
 		issues = append(issues, "Release notes body is required.")
 	}
+	if containsTokenLikeSecret(body) {
+		issues = append(issues, tokenLikeSecretIssue())
+	}
 	if packageVersion != "" && version != packageVersion && !allowPackageVersionUpdate {
 		issues = append(issues, fmt.Sprintf("Version [%s] does not match package.json version [%s].", version, packageVersion))
 	}
@@ -438,7 +486,7 @@ func (s *Service) ParseTopRelease(content string) ReleaseSection {
 
 func (s *Service) BuildReleasePayload(release ReleaseSection) ReleasePayload {
 	version := strings.TrimSpace(release.Version)
-	if version == "" {
+	if version == "" || strings.EqualFold(version, "Unreleased") {
 		return ReleasePayload{}
 	}
 
@@ -467,6 +515,14 @@ func (s *Service) ListVersions(content string) []string {
 
 func BuildReleaseSection(version string, releaseDate string, body string) string {
 	return fmt.Sprintf("## [%s] %s\n\n%s", strings.TrimSpace(version), strings.TrimSpace(releaseDate), strings.TrimSpace(body))
+}
+
+func containsTokenLikeSecret(value string) bool {
+	return tokenLikeSecretRegexp.MatchString(value)
+}
+
+func tokenLikeSecretIssue() string {
+	return "CHANGELOG.md appears to contain a token-like secret. Remove it before saving or publishing release notes."
 }
 
 func writeFileAtomically(path string, content string) error {
@@ -573,6 +629,25 @@ func (s *Service) gitRemoteLookup() release.RemoteLookup {
 		}
 		return lines[0], nil
 	}
+}
+
+func (s *Service) currentGitBranch() string {
+	root, ok := s.projectRoot()
+	if !ok {
+		return ""
+	}
+
+	lines, err := s.gitLines(root, "branch", "--show-current")
+	if err == nil && len(lines) > 0 {
+		return strings.TrimSpace(lines[0])
+	}
+
+	lines, err = s.gitLines(root, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil || len(lines) == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(lines[0])
 }
 
 func (s *Service) releaseRepositoryCandidates(packageJSONRaw []byte) []string {
@@ -696,19 +771,40 @@ func setPackageRepository(raw []byte, repository string) ([]byte, bool, error) {
 		return nil, false, errors.New("package.json content is empty")
 	}
 
-	repositoryURL := fmt.Sprintf("https://github.com/%s.git", repository)
+	repository = release.NormalizeGitHubRepository(repository)
+	if repository == "" {
+		return nil, false, errors.New("Release repository must use owner/repo format or a GitHub repository URL.")
+	}
+
 	content := string(raw)
 
-	if packageRepositoryURLRegexp.MatchString(content) {
-		updated := packageRepositoryURLRegexp.ReplaceAllString(content, `${1}`+repositoryURL+`${3}`)
+	if packageSpireReleaseRepositoryRegexp.MatchString(content) {
+		updated := packageSpireReleaseRepositoryRegexp.ReplaceAllString(content, `${1}`+repository+`${3}`)
 		if updated == content {
 			return raw, false, nil
 		}
 		return []byte(updated), true, nil
 	}
 
-	if packageRepositoryStringRegexp.MatchString(content) {
-		updated := packageRepositoryStringRegexp.ReplaceAllString(content, `${1}`+repositoryURL+`${3}`)
+	if packageSpireEmptyObjectRegexp.MatchString(content) {
+		updated := packageSpireEmptyObjectRegexp.ReplaceAllString(
+			content,
+			fmt.Sprintf(`${1}{
+    "release_repository": "%s"
+  }`, repository),
+		)
+		if updated == content {
+			return raw, false, nil
+		}
+		return []byte(updated), true, nil
+	}
+
+	if packageSpireObjectOpenRegexp.MatchString(content) {
+		updated := packageSpireObjectOpenRegexp.ReplaceAllString(
+			content,
+			fmt.Sprintf(`${1}
+    "release_repository": "%s",`, repository),
+		)
 		if updated == content {
 			return raw, false, nil
 		}
@@ -716,15 +812,15 @@ func setPackageRepository(raw []byte, repository string) ([]byte, bool, error) {
 	}
 
 	if packageVersionRegexp.MatchString(content) {
-		repositoryBlock := fmt.Sprintf("${1}${2}${3},\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"%s\"\n  }", repositoryURL)
-		updated := packageVersionRegexp.ReplaceAllString(content, repositoryBlock)
+		spireBlock := fmt.Sprintf("${1}${2}${3},\n  \"spire\": {\n    \"release_repository\": \"%s\"\n  }", repository)
+		updated := packageVersionRegexp.ReplaceAllString(content, spireBlock)
 		if updated == content {
 			return raw, false, nil
 		}
 		return []byte(updated), true, nil
 	}
 
-	return nil, false, errors.New("Unable to locate package.json repository field.")
+	return nil, false, errors.New("Unable to locate package.json version field.")
 }
 
 func normalizeDraftSubject(subject string) (string, bool) {

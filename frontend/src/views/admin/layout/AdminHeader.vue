@@ -78,10 +78,9 @@
               <div class="col-lg-6 col-3 p-0 m-0 pl-3 text-left">
 
                 <span
-                  v-if="metric.label !== 'Locked' && metric.label !== 'World'"
                   class="small" style="font-size: 12px;"
                 >
-                    {{ metric.value ? metric.value.toLocaleString() : "" }}
+                    {{ metric.value ? metric.value.toLocaleString() : 0 }}
                   </span>
 
               </div>

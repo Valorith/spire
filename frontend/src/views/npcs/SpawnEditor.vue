@@ -261,6 +261,20 @@
                   <input v-model="createForm.spawngroupName" class="form-control form-control-sm" placeholder="Auto-generated" />
                 </div>
               </div>
+              <div class="row">
+                <div class="col-4 mb-2">
+                  <label class="field-label">Enabled</label>
+                  <div class="pt-1">
+                    <eq-checkbox
+                      :value="createForm.enabled"
+                      :true-value="true"
+                      :false-value="false"
+                      label-right="Spawn point active"
+                      @input="createForm.enabled = $event"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Actions -->
@@ -697,7 +711,21 @@
                       <span v-if="sp._pendingAdd" class="badge ml-2" style="background: rgba(76,175,80,0.25); color: #4caf50; font-size: 0.75em;">New</span>
                       <span v-if="sp._pendingDelete" class="badge ml-2" style="background: rgba(244,67,54,0.25); color: #f44336; font-size: 0.75em;">Pending Delete</span>
                     </span>
-                    <div>
+                    <div class="spawn-point-header-actions">
+                      <div
+                        v-if="!sp._pendingDelete"
+                        class="spawn-point-enabled-toggle"
+                        :class="{ 'is-disabled': !sp.enabled }"
+                      >
+                        <span class="spawn-point-enabled-caption">Enabled</span>
+                        <eq-checkbox
+                          :value="sp.enabled"
+                          :true-value="true"
+                          :false-value="false"
+                          :label-right="sp.enabled ? 'Active' : 'Disabled'"
+                          @input="sp.enabled = $event"
+                        />
+                      </div>
                       <button
                         v-if="!sp._pendingDelete"
                         class="btn btn-xs btn-outline-info mr-1"
@@ -803,11 +831,11 @@
                   </div>
 
                   <div class="row">
-                    <div class="col-3 mb-2">
+                    <div class="col-2 mb-2">
                       <label class="field-label">Path Grid</label>
                       <input v-model.number="sp.pathgrid" type="number" class="form-control form-control-sm" />
                     </div>
-                    <div class="col-3 mb-2">
+                    <div class="col-2 mb-2">
                       <label class="field-label">Animation</label>
                       <select v-model.number="sp.animation" class="form-control form-control-sm">
                         <option :value="0">Standing</option>
@@ -817,18 +845,18 @@
                         <option :value="105">Kneeling</option>
                       </select>
                     </div>
-                    <div class="col-3 mb-2">
+                    <div class="col-2 mb-2">
                       <label class="field-label">Condition</label>
                       <input v-model.number="sp.condition" type="number" class="form-control form-control-sm" />
                     </div>
-                    <div class="col-3 mb-2">
+                    <div class="col-2 mb-2">
                       <label class="field-label">Cond Value</label>
                       <input v-model.number="sp.cond_value" type="number" class="form-control form-control-sm" />
                     </div>
                   </div>
 
                   <div class="row">
-                    <div class="col-3 mb-2">
+                    <div class="col-4 mb-2">
                       <label class="field-label">Min Expansion</label>
                       <button
                         class="btn btn-sm btn-block expansion-pick-btn"
@@ -836,7 +864,7 @@
                         @click="openExpansionPicker(sp, 'min_expansion', 'Min Expansion')"
                       >{{ expansionName(sp.min_expansion) }}</button>
                     </div>
-                    <div class="col-3 mb-2">
+                    <div class="col-4 mb-2">
                       <label class="field-label">Max Expansion</label>
                       <button
                         class="btn btn-sm btn-block expansion-pick-btn"
@@ -844,14 +872,16 @@
                         @click="openExpansionPicker(sp, 'max_expansion', 'Max Expansion')"
                       >{{ expansionName(sp.max_expansion) }}</button>
                     </div>
-                    <div class="col-3 mb-2">
+                    <div class="col-4 mb-2">
                       <label class="field-label">Content Flags</label>
                       <content-flag-selector
                         :value="sp.content_flags"
                         @input="sp.content_flags = $event"
                       />
                     </div>
-                    <div class="col-3 mb-2">
+                  </div>
+                  <div class="row">
+                    <div class="col-4 mb-2">
                       <label class="field-label">Flags Disabled</label>
                       <content-flag-selector
                         :value="sp.content_flags_disabled"
@@ -1066,9 +1096,11 @@
 
 <script>
 import { Spawn2Api, SpawnentryApi, SpawngroupApi, NpcTypeApi } from "../../app/api";
+import { Spawn2DisabledApi } from "../../app/api/api/spawn2-disabled-api";
 import { SpireApi } from "../../app/api/spire-api";
 import { SpireQueryBuilder } from "@/app/api/spire-query-builder";
 import { Zones } from "@/app/zones";
+import EqCheckbox from "../../components/eq-ui/EQCheckbox";
 import EqWindow from "../../components/eq-ui/EQWindow";
 import EqWindowSimple from "../../components/eq-ui/EQWindowSimple";
 import ContentArea from "../../components/layout/ContentArea";
@@ -1084,7 +1116,7 @@ let addNpcSearchTimeout = null;
 
 export default {
   name: "SpawnEditor",
-  components: { EqWindow, EqWindowSimple, ContentArea, NpcPopover, ContentFlagSelector, ContentExpansionSelector, RangeVisualizer },
+  components: { EqCheckbox, EqWindow, EqWindowSimple, ContentArea, NpcPopover, ContentFlagSelector, ContentExpansionSelector, RangeVisualizer },
   data() {
     return {
       // NPC search / list (left panel)
@@ -1160,10 +1192,12 @@ export default {
       this.npcSearch = this.$route.params.npcId;
       await this.doNpcSearch();
       if (this.npcList.length > 0) {
-        this.selectNpc(this.npcList[0]);
+        await this.selectNpc(this.npcList[0]);
       }
     } else if (this.$route.query.spawnGroupId) {
-      this.loadDirectSpawnGroup(Number(this.$route.query.spawnGroupId));
+      await this.loadDirectSpawnGroup(Number(this.$route.query.spawnGroupId));
+    } else {
+      await this.loadInitialNpcSelection();
     }
   },
 
@@ -1173,10 +1207,12 @@ export default {
         this.npcSearch = this.$route.params.npcId;
         await this.doNpcSearch();
         if (this.npcList.length > 0) {
-          this.selectNpc(this.npcList[0]);
+          await this.selectNpc(this.npcList[0]);
         }
       } else if (this.$route.query.spawnGroupId) {
-        this.loadDirectSpawnGroup(Number(this.$route.query.spawnGroupId));
+        await this.loadDirectSpawnGroup(Number(this.$route.query.spawnGroupId));
+      } else {
+        await this.loadInitialNpcSelection();
       }
     },
     editorSuccess(val) {
@@ -1190,6 +1226,16 @@ export default {
     // ========================
     // Direct Spawn Group mode
     // ========================
+    async loadInitialNpcSelection() {
+      this.npcSearch = "";
+      this.npcCurrentPage = 1;
+      await this.doNpcSearch();
+
+      if (this.npcList.length > 0) {
+        await this.selectNpc(this.npcList[0]);
+      }
+    },
+
     async loadDirectSpawnGroup(spawnGroupId) {
       if (!spawnGroupId) return;
       this.directSpawnGroupId = spawnGroupId;
@@ -1244,6 +1290,7 @@ export default {
     cardHasPendingChanges(card) {
       if (card.entries && card.entries.some(e => e._pendingAdd || e._pendingDelete)) return true;
       if (card.spawnPoints && card.spawnPoints.some(sp => sp._pendingAdd || sp._pendingDelete)) return true;
+      if (card.spawnPoints && card.spawnPoints.some(sp => sp.enabled !== sp._originalEnabled)) return true;
       const fields = ['name', 'spawn_limit', 'dist', 'delay', 'mindelay', 'despawn', 'despawn_timer', 'wp_spawns', 'min_x', 'max_x', 'min_y', 'max_y'];
       return fields.some(f => this.isFieldEdited(card, f));
     },
@@ -1296,6 +1343,10 @@ export default {
         animation: 0,
         condition: 0,
         cond_value: 1,
+        enabled: true,
+        _originalEnabled: true,
+        disabledRecordId: null,
+        disabledInstanceId: null,
         min_expansion: -1,
         max_expansion: -1,
         content_flags: "",
@@ -1317,6 +1368,9 @@ export default {
       const cloned = Object.assign({}, sp, {
         id: null,
         _tempId: tempId,
+        disabledRecordId: null,
+        disabledInstanceId: null,
+        _originalEnabled: sp.enabled,
         _pendingAdd: true,
         _pendingDelete: false,
         showZoneDropdown: false,
@@ -1346,11 +1400,13 @@ export default {
       try {
         const spawngroupApi = new SpawngroupApi(...SpireApi.cfg());
         const spawn2Api = new Spawn2Api(...SpireApi.cfg());
+        const spawn2DisabledApi = new Spawn2DisabledApi(...SpireApi.cfg());
         const spawnentryApi = new SpawnentryApi(...SpireApi.cfg());
 
         // Delete all spawn points
         for (const sp of card.spawnPoints) {
           if (sp.id) {
+            await this.deleteSpawnPointDisabledState(sp, spawn2DisabledApi);
             await spawn2Api.deleteSpawn2({ id: sp.id });
           }
         }
@@ -1386,6 +1442,7 @@ export default {
         respawntime: 1200,
         pathgrid: 0,
         chance: 100,
+        enabled: true,
         spawngroupName: "",
       };
     },
@@ -1426,10 +1483,19 @@ export default {
     async doNpcSearch() {
       const q = (this.npcSearch || "").trim();
 
-      // Need either a text query or an active zone filter to show results
+      // Default to a first page of NPCs that already have spawn entries so the page
+      // is useful on initial load instead of looking empty.
       if (!q && this.zoneFilter.length === 0) {
+        this.npcListLoading = true;
         this.npcList = [];
-        this.npcTotalResults = 0;
+
+        try {
+          await this.loadSpawnBackedNpcPage();
+        } catch (e) {
+          console.error("Failed to load initial spawn NPC list", e);
+        }
+
+        this.npcListLoading = false;
         return;
       }
 
@@ -1542,6 +1608,55 @@ export default {
       this.npcListLoading = false;
     },
 
+    async loadSpawnBackedNpcPage() {
+      const entryApi = new SpawnentryApi(...SpireApi.cfg());
+      const entryBuilder = new SpireQueryBuilder();
+      entryBuilder.select(["npcID"]);
+      entryBuilder.groupBy(["npcID"]);
+      entryBuilder.limit(this.npcPerPage);
+      entryBuilder.page(this.npcCurrentPage);
+      entryBuilder.orderBy(["npcID"]);
+
+      const entryResult = await entryApi.listSpawnentries(entryBuilder.get());
+      const npcIds = [...new Set((entryResult.data || [])
+        .map(e => Number(e.npc_id || e.npcID))
+        .filter(id => Number.isFinite(id) && id > 0))];
+
+      if (npcIds.length === 0) {
+        this.npcList = [];
+        this.npcTotalResults = 0;
+        return;
+      }
+
+      const npcApi = new NpcTypeApi(...SpireApi.cfg());
+      const npcBuilder = new SpireQueryBuilder();
+      for (const id of npcIds) {
+        npcBuilder.whereOr("id", "=", id);
+      }
+      npcBuilder.select(["id", "name", "level", "race", "class"]);
+      npcBuilder.limit(npcIds.length);
+      npcBuilder.orderBy(["id"]);
+
+      const result = await npcApi.listNpcTypes(npcBuilder.get());
+      const npcById = new Map((result.data || []).map(n => [Number(n.id), n]));
+      const npcs = npcIds
+        .map(id => npcById.get(id))
+        .filter(Boolean);
+
+      this.npcList = npcs.map(n => ({
+        id: n.id,
+        name: n.name || "",
+        cleanName: (n.name || "").replace(/_/g, " "),
+        level: n.level || 0,
+        race: n.race || 0,
+        class: n.class || 0,
+      }));
+
+      this.npcTotalResults = this.npcList.length >= this.npcPerPage
+        ? (this.npcCurrentPage * this.npcPerPage) + 1
+        : ((this.npcCurrentPage - 1) * this.npcPerPage) + this.npcList.length;
+    },
+
     paginateNpcs(page) {
       this.npcCurrentPage = page;
       this.doNpcSearch();
@@ -1552,12 +1667,7 @@ export default {
       this.selectedNpc = null;
       this.spawnGroupCards = [];
       this.npcCurrentPage = 1;
-      if (this.zoneFilter.length > 0) {
-        this.doNpcSearch();
-      } else {
-        this.npcList = [];
-        this.npcTotalResults = 0;
-      }
+      this.doNpcSearch();
     },
 
     // ========================
@@ -1775,8 +1885,12 @@ export default {
         sp2Builder.limit(50);
         const sp2Result = await sp2Api.listSpawn2s(sp2Builder.get());
         const spawn2s = sp2Result.data || [];
+        const disabledBySpawn2Id = await this.loadSpawnPointDisabledMap(spawn2s);
 
-        const spawnPoints = spawn2s.map(s2 => ({
+        const spawnPoints = spawn2s.map(s2 => {
+          const disabledRow = disabledBySpawn2Id.get(Number(s2.id));
+          const enabled = !(disabledRow && Number(disabledRow.disabled || 0) !== 0);
+          return {
           id: s2.id,
           spawngroupId: sgId,
           zone: s2.zone || "",
@@ -1792,6 +1906,10 @@ export default {
           animation: Number(s2.animation || 0),
           condition: Number(s2._condition || 0),
           cond_value: Number(s2.cond_value || 1),
+          enabled: enabled,
+          _originalEnabled: enabled,
+          disabledRecordId: disabledRow ? Number(disabledRow.id) : null,
+          disabledInstanceId: disabledRow && disabledRow.instance_id != null ? Number(disabledRow.instance_id) : null,
           min_expansion: s2.min_expansion != null ? Number(s2.min_expansion) : -1,
           max_expansion: s2.max_expansion != null ? Number(s2.max_expansion) : -1,
           content_flags: s2.content_flags || "",
@@ -1800,10 +1918,11 @@ export default {
           showZoneDropdown: false,
           filteredZones: [],
           // Queued changes state
-          _pendingAdd: false,
-          _pendingDelete: false,
-          _tempId: null,
-        }));
+            _pendingAdd: false,
+            _pendingDelete: false,
+            _tempId: null,
+          };
+        });
 
         // Attach pending flags to entries
         for (const e of enrichedEntries) {
@@ -1859,6 +1978,78 @@ export default {
       sp.showZoneDropdown = false;
     },
 
+    async loadSpawnPointDisabledMap(spawn2s) {
+      const disabledBySpawn2Id = new Map();
+      if (!spawn2s || spawn2s.length === 0) return disabledBySpawn2Id;
+
+      try {
+        const spawn2DisabledApi = new Spawn2DisabledApi(...SpireApi.cfg());
+        const builder = new SpireQueryBuilder();
+        for (const s2 of spawn2s) {
+          if (s2.id) {
+            builder.whereOr("spawn2_id", "=", s2.id);
+          }
+        }
+        builder.limit(spawn2s.length);
+
+        const result = await spawn2DisabledApi.listSpawn2Disableds(builder.get());
+        for (const row of (result.data || [])) {
+          disabledBySpawn2Id.set(Number(row.spawn_2_id), row);
+        }
+      } catch (_e) {
+      }
+
+      return disabledBySpawn2Id;
+    },
+
+    async deleteSpawnPointDisabledState(sp, spawn2DisabledApi = null) {
+      if (!sp || !sp.disabledRecordId) return;
+
+      const api = spawn2DisabledApi || new Spawn2DisabledApi(...SpireApi.cfg());
+      await api.deleteSpawn2Disabled({ id: sp.disabledRecordId });
+      sp.disabledRecordId = null;
+      sp.disabledInstanceId = null;
+    },
+
+    async syncSpawnPointEnabledState(sp, spawn2DisabledApi = null) {
+      if (!sp || !sp.id) return;
+
+      const api = spawn2DisabledApi || new Spawn2DisabledApi(...SpireApi.cfg());
+      if (sp.enabled) {
+        if (sp.disabledRecordId) {
+          await this.deleteSpawnPointDisabledState(sp, api);
+        }
+        return;
+      }
+
+      const payload = {
+        spawn_2_id: sp.id,
+        disabled: 1,
+      };
+
+      if (sp.disabledRecordId) {
+        const updatePayload = {
+          id: sp.disabledRecordId,
+          ...payload,
+        };
+        if (sp.disabledInstanceId != null) {
+          updatePayload.instance_id = sp.disabledInstanceId;
+        }
+        await api.updateSpawn2Disabled({
+          id: sp.disabledRecordId,
+          spawn2Disabled: updatePayload,
+        });
+      } else {
+        const result = await api.createSpawn2Disabled({
+          spawn2Disabled: payload,
+        });
+        if (result.data && result.data.id) {
+          sp.disabledRecordId = result.data.id;
+          sp.disabledInstanceId = result.data.instance_id != null ? Number(result.data.instance_id) : null;
+        }
+      }
+    },
+
     delayClose(obj, key) {
       setTimeout(() => { this.$set(obj, key, false); }, 200);
     },
@@ -1873,6 +2064,7 @@ export default {
       try {
         const spawngroupApi = new SpawngroupApi(...SpireApi.cfg());
         const spawn2Api = new Spawn2Api(...SpireApi.cfg());
+        const spawn2DisabledApi = new Spawn2DisabledApi(...SpireApi.cfg());
         const spawnentryApi = new SpawnentryApi(...SpireApi.cfg());
 
         // Save spawngroup settings
@@ -1961,8 +2153,10 @@ export default {
               sp.id = result.data.id;
               sp._tempId = null;
             }
+            await this.syncSpawnPointEnabledState(sp, spawn2DisabledApi);
             sp._pendingAdd = false;
           } else if (sp._pendingDelete) {
+            await this.deleteSpawnPointDisabledState(sp, spawn2DisabledApi);
             await spawn2Api.deleteSpawn2({ id: sp.id });
           } else {
             await spawn2Api.updateSpawn2({
@@ -1988,6 +2182,7 @@ export default {
                 content_flags_disabled: sp.content_flags_disabled || "",
               }
             });
+            await this.syncSpawnPointEnabledState(sp, spawn2DisabledApi);
           }
         }
 
@@ -1997,7 +2192,10 @@ export default {
 
         // Clear pending-add flags
         card.entries.forEach(e => { e._pendingAdd = false; });
-        card.spawnPoints.forEach(sp => { sp._pendingAdd = false; });
+        card.spawnPoints.forEach(sp => {
+          sp._pendingAdd = false;
+          sp._originalEnabled = sp.enabled;
+        });
 
         // Update the original snapshot so edit highlighting resets
         card._originalSpawngroup = Object.assign({}, card.spawngroup);
@@ -2344,6 +2542,7 @@ export default {
 
         const spawngroupApi = new SpawngroupApi(...SpireApi.cfg());
         const spawn2Api = new Spawn2Api(...SpireApi.cfg());
+        const spawn2DisabledApi = new Spawn2DisabledApi(...SpireApi.cfg());
         const spawnentryApi = new SpawnentryApi(...SpireApi.cfg());
 
         const sgName = this.createForm.spawngroupName && this.createForm.spawngroupName.trim().length > 0
@@ -2355,7 +2554,7 @@ export default {
         const spawngroupId = sg && sg.id;
         if (!spawngroupId) throw new Error("Unable to create spawngroup");
 
-        await spawn2Api.createSpawn2({
+        const spawn2Create = await spawn2Api.createSpawn2({
           spawn2: {
             spawngroup_id: spawngroupId,
             zone: zone,
@@ -2368,6 +2567,14 @@ export default {
             pathgrid: Number(this.createForm.pathgrid || 0),
           }
         });
+        if (spawn2Create.data && spawn2Create.data.id && !this.createForm.enabled) {
+          await spawn2DisabledApi.createSpawn2Disabled({
+            spawn2Disabled: {
+              spawn_2_id: spawn2Create.data.id,
+              disabled: 1,
+            }
+          });
+        }
 
         await spawnentryApi.createSpawnentry({
           spawnentry: {
@@ -2514,6 +2721,53 @@ export default {
   color: #fcc721;
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.spawn-point-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.spawn-point-enabled-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 8px 2px 10px;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 999px;
+  background: rgba(76, 175, 80, 0.08);
+  color: #9ad8a3;
+}
+
+.spawn-point-enabled-toggle.is-disabled {
+  border-color: rgba(244, 67, 54, 0.28);
+  background: rgba(244, 67, 54, 0.08);
+  color: #f0a3a3;
+}
+
+.spawn-point-enabled-caption {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.spawn-point-enabled-toggle ::v-deep > div {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.spawn-point-enabled-toggle ::v-deep .ml-3 {
+  margin-left: 6px !important;
+  font-size: 11px;
+  font-weight: 700;
+  color: inherit;
 }
 
 /* Spawn point toggle button */

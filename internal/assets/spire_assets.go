@@ -58,18 +58,28 @@ func (a SpireAssets) ServeStatic() echo.MiddlewareFunc {
 	if len(cachedir) > 0 {
 		if env.IsAppEnvDev() {
 			symlinkTarget := filepath.Join("./frontend/public/eq-asset-preview-master")
+			if existing, err := os.Readlink(symlinkTarget); err == nil {
+				if filepath.Clean(existing) == filepath.Clean(cachedir) {
+					goto serve
+				}
+			}
 
-			// always remove the link if it is there
+			// Try to refresh the link for frontend dev mode, but don't fail backend startup
+			// if Windows symlink privileges are unavailable.
 			_ = os.Remove(symlinkTarget)
 
-			// relink
 			err := os.Symlink(cachedir, symlinkTarget)
 			if err != nil {
-				log.Fatal(err)
+				a.logger.Warn().
+					Err(err).
+					Any("target", symlinkTarget).
+					Any("source", cachedir).
+					Msg("Could not create frontend asset symlink; continuing with backend static asset serving")
 			}
 		}
 	}
 
+serve:
 	// serve
 	return appmiddleware.StaticAsset(appmiddleware.StaticConfig{
 		Root:        "/",

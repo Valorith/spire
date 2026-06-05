@@ -62,10 +62,10 @@
     <b-button
       size="sm"
       variant="warning"
-      @click="removeFilter(filter)"
+      @click="removeFilter(index)"
       class="d-inline-block ml-3"
-      v-for="filter in filters"
-      :key="filter.f + '-' + filter.o + '-' + filter.v"
+      v-for="(filter, index) in filters"
+      :key="filter.f + '-' + filter.o + '-' + filter.v + '-' + index"
     >
       <i class="fa fa-remove"></i> {{ formatFilterHuman(filter) }}
     </b-button>
@@ -151,13 +151,8 @@ export default {
       this.$emit('input', queryBuilderFilters);
     },
 
-    removeFilter(filter) {
-      this.filters = this.filters.filter((f) => {
-        let a = util.format("%s-%s-%s", f.field, f.operator, f.value)
-        let b = util.format("%s-%s-%s", filter.field, filter.operator, filter.value)
-
-        return a !== b
-      })
+    removeFilter(index) {
+      this.filters.splice(index, 1)
 
       this.updateParent()
     },

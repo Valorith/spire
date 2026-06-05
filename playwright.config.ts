@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080';
+
 export default defineConfig({
   testDir: './tests',
   timeout: 30000,
@@ -7,10 +9,13 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL,
     headless: true,
-    viewport: { width: 1400, height: 900 },
+    viewport: null,
     ignoreHTTPSErrors: true,
+    launchOptions: {
+      args: ['--start-maximized'],
+    },
   },
   projects: [
     {
@@ -20,7 +25,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'echo "dev server already running"',
-    url: 'http://localhost:8080',
+    url: baseURL,
     reuseExistingServer: true,
     timeout: 120000,
   },

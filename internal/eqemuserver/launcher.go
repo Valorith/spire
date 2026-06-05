@@ -31,6 +31,7 @@ const (
 	loginServerProcessName  = "loginserver"
 	sharedMemoryProcessName = "shared_memory"
 	processLoopTimer        = 1 * time.Second
+	defaultOpcodeSourceURL  = "https://raw.githubusercontent.com/EQEmu/Server/master/utils/patches"
 )
 
 // stopTimerMutex is used to lock the stop timer
@@ -56,6 +57,7 @@ type Launcher struct {
 	runQueryServ                bool
 	runUcs                      bool
 	updateOpcodesOnStart        bool
+	opcodeSource                string
 	deleteLogFilesOlderThanDays int
 	patchesDirectory            string
 	opcodesDirectory            string
@@ -678,6 +680,7 @@ func (l *Launcher) loadServerConfig() {
 	l.runUcs = cfg.WebAdmin.Launcher.RunUcs
 	l.minZoneProcesses = cfg.WebAdmin.Launcher.MinZoneProcesses
 	l.updateOpcodesOnStart = cfg.WebAdmin.Launcher.UpdateOpcodesOnStart
+	l.opcodeSource = strings.TrimSpace(cfg.WebAdmin.Launcher.OpcodeSource)
 	l.deleteLogFilesOlderThanDays = cfg.WebAdmin.Launcher.DeleteLogFilesOlderThanDays
 
 	if l.minZoneProcesses < 1 {
@@ -931,9 +934,19 @@ func (l *Launcher) getProcessDetails(p *process.Process) ProcessDetails {
 	}
 }
 
-// updatePatchFiles will download the patch files from github
+func (l *Launcher) getOpcodeSourceBaseURL() string {
+	source := strings.TrimSpace(l.opcodeSource)
+	if source == "" {
+		return defaultOpcodeSourceURL
+	}
+
+	return strings.TrimRight(source, "/")
+}
+
+// updatePatchFiles will download the patch files from the configured source
 func (l *Launcher) updatePatchFiles() {
-	l.logger.Info().Msg("Updating patches (opcodes)")
+	source := l.getOpcodeSourceBaseURL()
+	l.logger.Info().Any("source", source).Msg("Updating patches (opcodes)")
 
 	// get the patch files
 	patchFiles := []string{
@@ -956,7 +969,7 @@ func (l *Launcher) updatePatchFiles() {
 	// download the patch files in errgroup
 	var g errgroup.Group
 	for _, p := range patchFiles {
-		url := fmt.Sprintf("https://raw.githubusercontent.com/EQEmu/Server/master/utils/patches/%s", p)
+		url := fmt.Sprintf("%s/%s", source, p)
 		path := filepath.Join(l.patchesDirectory, p)
 		relative := strings.ReplaceAll(path, l.pathmgmt.GetEQEmuServerPath()+string(filepath.Separator), "")
 
@@ -972,7 +985,7 @@ func (l *Launcher) updatePatchFiles() {
 	}
 
 	for _, o := range opcodeFiles {
-		url := fmt.Sprintf("https://raw.githubusercontent.com/EQEmu/Server/master/utils/patches/%s", o)
+		url := fmt.Sprintf("%s/%s", source, o)
 		path := filepath.Join(l.opcodesDirectory, o)
 		relative := strings.ReplaceAll(path, l.pathmgmt.GetEQEmuServerPath()+string(filepath.Separator), "")
 
@@ -988,7 +1001,7 @@ func (l *Launcher) updatePatchFiles() {
 	}
 
 	if err := g.Wait(); err != nil {
-		l.logger.Warn().Err(err).Msg("Failed to download patch files from github")
+		l.logger.Warn().Err(err).Any("source", source).Msg("Failed to download patch files from source")
 	} else {
 		l.logger.Info().Any("took", time.Since(now).String()).Msg("Updated patch files")
 	}

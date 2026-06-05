@@ -333,48 +333,51 @@ export default {
       this.loadModels()
     },
     async loadRaceInventory() {
-      const result = await SpireApi.v1().get('/static-map/race-inventory-map.json')
+      try {
+        const result = await SpireApi.v1().get('/static-map/race-inventory-map.json')
 
-      // zero out
-      zoneToRaceIdMapping = {};
-      result.data.races.forEach((race) => {
-        if (race.sources) {
-          race.sources.forEach((source) => {
-            if (source.zones) {
-              source.zones.forEach((zone) => {
-                if (typeof zoneToRaceIdMapping[zone.id] === "undefined") {
-                  zoneToRaceIdMapping[zone.id] = []
-                }
+        // zero out
+        zoneToRaceIdMapping = {};
+        result.data.races.forEach((race) => {
+          if (race.sources) {
+            race.sources.forEach((source) => {
+              if (source.zones) {
+                source.zones.forEach((zone) => {
+                  if (typeof zoneToRaceIdMapping[zone.id] === "undefined") {
+                    zoneToRaceIdMapping[zone.id] = []
+                  }
 
-                zoneToRaceIdMapping[zone.id].push(race.race_id)
-              })
-            }
-          })
-        }
-      })
-
-      // after we load race inventory data
-      let zoneList   = [];
-      let zoneResult = await (new ZoneApi(...SpireApi.cfg())).listZones({
-        where: "version__0",
-        orderBy: "short_name",
-        groupBy: "zoneidnumber"
-      })
-
-      // zone data
-      if (zoneResult.status === 200) {
-        zoneResult.data.forEach((row) => {
-          zoneList.push(
-            {
-              zoneId: row.zoneidnumber,
-              shortName: row.short_name,
-              longName: row.long_name,
-              modelCount: zoneToRaceIdMapping[row.zoneidnumber] ? zoneToRaceIdMapping[row.zoneidnumber].length : 0,
-            }
-          )
+                  zoneToRaceIdMapping[zone.id].push(race.race_id)
+                })
+              }
+            })
+          }
         })
 
-        this.zoneList = zoneList
+        let zoneList   = [];
+        let zoneResult = await (new ZoneApi(...SpireApi.cfg())).listZones({
+          where: "version__0",
+          orderBy: "short_name",
+          groupBy: "zoneidnumber"
+        })
+
+        if (zoneResult.status === 200) {
+          zoneResult.data.forEach((row) => {
+            zoneList.push(
+              {
+                zoneId: row.zoneidnumber,
+                shortName: row.short_name,
+                longName: row.long_name,
+                modelCount: zoneToRaceIdMapping[row.zoneidnumber] ? zoneToRaceIdMapping[row.zoneidnumber].length : 0,
+              }
+            )
+          })
+
+          this.zoneList = zoneList
+        }
+      } catch (error) {
+        this.zoneList = []
+        console.warn("RaceViewer.loadRaceInventory failed; continuing without zone filters", error)
       }
     }
   },
@@ -387,4 +390,3 @@ export default {
   }
 }
 </script>
-
