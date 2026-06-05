@@ -21,6 +21,11 @@ if [ ! -f "$PACKAGE_FILE" ]; then
   exit 1
 fi
 
+if grep -Eq 'gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|Authorization:[[:space:]]*Bearer[[:space:]]+[A-Za-z0-9._-]{20,}' "$CHANGELOG_FILE"; then
+  echo "CHANGELOG.md appears to contain a token-like secret. Remove it before publishing release notes."
+  exit 1
+fi
+
 PACKAGE_VERSION=$(jq -r '.version' "$PACKAGE_FILE")
 TOP_HEADER=$(grep -m1 '^## \[' "$CHANGELOG_FILE" || true)
 

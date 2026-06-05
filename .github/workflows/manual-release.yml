@@ -29,14 +29,23 @@ jobs:
     name: Build And Publish
     runs-on: ubuntu-latest
     env:
+      SPIRE_RELEASE_BRANCH: master
       SPIRE_RELEASE_REPO: ${{ inputs.release_repository }}
       GH_TOKEN: ${{ secrets.GH_RELEASE_GITHUB_API_TOKEN || github.token }}
 
     steps:
+      - name: Confirm release branch
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "${SPIRE_RELEASE_BRANCH}" ]; then
+            echo "Manual releases must be run from ${SPIRE_RELEASE_BRANCH}. Select ${SPIRE_RELEASE_BRANCH} in the workflow branch picker." >&2
+            exit 1
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: master
           token: ${{ secrets.GH_RELEASE_GITHUB_API_TOKEN || github.token }}
 
       - name: Set up Go
@@ -91,7 +100,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md package.json package-lock.json
           git commit -m "Release ${{ steps.prepare.outputs.tag }}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${SPIRE_RELEASE_BRANCH}"
 
       - name: Publish GitHub release
         run: ./scripts/publish-release.sh

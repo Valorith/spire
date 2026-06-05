@@ -427,6 +427,40 @@ func TestSaveContentWritesEntireChangelog(t *testing.T) {
 	}
 }
 
+func TestSaveContentRejectsTokenLikeSecret(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "CHANGELOG.md"), "## [1.0.0] 1/1/2026\n\n* Existing entry\n")
+	mustWriteFile(t, filepath.Join(dir, "package.json"), `{"version":"1.0.0"}`)
+
+	oldWD, _ := os.Getwd()
+	defer os.Chdir(oldWD)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	t.Setenv("APP_ENV", "local")
+
+	svc := NewService(gocache.New(0, 0))
+	_, err := svc.SaveContent(SaveContentRequest{
+		Content: "## [1.0.1] 1/2/2026\n\n* Do not publish " + "ghp_" + strings.Repeat("1", 36) + "\n",
+	})
+	if err == nil || !strings.Contains(err.Error(), "token-like secret") {
+		t.Fatalf("expected token-like secret rejection, got %v", err)
+	}
+}
+
+func TestValidateProposedReleaseRejectsTokenLikeSecret(t *testing.T) {
+	svc := NewService(gocache.New(0, 0))
+	issues := svc.ValidateProposedRelease(SaveRequest{
+		Version:     "1.0.1",
+		ReleaseDate: "1/2/2026",
+		Body:        "* Do not publish " + "github_pat_" + strings.Repeat("1", 40),
+	}, "## [1.0.0] 1/1/2026\n\n* Existing entry\n", "1.0.1", false)
+
+	if len(issues) == 0 || !strings.Contains(strings.Join(issues, "\n"), "token-like secret") {
+		t.Fatalf("expected token-like secret issue, got %v", issues)
+	}
+}
+
 func TestValidateCurrentDocumentAllowsUnreleasedDraft(t *testing.T) {
 	svc := NewService(gocache.New(0, 0))
 	content := "## [Unreleased] 1/2/2026\n\n* New entry\n\n## [1.0.0] 1/1/2026\n\n* Existing entry\n"
@@ -434,6 +468,16 @@ func TestValidateCurrentDocumentAllowsUnreleasedDraft(t *testing.T) {
 	issues := svc.ValidateCurrentDocument(content, "1.0.0")
 	if len(issues) > 0 {
 		t.Fatalf("expected no validation issues for unreleased draft, got %v", issues)
+	}
+}
+
+func TestValidateCurrentDocumentRejectsTokenLikeSecret(t *testing.T) {
+	svc := NewService(gocache.New(0, 0))
+	content := "## [1.0.0] 1/2/2026\n\n* Do not publish Authorization: Bearer " + strings.Repeat("a", 32) + "\n"
+
+	issues := svc.ValidateCurrentDocument(content, "1.0.0")
+	if len(issues) == 0 || !strings.Contains(strings.Join(issues, "\n"), "token-like secret") {
+		t.Fatalf("expected token-like secret issue, got %v", issues)
 	}
 }
 
