@@ -39,7 +39,7 @@ if [ -n "${SPIRE_RELEASE_REPO:-}" ]; then
 fi
 
 if [ -f "$PACKAGE_FILE" ]; then
-  package_repo=$(jq -r '.repository.url // ""' "$PACKAGE_FILE")
+  package_repo=$(jq -r '.spire.release_repository // ""' "$PACKAGE_FILE")
   if repo=$(normalize_repo "$package_repo"); then
     printf '%s\n' "$repo"
     exit 0
@@ -55,4 +55,4 @@ for remote_name in upstream origin; do
   fi
 done
 
-printf 'EQEmuTools/spire\n'
+printf 'Valorith/spire\n'

@@ -1,0 +1,107 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: Version bump to apply
+        required: true
+        default: Patch Release
+        type: choice
+        options:
+          - Patch Release
+          - Minor Release
+          - Major Release
+      release_repository:
+        description: Optional GitHub owner/repo override. Leave empty to use package.json.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manual-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build And Publish
+    runs-on: ubuntu-latest
+    env:
+      SPIRE_RELEASE_REPO: ${{ inputs.release_repository }}
+      GH_TOKEN: ${{ secrets.GH_RELEASE_GITHUB_API_TOKEN || github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_RELEASE_GITHUB_API_TOKEN || github.token }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+            frontend/eqsage-embed/package-lock.json
+            frontend/eqsage-embed/sage/package-lock.json
+
+      - name: Install release prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq zip
+          go install github.com/gobuffalo/packr/packr@v1.30.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare release version
+        id: prepare
+        run: sh ./scripts/prepare-github-release.sh "${{ inputs.release_type }}"
+
+      - name: Check for existing release tag
+        run: |
+          release_repo="$(./scripts/resolve-release-repo.sh)"
+          if git ls-remote --exit-code --tags "https://github.com/${release_repo}.git" "refs/tags/${{ steps.prepare.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Release tag ${{ steps.prepare.outputs.tag }} already exists in ${release_repo}" >&2
+            exit 1
+          fi
+
+      - name: Build release assets
+        run: |
+          ./scripts/validate-changelog.sh
+          ./scripts/export-release-notes.sh >/dev/null
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+          make build-binary
+          make build-installer-binary
+
+      - name: Commit release metadata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md package.json package-lock.json
+          git commit -m "Release ${{ steps.prepare.outputs.tag }}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Publish GitHub release
+        run: ./scripts/publish-release.sh
+
+      - name: Verify updater release source
+        run: |
+          release_repo="$(./scripts/resolve-release-repo.sh)"
+          latest_tag="$(curl -fsSL "https://api.github.com/repos/${release_repo}/releases/latest" | jq -r '.tag_name')"
+          if [ "$latest_tag" != "${{ steps.prepare.outputs.tag }}" ]; then
+            echo "Latest release for ${release_repo} is ${latest_tag}, expected ${{ steps.prepare.outputs.tag }}" >&2
+            exit 1
+          fi
+          echo "Spire update checks will see ${latest_tag} from ${release_repo}."
