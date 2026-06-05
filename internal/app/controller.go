@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	gocache "github.com/patrickmn/go-cache"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -414,6 +415,10 @@ func (d *Controller) requireLocalSageFsRequest(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, echo.Map{"error": "Sage filesystem bridge is only available in local mode"})
 	}
 
+	if !isLoopbackRemoteAddr(c.Request().RemoteAddr) {
+		return c.JSON(http.StatusForbidden, echo.Map{"error": "Sage filesystem bridge only accepts local requests"})
+	}
+
 	origin := c.Request().Header.Get("Origin")
 	if origin == "" {
 		return nil
@@ -522,11 +527,26 @@ func isEverQuestClientDirectory(root string) bool {
 
 func isLoopbackHost(host string) bool {
 	host = strings.ToLower(strings.TrimSpace(host))
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
 	return host == "localhost" ||
-		host == "127.0.0.1" ||
-		host == "::1" ||
 		host == "[::1]" ||
 		host == "host.docker.internal"
+}
+
+func isLoopbackRemoteAddr(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	host = strings.Trim(host, "[]")
+
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+
+	return isLoopbackHost(host)
 }
 
 func statusCodeForSageFsError(err error) int {

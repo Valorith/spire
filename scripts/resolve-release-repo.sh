@@ -36,6 +36,8 @@ if [ -n "${SPIRE_RELEASE_REPO:-}" ]; then
     printf '%s\n' "$repo"
     exit 0
   fi
+  echo "Invalid SPIRE_RELEASE_REPO '${SPIRE_RELEASE_REPO}'. Expected owner/repo or a github.com repository URL." >&2
+  exit 1
 fi
 
 if [ -f "$PACKAGE_FILE" ]; then

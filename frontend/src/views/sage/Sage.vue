@@ -51,6 +51,7 @@ export default {
     this.tornDown = true
     this.mountAttempt += 1
     window.removeEventListener('resize', this.forceFullViewportHost)
+    this.restoreFullViewportHost()
     if (this.startupTimeout) {
       window.clearTimeout(this.startupTimeout)
       this.startupTimeout = null
@@ -132,6 +133,30 @@ export default {
         element.style.setProperty('max-width', 'none', 'important')
         element.style.setProperty('max-height', 'none', 'important')
         element.style.setProperty('overflow', 'hidden', 'important')
+      }
+    },
+
+    restoreFullViewportHost() {
+      document.documentElement.classList.remove('sage-fullscreen-route')
+      document.body.classList.remove('sage-fullscreen-route')
+
+      for (const element of [
+        document.documentElement,
+        document.body,
+        document.getElementById('app'),
+        document.getElementById('app')?.firstElementChild,
+      ]) {
+        if (!element) {
+          continue
+        }
+        element.style.removeProperty('zoom')
+        element.style.removeProperty('transform')
+        element.style.removeProperty('transform-origin')
+        element.style.removeProperty('width')
+        element.style.removeProperty('height')
+        element.style.removeProperty('max-width')
+        element.style.removeProperty('max-height')
+        element.style.removeProperty('overflow')
       }
     },
   },
