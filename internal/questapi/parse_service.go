@@ -5,14 +5,29 @@ import (
 	gocache "github.com/patrickmn/go-cache"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
+
+type RepositorySource struct {
+	Org    string `json:"org"`
+	Repo   string `json:"repo"`
+	Branch string `json:"branch"`
+}
+
+var DefaultDefinitionSource = RepositorySource{
+	Org:    "EQEmu",
+	Repo:   "Server",
+	Branch: "master",
+}
 
 type ParseService struct {
 	cache      *gocache.Cache
 	downloader *github.SourceDownloader
 	files      map[string]string
 	snippets   map[string]string
+	source     RepositorySource
+	parseMu    sync.Mutex
 }
 
 func NewParseService(
@@ -78,14 +93,16 @@ func (c *ParseService) Source(
 	branch string,
 	forceRefresh bool,
 ) map[string]string {
+	requestedSource := RepositorySource{Org: org, Repo: repo, Branch: branch}
 
 	// return cache if not refresh
-	if !forceRefresh && len(c.files) > 0 {
+	if !forceRefresh && len(c.files) > 0 && c.source == requestedSource {
 		return c.files
 	}
 
 	// set to memory
 	c.files = c.downloader.Source(org, repo, branch, forceRefresh).Files
+	c.source = requestedSource
 
 	// return local reference
 	return c.files
@@ -113,18 +130,28 @@ func (c *ParseService) SourceSnippets(
 
 // Parse parses methods from our source
 func (c *ParseService) Parse(forceRefresh bool) Response {
+	return c.ParseSource(DefaultDefinitionSource, forceRefresh)
+}
+
+// ParseSource parses methods from the requested EQEmu Server repository source.
+func (c *ParseService) ParseSource(source RepositorySource, forceRefresh bool) Response {
+	c.parseMu.Lock()
+	defer c.parseMu.Unlock()
+
+	sourceChanged := c.source != source
+
 	// if lock set, return
 	_, found := c.cache.Get(lockKey)
-	if found {
+	if found && !sourceChanged {
 		return c.apiResponse()
 	}
 
 	// pull files in
-	c.Source("EQEmu", "Server", "master", forceRefresh)
+	c.Source(source.Org, source.Repo, source.Branch, forceRefresh)
 	c.SourceSnippets("EQEmu", "spire-quest-snippets", "main", forceRefresh)
 
 	// return cached copy
-	if len(perlMethods) > 0 && len(luaMethods) > 0 && !forceRefresh {
+	if len(perlMethods) > 0 && len(luaMethods) > 0 && !forceRefresh && !sourceChanged {
 		return c.apiResponse()
 	}
 

@@ -71,31 +71,33 @@
     </eq-window-simple>
 
     <eq-window-simple class="p-0" classes="pr-0">
-      <div style="height: 85vh; overflow-y: scroll" id="item-model-view-port">
+      <div class="item-model-view-port" id="item-model-view-port">
+        <div v-if="!loaded" class="item-model-loader">
+          <app-loader :is-loading="true" padding="4"/>
+        </div>
+
         <span v-if="filteredItemModels && filteredItemModels.length === 0">
           No models found...
         </span>
 
         <div class="row justify-content-center">
-        <div
-          v-for="modelId in filteredItemModels"
-          :key="modelId"
-          @mousedown="selectItemModel(modelId)"
-          :class="'m-1 item-model ' +  classIsPulsating(modelId)"
-        >
-          <span
-            :id="'item-model-' + modelId"
-            style="filter: drop-shadow(10px 5px 7px #000);"
-            :class="'fade-in object-ctn-' + modelId"
-            :title="'IT' + modelId"
+          <div
+            v-for="modelId in filteredItemModels"
+            :key="modelId"
+            @mousedown="selectItemModel(modelId)"
+            :class="'m-1 item-model ' +  classIsPulsating(modelId)"
           >
-          </span>
+            <span
+              :id="'item-model-' + modelId"
+              style="filter: drop-shadow(10px 5px 7px #000);"
+              :class="'fade-in object-ctn-' + modelId"
+              :title="'IT' + modelId"
+            >
+            </span>
+          </div>
         </div>
       </div>
-      </div>
     </eq-window-simple>
-
-    <app-loader :is-loading="!loaded" padding="4"/>
 
   </div>
 </template>
@@ -320,19 +322,12 @@ export default {
     // Item Type
     this.itemTypeOptions = [];
     for (const [type, description] of Object.entries(itemTypes)) {
-
-      let modelCountDescription = "";
-      if (itemTypesModelMapping[type] && itemTypesModelMapping[type].length > 0) {
-        modelCountDescription = util.format(" (%s models)", itemTypesModelMapping[type].length)
-      }
-
-      if (itemTypesModelMapping[type].length > 0) {
-        this.itemTypeOptions.push(
-          {
-            text: type + ") " + description + modelCountDescription,
-            value: type
-          }
-        )
+      const mappedModels = itemTypesModelMapping[type] || [];
+      if (mappedModels.length > 0) {
+        this.itemTypeOptions.push({
+          text: type + ") " + description + util.format(" (%s models)", mappedModels.length),
+          value: type
+        })
       }
     }
 
@@ -361,6 +356,31 @@ export default {
 </script>
 
 <style scoped>
+.item-model-view-port {
+  position: relative;
+  height: 85vh;
+  overflow-y: scroll;
+}
+
+.item-model-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-model-loader ::v-deep .loader {
+  flex-wrap: nowrap;
+  font-size: clamp(20px, 1.55vw, 36px);
+}
+
+.item-model-loader ::v-deep .loader li {
+  padding-right: clamp(1px, .12vw, 3px);
+  padding-left: clamp(1px, .12vw, 3px);
+}
+
 .item-model {
   height: auto;
   min-width: 120px;

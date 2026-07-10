@@ -1,5 +1,87 @@
 <template>
   <div>
+    <EqModal
+      v-if="showSourceSettings"
+      title="Quest API Sources"
+      @close="showSourceSettings = false"
+    >
+      <template #body>
+        <div class="quest-api-source-settings p-3">
+          <p class="text-muted mb-3">
+            Choose the GitHub repositories used for parsed API definitions and linked quest code examples.
+          </p>
+
+          <div class="quest-api-source-group mb-4">
+            <div class="font-weight-bold mb-2">
+              <i class="fa fa-code mr-1"></i> API Definitions
+            </div>
+            <label class="small mb-1">GitHub repository</label>
+            <b-form-input
+              v-model.trim="sourceSettingsDraft.definitionRepository"
+              placeholder="https://github.com/EQEmu/Server"
+            />
+            <label class="small mt-2 mb-1">Branch or tag</label>
+            <b-form-input
+              v-model.trim="sourceSettingsDraft.definitionBranch"
+              placeholder="master"
+            />
+          </div>
+
+          <div class="quest-api-source-group">
+            <div class="font-weight-bold mb-2">
+              <i class="fa fa-file-code-o mr-1"></i> Code Examples
+            </div>
+            <label class="small mb-1">GitHub repository</label>
+            <b-form-input
+              v-model.trim="sourceSettingsDraft.exampleRepository"
+              placeholder="https://github.com/ProjectEQ/projecteqquests"
+            />
+            <label class="small mt-2 mb-1">Branch or tag</label>
+            <b-form-input
+              v-model.trim="sourceSettingsDraft.exampleBranch"
+              placeholder="master"
+            />
+          </div>
+
+          <div v-if="sourceSettingsError" class="alert alert-danger mt-3 mb-0">
+            {{ sourceSettingsError }}
+          </div>
+        </div>
+      </template>
+
+      <template #footer>
+        <div class="mt-3">
+          <b-button
+            size="sm"
+            variant="outline-secondary"
+            class="mr-2"
+            :disabled="savingSourceSettings"
+            @click="resetSourceSettingsDraft"
+          >
+            <i class="fa fa-undo mr-1"></i> Use Defaults
+          </b-button>
+          <b-button
+            size="sm"
+            variant="outline-secondary"
+            class="mr-2"
+            :disabled="savingSourceSettings"
+            @click="showSourceSettings = false"
+          >
+            Cancel
+          </b-button>
+          <b-button
+            size="sm"
+            variant="success"
+            :disabled="savingSourceSettings"
+            @click="saveSourceSettings"
+          >
+            <i class="fa fa-save mr-1"></i>
+            {{ savingSourceSettings ? 'Refreshing...' : 'Save & Refresh' }}
+          </b-button>
+        </div>
+      </template>
+    </EqModal>
+
     <eq-window-simple
       title="Quest API Explorer"
       class="p-2"
@@ -61,7 +143,19 @@
             </b-button>
           </div>
           <div class="col-lg-1 col-sm-12 text-center mt-3">
-            <span class="font-weight-bold">Last Updated</span>
+            <div class="d-flex align-items-center justify-content-center">
+              <span class="font-weight-bold">Last Updated</span>
+              <b-button
+                size="sm"
+                variant="link"
+                class="quest-api-settings-button ml-1 p-0"
+                title="Configure Quest API sources"
+                v-b-tooltip.hover.v-dark.left
+                @click="openSourceSettings"
+              >
+                <i class="fa fa-cog"></i>
+              </b-button>
+            </div>
             <div>{{ fromNow(api.last_refreshed) }}</div>
           </div>
 
@@ -70,6 +164,19 @@
       </div>
 
       <app-loader :is-loading="!loaded" padding="4"/>
+
+      <div v-if="!loaded" class="text-right mt-2">
+        <b-button
+          size="sm"
+          variant="link"
+          class="quest-api-settings-button p-0"
+          title="Configure Quest API sources"
+          v-b-tooltip.hover.v-dark.left
+          @click="openSourceSettings"
+        >
+          <i class="fa fa-cog mr-1"></i> Source Settings
+        </b-button>
+      </div>
 
       <eq-debug :data="api" v-if="Object.keys(api).length"/>
 
@@ -314,7 +421,6 @@ import EqWindowSimple from "@/components/eq-ui/EQWindowSimple.vue";
 import EqTabs from "@/components/eq-ui/EQTabs.vue";
 import EqTab from "@/components/eq-ui/EQTab.vue";
 import slugify from "slugify";
-import * as util from "util";
 import QuestApiDisplayMethods from "@/views/quest-api-explorer/components/QuestApiDisplayMethods.vue";
 import Analytics from "@/app/analytics/analytics";
 import QuestApiDisplayConstants from "@/views/quest-api-explorer/components/QuestApiDisplayConstants.vue";
@@ -327,9 +433,20 @@ import {AppEnv} from "@/app/env/app-env";
 import ContentArea from "@/components/layout/ContentArea.vue";
 import {LocalSettings, Setting} from "@/app/local-settings/localsettings";
 import Time from "@/app/time/time";
+import EqModal from "@/components/eq-ui/EQModal.vue";
+
+const DEFAULT_SOURCE_SETTINGS = {
+  definitionRepository: "https://github.com/EQEmu/Server",
+  definitionBranch: "master",
+  exampleRepository: "https://github.com/ProjectEQ/projecteqquests",
+  exampleBranch: "master"
+}
+
+const defaultSourceSettings = () => Object.assign({}, DEFAULT_SOURCE_SETTINGS)
 
 export default {
   components: {
+    EqModal,
     ContentArea,
     EqDebug,
     QuestApiDisplayEvents,
@@ -348,6 +465,12 @@ export default {
       codeClass: "",
 
       appEnvLocal: false,
+
+      showSourceSettings: false,
+      savingSourceSettings: false,
+      sourceSettingsError: "",
+      sourceSettings: defaultSourceSettings(),
+      sourceSettingsDraft: defaultSourceSettings(),
 
       // languages:select
       languageSelection: null,
@@ -416,24 +539,149 @@ export default {
   async mounted() {
     Debug.log("[activated]")
 
+    this.loadSourceSettings()
     this.reset()
     await this.loadDefinitions();
     this.loadQueryState()
     this.init()
   },
   methods: {
+    loadSourceSettings() {
+      const stored = LocalSettings.getQuestApiSourceSettings() || {}
+      this.sourceSettings = Object.assign(defaultSourceSettings(), stored)
+      this.sourceSettingsDraft = Object.assign({}, this.sourceSettings)
+    },
+    openSourceSettings() {
+      this.sourceSettingsDraft = Object.assign({}, this.sourceSettings)
+      this.sourceSettingsError = ""
+      this.showSourceSettings = true
+    },
+    resetSourceSettingsDraft() {
+      this.sourceSettingsDraft = defaultSourceSettings()
+      this.sourceSettingsError = ""
+    },
+    parseGithubSource(repository, branch) {
+      let repositoryUrl = (repository || "").trim()
+      if (!repositoryUrl.includes("://")) {
+        repositoryUrl = "https://" + repositoryUrl
+      }
+
+      let parsed
+      try {
+        parsed = new URL(repositoryUrl)
+      } catch (e) {
+        throw new Error("Enter a valid GitHub repository URL.")
+      }
+
+      if (parsed.hostname.toLowerCase() !== "github.com") {
+        throw new Error("Repository sources must use github.com.")
+      }
+
+      const parts = parsed.pathname.split("/").filter(Boolean)
+      if (parts.length < 2) {
+        throw new Error("Repository URLs must include an organization and repository name.")
+      }
+
+      const org = parts[0]
+      const repo = parts[1].replace(/\.git$/i, "")
+      let sourceBranch = (branch || "").trim()
+      if (parts[2] === "tree" && parts.length > 3) {
+        sourceBranch = parts.slice(3).join("/")
+      }
+      if (!sourceBranch) {
+        sourceBranch = "master"
+      }
+
+      const segmentPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/
+      const refPattern = /^[A-Za-z0-9][A-Za-z0-9_./-]*$/
+      if (!segmentPattern.test(org) || !segmentPattern.test(repo)) {
+        throw new Error("The GitHub organization or repository name is invalid.")
+      }
+      if (!refPattern.test(sourceBranch) || sourceBranch.includes("..") || sourceBranch.startsWith("/")) {
+        throw new Error("The branch or tag is invalid.")
+      }
+
+      return {
+        repository: `https://github.com/${org}/${repo}`,
+        org,
+        repo,
+        branch: sourceBranch
+      }
+    },
+    definitionSource() {
+      return this.parseGithubSource(
+        this.sourceSettings.definitionRepository,
+        this.sourceSettings.definitionBranch
+      )
+    },
+    exampleSource() {
+      return this.parseGithubSource(
+        this.sourceSettings.exampleRepository,
+        this.sourceSettings.exampleBranch
+      )
+    },
+    async saveSourceSettings() {
+      this.sourceSettingsError = ""
+      this.savingSourceSettings = true
+
+      const previousSettings = Object.assign({}, this.sourceSettings)
+
+      try {
+        const definitions = this.parseGithubSource(
+          this.sourceSettingsDraft.definitionRepository,
+          this.sourceSettingsDraft.definitionBranch
+        )
+        const examples = this.parseGithubSource(
+          this.sourceSettingsDraft.exampleRepository,
+          this.sourceSettingsDraft.exampleBranch
+        )
+
+        this.sourceSettings = {
+          definitionRepository: definitions.repository,
+          definitionBranch: definitions.branch,
+          exampleRepository: examples.repository,
+          exampleBranch: examples.branch
+        }
+
+        await this.validateExampleSource()
+        await this.refreshDefinitions()
+
+        LocalSettings.setQuestApiSourceSettings(this.sourceSettings)
+        this.linkedExamples = {perl: {}, lua: {}}
+        this.displayExamples = []
+        this.showSourceSettings = false
+      } catch (e) {
+        this.sourceSettings = previousSettings
+        this.loaded = Object.keys(this.api).length > 0
+        this.sourceSettingsError = (e.response && e.response.data && (e.response.data.error || e.response.data.message)) || e.message || "Unable to update Quest API sources."
+        this.showSourceSettings = true
+      } finally {
+        this.savingSourceSettings = false
+      }
+    },
+    async validateExampleSource() {
+      const source = this.exampleSource()
+      await SpireApi.v1().post('/quest-api/source-examples', {
+        "search_terms": [],
+        "language": "perl",
+        "org": source.org,
+        "repo": source.repo,
+        "branch": source.branch
+      })
+    },
     isZeroState() {
       return Object.keys(this.$route.query).length === 0
     },
 
-    refreshDefinitions() {
+    async refreshDefinitions() {
       this.loaded = false
-
-      SpireApi.v1().post('quest-api/refresh-definitions').then((response) => {
-        if (response.status === 200) {
-          this.init()
-        }
-      });
+      const source = this.definitionSource()
+      const response = await SpireApi.v1().post('quest-api/refresh-definitions', source)
+      if (response.status === 200 && response.data && response.data.data) {
+        this.api = response.data.data
+        this.loaded = true
+        this.loadQueryState()
+      }
     },
 
     onSearch: debounce(function () {
@@ -566,7 +814,10 @@ export default {
     },
 
     async loadDefinitions() {
-      const r = await SpireApi.v1().get('/quest-api/definitions')
+      const source = this.definitionSource()
+      const r = await SpireApi.v1().get('/quest-api/definitions', {
+        params: source
+      })
       if (r.data && r.data.data) {
         this.api    = r.data.data
         this.loaded = true
@@ -997,14 +1248,13 @@ export default {
         lua: {}
       }
 
-      // fixed for now, but designed to be able to source from multiple locations
-      const org         = "ProjectEQ"
-      const repo        = "projecteqquests"
-      const branch      = "master"
-      const exampleRepo = util.format('/quest-api/source-examples/org/%s/repo/%s/branch/%s', org, repo, branch)
-      const response    = await SpireApi.v1().post(exampleRepo, {
+      const source = this.exampleSource()
+      const response = await SpireApi.v1().post('/quest-api/source-examples', {
         "search_terms": searchTerms,
-        "language": this.languageSelection
+        "language": this.languageSelection,
+        "org": source.org,
+        "repo": source.repo,
+        "branch": source.branch
       })
 
       if (response.data && response.data.data) {
@@ -1015,9 +1265,9 @@ export default {
             linkedExamples[this.languageSelection][result.search_term] = []
           }
 
-          result.org    = org
-          result.repo   = repo
-          result.branch = branch
+          result.org    = source.org
+          result.repo   = source.repo
+          result.branch = source.branch
 
           linkedExamples[this.languageSelection][result.search_term].push(result)
         })
@@ -1052,5 +1302,25 @@ export default {
 .example-preview-inner {
   max-height: 90vh;
   overflow-y: scroll;
+}
+
+.quest-api-settings-button {
+  color: rgba(255, 255, 255, .55) !important;
+  line-height: 1;
+}
+
+.quest-api-settings-button:hover,
+.quest-api-settings-button:focus {
+  color: #f4d35e !important;
+}
+
+.quest-api-source-settings {
+  width: min(620px, 75vw);
+}
+
+.quest-api-source-group {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(0, 0, 0, .18);
 }
 </style>

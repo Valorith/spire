@@ -3,6 +3,7 @@ export class Setting {
   static TAB_HOVER                   = "tab-hover";
   static SPELL_LEGACY_ICONS          = "spell-legacy-icons";
   static DEFAULT_LANGUAGE_PREFERENCE = "default-language-preference";
+  static QUEST_API_SOURCE_SETTINGS    = "quest-api-source-settings";
 
   // spire update
   static LAST_CHECKED_UPDATE_TIME    = "last-checked-update-time";
@@ -56,6 +57,27 @@ export class LocalSettings {
 
   static setLatestReleasePayload(payload: string) {
     this.set(Setting.LATEST_RELEASE_PAYLOAD, payload)
+  }
+
+  static setQuestApiSourceSettings(settings: object) {
+    this.set(Setting.QUEST_API_SOURCE_SETTINGS, JSON.stringify(settings))
+  }
+
+  static getQuestApiSourceSettings() {
+    const settings = this.get(Setting.QUEST_API_SOURCE_SETTINGS)
+    if (!settings) {
+      return null
+    }
+
+    try {
+      return JSON.parse(settings)
+    } catch (e) {
+      return null
+    }
+  }
+
+  static clearQuestApiSourceSettings() {
+    localStorage.removeItem(Setting.QUEST_API_SOURCE_SETTINGS)
   }
 
   static getLatestReleasePayload() {

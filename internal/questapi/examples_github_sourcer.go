@@ -4,12 +4,21 @@ import (
 	"github.com/EQEmuTools/spire/internal/github"
 	gocache "github.com/patrickmn/go-cache"
 	"strings"
+	"sync"
 )
 
 type ExamplesGithubSourcer struct {
 	cache      *gocache.Cache
 	downloader *github.SourceDownloader
 	files      map[string]string
+	source     RepositorySource
+	mu         sync.Mutex
+}
+
+var DefaultExampleSource = RepositorySource{
+	Org:    "ProjectEQ",
+	Repo:   "projecteqquests",
+	Branch: "master",
 }
 
 func NewExamplesGithubSourcer(
@@ -47,14 +56,28 @@ func (q *ExamplesGithubSourcer) Source(
 	branch string,
 	forceRefresh bool,
 ) map[string]string {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	return q.sourceFiles(org, repo, branch, forceRefresh)
+}
+
+func (q *ExamplesGithubSourcer) sourceFiles(
+	org string,
+	repo string,
+	branch string,
+	forceRefresh bool,
+) map[string]string {
+	requestedSource := RepositorySource{Org: org, Repo: repo, Branch: branch}
 
 	// return cache if not refresh
-	if !forceRefresh && len(q.files) > 0 {
+	if !forceRefresh && len(q.files) > 0 && q.source == requestedSource {
 		return q.files
 	}
 
 	// set to memory
 	q.files = q.downloader.Source(org, repo, branch, forceRefresh).Files
+	q.source = requestedSource
 
 	// return local reference
 	return q.files
@@ -69,7 +92,10 @@ func (q *ExamplesGithubSourcer) Search(
 	language string,
 	forceRefresh bool,
 ) []SearchResultSnippet {
-	q.Source(org, repo, branch, forceRefresh)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.sourceFiles(org, repo, branch, forceRefresh)
 
 	fileExt := ""
 	if language == "perl" {

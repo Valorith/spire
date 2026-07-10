@@ -252,8 +252,8 @@
                           class="mt-1"
                           style="width: 100%"
                           v-model.number="npc[gf.field]"
-                          @click="drawRangeVisualizer(gf.field)"
-                          @input="setFieldModifiedById(gf.field)"
+                          @pointerdown="activateRangeVisualizer(gf.field)"
+                          @input="handleRangeSliderInput(gf.field)"
                         >
                       </div>
                     </div>
@@ -423,9 +423,7 @@
                       </div>
 
                     </div>
-                    <div class="col-2 p-0" v-if="field.rangeSlider"
-                      @click="drawRangeVisualizer(field.field)"
-                    >
+                    <div class="col-2 p-0" v-if="field.rangeSlider">
                       <input
                         type="range"
                         min="0"
@@ -434,6 +432,8 @@
                         class="p-0 m-0 mt-2"
                         style="width: 100%"
                         v-model.number="npc[field.field]"
+                        @pointerdown="activateRangeVisualizer(field.field)"
+                        @input="handleRangeSliderInput(field.field)"
                       >
                     </div>
                   </div>
@@ -1121,6 +1121,15 @@ export default {
       this.lastResetTime = Date.now() + 5000
       EditFormFieldUtil.setFieldSubEditorHighlightedById(field)
       this.$forceUpdate()
+    },
+    activateRangeVisualizer(field) {
+      if (!this.rangeVisualizerActive || this.activeRangeField !== field) {
+        this.drawRangeVisualizer(field)
+      }
+    },
+    handleRangeSliderInput(field) {
+      this.setFieldModifiedById(field)
+      this.activateRangeVisualizer(field)
     },
 
     /**

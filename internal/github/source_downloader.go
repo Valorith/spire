@@ -7,6 +7,7 @@ import (
 	gocache "github.com/patrickmn/go-cache"
 	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,9 +55,9 @@ func (g *SourceDownloader) Source(org string, repo string, branch string, forceR
 	g.cache.Set(lockKey, 1, time.Minute*10)
 
 	// repo params
-	repoDir := g.GetSourcedDirPath(repo, branch)
+	repoDir := g.GetSourcedDirPath(org, repo, branch)
 	repoZipUrl := fmt.Sprintf("https://github.com/%v/%v/archive/%v.zip", org, repo, branch)
-	zipFileLocalLoc := filepath.Join(g.GetSourceRoot(), fmt.Sprintf("%v.zip", repo))
+	zipFileLocalLoc := filepath.Join(g.GetSourceRoot(), fmt.Sprintf("%v.zip", g.getSourceCacheKey(org, repo, branch)))
 
 	if forceRefresh {
 		err := os.RemoveAll(repoDir)
@@ -171,7 +172,11 @@ func (g *SourceDownloader) GetSourceRoot() string {
 }
 
 // GetSourcedDirPath returns the sourced download path
-// eg /home/user/.cache/<repo>-<branch> or /tmp/<repo>-<branch>
-func (g *SourceDownloader) GetSourcedDirPath(repo string, branch string) string {
-	return filepath.Join(g.GetSourceRoot(), fmt.Sprintf("%v-%v", repo, branch))
+// eg /home/user/.cache/<org>-<repo>-<branch> or /tmp/<org>-<repo>-<branch>
+func (g *SourceDownloader) GetSourcedDirPath(org string, repo string, branch string) string {
+	return filepath.Join(g.GetSourceRoot(), g.getSourceCacheKey(org, repo, branch))
+}
+
+func (g *SourceDownloader) getSourceCacheKey(org string, repo string, branch string) string {
+	return fmt.Sprintf("%v-%v-%v", url.PathEscape(org), url.PathEscape(repo), url.PathEscape(branch))
 }
