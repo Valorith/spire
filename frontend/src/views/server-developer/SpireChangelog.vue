@@ -601,6 +601,9 @@ export default {
           ? `Latest GitHub release ${this.releaseStatus.latest_release.tag_name} is published.`
           : "The expected release is published.";
       }
+      if (this.releaseStatus.summary === "sync_required") {
+        return this.releaseStatusIssues[0] || "The release is published, but this checkout must pull master before the stamped notes appear.";
+      }
       if (this.releaseStatus.summary === "unknown") {
         return "Local checks are clear, but GitHub status could not be read.";
       }
@@ -639,6 +642,12 @@ export default {
       }
       if (this.releaseStatus?.latest_release?.html_url && this.releaseStatus.summary === "published") {
         return {label: "Open release", url: this.releaseStatus.latest_release.html_url};
+      }
+      if (this.releaseStatus?.summary === "sync_required" && this.releaseRepository) {
+        return {
+          label: "Open master",
+          url: `https://github.com/${this.releaseRepository}/tree/${encodeURIComponent(this.releaseBranch)}`
+        };
       }
       if (this.releaseRepository) {
         return {
@@ -1117,6 +1126,10 @@ export default {
   background: #f6c343;
 }
 
+.release-info-sync_required::after {
+  background: #f6c343;
+}
+
 .release-info-running::after {
   background: #2c7be5;
 }
@@ -1226,6 +1239,11 @@ export default {
 }
 
 .release-status-ready .release-status-indicator {
+  background: #f6c343;
+  box-shadow: 0 0 10px rgba(246, 195, 67, .28);
+}
+
+.release-status-sync_required .release-status-indicator {
   background: #f6c343;
   box-shadow: 0 0 10px rgba(246, 195, 67, .28);
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/EQEmuTools/spire/internal/release"
 	"github.com/google/go-github/v41/github"
+	version "github.com/hashicorp/go-version"
 	"golang.org/x/oauth2"
 )
 
@@ -104,12 +105,13 @@ type UpdateGitHubTokenRequest struct {
 }
 
 type releaseStatusSignal struct {
-	LocalIssues        []string
-	ExpectedTag        string
-	WorkflowStatus     string
-	WorkflowConclusion string
-	LatestReleaseTag   string
-	GitHubError        string
+	LocalIssues         []string
+	LocalPackageVersion string
+	ExpectedTag         string
+	WorkflowStatus      string
+	WorkflowConclusion  string
+	LatestReleaseTag    string
+	GitHubError         string
 }
 
 func (s *Service) LoadReleaseStatus(ctx context.Context) (*ReleaseStatus, error) {
@@ -156,13 +158,23 @@ func (s *Service) LoadReleaseStatus(ctx context.Context) (*ReleaseStatus, error)
 	}
 
 	status.Summary, status.SummaryLabel = deriveReleaseStatusSummary(releaseStatusSignal{
-		LocalIssues:        status.Issues,
-		ExpectedTag:        status.ExpectedTag,
-		WorkflowStatus:     workflowStatus(status.Workflow),
-		WorkflowConclusion: workflowConclusion(status.Workflow),
-		LatestReleaseTag:   latestReleaseTag(status.LatestRelease),
-		GitHubError:        status.GitHubError,
+		LocalIssues:         status.Issues,
+		LocalPackageVersion: status.Local.PackageVersion,
+		ExpectedTag:         status.ExpectedTag,
+		WorkflowStatus:      workflowStatus(status.Workflow),
+		WorkflowConclusion:  workflowConclusion(status.Workflow),
+		LatestReleaseTag:    latestReleaseTag(status.LatestRelease),
+		GitHubError:         status.GitHubError,
 	})
+	if status.Summary == "sync_required" {
+		status.Issues = append(status.Issues, fmt.Sprintf(
+			"GitHub release %s is published, but this checkout still has package.json %s and CHANGELOG.md [%s]. Pull %s, then reload the editor.",
+			latestReleaseTag(status.LatestRelease),
+			status.Local.PackageVersion,
+			status.Local.TopReleaseVersion,
+			status.ReleaseBranch,
+		))
+	}
 	status.Steps = buildReleaseStatusSteps(state, status)
 
 	return status, nil
@@ -589,16 +601,42 @@ func deriveReleaseStatusSummary(signal releaseStatusSignal) (string, string) {
 	if signal.ExpectedTag != "" && strings.EqualFold(signal.LatestReleaseTag, signal.ExpectedTag) {
 		return "published", "Published"
 	}
+	if strings.EqualFold(signal.WorkflowStatus, "completed") &&
+		strings.EqualFold(signal.WorkflowConclusion, "success") &&
+		releaseStatusVersionBehind(signal.LocalPackageVersion, signal.LatestReleaseTag) {
+		return "sync_required", "Pull release metadata"
+	}
 	if signal.GitHubError != "" {
 		return "unknown", "GitHub unavailable"
 	}
 	return "ready", "Ready for workflow"
 }
 
+func releaseStatusVersionBehind(localVersion string, latestTag string) bool {
+	local, err := version.NewVersion(strings.TrimPrefix(strings.TrimSpace(localVersion), "v"))
+	if err != nil {
+		return false
+	}
+
+	latest, err := version.NewVersion(strings.TrimPrefix(strings.TrimSpace(latestTag), "v"))
+	if err != nil {
+		return false
+	}
+
+	return local.LessThan(latest)
+}
+
 func buildReleaseStatusSteps(state *LoadState, status *ReleaseStatus) []ReleaseStatusStep {
 	branchStatus := "pending"
-	if state.Source == "live" && strings.TrimSpace(state.CurrentBranch) != spireReleaseBranch {
+	syncRequired := status.Summary == "sync_required"
+	if syncRequired || (state.Source == "live" && strings.TrimSpace(state.CurrentBranch) != spireReleaseBranch) {
 		branchStatus = "attention"
+	}
+	syncTitle := "Move the release contents onto master."
+	syncDetail := "Merge or cherry-pick the work that should ship, then pull master current before editing release notes."
+	if syncRequired {
+		syncTitle = "Pull the published release metadata onto master."
+		syncDetail = fmt.Sprintf("Release %s is published. Pull master current to load the stamped CHANGELOG.md and package version, then reload this editor.", latestReleaseTag(status.LatestRelease))
 	}
 
 	editorStatus := "pending"
@@ -629,7 +667,7 @@ func buildReleaseStatusSteps(state *LoadState, status *ReleaseStatus) []ReleaseS
 	}
 
 	publishStatus := "pending"
-	if status.Summary == "published" {
+	if status.Summary == "published" || syncRequired {
 		publishStatus = "done"
 	} else if workflowStepStatus == "running" {
 		publishStatus = "running"
@@ -647,8 +685,8 @@ func buildReleaseStatusSteps(state *LoadState, status *ReleaseStatus) []ReleaseS
 	return []ReleaseStatusStep{
 		{
 			ID:     "sync_checkout",
-			Title:  "Move the release contents onto master.",
-			Detail: "Merge or cherry-pick the work that should ship, then pull master current before editing release notes.",
+			Title:  syncTitle,
+			Detail: syncDetail,
 			Status: branchStatus,
 		},
 		{

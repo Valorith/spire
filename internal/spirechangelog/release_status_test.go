@@ -149,6 +149,26 @@ func TestDeriveReleaseStatusSummary(t *testing.T) {
 			expected: "published",
 		},
 		{
+			name: "successful release ahead of checkout",
+			signal: releaseStatusSignal{
+				LocalPackageVersion: "4.23.5",
+				WorkflowStatus:      "completed",
+				WorkflowConclusion:  "success",
+				LatestReleaseTag:    "v5.0.0",
+			},
+			expected: "sync_required",
+		},
+		{
+			name: "previous successful release does not block newer local notes",
+			signal: releaseStatusSignal{
+				LocalPackageVersion: "4.23.6",
+				WorkflowStatus:      "completed",
+				WorkflowConclusion:  "success",
+				LatestReleaseTag:    "v4.23.5",
+			},
+			expected: "ready",
+		},
+		{
 			name:     "github unavailable",
 			signal:   releaseStatusSignal{GitHubError: "rate limited"},
 			expected: "unknown",
@@ -253,6 +273,42 @@ func TestBuildReleaseStatusStepsDoesNotAutoCompletePreflight(t *testing.T) {
 		if steps[i].Status != "pending" {
 			t.Fatalf("expected step %d to remain pending, got %s", i, steps[i].Status)
 		}
+	}
+}
+
+func TestBuildReleaseStatusStepsMarksPublishedMetadataSync(t *testing.T) {
+	state := &LoadState{
+		Source:            "live",
+		Writable:          true,
+		ReleaseRepository: "Valorith/spire",
+		CurrentBranch:     spireReleaseBranch,
+		TopRelease: ReleaseSection{
+			Version:     "Unreleased",
+			ReleaseDate: "7/9/2026",
+			Body:        "* Release note",
+		},
+	}
+	status := &ReleaseStatus{
+		Summary: "sync_required",
+		Workflow: &ReleaseStatusWorkflow{
+			Status:     "completed",
+			Conclusion: "success",
+		},
+		LatestRelease: &ReleaseStatusLatestRelease{TagName: "v5.0.0"},
+	}
+
+	steps := buildReleaseStatusSteps(state, status)
+	if steps[0].Status != "attention" {
+		t.Fatalf("expected checkout sync step attention, got %s", steps[0].Status)
+	}
+	if !strings.Contains(steps[0].Title, "Pull") || !strings.Contains(steps[0].Detail, "v5.0.0") {
+		t.Fatalf("expected checkout sync guidance, got %#v", steps[0])
+	}
+	if steps[4].Status != "done" {
+		t.Fatalf("expected workflow step done, got %s", steps[4].Status)
+	}
+	if steps[5].Status != "done" {
+		t.Fatalf("expected publish step done, got %s", steps[5].Status)
 	}
 }
 
