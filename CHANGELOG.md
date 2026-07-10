@@ -1,4 +1,4 @@
-## [Unreleased] 7/10/2026
+## [5.0.2] 7/10/2026
 
 * Additional UI consistincy improvements.
 
