@@ -1,3 +1,7 @@
+## [Unreleased] 7/10/2026
+
+* Additional UI consistincy improvements.
+
 ## [5.0.1] 7/10/2026
 
 * Minor fixes for the Patch Notes editor and Spire installer release source, plus easier custom server opcode patch repositories.

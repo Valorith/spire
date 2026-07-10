@@ -56,7 +56,7 @@
                 'is-invalid': opcodeSourceValidationState === false
               }"
               @change="saveLauncherOptions()"
-              placeholder="https://github.com/Valorith/Server"
+              placeholder="https://github.com/EQEmu/Server (upstream default)"
             >
             <b-form-invalid-feedback :state="opcodeSourceValidationState">
               {{ opcodeSourceValidationMessage }}

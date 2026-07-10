@@ -1,27 +1,39 @@
 <template>
   <div
-    class="card mt-3"
-    style="margin-bottom: 5px; background-color: rgba(0,0,0, .5); color: rgba(255,255,255,.7); border: 1px solid #000000;"
     v-if="connection && connection.database_connection && connection.database_connection.name"
-    @click="navigateConnections"
+    class="connection-status"
   >
     <div
-      class="card-body connection-status-box"
-      style="padding: 5px; padding-left: 15px; text-align: left;"
-      v-b-tooltip.v-dark.hover
-      :title="getConnectionDescription()"
+      v-if="appVersion"
+      class="spire-version-label"
+      style="padding: 0 15px; color: rgba(255,255,255,.34); font-size: 9px; font-weight: 500; letter-spacing: .08em; line-height: 1.1; text-align: center; text-transform: uppercase;"
+    >
+      Spire v{{ appVersion }}
+    </div>
+
+    <div
+      class="card mt-1"
+      style="margin-bottom: 5px; background-color: rgba(0,0,0, .5); color: rgba(255,255,255,.7); border: 1px solid #000000;"
+      @click="navigateConnections"
     >
       <div
-        class="avatar avatar-sm mr-3"
-        style="height: 10px; width: 10px"
+        class="card-body connection-status-box"
+        style="padding: 5px; padding-left: 15px; text-align: left;"
+        v-b-tooltip.v-dark.hover
+        :title="getConnectionDescription()"
       >
-        <img
-          :style="'background-color: ' + getConnectionStatusColor() + '; margin-bottom: 5px; transition: background-color 300ms;'"
-          src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-          class="avatar-img rounded-circle"
+        <div
+          class="avatar avatar-sm mr-3"
+          style="height: 10px; width: 10px"
         >
+          <img
+            :style="'background-color: ' + getConnectionStatusColor() + '; margin-bottom: 5px; transition: background-color 300ms;'"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+            class="avatar-img rounded-circle"
+          >
+        </div>
+        <i class="fe fe-database"></i> {{ connection.database_connection.name }}
       </div>
-      <i class="fe fe-database"></i> {{ connection.database_connection.name }}
     </div>
   </div>
 </template>
@@ -34,6 +46,12 @@ import util       from "util";
 
 export default {
   name: "DbConnectionStatusPill",
+  props: {
+    appVersion: {
+      type: String,
+      default: ""
+    }
+  },
   data() {
     return {
       connection: {},

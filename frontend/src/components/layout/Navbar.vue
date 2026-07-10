@@ -188,6 +188,7 @@
         <ul class="navbar-nav mb-md-3">
           <li class="nav-item" v-if="hasUpdate">
             <a
+              id="spire-update-available"
               href="#"
               style="color: yellow"
               class="nav-link pulsate-highlight-white"
@@ -197,6 +198,14 @@
               <i class="fe fe-check-circle mr-2"></i>
               Spire Update Available
             </a>
+            <b-tooltip
+              target="spire-update-available"
+              triggers="hover focus"
+              placement="right"
+              variant="dark"
+            >
+              Spire v{{ latestAppVersion }} is available
+            </b-tooltip>
           </li>
           <li class="nav-item" v-if="!hasUpdate">
             <a href="#" class="nav-link" data-toggle="modal" @click="checkForSpireUpdate()">
@@ -254,7 +263,7 @@
         </div>
 
         <!-- Active Database Connection Status -->
-        <db-connection-status-pill/>
+        <db-connection-status-pill :app-version="appVersion"/>
 
       </div> <!-- / .navbar-collapse -->
     </div>
