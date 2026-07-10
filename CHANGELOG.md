@@ -1,6 +1,8 @@
-## [Unreleased] 7/9/2026
+## [Unreleased] 7/10/2026
 
 * Minor fixes for the Patch Notes editor and Spire installer release source, plus easier custom server opcode patch repositories.
+* Server Patches (opcodes) updater improvement.
+* Spire Updater now linked to https://github.com/Valorith/spire.
 
 ## [5.0.0] 7/10/2026
 
