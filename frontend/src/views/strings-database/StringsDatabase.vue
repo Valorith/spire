@@ -1,5 +1,13 @@
 <template>
   <div>
+    <info-error-banner
+      class="mb-3"
+      :notification="notification"
+      :error="error"
+      @dismiss-error="error = ''"
+      @dismiss-notification="notification = ''"
+    />
+
     <div class="row">
       <div :class="(isSubEditActive() ? 'col-6' : 'col-12')">
 
@@ -7,8 +15,9 @@
           <div class="row">
             <div :class="(selectedType >= 0 ? 'col-10' : 'col-12') + ' text-center'">
               <b-form-select
-                v-model.number="selectedType"
-                @change="resetSelections(); updateQueryState()"
+                :key="'string-type-' + typeSelectRenderKey"
+                :value="selectedType"
+                @change="changeSelectedType"
                 class="mt-3 form-control"
               >
                 <option value="-1">--- Select ---</option>
@@ -92,7 +101,7 @@
       </div>
 
       <div class="col-6 fade-in" v-if="isSubEditActive()">
-        <eq-window-simple title="Edit Database String">
+        <eq-window-simple :title="creatingString ? 'Create Database String' : 'Edit Database String'">
 
           <div class="mt-3">
             ID
@@ -122,11 +131,12 @@
             variant="outline-warning"
           >
             <i class="fa fa-save"></i>
-            Save
+            {{ creatingString ? 'Create' : 'Save' }}
           </b-button>
 
           <b-button
-            @click="deleteSelectedString()"
+            v-if="!creatingString"
+            @click="deleteSelectedString"
             size="sm"
             class="mt-3 ml-3"
             variant="outline-danger"
@@ -135,25 +145,26 @@
             Delete
           </b-button>
 
-          <!-- Notification / Error -->
-          <info-error-banner
-            class="mt-3"
-            :notification="notification"
-            :error="error"
-            @dismiss-error="error = ''"
-            @dismiss-notification="notification = ''"
-          />
+          <b-button
+            v-else
+            @click="cancelCreate"
+            size="sm"
+            class="mt-3 ml-3"
+            variant="outline-secondary"
+          >
+            <i class="fa fa-times"></i>
+            Cancel
+          </b-button>
 
         </eq-window-simple>
 
         <eq-window-simple
           :title="'String Preview Type (' + selectedStringObject.type + ') ID (' + selectedStringObject.id + ')'"
-          v-if="selectedStringObject.type"
         >
-          <v-runtime-template
-            v-if="getSelectedStringObject()"
-            :template="'<div>' + formatStringPreview(selectedStringObject.value) + '</div>'"
-          />
+          <div
+            class="string-preview"
+            v-text="formatStringPreview(selectedStringObject.value)"
+          ></div>
         </eq-window-simple>
       </div>
 
@@ -189,8 +200,7 @@ export default {
     LoaderFakeProgress: LoaderFakeProgress,
     ContentArea,
     EqAutoTable,
-    EqWindowSimple,
-    "v-runtime-template": () => import("v-runtime-template")
+    EqWindowSimple
   },
   data() {
     return {
@@ -198,6 +208,7 @@ export default {
       typeCounts: {}, // stores the counts per type (select)
 
       selectedType: -1, // selected state
+      typeSelectRenderKey: 0,
 
       // for the sub selector pane on the right
       subSelectedId: -1,
@@ -208,6 +219,7 @@ export default {
 
       originalSelectedStringObject: {},
       selectedStringObject: {},
+      creatingString: false,
 
       lastSelectedTime: Date.now(),
 
@@ -219,8 +231,7 @@ export default {
 
   watch: {
     '$route'() {
-      console.log("route trigger")
-      this.init(true)
+      this.init()
     },
   },
 
@@ -235,10 +246,15 @@ export default {
       this.subSelectedType              = -1
       this.originalSelectedStringObject = {}
       this.selectedStringObject         = {}
+      this.creatingString               = false
     },
     resetSelections() {
-      this.subSelectedId   = -1;
-      this.subSelectedType = -1;
+      this.subSelectedId                = -1
+      this.subSelectedType              = -1
+      this.originalSelectedStringObject = {}
+      this.selectedStringObject         = {}
+      this.creatingString               = false
+      EditFormFieldUtil.resetFieldEditedStatus()
     },
 
     /**
@@ -264,25 +280,36 @@ export default {
     },
 
     loadQueryState() {
-      console.log("loading query state")
-      // Clear selections first (they will be set if query params are present)
-      this.selectedType = -1
-      this.subSelectedId = -1
+      const routeType       = this.parseRouteInteger(this.$route.query.type)
+      const routeSelectedId = this.parseRouteInteger(this.$route.query.selectedId)
+
+      this.error           = ""
+      this.selectedType    = -1
+      this.subSelectedId   = -1
       this.subSelectedType = -1
-      if (this.$route.query.type >= 0) {
-        this.selectedType    = parseInt(this.$route.query.type);
-        this.subSelectedType = parseInt(this.$route.query.type);
+
+      if (typeof this.$route.query.type !== 'undefined') {
+        if (!this.isValidStringType(routeType)) {
+          this.error = `Unknown string type: ${this.$route.query.type}`
+          return
+        }
+
+        this.selectedType    = routeType
+        this.subSelectedType = routeType
       }
-      if (this.$route.query.selectedId >= 0) {
-        this.subSelectedId = parseInt(this.$route.query.selectedId);
-        console.log("selected object", this.selectedStringObject)
 
+      if (typeof this.$route.query.selectedId !== 'undefined') {
+        if (!this.isValidStringType(this.selectedType)) {
+          this.error = "A valid string type is required to select a string"
+          return
+        }
+        if (routeSelectedId === null || routeSelectedId < 0) {
+          this.error = `Invalid string ID: ${this.$route.query.selectedId}`
+          return
+        }
+
+        this.subSelectedId = routeSelectedId
       }
-
-      console.log("selected type", this.selectedType)
-      console.log("sub selected type", this.subSelectedType)
-      console.log("sub selected id", this.subSelectedId)
-
     },
 
     /**
@@ -303,55 +330,75 @@ export default {
     commify(x) {
       return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     },
-    replaceAll(str, find, replace) {
-      return str.replace(new RegExp(find, 'g'), replace);
-    },
     formatStringPreview(contents) {
-      if (contents) {
-        return this.replaceAll(contents, "<BR>", "<BR/>")
-      }
-      return ""
+      return contents ? contents.replace(/<br\s*\/?\s*>/gi, "\n") : ""
     },
 
-    async createString() {
-      console.log("create")
+    parseRouteInteger(value) {
+      if (Array.isArray(value) || (typeof value !== 'string' && typeof value !== 'number')) {
+        return null
+      }
+      if (!/^\d+$/.test(String(value))) {
+        return null
+      }
+      const parsed = Number(value)
+      return Number.isSafeInteger(parsed) ? parsed : null
+    },
+    isValidStringType(type) {
+      return Number.isInteger(type) && Object.prototype.hasOwnProperty.call(DB_STR_TYPES, String(type))
+    },
+    changeSelectedType(value) {
+      const nextType = parseInt(value)
+      if (nextType === this.selectedType) {
+        return
+      }
+      if (!this.confirmDiscardChanges()) {
+        this.typeSelectRenderKey++
+        return
+      }
 
-      if (isNaN(parseInt(this.subSelectedType)) || parseInt(this.subSelectedType) < 0) {
+      this.resetSelections()
+      this.error        = ""
+      this.notification = ""
+      this.selectedType = nextType
+      this.updateQueryState()
+    },
+
+    createString() {
+      if (!this.isValidStringType(this.selectedType)) {
         this.error = "Please select a valid type first"
+        return
+      }
+      if (!this.confirmDiscardChanges()) {
         return
       }
 
       // filter list by type
-      let r = allStrings.filter((s) => s.type === parseInt(this.subSelectedType))
+      let r = allStrings.filter((s) => s.type === parseInt(this.selectedType))
         .sort((a, b) => a.id - b.id)
 
       // grab last id + 1 from list (handle empty list)
       const newId = r.length > 0 ? r[r.length - 1].id + 1 : 1
 
-      // create
-      try {
-        const response = await DbStrApiClient.createDbStr(
-          {
-            dbStr: {
-              id: newId,
-              type: parseInt(this.subSelectedType),
-              value: ""
-            }
-          }
-        )
-
-        // success
-        if (response.status === 200 && response.data) {
-          this.resetSelections()
-          this.updateQueryState()
-          this.selectString(newId, this.subSelectedType)
-          this.init(true)
-        }
-      } catch (err) {
-        if (err.response !== 200 && err.response.data.error) {
-          this.error = err.response.data.error
-        }
+      this.error                        = ""
+      this.notification                 = ""
+      this.creatingString               = true
+      this.subSelectedId                = newId
+      this.subSelectedType              = parseInt(this.selectedType)
+      this.originalSelectedStringObject = {}
+      this.selectedStringObject         = {
+        id: newId,
+        type: parseInt(this.selectedType),
+        value: ""
       }
+      EditFormFieldUtil.resetFieldEditedStatus()
+    },
+    cancelCreate() {
+      if (!this.confirmDiscardChanges()) {
+        return
+      }
+      this.resetSelections()
+      this.updateQueryState()
     },
 
     async deleteSelectedString() {
@@ -378,34 +425,21 @@ export default {
             let r = allStrings.filter((s) => s.type === parseInt(this.subSelectedType))
               .sort((a, b) => a.id - b.id)
 
-            let lastElement = {}
-
-            // grab last element and select
-            if (r && r.length > 0) {
-              lastElement = r[r.length - 1]
-              // if we deleted the last element, let's fallback to next in line...
-              if (parseInt(lastElement.id) === parseInt(this.subSelectedId)) {
-                if (r[r.length - 2]) {
-                  lastElement = r[r.length - 2]
-                }
-              }
-            }
-
+            const nextString = r.length > 0 ? r[r.length - 1] : null
+            const deletedType = parseInt(this.subSelectedType)
             this.resetSelections()
-            this.updateQueryState()
-
+            this.selectedType = deletedType
+            this.calculateStringTypeCounts(allStrings)
+            this.listData()
             this.notification = "Deleted successfully"
 
-            if (lastElement) {
-              this.selectString(lastElement.id, this.subSelectedType)
+            if (nextString) {
+              this.applySelectedString(nextString.id, nextString.type)
             }
-
-            this.init(true)
+            this.updateQueryState()
           }
         } catch (err) {
-          if (err.response !== 200 && err.response.data.error) {
-            this.error = err.response.data.error
-          }
+          this.error = this.getApiError(err, "Unable to delete the string")
         }
       }
     },
@@ -415,31 +449,40 @@ export default {
     },
     async saveSelectedString() {
       try {
-        const response = await DbStrApiClient.updateDbStr(
-          {
-            id: parseInt(this.originalSelectedStringObject.id),
+        const savedId   = parseInt(this.selectedStringObject.id)
+        const savedType = parseInt(this.selectedStringObject.type)
+        let response
+
+        if (this.creatingString) {
+          response = await DbStrApiClient.createDbStr({
             dbStr: this.selectedStringObject
-          },
-          {
-            query: (new SpireQueryBuilder())
-              .where("type", "=", this.selectedType)
-              .get()
-          }
-        )
+          })
+        } else {
+          response = await DbStrApiClient.updateDbStr(
+            {
+              id: parseInt(this.originalSelectedStringObject.id),
+              dbStr: this.selectedStringObject
+            },
+            {
+              query: (new SpireQueryBuilder())
+                .where("type", "=", this.selectedType)
+                .get()
+            }
+          )
+        }
 
         // success
         if (response.status === 200 && response.data) {
           EditFormFieldUtil.resetFieldEditedStatus()
-
+          this.creatingString = false
+          await this.refreshType(savedType)
+          this.applySelectedString(savedId, savedType)
           this.updateQueryState()
-          await this.init(true)
-          this.notification = "Saved successfully!"
+          this.notification = "Saved successfully"
         }
 
       } catch (err) {
-        if (err.response !== 200 && err.response.data.error) {
-          this.error = err.response.data.error
-        }
+        this.error = this.getApiError(err, "Unable to save the string")
       }
     },
 
@@ -456,23 +499,49 @@ export default {
     },
 
     selectString(stringId, typeId) {
+      if (stringId === this.subSelectedId && typeId === this.subSelectedType) {
+        return true
+      }
+      if (!this.confirmDiscardChanges()) {
+        return false
+      }
+      if (!allStrings.some((string) => string.id === stringId && string.type === typeId)) {
+        this.error = `String ID ${stringId} was not found for type ${typeId}`
+        return false
+      }
+
+      this.applySelectedString(stringId, typeId)
+      this.updateQueryState()
+      return true
+    },
+    applySelectedString(stringId, typeId) {
       this.lastSelectedTime             = Date.now()
       this.subSelectedId                = stringId
       this.subSelectedType              = typeId
       this.originalSelectedStringObject = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
       this.selectedStringObject         = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
-      this.updateQueryState()
+      this.creatingString               = false
+      EditFormFieldUtil.resetFieldEditedStatus()
     },
 
     hasUnsavedChanges() {
-      return this.selectedStringObject && this.originalSelectedStringObject &&
+      return this.creatingString || (this.selectedStringObject && this.originalSelectedStringObject &&
         JSON.stringify(this.selectedStringObject) !== JSON.stringify(this.originalSelectedStringObject)
+      )
+    },
+    confirmDiscardChanges() {
+      return !this.hasUnsavedChanges() || window.confirm("Discard unsaved string changes?")
     },
     warnUnsavedChanges(e) {
       if (this.hasUnsavedChanges()) {
         e.preventDefault()
         e.returnValue = ''
       }
+    },
+    getApiError(err, fallback) {
+      return err && err.response && err.response.data && err.response.data.error
+        ? err.response.data.error
+        : fallback
     },
     isStringSelected(string) {
       return string.id === this.subSelectedId && string.type === this.subSelectedType
@@ -495,10 +564,27 @@ export default {
         }
       }
       this.calculateStringTypeCounts(allStrings)
-      this.originalSelectedStringObject = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
-      this.selectedStringObject         = JSON.parse(JSON.stringify(this.getSelectedStringObject()))
+      const selectedString = this.getSelectedStringObject()
+      if (this.subSelectedId >= 0 && Object.keys(selectedString).length === 0) {
+        this.error = `String ID ${this.subSelectedId} was not found for type ${this.subSelectedType}`
+        this.subSelectedId                = -1
+        this.subSelectedType              = -1
+        this.originalSelectedStringObject = {}
+        this.selectedStringObject         = {}
+      } else {
+        this.originalSelectedStringObject = JSON.parse(JSON.stringify(selectedString))
+        this.selectedStringObject         = JSON.parse(JSON.stringify(selectedString))
+      }
+      this.creatingString = false
       this.listData()
       this.scrollToHighlighted()
+    },
+
+    async refreshType(type) {
+      const typeStrings = await this.getAllDbStrings(type)
+      allStrings        = allStrings.filter((string) => string.type !== parseInt(type)).concat(typeStrings)
+      this.calculateStringTypeCounts(allStrings)
+      this.listData()
     },
 
     async getAllDbStrings(typeFilter) {
@@ -560,9 +646,27 @@ export default {
   beforeDestroy() {
     window.removeEventListener('beforeunload', this.warnUnsavedChanges)
   },
+  beforeRouteUpdate(to, from, next) {
+    if (!this.confirmDiscardChanges()) {
+      next(false)
+      return
+    }
+    next()
+  },
+  beforeRouteLeave(to, from, next) {
+    if (!this.confirmDiscardChanges()) {
+      next(false)
+      return
+    }
+    next()
+  },
 }
 </script>
 
 <style scoped>
-
+.string-preview {
+  min-height: 28px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
 </style>

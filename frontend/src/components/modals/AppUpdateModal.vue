@@ -15,6 +15,15 @@
           <div>
             <span class="font-weight-bold">Latest Version</span> {{ release.tag_name.replace("v", "") }}
           </div>
+          <div>
+            <span class="font-weight-bold">Update Source</span>
+            <a
+              :href="updateRepositoryUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ml-1"
+            >github.com/{{ updateRepository }}</a>
+          </div>
         </div>
 
         <div class="mt-3">
@@ -83,6 +92,7 @@
 
 <script>
 import {LocalSettings} from "@/app/local-settings/localsettings";
+import {AppEnv} from "@/app/env/app-env";
 import {SpireApi} from "@/app/api/spire-api";
 import InfoErrorBanner from "@/components/InfoErrorBanner.vue";
 import LoaderFakeProgress from "@/components/LoaderFakeProgress.vue";
@@ -113,6 +123,14 @@ export default {
       notification: "",
       error: ""
     };
+  },
+  computed: {
+    updateRepository() {
+      return AppEnv.getReleaseRepository() || "Valorith/spire";
+    },
+    updateRepositoryUrl() {
+      return `https://github.com/${this.updateRepository}`;
+    }
   },
   watch: {
     release() {

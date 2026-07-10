@@ -6,25 +6,62 @@
   >
     <div class="p-3 pt-1">
       <div>
-        <div class="zt-bar">
-          <a :class="['zt', activeZoneTab === 'npcs' && 'zt-on']" @click="activeZoneTab = 'npcs'">Spawns</a>
-          <a :class="['zt', activeZoneTab === 'doors' && 'zt-on']" @click="activeZoneTab = 'doors'">Doors</a>
-          <a :class="['zt', activeZoneTab === 'objects' && 'zt-on']" @click="activeZoneTab = 'objects'">Obj</a>
-          <a :class="['zt', activeZoneTab === 'traps' && 'zt-on']" @click="activeZoneTab = 'traps'">Traps</a>
-          <span class="zt-sep">│</span>
-          <a :class="['zt', activeZoneTab === 'ground_spawns' && 'zt-on']" @click="activeZoneTab = 'ground_spawns'">GSpawns</a>
-          <a :class="['zt', activeZoneTab === 'forage' && 'zt-on']" @click="activeZoneTab = 'forage'">Forage</a>
-          <a :class="['zt', activeZoneTab === 'fishing' && 'zt-on']" @click="activeZoneTab = 'fishing'">Fish</a>
-          <a :class="['zt', activeZoneTab === 'sold' && 'zt-on']" @click="activeZoneTab = 'sold'">Sold</a>
-          <span class="zt-sep">│</span>
-          <a :class="['zt', activeZoneTab === 'spells' && 'zt-on']" @click="activeZoneTab = 'spells'">Spells</a>
-          <a :class="['zt', activeZoneTab === 'blocked_spells' && 'zt-on']" @click="activeZoneTab = 'blocked_spells'">Blocked</a>
-          <a :class="['zt', activeZoneTab === 'ldon_traps' && 'zt-on']" @click="activeZoneTab = 'ldon_traps'">LDoN</a>
-          <span class="zt-sep">│</span>
-          <a :class="['zt', activeZoneTab === 'tasks' && 'zt-on']" @click="activeZoneTab = 'tasks'">Tasks</a>
-          <a :class="['zt', activeZoneTab === 'graveyards' && 'zt-on']" @click="activeZoneTab = 'graveyards'">Graves</a>
-          <a :class="['zt', activeZoneTab === 'zone_connections' && 'zt-on']" @click="activeZoneTab = 'zone_connections'">Conns</a>
-          <a :class="['zt', activeZoneTab === 'zone' && 'zt-on']" @click="activeZoneTab = 'zone'">Zone</a>
+        <div
+          ref="zoneViewPicker"
+          class="zone-view-picker"
+          @keydown.esc.stop.prevent="handleZoneViewPickerEscape"
+        >
+          <button
+            ref="zoneViewTrigger"
+            type="button"
+            class="zone-view-trigger"
+            :class="{ 'zone-view-trigger-open': zoneViewPickerOpen }"
+            aria-haspopup="true"
+            aria-controls="zone-view-menu"
+            :aria-expanded="zoneViewPickerOpen ? 'true' : 'false'"
+            @click="toggleZoneViewPicker"
+          >
+            <span class="zone-view-trigger-copy">
+              <span class="zone-view-trigger-label">View</span>
+              <span class="zone-view-trigger-value">{{ activeZoneView.label }}</span>
+            </span>
+            <i class="fa fa-chevron-down zone-view-chevron" aria-hidden="true"></i>
+          </button>
+
+          <transition name="zone-view-menu">
+            <div
+              v-if="zoneViewPickerOpen"
+              id="zone-view-menu"
+              class="zone-view-menu"
+              aria-label="Zone views"
+            >
+              <div
+                v-for="group in zoneViewGroups"
+                :key="group.label"
+                class="zone-view-group"
+                role="group"
+                :aria-label="group.label"
+              >
+                <div class="zone-view-group-label">{{ group.label }}</div>
+                <button
+                  v-for="view in group.views"
+                  :key="view.key"
+                  type="button"
+                  class="zone-view-option"
+                  :class="{ 'zone-view-option-active': activeZoneTab === view.key }"
+                  :aria-pressed="activeZoneTab === view.key ? 'true' : 'false'"
+                  @click="selectZoneView(view.key)"
+                >
+                  <span>{{ view.label }}</span>
+                  <i
+                    v-if="activeZoneTab === view.key"
+                    class="fa fa-check"
+                    aria-hidden="true"
+                  ></i>
+                </button>
+              </div>
+            </div>
+          </transition>
         </div>
         <div v-show="activeZoneTab === 'npcs'">
 
@@ -2019,6 +2056,44 @@ import {ROUTE}             from "../../routes";
 import {Spawn}             from "../../app/spawn";
 import {Chrome}            from "vue-color";
 
+const ZONE_VIEW_GROUPS = Object.freeze([
+  {
+    label: 'Population',
+    views: [
+      { key: 'npcs', label: 'Spawns' },
+      { key: 'ground_spawns', label: 'Ground Spawns' },
+      { key: 'graveyards', label: 'Graveyards' },
+    ],
+  },
+  {
+    label: 'World',
+    views: [
+      { key: 'doors', label: 'Doors' },
+      { key: 'objects', label: 'Objects' },
+      { key: 'traps', label: 'Traps' },
+      { key: 'zone_connections', label: 'Connections' },
+    ],
+  },
+  {
+    label: 'Content',
+    views: [
+      { key: 'forage', label: 'Forage' },
+      { key: 'fishing', label: 'Fishing' },
+      { key: 'sold', label: 'Sold Items' },
+      { key: 'tasks', label: 'Tasks' },
+    ],
+  },
+  {
+    label: 'Rules & Zone',
+    views: [
+      { key: 'spells', label: 'Spells' },
+      { key: 'blocked_spells', label: 'Blocked Spells' },
+      { key: 'ldon_traps', label: 'LDoN Traps' },
+      { key: 'zone', label: 'Zone Settings' },
+    ],
+  },
+]);
+
 export default {
   name: "EqZoneCardPreview",
   components: { LoaderFakeProgress, NpcPopover, ItemPopover, SpellPopover, EqCheckbox, EqTab, EqTabs, EqWindow, 'chrome-picker': Chrome },
@@ -2040,6 +2115,8 @@ export default {
   data() {
     return {
       activeZoneTab: 'npcs',
+      zoneViewPickerOpen: false,
+      zoneViewGroups: ZONE_VIEW_GROUPS,
       fogSlots: [
         { label: 'Default', suffix: '' },
         { label: 'Slot 1', suffix: '_1' },
@@ -2193,9 +2270,11 @@ export default {
     EventBus.$off('GS_LOCATION_PICKED', this.handleLocationPicked)
     EventBus.$off('GS_DATA_CHANGED', this.loadGroundSpawns)
     EventBus.$emit('GS_PICK_LOCATION_CANCEL')
+    document.removeEventListener('click', this.handleZoneViewPickerDocumentClick)
   },
   mounted() {
     this.init()
+    document.addEventListener('click', this.handleZoneViewPickerDocumentClick)
   },
   watch: {
     zone: {
@@ -2215,6 +2294,13 @@ export default {
     },
   },
   computed: {
+    activeZoneView() {
+      for (const group of this.zoneViewGroups) {
+        const activeView = group.views.find(view => view.key === this.activeZoneTab)
+        if (activeView) return activeView
+      }
+      return { key: 'npcs', label: 'Spawns' }
+    },
     effectiveShortName() {
       return this.zoneShortName || (this.zone && this.zone.short_name) || ''
     },
@@ -2298,6 +2384,29 @@ export default {
   },
 
   methods: {
+    toggleZoneViewPicker() {
+      this.zoneViewPickerOpen = !this.zoneViewPickerOpen
+    },
+    selectZoneView(viewKey) {
+      this.activeZoneTab = viewKey
+      this.zoneViewPickerOpen = false
+    },
+    closeZoneViewPicker(focusTrigger = false) {
+      if (!this.zoneViewPickerOpen) return
+      this.zoneViewPickerOpen = false
+      if (focusTrigger) {
+        this.$nextTick(() => {
+          if (this.$refs.zoneViewTrigger) this.$refs.zoneViewTrigger.focus()
+        })
+      }
+    },
+    handleZoneViewPickerEscape() {
+      this.closeZoneViewPicker(true)
+    },
+    handleZoneViewPickerDocumentClick(event) {
+      if (!this.zoneViewPickerOpen || !this.$refs.zoneViewPicker) return
+      if (!this.$refs.zoneViewPicker.contains(event.target)) this.closeZoneViewPicker()
+    },
     getFogColor(suffix) {
       if (!this.zone) return 'rgb(0,0,0)';
       const r = this.zone['fog_red' + suffix] || 0;
@@ -3790,37 +3899,161 @@ export default {
 </script>
 
 <style>
-/* Zone Editor Tab Navigation */
-.zt-bar {
+/* Zone view navigation */
+.zone-view-picker {
+  position: relative;
+  z-index: 40;
+  margin: 2px 0 8px;
+}
+
+.zone-view-trigger {
+  width: 100%;
+  min-height: 38px;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0;
-  padding: 3px 0 4px;
-  border-bottom: 1px solid #333;
-  margin-bottom: 6px;
-  line-height: 1;
-}
-.zt {
-  font-size: 12.5px;
-  color: #777;
-  padding: 3px 7px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(8, 13, 19, 0.9);
+  border: 1px solid rgba(138, 125, 74, 0.55);
+  border-radius: 3px;
+  color: #d8d1b9;
+  text-align: left;
   cursor: pointer;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.03);
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.zone-view-trigger:hover,
+.zone-view-trigger-open {
+  background: rgba(15, 22, 30, 0.96);
+  border-color: rgba(184, 163, 91, 0.88);
+}
+
+.zone-view-trigger:focus-visible {
+  outline: 1px solid #b8a35b;
+  outline-offset: 2px;
+}
+
+.zone-view-trigger-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.zone-view-trigger-label {
+  color: #777e86;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zone-view-trigger-value {
+  overflow: hidden;
+  color: #eee5c5;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  transition: color 0.12s, border-color 0.12s;
-  user-select: none;
 }
-.zt:hover { color: #ccc; }
-.zt-on {
-  color: #f0e6c0;
-  border-bottom-color: #8a7d4a;
+
+.zone-view-chevron {
+  flex: 0 0 auto;
+  color: #a79352;
+  font-size: 9px;
+  transition: transform 0.14s ease, color 0.14s ease;
 }
-.zt-sep {
-  color: #333;
-  font-size: 12.5px;
-  padding: 0 1px;
-  user-select: none;
+
+.zone-view-trigger-open .zone-view-chevron {
+  color: #d2bd70;
+  transform: rotate(180deg);
+}
+
+.zone-view-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 80;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 8px;
+  padding: 9px;
+  background: rgba(10, 16, 23, 0.98);
+  border: 1px solid rgba(138, 125, 74, 0.72);
+  border-radius: 3px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.68);
+}
+
+.zone-view-group {
+  min-width: 0;
+}
+
+.zone-view-group-label {
+  margin: 0 4px 3px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #837b5c;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.zone-view-option {
+  width: 100%;
+  min-height: 27px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 6px;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 2px;
+  color: #a7adb3;
+  font-size: 11.5px;
+  line-height: 1.15;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.zone-view-option:hover,
+.zone-view-option:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f1ed;
+  outline: none;
+}
+
+.zone-view-option-active {
+  background: rgba(167, 147, 82, 0.15);
+  border-left-color: #b8a35b;
+  color: #f2e8c7;
+  font-weight: 600;
+}
+
+.zone-view-option .fa-check {
+  flex: 0 0 auto;
+  color: #c6ae5d;
+  font-size: 9px;
+}
+
+.zone-view-menu-enter-active,
+.zone-view-menu-leave-active {
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  transform-origin: top center;
+}
+
+.zone-view-menu-enter,
+.zone-view-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .gs-item-search-dropdown {

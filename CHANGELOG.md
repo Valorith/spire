@@ -8,7 +8,7 @@
 
 Release Type:  **BETA**
 Privde Feedback here: https://github.com/Valorith/spire/issues
-* Added multiple content editors in beta status: Tradeskills, Spawns, Loot, NPC, Evolving Items
+* Added multiple content editors in beta status: Tradeskills, Spawns, Loot, NPC, Evolving Items, AA Editor
 * Made UI/UX improvements to the Zones editor.
 * **Auth** Refresh API auth state correctly after GitHub login.
 * **Infrastructure** Improve Railway and dev deployment behavior with safer startup validation, better defaults, and a non-root runtime.
