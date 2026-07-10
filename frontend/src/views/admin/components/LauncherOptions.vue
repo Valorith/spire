@@ -27,16 +27,44 @@
       </tr>
       <tr>
         <td>
-          <div class="mb-2">Opcode Update Source</div>
-          <p class="text-muted mb-2">
-            Leave blank to use the default EQEmu upstream source. Set this to the base URL containing the
-            `patch_*.conf`, `opcodes.conf`, and `mail_opcodes.conf` files.
-          </p>
-          <b-form-input
-            v-model.trim="launcher.opcodeSource"
-            @change="saveLauncherOptions()"
-            placeholder="https://raw.githubusercontent.com/EQEmu/Server/master/utils/patches"
-          />
+          <button
+            type="button"
+            class="opcode-repository-toggle"
+            :aria-label="`Opcode Update Repository (${opcodeRepositorySummary})`"
+            :aria-expanded="showOpcodeRepository ? 'true' : 'false'"
+            @click="showOpcodeRepository = !showOpcodeRepository"
+          >
+            <i class="fa fa-code-fork opcode-repository-icon" aria-hidden="true"></i>
+            <span class="opcode-repository-label">Opcode Update Repository</span>
+            <span class="opcode-repository-summary">({{ opcodeRepositorySummary }})</span>
+            <i
+              class="fa opcode-repository-chevron"
+              :class="showOpcodeRepository ? 'fa-chevron-down' : 'fa-chevron-right'"
+            ></i>
+          </button>
+          <div v-show="showOpcodeRepository" class="pt-2">
+            <p class="text-muted mb-2">
+              Leave blank to use the upstream EQEmu/Server repository. Paste a GitHub Server repository URL and Spire
+              will find its `utils/patches` directory. To use a branch or tag, paste its `/tree/&lt;ref&gt;` URL.
+            </p>
+            <input
+              v-model.trim="opcodeSource"
+              type="url"
+              class="form-control"
+              :class="{
+                'is-valid': opcodeSourceValidationState === true,
+                'is-invalid': opcodeSourceValidationState === false
+              }"
+              @change="saveLauncherOptions()"
+              placeholder="https://github.com/Valorith/Server"
+            >
+            <b-form-invalid-feedback :state="opcodeSourceValidationState">
+              {{ opcodeSourceValidationMessage }}
+            </b-form-invalid-feedback>
+            <b-form-valid-feedback :state="opcodeSourceValidationState">
+              Repository saved. Spire will load its server patches automatically.
+            </b-form-valid-feedback>
+          </div>
         </td>
       </tr>
       <tr>
@@ -204,11 +232,17 @@ export default {
       },
 
       staticZones: [],
-      availableZoneOptions: []
+      availableZoneOptions: [],
+      showOpcodeRepository: false,
+      opcodeSource: "",
+      opcodeSourceValidationState: null,
+      opcodeSourceValidationMessage: ""
     }
   },
   async created() {
-    this.launcher = this.launcherConfig
+    // Preserve the declared defaults so Vue 2 observes every launcher field,
+    // even when the parent initially passes an empty config before its API load.
+    this.launcher = Object.assign({}, this.launcher, this.launcherConfig || {})
 
     if (this.launcher.staticZones && this.launcher.staticZones.length > 0) {
       this.staticZones = this.launcher.staticZones.split(",")
@@ -221,6 +255,7 @@ export default {
     if (typeof this.launcher.opcodeSource === 'undefined') {
       this.launcher.opcodeSource = ""
     }
+    this.opcodeSource = this.launcher.opcodeSource
 
     if (typeof this.launcher.deleteLogFilesOlderThanDays !== 'undefined' && this.launcher.deleteLogFilesOlderThanDays === 0) {
       this.launcher.deleteLogFilesOlderThanDays = 7
@@ -240,26 +275,67 @@ export default {
   },
   watch: {
     launcherConfig: function (newValue) {
-      this.launcher = newValue
+      this.launcher = Object.assign({}, this.launcher, newValue || {})
+      this.opcodeSource = this.launcher.opcodeSource || ""
+    },
+    opcodeSource: function () {
+      this.clearOpcodeSourceValidation()
     }
   },
   computed: {
     availableOptions() {
       return this.availableZoneOptions.filter(opt => this.staticZones.indexOf(opt) === -1)
+    },
+    opcodeRepositorySummary() {
+      const source = (this.opcodeSource || "").trim()
+      if (!source) {
+        return "EQEmu/Server"
+      }
+
+      try {
+        const parsed = new URL(source)
+        const host = parsed.hostname.toLowerCase()
+        const parts = parsed.pathname.split("/").filter(Boolean)
+        const isGitHubRepository = host === "github.com" ||
+          host === "www.github.com" ||
+          host === "raw.githubusercontent.com"
+        if (isGitHubRepository && parts.length >= 2) {
+          const owner = decodeURIComponent(parts[0])
+          const repository = decodeURIComponent(parts[1]).replace(/\.git$/i, "")
+          return `${owner}/${repository}`
+        }
+
+        return parsed.hostname || "Custom source"
+      } catch (e) {
+        return "Custom source"
+      }
     }
   },
   methods: {
+    clearOpcodeSourceValidation() {
+      this.opcodeSourceValidationState = null
+      this.opcodeSourceValidationMessage = ""
+    },
     saveLauncherOptions() {
       setTimeout(async () => {
         if (this.staticZones && this.staticZones.length > 0) {
           this.launcher.staticZones = this.staticZones.join(",")
         }
 
-        this.launcher.opcodeSource = (this.launcher.opcodeSource || "").trim()
+        this.opcodeSource = (this.opcodeSource || "").trim()
+        this.launcher.opcodeSource = this.opcodeSource
 
         try {
           await SpireApi.v1().post('admin/launcherconfig', this.launcher)
+          this.opcodeSourceValidationState = this.opcodeSource ? true : null
+          this.opcodeSourceValidationMessage = ""
         } catch (e) {
+          if (e && e.response && e.response.status === 400) {
+            this.showOpcodeRepository = true
+            this.opcodeSourceValidationState = false
+            this.opcodeSourceValidationMessage = (e.response.data && e.response.data.error) ||
+              "Enter a valid GitHub Server repository URL."
+          }
           console.log(e)
         }
 
@@ -270,5 +346,66 @@ export default {
 </script>
 
 <style scoped>
+
+.opcode-repository-toggle {
+  align-items: center;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 3px;
+  box-shadow: none !important;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  margin: -3px -5px;
+  min-height: 0;
+  opacity: 0.78;
+  padding: 3px 5px !important;
+  text-align: left;
+  transition: background-color 120ms ease, opacity 120ms ease;
+  width: 100%;
+}
+
+.opcode-repository-toggle:hover {
+  background: rgba(255, 255, 255, 0.035) !important;
+  opacity: 1;
+}
+
+.opcode-repository-toggle:focus {
+  outline: none;
+}
+
+.opcode-repository-toggle:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+  opacity: 1;
+}
+
+.opcode-repository-icon {
+  font-size: 10px;
+  margin-right: 7px;
+  opacity: 0.42;
+  width: 11px;
+}
+
+.opcode-repository-label {
+  opacity: 0.88;
+  white-space: nowrap;
+}
+
+.opcode-repository-summary {
+  flex: 0 0 auto;
+  font-size: 9px;
+  margin-left: auto;
+  opacity: 0.62;
+  padding-left: 12px;
+  white-space: nowrap;
+}
+
+.opcode-repository-chevron {
+  font-size: 9px;
+  margin-left: 7px;
+  opacity: 0.4;
+  width: 8px;
+}
 
 </style>

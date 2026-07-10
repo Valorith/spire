@@ -4,6 +4,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/http/routes"
 	"github.com/labstack/echo/v4"
 	"net/http"
+	"strings"
 )
 
 type Controller struct {
@@ -93,6 +94,11 @@ func (a *Controller) saveLauncherConfig(c echo.Context) error {
 	err := c.Bind(&config)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, "Failed to bind config")
+	}
+
+	config.OpcodeSource = strings.TrimSpace(config.OpcodeSource)
+	if _, err = ResolveOpcodeSourceBaseURL(config.OpcodeSource); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 
 	cfg, _ := a.serverconfig.Get()

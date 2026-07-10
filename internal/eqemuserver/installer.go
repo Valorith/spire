@@ -12,6 +12,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/password"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
+	spirerelease "github.com/EQEmuTools/spire/internal/release"
 	"github.com/EQEmuTools/spire/internal/unzip"
 	"github.com/go-git/go-git/v5"
 	"github.com/google/go-github/v41/github"
@@ -1336,11 +1337,16 @@ func (a *Installer) installSpireBinary() error {
 
 	// check if spire is already installed
 	if _, err := os.Stat(spirePath); os.IsNotExist(err) {
+		owner, repo, err := spireInstallerReleaseRepository()
+		if err != nil {
+			return err
+		}
+
 		client := github.NewClient(&http.Client{Timeout: 5 * time.Second})
 		release, _, err := client.Repositories.GetLatestRelease(
 			context.Background(),
-			"EQEmuTools",
-			"spire",
+			owner,
+			repo,
 		)
 		if err != nil {
 			a.logger.Error().Err(err).Msg("Could not get latest release")
@@ -1413,6 +1419,16 @@ func (a *Installer) installSpireBinary() error {
 
 	a.DoneBanner("Installing Spire")
 	return nil
+}
+
+func spireInstallerReleaseRepository() (string, string, error) {
+	repository := spirerelease.NormalizeGitHubRepository(spirerelease.DefaultRepository)
+	owner, repo, ok := strings.Cut(repository, "/")
+	if !ok || strings.TrimSpace(owner) == "" || strings.TrimSpace(repo) == "" {
+		return "", "", fmt.Errorf("invalid Spire release repository [%s]", repository)
+	}
+
+	return owner, repo, nil
 }
 
 func (a *Installer) initSpire() error {

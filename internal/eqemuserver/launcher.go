@@ -31,7 +31,6 @@ const (
 	loginServerProcessName  = "loginserver"
 	sharedMemoryProcessName = "shared_memory"
 	processLoopTimer        = 1 * time.Second
-	defaultOpcodeSourceURL  = "https://raw.githubusercontent.com/EQEmu/Server/master/utils/patches"
 )
 
 // stopTimerMutex is used to lock the stop timer
@@ -934,18 +933,18 @@ func (l *Launcher) getProcessDetails(p *process.Process) ProcessDetails {
 	}
 }
 
-func (l *Launcher) getOpcodeSourceBaseURL() string {
-	source := strings.TrimSpace(l.opcodeSource)
-	if source == "" {
-		return defaultOpcodeSourceURL
-	}
-
-	return strings.TrimRight(source, "/")
+func (l *Launcher) getOpcodeSourceBaseURL() (string, error) {
+	return eqemuserverconfig.ResolveOpcodeSourceBaseURL(l.opcodeSource)
 }
 
 // updatePatchFiles will download the patch files from the configured source
 func (l *Launcher) updatePatchFiles() {
-	source := l.getOpcodeSourceBaseURL()
+	source, err := l.getOpcodeSourceBaseURL()
+	if err != nil {
+		l.logger.Warn().Err(err).Msg("Invalid opcode update source")
+		return
+	}
+
 	l.logger.Info().Any("source", source).Msg("Updating patches (opcodes)")
 
 	// get the patch files
