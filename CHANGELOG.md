@@ -1,3 +1,7 @@
+## [Unreleased] 7/9/2026
+
+* Minor fix for Patch Notes editor.
+
 ## [5.0.0] 7/10/2026
 
 Release Type:  **BETA**
