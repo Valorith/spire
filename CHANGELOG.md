@@ -1,4 +1,5 @@
-## [4.23.5] 7/9/2026
+## [Unreleased] 7/9/2026
+
 Release Type:  **BETA**
 Privde Feedback here: https://github.com/Valorith/spire/issues
 * Added multiple content editors in beta status: Tradeskills, Spawns, Loot, NPC, Evolving Items
