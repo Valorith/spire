@@ -1,6 +1,8 @@
-## [4.23.5] 3/25/2026
-
-* **Items** Add the evolving items editor with improved chain editing, subtype selectors, clearer labels, and smoother panel interactions.
+## [4.23.5] 7/9/2026
+Release Type:  **BETA**
+Privde Feedback here: https://github.com/Valorith/spire/issues
+* Added multiple content editors in beta status: Tradeskills, Spawns, Loot, NPC, Evolving Items
+* Made UI/UX improvements to the Zones editor.
 * **Auth** Refresh API auth state correctly after GitHub login.
 * **Infrastructure** Improve Railway and dev deployment behavior with safer startup validation, better defaults, and a non-root runtime.
 * **Build** Fix Swagger generation compatibility with the pinned `swag` version.
