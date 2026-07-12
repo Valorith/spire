@@ -3,6 +3,7 @@
     <EqModal
       v-if="showSourceSettings"
       title="Quest API Sources"
+      :dismissible="false"
       @close="showSourceSettings = false"
     >
       <template #body>
@@ -51,6 +52,29 @@
 
       <template #footer>
         <div class="mt-3">
+          <div
+            v-if="savingSourceSettings"
+            class="quest-api-refresh-progress mb-3"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span>
+                <i class="fa fa-refresh fa-spin mr-1"></i>
+                Refreshing Quest API sources...
+              </span>
+              <span class="text-muted small">This may take a moment</span>
+            </div>
+            <b-progress
+              :value="100"
+              :max="100"
+              variant="success"
+              animated
+              striped
+              height="6px"
+            />
+          </div>
+
           <b-button
             size="sm"
             variant="outline-secondary"
@@ -75,7 +99,7 @@
             :disabled="savingSourceSettings"
             @click="saveSourceSettings"
           >
-            <i class="fa fa-save mr-1"></i>
+            <i :class="savingSourceSettings ? 'fa fa-refresh fa-spin mr-1' : 'fa fa-save mr-1'"></i>
             {{ savingSourceSettings ? 'Refreshing...' : 'Save & Refresh' }}
           </b-button>
         </div>
@@ -122,7 +146,7 @@
               :options="constantOptions"
             />
           </div>
-          <div :class="'col-lg-' + (appEnvLocal ? '3' : '4') + ' col-sm-12 text-center'">
+          <div :class="'col-lg-' + (appEnvLocal ? '2' : '3') + ' col-sm-12 text-center'">
             Search
             <b-input
               id="quest-explorer-search"
@@ -142,21 +166,25 @@
               <i class="fa fa-refresh"></i> Refresh
             </b-button>
           </div>
-          <div class="col-lg-1 col-sm-12 text-center mt-3">
-            <div class="d-flex align-items-center justify-content-center">
-              <span class="font-weight-bold">Last Updated</span>
+          <div class="col-lg-2 col-sm-12 quest-api-meta-column">
+            <div class="quest-api-source-meta">
+              <div class="quest-api-update-meta">
+                <span class="quest-api-update-label">Last updated</span>
+                <span class="quest-api-update-value">{{ fromNow(api.last_refreshed) }}</span>
+              </div>
               <b-button
                 size="sm"
                 variant="link"
-                class="quest-api-settings-button ml-1 p-0"
+                class="quest-api-settings-button"
                 title="Configure Quest API sources"
+                aria-label="Configure Quest API sources"
                 v-b-tooltip.hover.v-dark.left
                 @click="openSourceSettings"
               >
-                <i class="fa fa-cog"></i>
+                <i class="fa fa-cog mr-1"></i>
+                Sources
               </b-button>
             </div>
-            <div>{{ fromNow(api.last_refreshed) }}</div>
           </div>
 
         </div>
@@ -169,8 +197,9 @@
         <b-button
           size="sm"
           variant="link"
-          class="quest-api-settings-button p-0"
+          class="quest-api-settings-button"
           title="Configure Quest API sources"
+          aria-label="Configure Quest API sources"
           v-b-tooltip.hover.v-dark.left
           @click="openSourceSettings"
         >
@@ -1305,13 +1334,71 @@ export default {
 }
 
 .quest-api-settings-button {
-  color: rgba(255, 255, 255, .55) !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  min-height: 38px;
+  padding: 8px 12px !important;
+  color: rgba(255, 255, 255, .68) !important;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
+  border: 1px solid rgba(255, 255, 255, .16) !important;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, .2);
+  text-decoration: none !important;
+  transition: color .16s ease, border-color .16s ease, background-color .16s ease, transform .16s ease;
 }
 
 .quest-api-settings-button:hover,
 .quest-api-settings-button:focus {
   color: #f4d35e !important;
+  border-color: rgba(244, 211, 94, .5) !important;
+  background: rgba(244, 211, 94, .08);
+  box-shadow: 0 0 0 2px rgba(244, 211, 94, .08);
+  transform: translateY(-1px);
+}
+
+.quest-api-meta-column {
+  padding-left: 8px;
+}
+
+.quest-api-source-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 38px;
+  margin-top: 17px;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, .12);
+}
+
+.quest-api-update-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  line-height: 1.1;
+  text-align: right;
+}
+
+.quest-api-update-label {
+  color: rgba(255, 255, 255, .42);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.quest-api-update-value {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, .82);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .quest-api-source-settings {
@@ -1322,5 +1409,45 @@ export default {
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, .12);
   background: rgba(0, 0, 0, .18);
+}
+
+.quest-api-refresh-progress {
+  min-width: 360px;
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, .82);
+  text-align: left;
+  border: 1px solid rgba(99, 190, 123, .28);
+  border-radius: 4px;
+  background: rgba(38, 92, 52, .16);
+}
+
+.quest-api-refresh-progress .progress {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(0, 0, 0, .38);
+}
+
+.quest-api-refresh-progress .progress-bar {
+  background-color: #4e9f64;
+}
+
+@media (max-width: 640px) {
+  .quest-api-refresh-progress {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .quest-api-meta-column {
+    padding-left: 15px;
+  }
+
+  .quest-api-source-meta {
+    justify-content: center;
+    margin-top: 12px;
+    padding: 10px 0 0;
+    border-top: 1px solid rgba(255, 255, 255, .12);
+    border-left: 0;
+  }
 }
 </style>

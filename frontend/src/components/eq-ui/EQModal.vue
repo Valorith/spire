@@ -41,10 +41,17 @@ export default {
       default: '',
       required: false
     },
+    dismissible: {
+      type: Boolean,
+      default: true,
+      required: false
+    },
   },
   methods: {
     dismiss() {
-      this.$emit('close');
+      if (this.dismissible) {
+        this.$emit('close');
+      }
     },
     keyPress(e) {
       if (e.key === 'Escape') {

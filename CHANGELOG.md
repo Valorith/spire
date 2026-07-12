@@ -1,3 +1,7 @@
+## [Unreleased] 7/12/2026
+
+* You can now configure the Quest API Explorer to source its data from specific repositories.
+
 ## [5.0.2] 7/10/2026
 
 * Additional UI consistincy improvements.
