@@ -1,3 +1,7 @@
+## [Unreleased] 7/12/2026
+
+* Disable Quest API Explorer configuration in hosted mode.
+
 ## [5.0.3] 7/12/2026
 
 * You can now configure the Quest API Explorer to source its data from specific repositories.

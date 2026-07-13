@@ -1,7 +1,7 @@
 <template>
   <div>
     <EqModal
-      v-if="showSourceSettings"
+      v-if="showSourceSettings && canConfigureSources"
       title="Quest API Sources"
       :dismissible="false"
       @close="showSourceSettings = false"
@@ -113,41 +113,41 @@
       <div v-if="loaded">
 
         <!-- Form -->
-        <div class="row">
-          <div class="col-lg-1 col-sm-12 text-center">
-            Language
+        <div class="quest-api-toolbar">
+          <div class="quest-api-control quest-api-control-language">
+            <div class="quest-api-control-label">Language</div>
             <b-form-select
               v-model="languageSelection"
               :options="languageOptions"
               @change="languageReset(); updateQueryState();"
             />
           </div>
-          <div class="col-lg-2 col-sm-12 text-center">
-            Types
+          <div class="quest-api-control quest-api-control-select">
+            <div class="quest-api-control-label">Types</div>
             <b-form-select
               v-model="methodTypeSelection"
               @change="methodTypeSelectReset(); updateQueryState(); "
               :options="methodTypeOptions"
             />
           </div>
-          <div class="col-lg-2 col-sm-12 text-center">
-            Events
+          <div class="quest-api-control quest-api-control-select">
+            <div class="quest-api-control-label">Events</div>
             <b-form-select
               v-model="eventSelection"
               @change="eventSelectReset(); updateQueryState();"
               :options="eventOptions"
             />
           </div>
-          <div class="col-lg-2 col-sm-12 text-center">
-            Constants
+          <div class="quest-api-control quest-api-control-select">
+            <div class="quest-api-control-label">Constants</div>
             <b-form-select
               v-model="constantSelection"
               @change="constantSelectReset(); updateQueryState();"
               :options="constantOptions"
             />
           </div>
-          <div :class="'col-lg-' + (appEnvLocal ? '2' : '3') + ' col-sm-12 text-center'">
-            Search
+          <div class="quest-api-control quest-api-control-search">
+            <div class="quest-api-control-label">Search</div>
             <b-input
               id="quest-explorer-search"
               v-model="search"
@@ -156,23 +156,23 @@
               autofocus
             />
           </div>
-          <div class="col-lg-1 col-sm-12 text-center" v-if="appEnvLocal">
+          <div class="quest-api-control quest-api-control-refresh" v-if="appEnvLocal">
             <b-button
               variant="outline-warning"
               @click="refreshDefinitions"
               size="sm"
-              style="margin-top: 20px"
             >
               <i class="fa fa-refresh"></i> Refresh
             </b-button>
           </div>
-          <div class="col-lg-2 col-sm-12 quest-api-meta-column">
+          <div class="quest-api-control quest-api-meta-column">
             <div class="quest-api-source-meta">
               <div class="quest-api-update-meta">
                 <span class="quest-api-update-label">Last updated</span>
                 <span class="quest-api-update-value">{{ fromNow(api.last_refreshed) }}</span>
               </div>
               <b-button
+                v-if="canConfigureSources"
                 size="sm"
                 variant="link"
                 class="quest-api-settings-button"
@@ -193,7 +193,7 @@
 
       <app-loader :is-loading="!loaded" padding="4"/>
 
-      <div v-if="!loaded" class="text-right mt-2">
+      <div v-if="!loaded && canConfigureSources" class="text-right mt-2">
         <b-button
           size="sm"
           variant="link"
@@ -554,6 +554,11 @@ export default {
       searchConstantsResult: []
     }
   },
+  computed: {
+    canConfigureSources() {
+      return !AppEnv.isHostedReadOnlyModeEnabled()
+    }
+  },
   watch: {
     $route(to, from) {
       this.loadQueryState()
@@ -581,6 +586,10 @@ export default {
       this.sourceSettingsDraft = Object.assign({}, this.sourceSettings)
     },
     openSourceSettings() {
+      if (!this.canConfigureSources) {
+        return
+      }
+
       this.sourceSettingsDraft = Object.assign({}, this.sourceSettings)
       this.sourceSettingsError = ""
       this.showSourceSettings = true
@@ -1333,6 +1342,57 @@ export default {
   overflow-y: scroll;
 }
 
+.quest-api-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  width: 100%;
+  padding: 0 4px 2px;
+}
+
+.quest-api-control {
+  min-width: 0;
+  text-align: left;
+}
+
+.quest-api-control-language {
+  flex: .65 1 85px;
+  min-width: 80px;
+}
+
+.quest-api-control-select {
+  flex: 1 1 135px;
+  min-width: 120px;
+}
+
+.quest-api-control-search {
+  flex: 1.6 1 200px;
+  min-width: 170px;
+}
+
+.quest-api-control-refresh {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+}
+
+.quest-api-control-refresh .btn {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.quest-api-control-label {
+  margin-bottom: 5px;
+  color: rgba(255, 255, 255, .5);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 .quest-api-settings-button {
   display: inline-flex !important;
   align-items: center;
@@ -1361,6 +1421,9 @@ export default {
 }
 
 .quest-api-meta-column {
+  flex: .9 1 175px;
+  min-width: 160px;
+  margin-left: auto;
   padding-left: 8px;
 }
 
@@ -1369,8 +1432,8 @@ export default {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  width: 100%;
   min-height: 38px;
-  margin-top: 17px;
   padding-left: 14px;
   border-left: 1px solid rgba(255, 255, 255, .12);
 }
@@ -1432,22 +1495,39 @@ export default {
 }
 
 @media (max-width: 640px) {
-  .quest-api-refresh-progress {
-    min-width: 0;
+  .quest-api-toolbar {
+    gap: 10px;
+    padding-right: 0;
+    padding-left: 0;
   }
-}
 
-@media (max-width: 991.98px) {
+  .quest-api-control,
+  .quest-api-control-language,
+  .quest-api-control-select,
+  .quest-api-control-search,
   .quest-api-meta-column {
-    padding-left: 15px;
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .quest-api-control-refresh .btn {
+    width: 100%;
+  }
+
+  .quest-api-meta-column {
+    margin-left: 0;
+    padding-left: 0;
   }
 
   .quest-api-source-meta {
-    justify-content: center;
-    margin-top: 12px;
+    justify-content: space-between;
     padding: 10px 0 0;
     border-top: 1px solid rgba(255, 255, 255, .12);
     border-left: 0;
+  }
+
+  .quest-api-refresh-progress {
+    min-width: 0;
   }
 }
 </style>
