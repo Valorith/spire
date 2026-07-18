@@ -488,6 +488,7 @@ const installSpireSageFileBridge = async () => {
           await waitBeforeRetry(attempt)
         }
       }
+      throw new Error(`Sage filesystem read-file exhausted retries: ${filePath}`)
     } finally {
       releaseTransferSlot()
     }

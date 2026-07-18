@@ -544,13 +544,13 @@ class ZoneController extends GameControllerChild {
         // Perform actions based on the hit
         const hitPoint = pickResult.pickedPoint;
         raycastMesh.position.set(hitPoint.x, hitPoint.y + 5, hitPoint.z);
-        chosenLocation = { x: hitPoint.x, y: hitPoint.y + 5, z: hitPoint.z };
+        chosenLocation = { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z };
 
         tooltip.style.left = `${e.pageX - tooltip.clientWidth / 2}px`;
         tooltip.style.top = `${e.pageY + tooltip.clientHeight / 2}px`;
         tooltip.innerHTML = `<p>[T] to commit - [Escape] to cancel</p><p>X: ${hitPoint.z.toFixed(
           2
-        )}, Y: ${hitPoint.x.toFixed(2)}, Z: ${(hitPoint.y + 5).toFixed(2)}</p>`;
+        )}, Y: ${hitPoint.x.toFixed(2)}, Z: ${hitPoint.y.toFixed(2)}</p>`;
       }
     };
     const self = this;

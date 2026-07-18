@@ -35,6 +35,7 @@ function SpawnNavBar() {
   const [, forceRender] = useState({});
   const { openAlert } = useAlertContext();
   const { selectedZone, Spire, setRightDrawerOpen } = useMainContext();
+  const { loadCallback } = useZoneContext();
   const [open, setOpen] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [gridLoading, setGridLoading] = useState(false);
@@ -118,6 +119,7 @@ function SpawnNavBar() {
               }
               : current
           );
+          await loadCallback({ type: 'moveSpawn', spawn: updatedSpawn });
           openAlert(`Updated ${updatedSpawn.name}`);
         });
       spawnSaveQueueRef.current = queuedSave.catch(() => {
@@ -141,6 +143,7 @@ function SpawnNavBar() {
     initialSpawn?.x,
     initialSpawn?.y,
     initialSpawn?.z,
+    loadCallback,
     openAlert,
   ]);
 
@@ -243,7 +246,6 @@ function SpawnNavBar() {
     () => selectedSpawn?.spawnentries ?? [],
     [selectedSpawn?.spawnentries]
   );
-  const { loadCallback } = useZoneContext();
   const doDelete = () => {
     confirm({
       description: 'Are you sure you want to delete this spawn?',
@@ -272,12 +274,12 @@ function SpawnNavBar() {
   );
   const createGridEntry = useCallback(async () => {
     let updateSpawn = false;
-    if (!selectedSpawn.grid) {
+    if (!selectedSpawn.pathgrid) {
       const gridApi = new Spire.SpireApiTypes.GridApi(
         ...Spire?.SpireApi.cfg()
       );
       const freeIdRes = await Spire?.SpireApi.v1().get(
-        '/api/v1/query/free-id-ranges/grid/id'
+        'query/free-id-ranges/grid/id'
       );
       const freeId = +freeIdRes.data.data[0].start_id;
       const newEntry = await gridApi.createGrid({
@@ -329,7 +331,7 @@ function SpawnNavBar() {
     setGridUpdater((g) => g + 1);
     forceRender({});
     if (updateSpawn) {
-      loadCallback({ type: 'updateSpawn', spawn: selectedSpawn });
+      await loadCallback({ type: 'updateSpawn', spawn: selectedSpawn });
       setSelectedSpawn(selectedSpawn);
     }
   }, [Spire?.SpireApi, selectedZone, selectedSpawn, loadCallback]); // eslint-disable-line
@@ -448,6 +450,7 @@ function SpawnNavBar() {
           padding : '15px',
           zIndex  : 1000,
           top     : 0,
+          pointerEvents: 'auto',
         }}
       >
         <Box
@@ -470,6 +473,7 @@ function SpawnNavBar() {
             </Typography>
           </Typography>
           <IconButton
+            aria-label="Delete spawn"
             sx={{ position: 'absolute', top: 15, right: 15 }}
             onClick={doDelete}
           >
@@ -565,6 +569,7 @@ function SpawnNavBar() {
               size="small"
               type="number"
               inputProps={{
+                'aria-label': 'Spawn X',
                 style: { textAlign: 'center' },
               }}
               sx={{ margin: 0, padding: 0 }}
@@ -577,6 +582,7 @@ function SpawnNavBar() {
               size="small"
               type="number"
               inputProps={{
+                'aria-label': 'Spawn Y',
                 style: { textAlign: 'center' },
               }}
               sx={{ margin: 0, padding: 0 }}
@@ -589,6 +595,7 @@ function SpawnNavBar() {
               size="small"
               type="number"
               inputProps={{
+                'aria-label': 'Spawn Z',
                 style: { textAlign: 'center' },
               }}
               sx={{ margin: 0, padding: 0 }}
@@ -662,6 +669,7 @@ function SpawnNavBar() {
                 ))}
               </Select>
               <IconButton
+                aria-label="Add grid waypoint"
                 disabled={gridLoading}
                 sx={{ width: '56px' }}
                 onClick={createGridEntry}
@@ -669,7 +677,12 @@ function SpawnNavBar() {
                 <AddCircleIcon />
               </IconButton>
               <IconButton
-                disabled={gridLoading || !selectedGridEntry}
+                aria-label="Delete grid waypoint"
+                disabled={
+                  gridLoading ||
+                  !selectedGridEntry ||
+                  (selectedSpawn.grid?.length ?? 0) <= 1
+                }
                 sx={{ width: '56px' }}
                 onClick={deleteGridEntry}
               >

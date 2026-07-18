@@ -7,6 +7,9 @@ import { debugSageLog, markStage } from '../../debug-stage';
 const MainContext = React.createContext({});
 let gameControllerImportPromise = null;
 let babylonRuntimePromise = null;
+const modelReviewRequested = () =>
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).has('sageModelReview');
 
 /**
  * @typedef Spire
@@ -68,15 +71,17 @@ export const MainProvider = ({
   ] = usePermissions();
   const { remoteUrl } = useSettingsContext();
   const [selectedZone, setSelectedZone] = useState(null);
+  const [modelExporter, setModelExporter] = useState(modelReviewRequested);
   const [zoneDialogOpen, setZoneDialogOpen] = useState(
-    () => permissionStatus === PermissionStatusTypes.Ready
+    () =>
+      permissionStatus === PermissionStatusTypes.Ready &&
+      !modelReviewRequested()
   );
   const [statusDialogOpen, setStatusDialogOpen] = useState(
     () => permissionStatus !== PermissionStatusTypes.Ready
   );
   const [zoneBuilderDialogOpen, setZoneBuilderDialogOpen] = useState(false);
   const [audioDialogOpen, setAudioDialogOpen] = useState(false);
-  const [modelExporter, setModelExporter] = useState(false);
   const [quailWorkspace, setQuailWorkspace] = useState(false);
   const [zoneBuilder, setZoneBuilder] = useState(false);
   const [zones, setZones] = useState([]);
@@ -120,12 +125,13 @@ export const MainProvider = ({
     }
 
     if (!selectedZone) {
-      const needsZoneDialog = permissionStatus === PermissionStatusTypes.Ready;
+      const needsZoneDialog =
+        permissionStatus === PermissionStatusTypes.Ready && !modelExporter;
       if (zoneDialogOpen !== needsZoneDialog) {
         setZoneDialogOpen(needsZoneDialog);
       }
     }
-  }, [permissionStatus, selectedZone, statusDialogOpen, zoneDialogOpen]);
+  }, [modelExporter, permissionStatus, selectedZone, statusDialogOpen, zoneDialogOpen]);
 
   useEffect(() => {
     markStage('main-provider:permission-effect', {
@@ -249,7 +255,7 @@ export const MainProvider = ({
       permissionStatus !== PermissionStatusTypes.Ready ||
       statusDialogOpen ||
       zoneDialogOpen ||
-      !selectedZone ||
+      (!selectedZone && !modelExporter) ||
       !!gameController ||
       gameControllerLoading ||
       !!gameControllerLoadError
@@ -264,6 +270,7 @@ export const MainProvider = ({
     gameControllerLoadError,
     gameControllerLoading,
     loadGameController,
+    modelExporter,
     permissionStatus,
     selectedZone,
     statusDialogOpen,
@@ -271,15 +278,15 @@ export const MainProvider = ({
   ]);
 
   useEffect(() => {
-    if (!selectedZone) {
+    if (!selectedZone && !modelExporter) {
       setGameControllerLoadError(null);
       setControllerLoadStage('Waiting for zone selection');
     }
-  }, [selectedZone]);
+  }, [modelExporter, selectedZone]);
 
   useEffect(() => {
     if (gameController) {
-      gameController.modelExporter = true;
+      gameController.modelExporter = modelExporter;
       window.gameController = gameController;
     }
   }, [gameController, modelExporter]);

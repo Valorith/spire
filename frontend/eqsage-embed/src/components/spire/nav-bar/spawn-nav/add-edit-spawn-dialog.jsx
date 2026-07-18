@@ -173,16 +173,19 @@ export const AddEditSpawnDialog = ({
                   sx={{ margin: 0, padding: 0, width: '80px' }}
                   value={entry.chance}
                   onChange={(e) =>
-                    setNpcList((c) => {
-                      const newC = deepClone(c);
-                      newC[index].chance = +e.target.value;
-                      return newC;
-                    })
+                    setNpcList((current) =>
+                      current.map((candidate, candidateIndex) =>
+                        candidateIndex === index
+                          ? { ...candidate, chance: +e.target.value }
+                          : candidate
+                      )
+                    )
                   }
                 ></TextField>
               </TableCell>
               <TableCell align="center">
                 <IconButton
+                  aria-label={`Remove ${entry?.npc_type?.name ?? 'spawn entry'}`}
                   onClick={() => {
                     setNpcList((c) => {
                       const newC = [...c];
@@ -196,6 +199,7 @@ export const AddEditSpawnDialog = ({
               </TableCell>
               <TableCell align="center">
                 <IconButton
+                  aria-label={`Open ${entry?.npc_type?.name ?? 'spawn entry'} NPC editor`}
                   onClick={() => {
                     window.open(
                       `${Spire.SpireApi?.remoteUrl ?? ''}/npc/${entry.npc_id}`,
@@ -211,6 +215,7 @@ export const AddEditSpawnDialog = ({
         </TableBody>
       </Table>
       <Autocomplete
+        disablePortal
         size="small"
         onKeyDown={(e) => {
           // e.preventDefault();

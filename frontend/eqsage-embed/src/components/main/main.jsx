@@ -33,6 +33,11 @@ const RaceFaceAudit = React.lazy(() =>
 const RaceArchiveAudit = React.lazy(() =>
   import('../validation/race-archive-audit').then((module) => ({ default: module.RaceArchiveAudit }))
 );
+const ModelReviewWorkspace = React.lazy(() =>
+  import('../model-review/model-review-workspace').then((module) => ({
+    default: module.ModelReviewWorkspace,
+  }))
+);
 
 const ZoneLoadingOverlay = ({
   title = 'Preparing Zone Editor',
@@ -83,6 +88,7 @@ export const Main = ({ onBootStateChange } = {}) => {
   debugSageLog('[SageMainRender]');
   const {
     selectedZone,
+    modelExporter,
     zoneDialogOpen,
     statusDialogOpen,
     rootFileSystemHandle,
@@ -190,6 +196,7 @@ export const Main = ({ onBootStateChange } = {}) => {
       statusDialogOpen,
       zoneDialogOpen,
       hasGameController: !!gameController,
+      modelReview      : modelExporter,
       selectedZone     : selectedZone?.short_name ?? null,
       hasRootHandle: !!rootFileSystemHandle,
       unsupported,
@@ -222,10 +229,19 @@ export const Main = ({ onBootStateChange } = {}) => {
       return;
     }
 
-    if (selectedZone && !gameController) {
+    if ((selectedZone || modelExporter) && !gameController) {
       onBootStateChange?.({
         stage    : 'boot:controller-loading',
         detail   : controllerLoadStage || 'Loading viewer controller',
+        uiVisible: true,
+      });
+      return;
+    }
+
+    if (modelExporter && gameController) {
+      onBootStateChange?.({
+        stage    : 'boot:model-review-active',
+        detail   : 'Launching model review workspace',
         uiVisible: true,
       });
       return;
@@ -248,6 +264,7 @@ export const Main = ({ onBootStateChange } = {}) => {
   }, [
     controllerLoadStage,
     gameController,
+    modelExporter,
     onBootStateChange,
     permissionStatus,
     rootFileSystemHandle,
@@ -347,7 +364,7 @@ export const Main = ({ onBootStateChange } = {}) => {
               )}
               {zoneDialogOpen && <ZoneChooserDialog open={true} />}
             </Suspense>
-            {!statusDialogOpen && !zoneDialogOpen && !selectedZone && (
+            {!statusDialogOpen && !zoneDialogOpen && !selectedZone && !modelExporter && (
               <ZoneLoadingOverlay
                 title="Preparing Sage"
                 message={
@@ -358,11 +375,13 @@ export const Main = ({ onBootStateChange } = {}) => {
                 error="Startup did not reach the directory or zone chooser dialogs."
               />
             )}
-            {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !gameController && (
+            {!statusDialogOpen && !zoneDialogOpen && (!!selectedZone || modelExporter) && !gameController && (
               <ZoneLoadingOverlay
                 message={
                   controllerLoadStage ||
-                  `Loading viewer modules for ${selectedZone.long_name ?? selectedZone.short_name}.`
+                  (modelExporter
+                    ? 'Loading viewer modules for model review.'
+                    : `Loading viewer modules for ${selectedZone.long_name ?? selectedZone.short_name}.`)
                 }
                 error={
                   gameControllerLoadError
@@ -371,7 +390,19 @@ export const Main = ({ onBootStateChange } = {}) => {
                 }
               />
             )}
-            {!statusDialogOpen && !zoneDialogOpen && !!selectedZone && !!gameController && (
+            {!statusDialogOpen && !zoneDialogOpen && modelExporter && !!gameController && (
+              <Suspense
+                fallback={
+                  <ZoneLoadingOverlay
+                    title="Preparing Model Review"
+                    message="Loading review workspace…"
+                  />
+                }
+              >
+                <ModelReviewWorkspace />
+              </Suspense>
+            )}
+            {!statusDialogOpen && !zoneDialogOpen && !modelExporter && !!selectedZone && !!gameController && (
               <>
                 {!ZoneProviderComponent || !BabylonZoneComponent ? (
                   <ZoneLoadingOverlay

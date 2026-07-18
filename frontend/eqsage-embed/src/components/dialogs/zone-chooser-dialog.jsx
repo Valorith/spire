@@ -65,6 +65,7 @@ export const ZoneChooserDialog = ({ open }) => {
     selectedZone,
     setSelectedZone,
     setZoneDialogOpen,
+    setModelExporter,
     loadGameController,
     Spire,
     setZones,
@@ -77,6 +78,7 @@ export const ZoneChooserDialog = ({ open }) => {
   const [zone, setZone] = useState(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [enteringZone, setEnteringZone] = useState(false);
+  const [enteringModelReview, setEnteringModelReview] = useState(false);
 
   const autocompleteRef = useRef(null);
   const previewAutoEnterRef = useRef(false);
@@ -199,6 +201,24 @@ export const ZoneChooserDialog = ({ open }) => {
   useEffect(() => setZones(zoneList), [zoneList, setZones]);
 
   const confirm = useConfirm();
+
+  const openModelReview = async () => {
+    setEnteringModelReview(true);
+    const url = new URL(window.location.href);
+    url.searchParams.set('sageModelReview', '1');
+    window.history.replaceState(null, '', url.toString());
+    setModelExporter(true);
+    setZoneDialogOpen(false);
+    try {
+      await loadGameController();
+    } catch (error) {
+      console.error('[ZoneChooserDialog] failed to start model review', error);
+      setModelExporter(false);
+      setZoneDialogOpen(true);
+    } finally {
+      setEnteringModelReview(false);
+    }
+  };
 
   const unlinkDir = () => {
     confirm({
@@ -419,6 +439,15 @@ export const ZoneChooserDialog = ({ open }) => {
             sx={{ margin: '5px auto' }}
           >
             {enteringZone ? 'Preparing Zone Editor...' : 'Enter Zone Editor'}
+          </Button>
+          <Button
+            color="primary"
+            onClick={() => void openModelReview()}
+            disabled={enteringZone || enteringModelReview}
+            variant="text"
+            sx={{ margin: '2px auto 0', fontSize: '13px' }}
+          >
+            {enteringModelReview ? 'Preparing Model Review…' : 'Open Model Review'}
           </Button>
         </Stack>
       </Box>

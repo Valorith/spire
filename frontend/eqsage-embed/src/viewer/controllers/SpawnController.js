@@ -2076,6 +2076,21 @@ class SpawnController extends GameControllerChild {
     if (this.selectedSpawnId === spawnId) {
       this.clearSpawnSelection();
     }
+    if (window.__spireSagePreview && window.__spireSageSpawnStats) {
+      const sceneChildren = this.zoneSpawnsNode?.getChildren?.() ?? [];
+      const loadedSpawns = Object.values(this.spawns);
+      window.__spireSageSpawnStats = {
+        ...window.__spireSageSpawnStats,
+        requested    : loadedSpawns.length,
+        sourceCount  : loadedSpawns.length,
+        loaded       : loadedSpawns.length,
+        modelGroups  : new Set(loadedSpawns.map((entry) => entry.modelName)).size,
+        rootNodeCount: sceneChildren.filter(
+          (child) => child?.metadata?.spawnRoot === true
+        ).length,
+        sceneChildren: sceneChildren.length,
+      };
+    }
   }
 
   getSpawnModelCandidates(npcType) {
@@ -2129,18 +2144,26 @@ class SpawnController extends GameControllerChild {
 
   async updateSpawn(spawn) {
     const firstSpawn = spawn.spawnentries?.[0]?.npc_type;
+    if (!firstSpawn) {
+      console.warn('Cannot update spawn without an associated NPC type', spawn);
+      return;
+    }
     const newSpawn = {
       ...firstSpawn,
       ...spawn,
     };
-    this.spawns[spawn.id]?.dispose();
-    delete this.spawns[spawn.id];
     const realModel = await this.resolveAvailableSpawnModel(firstSpawn);
     if (!realModel) {
       console.warn('Cannot update spawn without a resolved NPC model', spawn);
       return;
     }
+    const restoreSelection = this.selectedSpawnId === spawn.id;
+    this.spawns[spawn.id]?.dispose();
+    delete this.spawns[spawn.id];
     await this.addSpawn(realModel, [newSpawn], this.spawnLoadToken);
+    if (restoreSelection && this.spawns[spawn.id]) {
+      this.selectSpawn(newSpawn);
+    }
   }
 
   getMaterialTexture(material) {
@@ -3146,11 +3169,17 @@ class SpawnController extends GameControllerChild {
       }
       if (typeof window !== 'undefined' && window.__spireSagePreview) {
         const sceneChildren = this.zoneSpawnsNode?.getChildren?.() ?? [];
+        const loadedSpawns = Object.values(this.spawns);
+        const currentSpawnCount = skipDispose
+          ? loadedSpawns.length
+          : loadedCount;
         const stats = {
-          requested: count,
-          sourceCount: spawns.length,
-          modelGroups: Object.keys(spawnList).length,
-          loaded: loadedCount,
+          requested: skipDispose ? currentSpawnCount : count,
+          sourceCount: skipDispose ? currentSpawnCount : spawns.length,
+          modelGroups: skipDispose
+            ? new Set(loadedSpawns.map((entry) => entry.modelName)).size
+            : Object.keys(spawnList).length,
+          loaded: currentSpawnCount,
           lodProxyCount: sceneChildren.filter(
             (child) => child?.metadata?.onlyOccluded === false
           ).length,
@@ -3191,8 +3220,35 @@ class SpawnController extends GameControllerChild {
   moveSpawn(infSpawn) {
     const spawn = this.spawns[infSpawn.id];
     if (spawn) {
+      const currentSpawnData = spawn.spawnEntry;
+      if (currentSpawnData && typeof currentSpawnData === 'object') {
+        Object.assign(currentSpawnData, infSpawn);
+      } else {
+        spawn.spawnEntry = infSpawn;
+      }
+      const synchronizedSpawn = spawn.spawnEntry ?? infSpawn;
+      spawn.metadata = {
+        ...(spawn.metadata ?? {}),
+        spawn: synchronizedSpawn,
+      };
+      const spawnNodes = [
+        spawn.rootNode,
+        ...(spawn.rootNode?.getChildMeshes?.(false) ?? []),
+        spawn.instance,
+        spawn.nameplateMesh,
+      ].filter(Boolean);
+      for (const node of spawnNodes) {
+        node.metadata = {
+          ...(node.metadata ?? {}),
+          spawn: synchronizedSpawn,
+        };
+      }
       spawn.rootNode.position.set(infSpawn.y, infSpawn.z, infSpawn.x);
-      spawn.normalizeToSpawnGround?.(infSpawn.z);
+      spawn.rootNode.metadata = {
+        ...(spawn.rootNode.metadata ?? {}),
+        preserveRequestedGroundY: true,
+      };
+      spawn.normalizeToSpawnGround?.(infSpawn.z, { snapToZone: false });
       if (this.selectedSpawnId === infSpawn.id) {
         this.showTargetRing(infSpawn);
       }

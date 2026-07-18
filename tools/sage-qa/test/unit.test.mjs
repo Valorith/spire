@@ -43,6 +43,7 @@ import {
 import {
   evaluateAppearanceVariant,
   evaluateFaceVariantDeterminism,
+  inspectHeadTextureOrientation,
   isCharacterAppearanceMaterialName,
   isKnownEffectOnlyCharacterModel,
 } from '../../../frontend/eqsage-embed/src/viewer/helpers/appearanceValidation.js';
@@ -84,6 +85,31 @@ test('parseArgs supports aliases, values, booleans, and negated flags', () => {
       raceAudit: false,
     }
   );
+});
+
+test('head texture orientation diagnostics compare effective geometry and runtime flips', () => {
+  const internalTexture = {
+    _spireSageRequestedInvertY: false,
+    _spireSageUploadInvertY: false,
+  };
+  const material = {
+    name: 'HUMHE0001',
+    metadata: { spireSkinnedVFlipped: true },
+    albedoTexture: {
+      name: 'humhe0001',
+      vOffset: 0,
+      vScale: 1,
+      _texture: internalTexture,
+    },
+  };
+  const policy = { geometryUvFlipped: true, runtimeTextureVFlipped: false };
+
+  assert.equal(inspectHeadTextureOrientation(material, policy).risk, false);
+  material.albedoTexture.vScale = -1;
+  assert.equal(inspectHeadTextureOrientation(material, policy).risk, true);
+  material.albedoTexture.vScale = 1;
+  internalTexture._spireSageUploadInvertY = true;
+  assert.equal(inspectHeadTextureOrientation(material, policy).risk, true);
 });
 
 test('zone texture animation resolves frames beside the GLB base texture', () => {

@@ -2176,7 +2176,7 @@ export class BabylonSpawn {
 
   normalizeToSpawnGround(
     targetY = this.rootNode?.position?.y,
-    { onlyRaise = false, clearance = 0 } = {}
+    { onlyRaise = false, clearance = 0, snapToZone = true } = {}
   ) {
     if (!this.rootNode || !Number.isFinite(Number(targetY))) {
       return 0;
@@ -2188,7 +2188,9 @@ export class BabylonSpawn {
     }
 
     const requestedTargetY = Number(targetY);
-    const zoneGroundY = this.getZoneGroundWorldY(requestedTargetY);
+    const zoneGroundY = snapToZone
+      ? this.getZoneGroundWorldY(requestedTargetY)
+      : null;
     const effectiveTargetY = Number.isFinite(zoneGroundY)
       ? zoneGroundY
       : requestedTargetY;
@@ -2230,7 +2232,10 @@ export class BabylonSpawn {
   }
 
   normalizeAnimatedGroundPose(options = {}) {
-    this.normalizeToSpawnGround(this.spawn.z, options);
+    this.normalizeToSpawnGround(this.spawn.z, {
+      snapToZone: this.rootNode?.metadata?.preserveRequestedGroundY !== true,
+      ...options,
+    });
     this.updateNameplatePosition();
   }
 

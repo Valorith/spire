@@ -22,6 +22,7 @@ import {
 import {
   evaluateAppearanceVariant,
   evaluateFaceVariantDeterminism,
+  inspectHeadTextureOrientation,
   isKnownEffectOnlyCharacterModel,
 } from '../../viewer/helpers/appearanceValidation';
 import { useMainContext } from '../main/context';
@@ -269,43 +270,8 @@ const waitForTextures = async (textures) => {
 };
 
 const getHeadOrientationDiagnostic = (material) => {
-  const texture = getTexture(material);
-  const requestedInvertY =
-    texture?._texture?._spireSageRequestedInvertY;
-  const uploadInvertY = texture?._texture?._spireSageUploadInvertY;
-  const uploadOrientationMismatch =
-    typeof requestedInvertY === 'boolean' &&
-    typeof uploadInvertY === 'boolean' &&
-    requestedInvertY !== uploadInvertY;
-  const geometryUvFlipped =
-    material?.metadata?.gltf?.extras?.spireSkinnedVFlipped === true ||
-    material?.metadata?.extras?.spireSkinnedVFlipped === true ||
-    material?.metadata?.spireSkinnedVFlipped === true;
   const orientationPolicy = getCharacterHeadOrientationPolicy(material?.name);
-  const expectsGeometryUvFlip = orientationPolicy.geometryUvFlipped;
-  const expectsRuntimeTextureVFlip = orientationPolicy.runtimeTextureVFlipped;
-  const runtimeTextureVFlipped = Number(texture?.vScale ?? 1) < 0;
-  const expectedEffectiveVFlip =
-    expectsGeometryUvFlip !== expectsRuntimeTextureVFlip;
-  const effectiveVFlip = geometryUvFlipped !== runtimeTextureVFlipped;
-  return {
-    material: material?.name ?? '',
-    texture: texture?.name ?? texture?.url ?? '',
-    requestedInvertY,
-    uploadInvertY,
-    vOffset: texture?.vOffset,
-    vScale: texture?.vScale,
-    geometryUvFlipped,
-    runtimeTextureVFlipped,
-    expectsGeometryUvFlip,
-    expectsRuntimeTextureVFlip,
-    effectiveVFlip,
-    expectedEffectiveVFlip,
-    uploadOrientationMismatch,
-    risk:
-      effectiveVFlip !== expectedEffectiveVFlip ||
-      uploadOrientationMismatch,
-  };
+  return inspectHeadTextureOrientation(material, orientationPolicy);
 };
 
 const buildInventory = (requestedModels) => {

@@ -176,9 +176,14 @@ const collectSpawnVisualStats = async (gameController) => {
       appearanceTexturePendingCount:
         visualStats.appearanceTexturePendingCount ?? 0,
     };
-    visualStats.runtimeAnimation = await collectRuntimeAnimationProbe(
-      gameController
-    );
+    // Static/native-pose spawns do not need an expensive deterministic frame
+    // seek. The visual inventory is the authoritative classifier used by the
+    // validation result below, so avoid walking thousands of matrices when it
+    // reports that the zone has no animated skeleton spawns.
+    visualStats.runtimeAnimation =
+      Number(visualStats.animatedSkeletonSpawnCount ?? 0) > 0
+        ? await collectRuntimeAnimationProbe(gameController)
+        : null;
   }
   return visualStats;
 };
@@ -218,6 +223,90 @@ const getPlayingSpawnAnimationProbes = (gameController) => {
     probes.push({ spawnId, spawn, group: playingGroups[0] });
   }
   return probes;
+};
+
+const collectSpawnPlacementStats = (gameController, spawnPoints = []) => {
+  const spawnController = gameController?.SpawnController;
+  const tolerance = 0.25;
+  const stats = {
+    expectedCount          : spawnPoints.length,
+    loadedCount            : 0,
+    missingVisualCount     : 0,
+    nonFinitePlacementCount: 0,
+    positionMismatchCount  : 0,
+    staleReferenceCount    : 0,
+    samples                : [],
+  };
+
+  for (const sourceSpawn of spawnPoints) {
+    const spawnId = sourceSpawn?.id ?? sourceSpawn?.__spireSpawnId;
+    const visual = spawnController?.spawns?.[spawnId];
+    if (!visual?.rootNode || visual.rootNode.isDisposed?.()) {
+      stats.missingVisualCount++;
+      if (stats.samples.length < 10) {
+        stats.samples.push({ spawnId, issue: 'missing-visual' });
+      }
+      continue;
+    }
+
+    stats.loadedCount++;
+    const expected = {
+      x: Number(sourceSpawn.y),
+      y: Number(sourceSpawn.z),
+      z: Number(sourceSpawn.x),
+    };
+    const actual = {
+      x: Number(visual.rootNode.position?.x),
+      y: Number(
+        visual.getGroundReferenceWorldY?.() ??
+        visual.rootNode.metadata?.spawnGroundY ??
+        visual.rootNode.position?.y
+      ),
+      z: Number(visual.rootNode.position?.z),
+    };
+    const finite = [...Object.values(expected), ...Object.values(actual)]
+      .every(Number.isFinite);
+    const deltas = {
+      x: Math.abs(actual.x - expected.x),
+      y: Math.abs(actual.y - expected.y),
+      z: Math.abs(actual.z - expected.z),
+    };
+    const positionMismatch = finite && Object.values(deltas)
+      .some((delta) => delta > tolerance);
+    const reference = visual.spawnEntry ?? visual.rootNode.metadata?.spawn;
+    const staleReference =
+      Number(reference?.x) !== Number(sourceSpawn.x) ||
+      Number(reference?.y) !== Number(sourceSpawn.y) ||
+      Number(reference?.z) !== Number(sourceSpawn.z);
+
+    stats.nonFinitePlacementCount += finite ? 0 : 1;
+    stats.positionMismatchCount += positionMismatch ? 1 : 0;
+    stats.staleReferenceCount += staleReference ? 1 : 0;
+    if ((!finite || positionMismatch || staleReference) && stats.samples.length < 10) {
+      stats.samples.push({
+        spawnId,
+        issue: !finite
+          ? 'non-finite-placement'
+          : positionMismatch
+            ? 'position-mismatch'
+            : 'stale-reference',
+        actual,
+        deltas,
+        expected,
+        reference: reference
+          ? { x: reference.x, y: reference.y, z: reference.z }
+          : null,
+      });
+    }
+  }
+
+  stats.pass =
+    stats.loadedCount === stats.expectedCount &&
+    stats.missingVisualCount === 0 &&
+    stats.nonFinitePlacementCount === 0 &&
+    stats.positionMismatchCount === 0 &&
+    stats.staleReferenceCount === 0;
+  return stats;
 };
 
 const captureSpawnAnimationPose = (spawn, animationGroup) => {
@@ -620,12 +709,27 @@ const collectGeometryArtifactStats = (gameController) => {
       continue;
     }
 
-    const size = {
-      x: Math.abs(maximumWorld.x - minimumWorld.x),
-      y: Math.abs(maximumWorld.y - minimumWorld.y),
-      z: Math.abs(maximumWorld.z - minimumWorld.z),
-    };
-    const maxDimension = Math.max(size.x, size.y, size.z);
+    // Babylon uses sentinel bounds for meshes whose geometry is intentionally
+    // deferred or absent. They cannot be measured, so they are not evidence of
+    // an oversized rendered artifact.
+    if (
+      !Number.isFinite(minimumWorld.x) ||
+      !Number.isFinite(minimumWorld.y) ||
+      !Number.isFinite(minimumWorld.z) ||
+      !Number.isFinite(maximumWorld.x) ||
+      !Number.isFinite(maximumWorld.y) ||
+      !Number.isFinite(maximumWorld.z) ||
+      maximumWorld.x < minimumWorld.x ||
+      maximumWorld.y < minimumWorld.y ||
+      maximumWorld.z < minimumWorld.z
+    ) {
+      continue;
+    }
+    const maxDimension = Math.max(
+      maximumWorld.x - minimumWorld.x,
+      maximumWorld.y - minimumWorld.y,
+      maximumWorld.z - minimumWorld.z
+    );
     if (maxDimension < 1200) {
       continue;
     }
@@ -705,6 +809,10 @@ const emitZoneValidation = async ({
   const spawnStats = window.__spireSageSpawnStats ?? null;
   const canvasStats = window.__spireSageCanvasStats ?? null;
   const visualStats = await collectSpawnVisualStats(gameController);
+  const spawnPlacementStats = collectSpawnPlacementStats(
+    gameController,
+    spawnPoints
+  );
   const renderableDoorPoints = Array.isArray(doorLoad?.renderableDoors)
     ? doorLoad.renderableDoors
     : getRenderableDoors(doorPoints);
@@ -741,7 +849,8 @@ const emitZoneValidation = async ({
     lodProxyCount === 0 &&
     (spawnStats.missingAssetCount ?? 0) === 0 &&
     (spawnStats.unresolvedModelCount ?? 0) === 0 &&
-    (spawnStats.fallbackCount ?? 0) === 0;
+    (spawnStats.fallbackCount ?? 0) === 0 &&
+    spawnPlacementStats.pass;
   const texturePass =
     !!visualStats &&
     visualStats.spawnCount === (spawnStats?.loaded ?? 0) &&
@@ -757,16 +866,19 @@ const emitZoneValidation = async ({
     (visualStats.verticallyFlippedHeadTextureCount ?? 0) === 0 &&
     (visualStats.bodyVariantFallbackCount ?? 0) === 0 &&
     (visualStats.secondaryHeadBoneRemapFailureCount ?? 0) === 0;
+  const animatedSkeletonSpawnCount = Number(
+    visualStats?.animatedSkeletonSpawnCount ?? 0
+  );
   const runtimeAnimationPass =
-    !!visualStats?.runtimeAnimation &&
+    animatedSkeletonSpawnCount === 0 ||
     (
-      Number(visualStats?.animatedSkeletonSpawnCount ?? 0) === 0 ||
-      Number(visualStats.runtimeAnimation.probedSpawnCount ?? 0) > 0
-    ) &&
-    Number(visualStats.runtimeAnimation.movingSpawnCount ?? 0) ===
-      Number(visualStats.runtimeAnimation.probedSpawnCount ?? 0) &&
-    Number(visualStats.runtimeAnimation.stationaryAnimatedSpawnCount ?? 0) === 0 &&
-    Number(visualStats.runtimeAnimation.nonFiniteMatrixCount ?? 0) === 0;
+      !!visualStats?.runtimeAnimation &&
+      Number(visualStats.runtimeAnimation.probedSpawnCount ?? 0) > 0 &&
+      Number(visualStats.runtimeAnimation.movingSpawnCount ?? 0) ===
+        Number(visualStats.runtimeAnimation.probedSpawnCount ?? 0) &&
+      Number(visualStats.runtimeAnimation.stationaryAnimatedSpawnCount ?? 0) === 0 &&
+      Number(visualStats.runtimeAnimation.nonFiniteMatrixCount ?? 0) === 0
+    );
   const animationPass =
     !!visualStats &&
     (
@@ -854,7 +966,10 @@ const emitZoneValidation = async ({
     camera: window.__spireSageCameraStats ?? null,
     cameraFraming: window.__spireSageCameraFraming ?? null,
     movement,
-    spawns: spawnStats,
+    spawns: {
+      ...(spawnStats ?? {}),
+      placement: spawnPlacementStats,
+    },
     visuals: visualStats,
     geometry: geometryStats,
     rootNodeCount: rootIds.length,
@@ -909,12 +1024,20 @@ export const ZoneProvider = ({ children }) => {
         }
         await gameController.SpawnController.addSpawns([spawn], true);
         setSpawns(s => [...s, spawn]);
+      } else if (type === 'moveSpawn') {
+        setSpawns(spawns => spawns.map(s => s.id === spawn.id ? {
+          ...s,
+          x: spawn.x,
+          y: spawn.y,
+          z: spawn.z,
+        } : s));
+        gameController.SpawnController.moveSpawn(spawn);
       } else if (type === 'updateSpawn') {
         setSpawns(spawns => spawns.map(s => s.id === spawn.id ? spawn : s));
-        gameController.SpawnController.updateSpawn(spawn);
+        await gameController.SpawnController.updateSpawn(spawn);
       } else if (type === 'deleteSpawn') {
         setSpawns(spawns => spawns.filter(s => s.id !== spawn.id));
-        gameController.SpawnController.deleteSpawn(spawn);
+        await gameController.SpawnController.deleteSpawn(spawn);
       } else if (type === 'refresh') {
         const refreshRun = ++refreshRunRef.current;
         const zoneShortName = selectedZone.short_name;

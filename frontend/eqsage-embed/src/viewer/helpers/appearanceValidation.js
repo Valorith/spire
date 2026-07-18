@@ -3,6 +3,57 @@ const toCount = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const getMaterialTexture = (material) =>
+  material?.albedoTexture ??
+  material?._albedoTexture ??
+  material?.diffuseTexture ??
+  material?._diffuseTexture ??
+  material?.emissiveTexture ??
+  material?._emissiveTexture ??
+  null;
+
+export const inspectHeadTextureOrientation = (
+  material,
+  orientationPolicy
+) => {
+  const texture = getMaterialTexture(material);
+  const requestedInvertY = texture?._texture?._spireSageRequestedInvertY;
+  const uploadInvertY = texture?._texture?._spireSageUploadInvertY;
+  const uploadOrientationMismatch =
+    typeof requestedInvertY === 'boolean' &&
+    typeof uploadInvertY === 'boolean' &&
+    requestedInvertY !== uploadInvertY;
+  const geometryUvFlipped =
+    material?.metadata?.gltf?.extras?.spireSkinnedVFlipped === true ||
+    material?.metadata?.extras?.spireSkinnedVFlipped === true ||
+    material?.metadata?.spireSkinnedVFlipped === true;
+  const expectsGeometryUvFlip = orientationPolicy?.geometryUvFlipped === true;
+  const expectsRuntimeTextureVFlip =
+    orientationPolicy?.runtimeTextureVFlipped === true;
+  const runtimeTextureVFlipped = Number(texture?.vScale ?? 1) < 0;
+  const expectedEffectiveVFlip =
+    expectsGeometryUvFlip !== expectsRuntimeTextureVFlip;
+  const effectiveVFlip = geometryUvFlipped !== runtimeTextureVFlipped;
+
+  return {
+    material: material?.name ?? '',
+    texture: texture?.name ?? texture?.url ?? '',
+    requestedInvertY,
+    uploadInvertY,
+    vOffset: texture?.vOffset,
+    vScale: texture?.vScale,
+    geometryUvFlipped,
+    runtimeTextureVFlipped,
+    expectsGeometryUvFlip,
+    expectsRuntimeTextureVFlip,
+    effectiveVFlip,
+    expectedEffectiveVFlip,
+    uploadOrientationMismatch,
+    risk:
+      effectiveVFlip !== expectedEffectiveVFlip || uploadOrientationMismatch,
+  };
+};
+
 // These race entries are particles/boundaries rather than visible character
 // bodies in the shipped client art. Keep the list deliberately narrow so a
 // newly invisible NPC cannot pass merely because every material is marked as
