@@ -41,6 +41,10 @@ function SpawnNavBar() {
   const [selectedGridIdx, setSelectedGridIdx] = useState(0);
   const [addEditDialogOpen, setAddEditDialogOpen] = useState(false);
   const selectionRunRef = useRef(0);
+  const spawnSaveTimerRef = useRef(null);
+  const spawnSaveQueueRef = useRef(Promise.resolve());
+  const spawnSaveSequenceRef = useRef(0);
+  const gridSaveQueueRef = useRef(Promise.resolve());
   const confirm = useConfirm();
 
   const pickRaycast = useCallback(() => {
@@ -61,9 +65,20 @@ function SpawnNavBar() {
   }, [open, setRightDrawerOpen]);
 
   useEffect(() => {
-    if (!selectedSpawn) {
+    if (
+      !selectedSpawn ||
+      !initialSpawn ||
+      selectedSpawn.id !== initialSpawn.id ||
+      !Spire
+    ) {
+      spawnSaveSequenceRef.current += 1;
       return;
     }
+
+    // Keep the in-scene model synchronized even when the user restores the
+    // last persisted coordinates and no API request is needed.
+    gameController.SpawnController.moveSpawn(selectedSpawn);
+
     if (
       initialSpawn.x === selectedSpawn.x &&
       initialSpawn.y === selectedSpawn.y &&
@@ -71,28 +86,62 @@ function SpawnNavBar() {
     ) {
       return;
     }
-    gameController.SpawnController.moveSpawn(selectedSpawn);
 
-    (async () => {
-      const spawn2Api = new Spire.SpireApiTypes.Spawn2Api(
-        ...Spire?.SpireApi.cfg()
-      );
-      try {
-        await spawn2Api.updateSpawn2({
-          id    : selectedSpawn.id,
-          spawn2: selectedSpawn,
+    const updatedSpawn = { ...selectedSpawn };
+    const saveSequence = ++spawnSaveSequenceRef.current;
+    window.clearTimeout(spawnSaveTimerRef.current);
+    spawnSaveTimerRef.current = window.setTimeout(() => {
+      spawnSaveTimerRef.current = null;
+      const queuedSave = spawnSaveQueueRef.current
+        .catch(() => {})
+        .then(async () => {
+          if (saveSequence !== spawnSaveSequenceRef.current) {
+            return;
+          }
+          const spawn2Api = new Spire.SpireApiTypes.Spawn2Api(
+            ...Spire.SpireApi.cfg()
+          );
+          await spawn2Api.updateSpawn2({
+            id    : updatedSpawn.id,
+            spawn2: updatedSpawn,
+          });
+          if (saveSequence !== spawnSaveSequenceRef.current) {
+            return;
+          }
+          setInitialSpawn((current) =>
+            current?.id === updatedSpawn.id
+              ? {
+                ...current,
+                x: updatedSpawn.x,
+                y: updatedSpawn.y,
+                z: updatedSpawn.z,
+              }
+              : current
+          );
+          openAlert(`Updated ${updatedSpawn.name}`);
         });
-        openAlert(`Updated ${selectedSpawn.name}`);
-      } catch (e) {
-        openAlert(`Failed to update ${selectedSpawn.name}`, 'warning');
-      }
-    })();
+      spawnSaveQueueRef.current = queuedSave.catch(() => {
+        if (saveSequence === spawnSaveSequenceRef.current) {
+          openAlert(`Failed to update ${updatedSpawn.name}`, 'warning');
+        }
+      });
+    }, 350);
+
+    return () => {
+      window.clearTimeout(spawnSaveTimerRef.current);
+      spawnSaveTimerRef.current = null;
+    };
   }, [   // eslint-disable-line
+    selectedSpawn?.id,
     selectedSpawn?.x,
     selectedSpawn?.y,
     selectedSpawn?.z,
     Spire,
-    initialSpawn,
+    initialSpawn?.id,
+    initialSpawn?.x,
+    initialSpawn?.y,
+    initialSpawn?.z,
+    openAlert,
   ]);
 
   useEffect(() => {
@@ -109,6 +158,8 @@ function SpawnNavBar() {
 
       const selectionRun = selectionRunRef.current + 1;
       selectionRunRef.current = selectionRun;
+      spawnSaveSequenceRef.current += 1;
+      window.clearTimeout(spawnSaveTimerRef.current);
       gameController.SpawnController.npcLight(spawn);
       const s = JSON.parse(JSON.stringify(spawn));
       if (!s.pathgrid) {
@@ -284,23 +335,30 @@ function SpawnNavBar() {
   }, [Spire?.SpireApi, selectedZone, selectedSpawn, loadCallback]); // eslint-disable-line
 
   const updateGridEntry = useCallback(
-    async (gridEntry, number = gridEntry.number) => {
-      const gridApi = new Spire.SpireApiTypes.GridEntryApi(
-        ...Spire?.SpireApi.cfg()
-      );
+    (gridEntry, number = gridEntry.number) => {
       const builder = new Spire.SpireQueryBuilder();
       builder.where('number', '=', number);
       builder.where('zoneid', '=', gridEntry.zoneid);
       builder.where('gridid', '=', gridEntry.gridid);
       forceRender({});
       const clone = JSON.parse(JSON.stringify(gridEntry));
-      await gridApi.updateGridEntry(
-        {
-          id       : gridEntry.gridid,
-          gridEntry: clone,
-        },
-        { query: builder.get() }
-      );
+      const query = builder.get();
+      const queuedSave = gridSaveQueueRef.current
+        .catch(() => {})
+        .then(async () => {
+          const gridApi = new Spire.SpireApiTypes.GridEntryApi(
+            ...Spire?.SpireApi.cfg()
+          );
+          await gridApi.updateGridEntry(
+            {
+              id       : clone.gridid,
+              gridEntry: clone,
+            },
+            { query }
+          );
+        });
+      gridSaveQueueRef.current = queuedSave;
+      return queuedSave;
     },
     [Spire?.SpireApi, Spire?.SpireQueryBuilder]
   );
@@ -629,7 +687,15 @@ function SpawnNavBar() {
                   value={selectedGridEntry.heading}
                   onChange={(e) => {
                     selectedGridEntry.heading = +e.target.value;
-                    updateGridEntry(selectedGridEntry);
+                    setGridUpdater((value) => value + 1);
+                  }}
+                  onBlur={() => updateGridEntry(selectedGridEntry)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.target.blur();
+                    }
                   }}
                 ></TextField>
                 <TextField
@@ -639,7 +705,15 @@ function SpawnNavBar() {
                   value={selectedGridEntry.pause}
                   onChange={(e) => {
                     selectedGridEntry.pause = +e.target.value;
-                    updateGridEntry(selectedGridEntry);
+                    setGridUpdater((value) => value + 1);
+                  }}
+                  onBlur={() => updateGridEntry(selectedGridEntry)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.target.blur();
+                    }
                   }}
                 ></TextField>
               </Stack>

@@ -6,6 +6,11 @@ import { GlobalStore } from '../../state';
 import { assetUrl } from '../../embed-config';
 import { createGltfTransformIo, loadGltfTransformModules } from '../../util/gltf-transform';
 import { clampFlySpeed } from '../common/cameraSettings';
+import {
+  applyTextureAnimationFrame,
+  getMaterialBaseColorTexture,
+  resolveTextureAnimationFrameUrl,
+} from '../helpers/textureAnimation';
 
 const {
   Color3,
@@ -42,6 +47,15 @@ const scheduleZoneLoadCallback = (callback) => {
       });
   }, 0);
 };
+const createCancelledZoneLoadError = () => {
+  const error = new Error('Zone load was cancelled');
+  error.name = 'AbortError';
+  return error;
+};
+const isSceneDisposed = (scene) =>
+  typeof scene?.isDisposed === 'function'
+    ? scene.isDisposed()
+    : Boolean(scene?.isDisposed);
 const logPreviewZoneLoad = (...args) => {
   if (window.__spireSagePreview) {
     console.log('[SageZoneLoad]', ...args);
@@ -183,11 +197,11 @@ class ZoneController extends GameControllerChild {
   objectAnimationPlaying = [];
   lastPosition = new Vector3(0, 0, 0);
   animationRange = 200;
-  objectCullRange = 2000;
   /** @type {RecastJSPlugin} */
   navigationPlugin = null;
   pointerObserver = null;
   renderObserver = null;
+  loadGeneration = 0;
 
   loadCallbacks = [];
   clickCallbacks = [];
@@ -214,6 +228,10 @@ class ZoneController extends GameControllerChild {
   };
   removeLoadCallback = (cb) => {
     this.loadCallbacks = this.loadCallbacks.filter((l) => l !== cb);
+  };
+  cancelPendingLoad = () => {
+    this.loadGeneration += 1;
+    this.zoneLoaded = false;
   };
   dispose() {
     this.SpawnController.dispose();
@@ -662,7 +680,15 @@ class ZoneController extends GameControllerChild {
     return newMergedMesh;
   };
 
-  async loadModel(name, cachedMetadata = null) {
+  async loadModel(name, cachedMetadata = null, signal = null) {
+    const loadGeneration = ++this.loadGeneration;
+    const isCurrentLoad = () =>
+      loadGeneration === this.loadGeneration && !signal?.aborted;
+    const assertCurrentLoad = () => {
+      if (!isCurrentLoad()) {
+        throw createCancelledZoneLoadError();
+      }
+    };
     logPreviewZoneLoad('load:start', name);
     this.zoneLoaded = false;
     GlobalStore.actions.setLoading(true);
@@ -673,6 +699,8 @@ class ZoneController extends GameControllerChild {
       GlobalStore.actions.setLoading(false);
       return;
     }
+    assertCurrentLoad();
+    const loadScene = this.scene;
     this.zoneName = name;
     const configuredFlySpeed = Number(
       this.cameraFlySpeed ?? this.gc.settings?.flySpeed
@@ -730,6 +758,7 @@ class ZoneController extends GameControllerChild {
     }
 
     const metadata = cachedMetadata || (await getEQFile('zones', `${name}.json`, 'json'));
+    assertCurrentLoad();
     let zoneRootUrl = '/eq/zones/';
     let zoneFileName = `${name}.glb`;
     let zoneObjectUrl = null;
@@ -737,6 +766,7 @@ class ZoneController extends GameControllerChild {
       const zoneBuffer =
         (await this.gc.loadEQGltfFile?.('zones', `${name}.glb`)) ||
         (await getEQFile('zones', `${name}.glb`));
+      assertCurrentLoad();
       if (!zoneBuffer) {
         throw new Error(`Generated zone geometry is missing for ${name}`);
       }
@@ -755,7 +785,7 @@ class ZoneController extends GameControllerChild {
         '',
         zoneRootUrl,
         zoneFileName,
-        this.scene,
+        loadScene,
         undefined,
         '.glb'
       );
@@ -769,6 +799,10 @@ class ZoneController extends GameControllerChild {
     }
     if (!zone?.meshes?.length) {
       throw new Error(`No zone meshes were loaded for ${name}`);
+    }
+    if (!isCurrentLoad()) {
+      zone.meshes.forEach((mesh) => mesh.dispose?.(false, true));
+      throw createCancelledZoneLoadError();
     }
     logPreviewZoneLoad('import:done', name, {
       meshCount: zone.meshes.length,
@@ -816,6 +850,7 @@ class ZoneController extends GameControllerChild {
     }
 
     await yieldToBrowser();
+    assertCurrentLoad();
     if (metadata) {
       this.metadata = metadata;
       this.objectContainer = new TransformNode(
@@ -827,14 +862,20 @@ class ZoneController extends GameControllerChild {
         !window.__spireSagePreview || this.gc.settings.loadStaticObjects === true;
       if (shouldLoadStaticObjects) {
         for (const [key, value] of Object.entries(metadata.objects)) {
+          assertCurrentLoad();
           await yieldToBrowser();
-          for (const mesh of await this.instantiateObjects(key, value)) {
+          for (const mesh of await this.instantiateObjects(key, value, {
+            isCancelled: () => !isCurrentLoad(),
+            scene      : loadScene,
+          })) {
             if (!mesh) {
               continue;
             }
+            assertCurrentLoad();
             mesh.parent = this.objectContainer;
           }
           await yieldToBrowser();
+          assertCurrentLoad();
         }
       }
 
@@ -849,8 +890,10 @@ class ZoneController extends GameControllerChild {
         metadata.regions = await optimizeBoundingBoxes(
           metadata.unoptimizedRegions
         );
+        assertCurrentLoad();
         delete metadata.unoptimizedRegions;
         await writeEQFile('zones', `${name}.json`, JSON.stringify(metadata));
+        assertCurrentLoad();
       }
       let idx = 0;
 
@@ -897,10 +940,13 @@ class ZoneController extends GameControllerChild {
       }
     }
     await yieldToBrowser();
+    assertCurrentLoad();
     if (!window.__spireSagePreview) {
       await this.addTextureAnimations();
+      assertCurrentLoad();
     }
 
+    assertCurrentLoad();
     this.zoneLoaded = true;
     this.loadCallbacks.forEach((callback) => {
       scheduleZoneLoadCallback(callback);
@@ -909,11 +955,13 @@ class ZoneController extends GameControllerChild {
     GlobalStore.actions.setLoading(false);
   }
 
-  async instantiateObjects(modelName, model) {
+  async instantiateObjects(modelName, model, options = {}) {
+    const targetScene = options.scene ?? this.scene;
+    const isCancelled = options.isCancelled ?? (() => false);
     const objectBuffer =
       (await this.gc.loadEQGltfFile?.('objects', `${modelName}.glb`)) ||
       (await getEQFile('objects', `${modelName}.glb`));
-    if (!objectBuffer) {
+    if (!objectBuffer || isCancelled() || !targetScene || isSceneDisposed(targetScene)) {
       return [];
     }
 
@@ -923,13 +971,17 @@ class ZoneController extends GameControllerChild {
     const container = await SceneLoader.LoadAssetContainerAsync(
       '',
       objectUrl,
-      this.scene,
+      targetScene,
       undefined,
       '.glb'
     )
       .catch((_e) => null)
       .finally(() => URL.revokeObjectURL(objectUrl));
     if (!container) {
+      return [];
+    }
+    if (isCancelled() || isSceneDisposed(targetScene)) {
+      container.dispose();
       return [];
     }
     const mergedMeshes = [];
@@ -945,7 +997,7 @@ class ZoneController extends GameControllerChild {
       );
       if (this.gc.settings.disableAnimations) {
         instanceContainer.animationGroups?.forEach((ag) =>
-          this.scene.removeAnimationGroup(ag)
+          targetScene.removeAnimationGroup(ag)
         );
         instanceContainer.animationGroups = [];
       }
@@ -1000,12 +1052,18 @@ class ZoneController extends GameControllerChild {
           if (instanceSkeleton) {
             rootNode.skeleton = instanceSkeleton;
           }
-          rootNode.addLODLevel(2000, null);
+          // Babylon already frustum-culls placed zone objects. A fixed null LOD
+          // makes large zones visibly pop as the camera or a mesh's bounds cross
+          // the cutoff, which is especially noticeable from the overview camera.
           rootNode.id = `${modelName}_${idx}`;
           if (!hasAnimations) {
             rootNode.freezeWorldMatrix();
           } else {
             setTimeout(() => {
+              if (isCancelled() || isSceneDisposed(targetScene)) {
+                instanceContainer.animationGroups.forEach((ag) => ag.dispose?.());
+                return;
+              }
               instanceContainer.animationGroups.forEach((ag) => {
                 ag.play(true);
               });
@@ -1020,80 +1078,106 @@ class ZoneController extends GameControllerChild {
       instanceContainer.rootNodes[0].dispose();
     }
 
+    if (isCancelled() || isSceneDisposed(targetScene)) {
+      mergedMeshes.forEach((mesh) => mesh.dispose?.(false, true));
+      return [];
+    }
     return mergedMeshes;
   }
 
   async addTextureAnimations() {
-    const addTextureAnimation = (material, textureAnimation) => {
-      const [baseTexture] = material.getActiveTextures();
-      return textureAnimation.frames.map((f) => {
-        return new Texture(
-          f,
-          this.scene,
-          baseTexture.noMipMap,
-          baseTexture.invertY,
-          baseTexture.samplingMode
+    const targetScene = this.scene;
+    if (!targetScene || isSceneDisposed(targetScene)) {
+      return;
+    }
+
+    const animationTimerMap = new Map();
+    const animationTexturesCache = new Map();
+    const getAnimationFrameTexture = (baseTexture, frameName) => {
+      const frameUrl = resolveTextureAnimationFrameUrl(baseTexture, frameName);
+      if (!frameUrl) {
+        return null;
+      }
+
+      const baseUrl = `${baseTexture.url ?? baseTexture.name ?? ''}`;
+      if (frameUrl.toLowerCase() === baseUrl.toLowerCase()) {
+        return baseTexture;
+      }
+
+      const cacheKey = [
+        frameUrl.toLowerCase(),
+        Number(Boolean(baseTexture.noMipMap)),
+        Number(Boolean(baseTexture.invertY)),
+        baseTexture.samplingMode,
+      ].join('|');
+      if (!animationTexturesCache.has(cacheKey)) {
+        animationTexturesCache.set(
+          cacheKey,
+          new Texture(
+            frameUrl,
+            targetScene,
+            baseTexture.noMipMap,
+            baseTexture.invertY,
+            baseTexture.samplingMode
+          )
         );
-      });
+      }
+      return animationTexturesCache.get(cacheKey);
     };
 
-    let animationTimerMap = {};
-    const animationTexturesCache = {};
-
-    for (const material of this.scene.materials) {
+    for (const material of targetScene.materials) {
       if (!material.metadata?.gltf?.extras?.animationDelay) {
         continue;
       }
 
-      const textureAnimation = material.metadata?.gltf?.extras;
-      if (textureAnimation) {
-        let allTextures;
-        if (animationTexturesCache[material.id]) {
-          allTextures = animationTexturesCache[material.id];
-        } else {
-          allTextures = await addTextureAnimation(material, textureAnimation);
-          animationTexturesCache[material.id] = allTextures;
-        }
-        animationTimerMap = {
-          ...animationTimerMap,
-          [textureAnimation.animationDelay]: {
-            ...(animationTimerMap[textureAnimation.animationDelay] ?? {}),
-            materials: [
-              ...(animationTimerMap[textureAnimation.animationDelay]
-                ?.materials ?? []),
-              {
-                frames      : textureAnimation.frames,
-                currentFrame: 1,
-                allTextures,
-                material,
-              },
-            ],
-          },
-        };
+      const textureAnimation = material.metadata.gltf.extras;
+      const targetTexture = getMaterialBaseColorTexture(material);
+      if (!targetTexture || !Array.isArray(textureAnimation.frames)) {
+        continue;
       }
+
+      const allTextures = textureAnimation.frames
+        .map((frame) => getAnimationFrameTexture(targetTexture, frame))
+        .filter(Boolean);
+      if (allTextures.length < 2) {
+        continue;
+      }
+
+      const delay = Number(textureAnimation.animationDelay);
+      if (!Number.isFinite(delay) || delay <= 0) {
+        continue;
+      }
+
+      const materials = animationTimerMap.get(delay) ?? [];
+      materials.push({
+        allTextures,
+        currentFrame: 0,
+        targetTexture,
+      });
+      animationTimerMap.set(delay, materials);
     }
 
-    for (const [time, value] of Object.entries(animationTimerMap)) {
+    for (const [time, materials] of animationTimerMap.entries()) {
       const interval = setInterval(() => {
-        for (const material of value.materials) {
-          material.currentFrame =
-            material.currentFrame + 1 > material.frames.length
-              ? 1
-              : material.currentFrame + 1;
-          for (const texture of material.material.getActiveTextures()) {
-            if (material.allTextures[material.currentFrame - 1]) {
-              texture._texture =
-                material.allTextures[material.currentFrame - 1]._texture;
-            }
-          }
+        if (isSceneDisposed(targetScene)) {
+          clearInterval(interval);
+          return;
+        }
+
+        for (const animation of materials) {
+          animation.currentFrame =
+            (animation.currentFrame + 1) % animation.allTextures.length;
+          // Texture creation is asynchronous. A missing or still-loading frame
+          // must leave the last valid frame intact rather than turning a large
+          // terrain material black for one animation tick.
+          applyTextureAnimationFrame(
+            animation.targetTexture,
+            animation.allTextures[animation.currentFrame]
+          );
         }
       }, +time * 2);
 
-      for (const material of value.materials) {
-        material.material.onDisposeObservable.add(() => {
-          clearInterval(interval);
-        });
-      }
+      targetScene.onDisposeObservable.addOnce(() => clearInterval(interval));
     }
   }
 }

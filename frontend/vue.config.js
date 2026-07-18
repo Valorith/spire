@@ -6,6 +6,9 @@ module.exports = {
   devServer: {
     host: "0.0.0.0",
     disableHostCheck: true,
+    // Direct entry to Vue Router pages (notably /sage) must work after a
+    // freshly started local dev server, not only after navigating from `/`.
+    historyApiFallback: true,
     watchOptions: {
       ignored: [/node_modules/, /public/],
     },

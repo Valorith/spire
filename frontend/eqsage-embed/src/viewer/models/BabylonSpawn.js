@@ -2,7 +2,26 @@ import BABYLON from '@bjs';
 import { Spawn } from './Spawn';
 import { eqtoBabylonVector } from '../util/vector';
 import { AnimationNames, mapAnimations } from '../helpers/animationUtils';
-import { getEQFileExists } from 'sage-core/util/fileHandler';
+import {
+  evaluateAnimatedBoundsSafety,
+  evaluateHeadRotationSafety,
+  inspectAnimationGroupVitality,
+  inspectAnimationSetVitality,
+  isNeutralIdleAnimationName,
+  isStaticPoseOnlyCharacterModel,
+  retargetDetachedAnimationTargets,
+  selectPreferredVisualAnimationGroup,
+} from '../helpers/animationValidation';
+import { getCharacterBodyModelVariation } from '../common/raceModelResolution';
+import raceModelMetadata from '../common/raceModelMetadata.json';
+import { evaluateNameplatePlacement } from '../helpers/nameplateValidation';
+import { isCharacterAppearanceMaterialName } from '../helpers/appearanceValidation';
+import {
+  getEQFile,
+  getEQFileDirectoryRevision,
+  getEQFileExists,
+} from 'sage-core/util/fileHandler';
+import { getCharacterHeadOrientationPolicy } from 'sage-core/util/character-texture-orientation';
 
 const {
   Color3,
@@ -22,15 +41,24 @@ const {
 
 const INVISIBLE_SPAWN_MODELS = new Set(['tpf', 'tpm', 'tpn']);
 const textureExistsCache = new Map();
+const transparentSentinelTextureCache = new Map();
 const modelExistsCache = new Map();
+const animationSafetyCache = new Map();
+const pendingAppearanceMaterialsByScene = new WeakMap();
+const APPEARANCE_TEXTURE_DECODE_ATTEMPTS = 2;
+const APPEARANCE_TEXTURE_DECODE_TIMEOUT_MS = 10000;
 const DEFAULT_SPAWN_SCALE = 1.5;
 const SPAWN_SIZE_SCALE_DIVISOR = 6;
 const FOOT_MATERIAL_PATTERN = /ft\d{4}$/i;
 const HEAD_MATERIAL_PATTERN = /^[a-z0-9]{3}he(?:\d{2}|sk)\d{2}$/i;
-const HEAD_OR_FACE_MATERIAL_PATTERN =
-  /^[a-z0-9]{3}(?:he(?:\d{2}|sk)\d{2}|fa\d{4})$/i;
 const HEAD_BONE_PATTERN = /^(?:he|ne|fa|head_point|hair_point)/i;
+// Validate the actual deforming head bone. `head_point` is an attachment
+// helper whose native bind offset is 120 degrees on classic player rigs; it
+// does not drive the face and treating it as a head bone creates a deterministic
+// false positive for every Human/Elf-sized model.
+const PRIMARY_HEAD_BONE_PATTERN = /^(?:hehead|head)$/i;
 const CLASSIC_MALE_LEG_SPIKE_MATERIAL_PATTERN = /^(?:bam|erm|hum)lg000[12]$/i;
+const BODY_VARIANT_CLOTHING_PREFIX_PATTERN = /(?:ch|fa|ua|lg|ft)$/i;
 const POSE_ANIMATION_PATTERN = /^(?:Clone of )?pos$/i;
 const NAMEPLATE_FONT_FAMILY = 'Arial, Helvetica, sans-serif';
 const NAMEPLATE_FONT_SIZE = 44;
@@ -85,7 +113,124 @@ const ZONE_GROUND_SNAP_DISABLED_MODELS = new Set([
 ]);
 const ZONE_GROUND_SNAP_PARENT_IDS = new Set(['static-objects', 'doors']);
 const SEPARATE_HEAD_MODELS = new Set(['ghu', 'zof', 'zom']);
-const DOUBLE_SIDED_SPAWN_MODELS = new Set(['ghu']);
+const DOUBLE_SIDED_SPAWN_MODELS = new Set(['brf', 'frf', 'ghu', 'goj']);
+const COMPACT_NATIVE_ARM_NEUTRAL_ROTATIONS = new Map([
+  ['qcf', { axis: 'z', amount: 0.65 }],
+  ['clm', { axis: 'z', amount: 0.15 }],
+  ['com', { axis: 'x', amount: 1 }],
+  ['cof', { axis: 'x', amount: 1 }],
+  // CLF's bicep nodes use a different local basis from CLM. Rotating around
+  // local Z only twists the arms in depth; local X lowers them visibly.
+  ['clf', { axis: 'x', amount: 1 }],
+]);
+
+const getPendingAppearanceMaterials = (scene) => {
+  let pending = pendingAppearanceMaterialsByScene.get(scene);
+  if (!pending) {
+    pending = new Map();
+    pendingAppearanceMaterialsByScene.set(scene, pending);
+  }
+  return pending;
+};
+
+const getAppearanceTextureData = async (fileName, attempts = 3) => {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const textureData = await getEQFile('textures', fileName).catch(() => false);
+    if ((textureData?.byteLength ?? 0) > 0) {
+      return textureData;
+    }
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 40));
+    }
+  }
+  return false;
+};
+
+const startAppearanceTextureDecode = ({
+  name,
+  scene,
+  sourceTexture,
+  textureData,
+  material,
+  assignTexture,
+}) => {
+  let attempt = 0;
+  const startAttempt = () => {
+    attempt++;
+    if (material.isDisposed?.()) {
+      material.metadata.spireAppearanceTexturePending = false;
+      return null;
+    }
+    // Blob URLs give Babylon an independently decodable browser image with a
+    // real MIME type and a unique cache key. Revoke the URL after Babylon has
+    // uploaded the pixels; the GPU texture remains valid.
+    const objectUrl = URL.createObjectURL(
+      new Blob([textureData], { type: 'image/png' })
+    );
+    let texture = null;
+    let settled = false;
+    const finish = (success, error = null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      URL.revokeObjectURL(objectUrl);
+      material.metadata.spireAppearanceTextureDecodeAttempts = attempt;
+      if (success && texture?.isReady?.()) {
+        material.metadata.spireAppearanceTexturePending = false;
+        material.metadata.spireAppearanceTextureDecodeFailed = false;
+        material.metadata.spireAppearanceTextureDecodeLastError = null;
+        return;
+      }
+      material.metadata.spireAppearanceTextureDecodeLastError =
+        error ? `${error}` : 'unknown decode failure';
+      texture?.dispose?.();
+      if (
+        attempt < APPEARANCE_TEXTURE_DECODE_ATTEMPTS &&
+        !material.isDisposed?.()
+      ) {
+        queueMicrotask(() => startAttempt());
+        return;
+      }
+      material.metadata.spireAppearanceTexturePending = false;
+      material.metadata.spireAppearanceTextureDecodeFailed = true;
+    };
+    const timeout = setTimeout(
+      () => finish(false, 'decode timeout'),
+      APPEARANCE_TEXTURE_DECODE_TIMEOUT_MS
+    );
+    try {
+      texture = new Texture(
+        objectUrl,
+        scene,
+        sourceTexture.noMipMap,
+        sourceTexture.invertY,
+        sourceTexture.samplingMode,
+        () => finish(true),
+        (message, exception) =>
+          finish(false, exception?.message ?? message ?? 'image decode error')
+      );
+      if (settled) {
+        texture.dispose?.();
+        return texture;
+      }
+      // Preserve the EQ material name for diagnostics.
+      texture.name = name;
+      assignTexture(material, texture);
+      queueMicrotask(() => {
+        if (texture?.isReady?.()) {
+          finish(true);
+        }
+      });
+    } catch (_error) {
+      finish(false, _error?.message ?? 'texture construction error');
+    }
+    return texture;
+  };
+  return startAttempt();
+};
+
 const SECONDARY_HEAD_MODEL_PREFIXES = [
   'bam',
   'baf',
@@ -93,6 +238,7 @@ const SECONDARY_HEAD_MODEL_PREFIXES = [
   'erf',
   'elf',
   'elm',
+  'frg',
   'gnf',
   'gnm',
   'trf',
@@ -123,37 +269,11 @@ const SECONDARY_HEAD_MODEL_PREFIXES = [
   'ghu',
   'zof',
   'zom',
+  'qcm',
+  'qcf',
+  'clm',
+  'clf',
 ];
-const CLASSIC_HEAD_TEXTURE_V_FLIP_MODELS = new Set([
-  'baf',
-  'bam',
-  'daf',
-  'dam',
-  'dwf',
-  'dwm',
-  'elf',
-  'elm',
-  'erf',
-  'erm',
-  'gnf',
-  'gnm',
-  'haf',
-  'ham',
-  'hif',
-  'him',
-  'hof',
-  'hom',
-  'huf',
-  'hum',
-  'ikf',
-  'ikm',
-  'ogf',
-  'ogm',
-  'trf',
-  'trm',
-]);
-const HEAD_TEXTURE_V_FLIP_EXCLUDED_MODELS = new Set(['orc']);
-
 const shouldAttachSecondaryMesh = (modelName, materialName) =>
   HEAD_MATERIAL_PATTERN.test(materialName) ||
   (modelName === 'ghu' && /^ghulg\d{4}$/i.test(materialName));
@@ -175,18 +295,11 @@ const markSecondaryHeadMaterial = (material) => {
   material.subMaterials?.forEach?.(markSecondaryHeadMaterial);
 };
 
-const shouldFlipHeadTextureV = (modelName, materialName, material = null) =>
-  !HEAD_TEXTURE_V_FLIP_EXCLUDED_MODELS.has(modelName) &&
-  (
-    (
-      CLASSIC_HEAD_TEXTURE_V_FLIP_MODELS.has(modelName) &&
-      HEAD_OR_FACE_MATERIAL_PATTERN.test(materialName)
-    ) ||
-    (
-      isSecondaryHeadMaterial(material) &&
-      HEAD_MATERIAL_PATTERN.test(materialName)
-    )
-  );
+const isCharacterHeadMaterial = (material) =>
+  material?.metadata?.gltf?.extras?.spireCharacterHead === true ||
+  material?.metadata?.extras?.spireCharacterHead === true ||
+  material?.metadata?.spireCharacterHead === true ||
+  getCharacterHeadOrientationPolicy(material?.name).isCharacterHead;
 
 const isUsableWorldY = (value) =>
   Number.isFinite(value) && Math.abs(value) < 1000000;
@@ -200,13 +313,171 @@ const getNextPowerOfTwo = (value) => {
 };
 
 const getCachedTextureExists = async (fileName) => {
-  if (!textureExistsCache.has(fileName)) {
-    textureExistsCache.set(
-      fileName,
-      getEQFileExists('textures', fileName).catch(() => false)
-    );
+  const revision = getEQFileDirectoryRevision('textures');
+  const cached = textureExistsCache.get(fileName);
+  if (cached?.revision === revision) {
+    return cached.promise;
   }
-  return textureExistsCache.get(fileName);
+  const promise = (async () => {
+    if (!(await getEQFileExists('textures', fileName))) {
+      return false;
+    }
+    // A File System Access handle becomes visible when it is created, before
+    // its writer necessarily closes. Never classify a zero-byte in-progress
+    // texture as ready for Babylon.
+    const deadline = performance.now() + 5000;
+    do {
+      const data = await getEQFile('textures', fileName).catch(() => false);
+      if ((data?.byteLength ?? 0) > 0) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    } while (performance.now() < deadline);
+    return false;
+  })();
+  textureExistsCache.set(fileName, { promise, revision });
+  const exists = await promise;
+  if (!exists && textureExistsCache.get(fileName)?.promise === promise) {
+    // Missing character textures can be produced later by an on-demand
+    // archive refresh. Negative cache entries must never outlive that event.
+    textureExistsCache.delete(fileName);
+  }
+  return exists;
+};
+
+const getCachedTransparentSentinelTexture = async (fileName) => {
+  const revision = getEQFileDirectoryRevision('textures');
+  const cached = transparentSentinelTextureCache.get(fileName);
+  if (cached?.revision === revision) {
+    return cached.promise;
+  }
+  const promise = getEQFile('textures', fileName)
+        .then(async (data) => {
+          if (!data) {
+            return false;
+          }
+          const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+          if (
+            bytes.byteLength < 24 ||
+            bytes[0] !== 0x89 ||
+            bytes[1] !== 0x50 ||
+            bytes[2] !== 0x4e ||
+            bytes[3] !== 0x47
+          ) {
+            return false;
+          }
+          const view = new DataView(
+            bytes.buffer,
+            bytes.byteOffset,
+            bytes.byteLength
+          );
+          const width = view.getUint32(16, false);
+          const height = view.getUint32(20, false);
+          if (width <= 0 || height <= 0) {
+            return false;
+          }
+
+          // Character archives use fully transparent PNGs as sentinels for
+          // exposed skin. Most classic sentinels are 8x8, but later race
+          // archives contain the same marker at 32-256px. Dimensions therefore
+          // cannot determine intent: several valid EQ textures (teeth, eyes,
+          // and effect details) are also 8x8. Decode every candidate and only
+          // classify an image whose complete alpha channel is transparent.
+          const blob = new Blob([bytes], { type: 'image/png' });
+          let bitmap = null;
+          let objectUrl = null;
+          if (typeof createImageBitmap === 'function') {
+            bitmap = await createImageBitmap(blob);
+          } else if (
+            typeof document !== 'undefined' &&
+            typeof URL !== 'undefined' &&
+            typeof URL.createObjectURL === 'function'
+          ) {
+            objectUrl = URL.createObjectURL(blob);
+            bitmap = await new Promise((resolve, reject) => {
+              const image = document.createElement('img');
+              image.onload = () => resolve(image);
+              image.onerror = () => reject(new Error(`Unable to decode ${fileName}`));
+              image.src = objectUrl;
+            });
+          } else {
+            return false;
+          }
+          try {
+            const canvas = typeof OffscreenCanvas === 'function'
+              ? new OffscreenCanvas(bitmap.width, bitmap.height)
+              : Object.assign(document.createElement('canvas'), {
+                  width: bitmap.width,
+                  height: bitmap.height,
+                });
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            if (!context) {
+              return false;
+            }
+            context.drawImage(bitmap, 0, 0);
+            const pixels = context.getImageData(
+              0,
+              0,
+              bitmap.width,
+              bitmap.height
+            ).data;
+            for (let index = 3; index < pixels.length; index += 4) {
+              if (pixels[index] !== 0) {
+                return false;
+              }
+            }
+            return true;
+          } finally {
+            bitmap.close?.();
+            if (objectUrl) {
+              URL.revokeObjectURL(objectUrl);
+            }
+          }
+        })
+        .catch(() => false);
+  transparentSentinelTextureCache.set(fileName, { promise, revision });
+  return promise;
+};
+
+const getSkinFallbackTextureName = async (prefix, textNum) => {
+  // Some models have no SK texture for a particular UV slot. In those cases
+  // the same slot from appearance 00 is the canonical exposed-skin texture.
+  // Keep the slot number stable so we never substitute an incompatible UV
+  // layout merely because another SK texture happens to exist.
+  for (const candidate of [
+    `${prefix}sk${textNum}`,
+    `${prefix}00${textNum}`,
+  ]) {
+    const fileName = `${candidate}.png`;
+    if (
+      await getCachedTextureExists(fileName) &&
+      !(await getCachedTransparentSentinelTexture(fileName))
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const getBodyVariantCoverageTextureName = async (
+  prefix,
+  textNum,
+  maximumStandardTexture
+) => {
+  if (!BODY_VARIANT_CLOTHING_PREFIX_PATTERN.test(prefix)) {
+    return null;
+  }
+  for (let texture = maximumStandardTexture; texture >= 1; texture--) {
+    const candidate = `${prefix}${texture.toString().padStart(2, '0')}${textNum}`;
+    const fileName = `${candidate}.png`;
+    if (
+      await getCachedTextureExists(fileName) &&
+      !(await getCachedTransparentSentinelTexture(fileName))
+    ) {
+      return candidate;
+    }
+  }
+  return null;
 };
 
 const getCachedModelExists = async (fileName) => {
@@ -217,6 +488,43 @@ const getCachedModelExists = async (fileName) => {
     );
   }
   return modelExistsCache.get(fileName);
+};
+
+const isTransparentSentinelMaterial = async (material) => {
+  if (!material?.name) {
+    return false;
+  }
+  if (material.metadata?.transparentTextureSentinel === true) {
+    return true;
+  }
+  const isTransparentSentinel = await getCachedTransparentSentinelTexture(
+    `${material.name}.png`
+  );
+  if (isTransparentSentinel) {
+    material.metadata = {
+      ...(material.metadata ?? {}),
+      transparentTextureSentinel: true,
+    };
+  }
+  return isTransparentSentinel;
+};
+
+const suppressTransparentSentinelMaterial = (material) => {
+  if (!material || material.metadata?.transparentTextureSentinel !== true) {
+    return;
+  }
+  material.metadata = {
+    ...(material.metadata ?? {}),
+    transparentTextureSentinel: true,
+    transparentTextureSentinelSuppressed: true,
+  };
+  // Some converted GLBs do not preserve the PNG alpha mode, which makes a
+  // fully transparent layer render as opaque white. If no compatible skin
+  // texture exists, keep the intentional layer invisible at the material
+  // level instead of relying on the imported alpha configuration.
+  material.alpha = 0;
+  material.disableColorWrite = true;
+  material.disableDepthWrite = true;
 };
 
 /** @typedef {import('@babylonjs/core/Meshes').Mesh} Mesh */
@@ -236,11 +544,18 @@ export class BabylonSpawn {
   /** @type {Mesh} */
   nameplateMesh = null;
 
+  nameplateRequired = false;
+
+  nameplateValidationRepresentative = false;
+
   /** @type {Node} */
   parentNode = null;
 
   /** @type {import('@babylonjs/core').AnimationGroup[]} */
   animationGroups = [];
+
+  /** @type {import('@babylonjs/core').InstantiatedEntries | null} */
+  instanceContainer = null;
 
   /**
    * @type {Object.<number, import('@babylonjs/core').AnimationGroup>}
@@ -257,6 +572,14 @@ export class BabylonSpawn {
   animating = false;
   canAnimate = false;
   animatingIndex = AnimationNames.Idle;
+  postInitializeTimer = null;
+  disposed = false;
+  selectedAnimationPromoted = false;
+  selectedAnimationPromotionFailed = false;
+  selectedAnimationPromotionPromise = null;
+  selectedVisualAnimationName = null;
+  neutralIdleCandidateNames = [];
+  neutralIdleSelectionPass = true;
 
   /**
    * @param {object} spawnData
@@ -420,15 +743,35 @@ export class BabylonSpawn {
     texture.vOffset = 1;
   }
 
+  clearTextureVFlip(texture) {
+    if (!texture) {
+      return;
+    }
+    texture.vScale = Math.abs(texture.vScale || 1);
+    texture.vOffset = 0;
+  }
+
   applyHeadTextureOrientation(rootNode, multiMaterial = null) {
     const bindings = this.getMaterialBindings(rootNode, multiMaterial);
     for (const { material } of bindings) {
-      if (
-        !shouldFlipHeadTextureV(this.modelName, `${material?.name ?? ''}`, material)
-      ) {
+      if (!isCharacterHeadMaterial(material)) {
         continue;
       }
-      this.applyTextureVFlip(this.getMaterialTexture(material));
+      const policy = getCharacterHeadOrientationPolicy(material.name);
+      const geometryUvFlipped =
+        material.metadata?.gltf?.extras?.spireSkinnedVFlipped === true ||
+        material.metadata?.extras?.spireSkinnedVFlipped === true ||
+        material.metadata?.spireSkinnedVFlipped === true;
+      const desiredEffectiveVFlip =
+        policy.geometryUvFlipped !== policy.runtimeTextureVFlipped;
+      const needsRuntimeTextureVFlip =
+        geometryUvFlipped !== desiredEffectiveVFlip;
+      const texture = this.getMaterialTexture(material);
+      if (needsRuntimeTextureVFlip) {
+        this.applyTextureVFlip(texture);
+      } else {
+        this.clearTextureVFlip(texture);
+      }
       material.markAsDirty?.(BABYLON.Material?.TextureDirtyFlag ?? 1);
     }
   }
@@ -491,15 +834,24 @@ export class BabylonSpawn {
   }
 
   async applyTextureSwaps(rootNode, multiMaterial = null) {
-    if (
-      !this.spawnEntry.hasOwnProperty('texture') ||
-      this.spawnEntry.texture <= 0 ||
-      this.skipTextureSwap(this.modelName)
-    ) {
-      return;
-    }
-
-    const texture = Number(this.spawnEntry.texture);
+    const texture = Number(this.spawnEntry.texture ?? 0);
+    this.appearanceTextureDecodeFailureCount = 0;
+    this.appearanceTextureDecodeFailures = [];
+    this.bodyVariantTextureFallbackApplied = false;
+    this.bodyVariantTextureFallbackAppliedCount = 0;
+    this.bodyVariantTextureFallbackAvailableCount = 0;
+    this.bodyVariantTextureCoverageRequiredCount = 0;
+    this.bodyVariantTextureCoverageAppliedCount = 0;
+    const canSwapBodyTexture =
+      !this.skipTextureSwap(this.modelName);
+    const rawFace = Math.trunc(Number(this.spawnEntry.face ?? 0));
+    const face = Number.isFinite(rawFace) && rawFace >= 0 && rawFace <= 9
+      ? rawFace
+      : 0;
+    const helmTexture = Math.max(
+      0,
+      Math.trunc(Number(this.spawnEntry.helmtexture ?? 0))
+    );
     const bindings = this.getMaterialBindings(rootNode, multiMaterial);
 
     for (const { assign, material } of bindings) {
@@ -507,85 +859,390 @@ export class BabylonSpawn {
       if (!sourceTexture || !material?.name) {
         continue;
       }
+      // Mark unresolved sentinels as well as successfully substituted ones so
+      // the validation campaign reports a real placeholder instead of merely
+      // flagging every legitimate tiny EQ texture.
+      const sourceIsTransparentSentinel =
+        await isTransparentSentinelMaterial(material);
 
-      const isVariationTexture = texture >= 10;
-      let text = isVariationTexture ? texture - 10 : texture;
       const isHead = HEAD_MATERIAL_PATTERN.test(material.name);
-      if (material.name.startsWith('clk')) {
-        text += 4;
-      } else if (texture >= 10 && !isHead) {
+      if (!isHead && !isCharacterAppearanceMaterialName(material.name)) {
+        // Race ids can resolve to static props (ships, launches, beds, etc.).
+        // Their material names do not use the character appearance suffix
+        // convention, so preserve the imported texture verbatim.
+        if (sourceIsTransparentSentinel) {
+          suppressTransparentSentinelMaterial(material);
+        }
         continue;
       }
       const prefix = material.name.slice(0, material.name.length - 4);
       const suffix = material.name.slice(material.name.length - 4);
       const textVer = suffix.slice(0, 2);
       const textNum = suffix.slice(2, 4);
-      const thisText = text.toString().padStart(2, '0');
-      let newFullName = `${prefix}${thisText}${textNum}`;
+      let newFullName = null;
+      let bodyVariantTextureCandidate = null;
+      let bodyVariantCoverageCandidate = null;
+      const recordBodyVariantAssignment = (assignedName) => {
+        const normalized = `${assignedName ?? ''}`.toLowerCase();
+        if (
+          bodyVariantTextureCandidate &&
+          normalized === bodyVariantTextureCandidate.toLowerCase()
+        ) {
+          this.bodyVariantTextureFallbackAppliedCount++;
+        }
+        if (
+          bodyVariantCoverageCandidate &&
+          normalized === bodyVariantCoverageCandidate.toLowerCase()
+        ) {
+          this.bodyVariantTextureCoverageAppliedCount++;
+        }
+      };
 
       if (isHead) {
-        if (this.hasAttachedSecondaryHead) {
+        if (
+          this.hasAttachedSecondaryHead &&
+          !isSecondaryHeadMaterial(material)
+        ) {
           continue;
         }
 
-        const headTexture = Number(this.spawnEntry.helmtexture ?? 0);
-        newFullName = headTexture > 0
-          ? `${prefix}${headTexture.toString().padStart(2, '0')}${textNum}`
-          : `${prefix}sk${textNum}`;
+        const headTextureCandidates = [];
+        if (helmTexture > 0) {
+          headTextureCandidates.push(
+            `${prefix}${helmTexture.toString().padStart(2, '0')}${textNum}`
+          );
+        } else {
+          const faceTextureSuffix = `${face}${textNum.slice(-1)}`;
+          headTextureCandidates.push(
+            `${prefix}sk${faceTextureSuffix}`,
+            `${prefix}sk${textNum}`
+          );
+          if (face > 0) {
+            headTextureCandidates.push(
+              `${prefix}${face.toString().padStart(2, '0')}${textNum}`
+            );
+          }
+        }
+
+        for (const candidate of new Set(headTextureCandidates)) {
+          if (!(await getCachedTextureExists(`${candidate}.png`))) {
+            continue;
+          }
+          if (await getCachedTransparentSentinelTexture(`${candidate}.png`)) {
+            const skinMaterialName = await getSkinFallbackTextureName(
+              prefix,
+              textNum
+            );
+            if (skinMaterialName) {
+              newFullName = skinMaterialName;
+              break;
+            }
+            continue;
+          }
+          newFullName = candidate;
+          break;
+        }
+      } else {
+        const usesSkinMaterial = textVer.toLowerCase() === 'sk';
+        if (!canSwapBodyTexture) {
+          // Models in the texture-swap exclusion list retain their native SK
+          // materials. Restore those materials when a reusable audit instance
+          // previously applied a numeric appearance.
+          if (usesSkinMaterial) {
+            if (sourceIsTransparentSentinel) {
+              suppressTransparentSentinelMaterial(material);
+            }
+            continue;
+          }
+          const skinMaterialName = `${prefix}sk${textNum}`;
+          const skinMaterialExists = await getCachedTextureExists(
+            `${skinMaterialName}.png`
+          );
+          const skinMaterialIsTransparent = skinMaterialExists &&
+            await getCachedTransparentSentinelTexture(`${skinMaterialName}.png`);
+          if (skinMaterialExists && !skinMaterialIsTransparent) {
+            newFullName = skinMaterialName;
+          } else {
+            // Non-character and texture-swap-excluded models can contain
+            // intentionally transparent decorative layers whose names do not
+            // follow the four-character appearance suffix convention. Leaving
+            // those layers active makes converted GLBs render opaque white.
+            if (sourceIsTransparentSentinel) {
+              suppressTransparentSentinelMaterial(material);
+            }
+            continue;
+          }
+        } else {
+          const isVariationTexture = texture >= 10;
+          const useBodyVariantTextureFallback =
+            isVariationTexture && this.bodyVariantFallback === true;
+          const maximumStandardTexture = Math.max(
+            1,
+            Math.min(
+              9,
+              Number(raceModelMetadata[this.modelName]?.maxTexture ?? 4)
+            )
+          );
+          let text = useBodyVariantTextureFallback
+            ? texture
+            : isVariationTexture
+              ? texture - 10
+              : texture;
+          if (material.name.startsWith('clk')) {
+            text += 4;
+          } else if (isVariationTexture && !useBodyVariantTextureFallback) {
+            continue;
+          }
+          const thisText = text.toString().padStart(2, '0');
+          if (thisText === textVer) {
+            // A model may ship with its requested numeric appearance already
+            // assigned. Do not bypass sentinel resolution merely because no
+            // material-name swap is otherwise required.
+            if (!sourceIsTransparentSentinel) {
+              continue;
+            }
+            newFullName = await getSkinFallbackTextureName(prefix, textNum);
+            if (!newFullName) {
+              suppressTransparentSentinelMaterial(material);
+              continue;
+            }
+          } else {
+            newFullName = `${prefix}${thisText}${textNum}`;
+            if (!(await getCachedTextureExists(`${newFullName}.png`))) {
+              // A numeric appearance is optional per UV slot. Do not attempt
+              // to decode a filename the archive never supplied; retain the
+              // imported native material unless the high-numbered body-model
+              // fallback can prove a compatible standard clothing texture.
+              newFullName = null;
+              if (
+                useBodyVariantTextureFallback &&
+                BODY_VARIANT_CLOTHING_PREFIX_PATTERN.test(prefix)
+              ) {
+                this.bodyVariantTextureCoverageRequiredCount++;
+                bodyVariantCoverageCandidate =
+                  await getBodyVariantCoverageTextureName(
+                    prefix,
+                    textNum,
+                    maximumStandardTexture
+                  );
+                // A high-numbered appearance may omit a numeric clothing
+                // variant while the imported native SK material is already a
+                // complete, non-transparent texture. Count that real source
+                // material as deterministic coverage instead of replacing it
+                // with white or reporting a false unresolved fallback. A
+                // transparent sentinel remains unresolved and still fails QA.
+                if (
+                  !bodyVariantCoverageCandidate &&
+                  !sourceIsTransparentSentinel
+                ) {
+                  bodyVariantCoverageCandidate = material.name;
+                }
+                newFullName = bodyVariantCoverageCandidate;
+              }
+              if (!newFullName) {
+                if (sourceIsTransparentSentinel) {
+                  suppressTransparentSentinelMaterial(material);
+                }
+                continue;
+              }
+            } else if (
+              useBodyVariantTextureFallback &&
+              !(await getCachedTransparentSentinelTexture(`${newFullName}.png`))
+            ) {
+              bodyVariantTextureCandidate = newFullName;
+              this.bodyVariantTextureFallbackAvailableCount++;
+            }
+            if (
+              newFullName &&
+              await getCachedTransparentSentinelTexture(`${newFullName}.png`)
+            ) {
+              newFullName = await getSkinFallbackTextureName(prefix, textNum);
+              if (!newFullName) {
+                // Preserve the currently assigned material instead of
+                // replacing it with an unresolved transparent placeholder.
+                if (sourceIsTransparentSentinel) {
+                  suppressTransparentSentinelMaterial(material);
+                }
+                continue;
+              }
+            }
+          }
+        }
       }
 
-      if (!isHead && thisText === textVer) {
+      if (!newFullName || newFullName === material.name) {
+        recordBodyVariantAssignment(newFullName);
+        if (sourceIsTransparentSentinel) {
+          suppressTransparentSentinelMaterial(material);
+        }
         continue;
       }
 
-      const exists = await getCachedTextureExists(`${newFullName}.png`);
-      if (!exists) {
+      const scene = window.gameController.currentScene;
+      const pendingAppearanceMaterials = getPendingAppearanceMaterials(scene);
+      const pendingMaterialKey = newFullName.toLowerCase();
+      const pendingMaterialPromise = pendingAppearanceMaterials.get(
+        pendingMaterialKey
+      );
+      if (pendingMaterialPromise) {
+        const pendingMaterial = await pendingMaterialPromise;
+        if (pendingMaterial) {
+          if (isSecondaryHeadMaterial(material)) {
+            markSecondaryHeadMaterial(pendingMaterial);
+          }
+          assign(pendingMaterial);
+          recordBodyVariantAssignment(pendingMaterial.name);
+        } else if (sourceIsTransparentSentinel) {
+          suppressTransparentSentinelMaterial(material);
+        }
+        if (!pendingMaterial) {
+          this.appearanceTextureDecodeFailureCount++;
+          this.appearanceTextureDecodeFailures.push(newFullName);
+        }
         continue;
       }
 
-      const existing = window.gameController.currentScene.materials
+      let existing = scene.materials
         .flat()
         .find((entry) => entry.name === newFullName);
+      if (
+        !isHead &&
+        canSwapBodyTexture &&
+        (await isTransparentSentinelMaterial(existing))
+      ) {
+        // Player-race archives include transparent numeric
+        // materials to mean "show the native skin for this body slot". These
+        // materials are present in the GLB, so merely checking for a matching
+        // material name incorrectly selects the transparent sentinel and
+        // Babylon renders the body section white. Resolve it to the matching
+        // SK material before assigning the swap.
+        const skinMaterialName = await getSkinFallbackTextureName(
+          prefix,
+          textNum
+        );
+        const skinMaterial = scene.materials
+          .flat()
+          .find(
+            (entry) =>
+              skinMaterialName &&
+              entry.name.toLowerCase() === skinMaterialName.toLowerCase()
+          );
+        if (
+          !skinMaterial ||
+          (await isTransparentSentinelMaterial(skinMaterial))
+        ) {
+          // Never assign a transparent sentinel when the archive has no safe
+          // same-UV fallback. Retaining the current material is deterministic
+          // and avoids Babylon's opaque-white rendering of transparent RGB.
+          if (sourceIsTransparentSentinel) {
+            suppressTransparentSentinelMaterial(material);
+          }
+          continue;
+        }
+        newFullName = skinMaterial.name;
+        existing = skinMaterial;
+      }
       if (existing) {
         if (isSecondaryHeadMaterial(material)) {
           markSecondaryHeadMaterial(existing);
         }
-        if (shouldFlipHeadTextureV(this.modelName, newFullName, existing)) {
-          this.applyTextureVFlip(this.getMaterialTexture(existing));
-          existing.markAsDirty?.(BABYLON.Material?.TextureDirtyFlag ?? 1);
-        }
         assign(existing);
+        recordBodyVariantAssignment(existing.name);
         continue;
       }
 
-      const MaterialClass =
-        typeof PBRMaterial === 'function' ? PBRMaterial : StandardMaterial;
-      const newMat = new MaterialClass(
-        newFullName,
-        window.gameController.currentScene
+      const materialCreationPromise = (async () => {
+        const MaterialClass =
+          typeof PBRMaterial === 'function' ? PBRMaterial : StandardMaterial;
+        const newMat = material.clone?.(newFullName) ?? new MaterialClass(
+          newFullName,
+          scene
+        );
+        newMat.name = newFullName;
+        if ('metallic' in newMat) {
+          newMat.metallic = 0;
+        }
+        if ('roughness' in newMat) {
+          newMat.roughness = 1;
+        }
+        newMat.metadata = material.metadata
+          ? { ...material.metadata }
+          : null;
+        if (newMat.metadata) {
+          delete newMat.metadata.transparentTextureSentinel;
+          delete newMat.metadata.transparentTextureSentinelSuppressed;
+        }
+        if (isSecondaryHeadMaterial(material)) {
+          markSecondaryHeadMaterial(newMat);
+        }
+        const textureFileName = `${newFullName}.png`;
+        const textureData = await getAppearanceTextureData(textureFileName);
+        if ((textureData?.byteLength ?? 0) === 0) {
+          newMat.dispose?.();
+          return null;
+        }
+
+        newMat.metadata = {
+          ...(newMat.metadata ?? {}),
+          spireAppearanceTexturePending: true,
+          spireAppearanceTextureDecodeFailed: false,
+        };
+        const newTexture = startAppearanceTextureDecode({
+          name: newFullName,
+          scene,
+          sourceTexture,
+          textureData,
+          material: newMat,
+          assignTexture: (targetMaterial, targetTexture) =>
+            this.setMaterialTexture(targetMaterial, targetTexture),
+        });
+        if (!newTexture) {
+          newMat.dispose?.();
+          return null;
+        }
+        return newMat;
+      })();
+      pendingAppearanceMaterials.set(
+        pendingMaterialKey,
+        materialCreationPromise
       );
-      if ('metallic' in newMat) {
-        newMat.metallic = 0;
+      let newMat = null;
+      try {
+        newMat = await materialCreationPromise;
+      } finally {
+        if (
+          pendingAppearanceMaterials.get(pendingMaterialKey) ===
+          materialCreationPromise
+        ) {
+          pendingAppearanceMaterials.delete(pendingMaterialKey);
+        }
       }
-      if ('roughness' in newMat) {
-        newMat.roughness = 1;
+      if (!newMat) {
+        // Retain a known-good source (or suppress an intentional transparent
+        // sentinel) if material construction fails before Babylon can begin
+        // its asynchronous decode.
+        if (sourceIsTransparentSentinel) {
+          suppressTransparentSentinelMaterial(material);
+        }
+        this.appearanceTextureDecodeFailureCount++;
+        this.appearanceTextureDecodeFailures.push(newFullName);
+        continue;
       }
-      if (isSecondaryHeadMaterial(material)) {
-        markSecondaryHeadMaterial(newMat);
-      }
-      const newTexture = new Texture(
-        newFullName,
-        window.gameController.currentScene,
-        sourceTexture.noMipMap,
-        sourceTexture.invertY,
-        sourceTexture.samplingMode
-      );
-      if (shouldFlipHeadTextureV(this.modelName, newFullName, newMat)) {
-        this.applyTextureVFlip(newTexture);
-      }
-      this.setMaterialTexture(newMat, newTexture);
       assign(newMat);
+      recordBodyVariantAssignment(newMat.name);
     }
+
+    const bodyVariantResolvedAssignmentCount =
+      this.bodyVariantTextureFallbackAppliedCount +
+      this.bodyVariantTextureCoverageAppliedCount;
+    this.bodyVariantTextureFallbackApplied =
+      this.bodyVariantFallback === true &&
+      bodyVariantResolvedAssignmentCount > 0 &&
+      this.bodyVariantTextureFallbackAppliedCount ===
+        this.bodyVariantTextureFallbackAvailableCount &&
+      this.bodyVariantTextureCoverageAppliedCount ===
+        this.bodyVariantTextureCoverageRequiredCount;
+    this.applyHeadTextureOrientation(rootNode, multiMaterial);
   }
 
   getModelTopWorldY() {
@@ -647,6 +1304,10 @@ export class BabylonSpawn {
       : 2.5 + halfPlaneHeight;
   }
 
+  isNameplateEligible() {
+    return !INVISIBLE_SPAWN_MODELS.has(this.modelName);
+  }
+
   updateNameplatePosition() {
     if (!this.nameplateMesh) {
       return;
@@ -655,6 +1316,76 @@ export class BabylonSpawn {
     this.nameplateMesh.position.y = this.getNameplateOffsetY(
       this.nameplateMesh.metadata?.planeHeight
     );
+  }
+
+  inspectNameplate() {
+    const expectedLines = this.getNameplateLines();
+    const plane = this.nameplateMesh;
+    const material = plane?.material;
+    const texture =
+      material?.diffuseTexture ??
+      material?._diffuseTexture ??
+      material?.emissiveTexture ??
+      material?._emissiveTexture;
+    const planeHeight = Number(plane?.metadata?.planeHeight ?? 0);
+    const bodyTopLocalY = this.getModelTopLocalY();
+    const placement = evaluateNameplatePlacement({
+      bodyTopLocalY,
+      nameplateCenterLocalY: plane?.position?.y,
+      planeHeight,
+      rootScaleY: this.rootNode?.scaling?.y,
+      requiredWorldClearance: NAMEPLATE_HEAD_CLEARANCE,
+    });
+    const textureSize = texture?.getSize?.() ?? {};
+    const renderedLines = Array.isArray(plane?.metadata?.textLines)
+      ? plane.metadata.textLines
+      : [];
+    const textMatches =
+      renderedLines.length === expectedLines.length &&
+      renderedLines.every((line, index) => line === expectedLines[index]);
+    const centered =
+      Math.abs(Number(plane?.position?.x ?? Infinity)) <= 0.001 &&
+      Math.abs(Number(plane?.position?.z ?? Infinity)) <= 0.001;
+    const present = !!plane && !plane.isDisposed?.();
+    const visible =
+      present &&
+      plane.isVisible !== false &&
+      plane.visibility !== 0 &&
+      plane.isEnabled?.() !== false;
+    const textured =
+      !!texture &&
+      texture.isReady?.() !== false &&
+      Number(textureSize.width ?? 0) > 1 &&
+      Number(textureSize.height ?? 0) > 1;
+    const attached = plane?.parent === this.rootNode;
+    const billboarded = Number(plane?.billboardMode ?? 0) !== 0;
+
+    return {
+      required: this.nameplateRequired === true,
+      validationRepresentative:
+        this.nameplateValidationRepresentative === true,
+      present,
+      visible,
+      textured,
+      attached,
+      centered,
+      billboarded,
+      textMatches,
+      expectedLines,
+      renderedLines,
+      textureWidth: Number(textureSize.width ?? 0),
+      textureHeight: Number(textureSize.height ?? 0),
+      placement,
+      pass:
+        present &&
+        visible &&
+        textured &&
+        attached &&
+        centered &&
+        billboarded &&
+        textMatches &&
+        placement.pass,
+    };
   }
 
   getCleanNameplateName(name) {
@@ -883,6 +1614,436 @@ export class BabylonSpawn {
     );
   }
 
+  getPreferredVisualAnimationGroup() {
+    if (this.nativePoseOnly) {
+      return null;
+    }
+    return selectPreferredVisualAnimationGroup(this.animationGroups);
+  }
+
+  recordVisualAnimationSelection(animationGroup) {
+    const poseGroup = this.animationGroups.find((group) =>
+      this.isPoseAnimation(group)
+    ) ?? null;
+    this.neutralIdleCandidateNames = this.getPlayableAnimationGroups()
+      .filter((group) => isNeutralIdleAnimationName(group?.name))
+      .filter((group) =>
+        inspectAnimationGroupVitality(group, poseGroup).dynamicTargetCount > 0
+      )
+      .map((group) => group.name);
+    this.selectedVisualAnimationName = animationGroup?.name ?? null;
+    this.neutralIdleSelectionPass =
+      this.neutralIdleCandidateNames.length === 0 ||
+      isNeutralIdleAnimationName(this.selectedVisualAnimationName);
+  }
+
+  isDynamicVisualAnimationGroup(animationGroup) {
+    if (!animationGroup) {
+      return false;
+    }
+    const poseGroup = this.animationGroups.find((group) =>
+      this.isPoseAnimation(group)
+    ) ?? null;
+    return inspectAnimationGroupVitality(
+      animationGroup,
+      poseGroup
+    ).dynamicTargetCount > 0;
+  }
+
+  synchronizeSkeletonPose() {
+    if (!this.rootNode) {
+      return;
+    }
+    const nodes = [
+      this.rootNode,
+      ...(this.rootNode.getDescendants?.(false) ?? []),
+    ];
+    for (const node of nodes) {
+      node.computeWorldMatrix?.(true);
+    }
+    const skeletons = new Set([
+      ...(this.instanceContainer?.skeletons ?? []),
+      ...nodes.map((node) => node?.skeleton).filter(Boolean),
+    ]);
+    for (const skeleton of skeletons) {
+      skeleton.prepare?.(true);
+    }
+    for (const node of nodes) {
+      node.refreshBoundingInfo?.(true, true);
+    }
+  }
+
+  getVisualMaxDimension() {
+    if (!this.rootNode) {
+      return null;
+    }
+    const meshes = [
+      ...(typeof this.rootNode.getTotalVertices === 'function'
+        ? [this.rootNode]
+        : []),
+      ...(this.rootNode.getChildMeshes?.(false) ?? []),
+    ].filter(
+      (mesh) =>
+        mesh?.name !== 'nameplate' &&
+        mesh?.id !== 'textPlane' &&
+        mesh?.metadata?.hiddenBoundary !== true &&
+        mesh?.isVisible !== false &&
+        mesh?.visibility !== 0 &&
+        (typeof mesh?.getTotalVertices !== 'function' ||
+          mesh.getTotalVertices() > 0)
+    );
+
+    let maximumDimension = 0;
+    for (const mesh of meshes) {
+      try {
+        mesh.computeWorldMatrix?.(true);
+        mesh.refreshBoundingInfo?.(true, true);
+        const box = mesh.getBoundingInfo?.()?.boundingBox;
+        const minimum = box?.minimumWorld;
+        const maximum = box?.maximumWorld;
+        if (!minimum || !maximum) {
+          continue;
+        }
+        maximumDimension = Math.max(
+          maximumDimension,
+          Math.abs(maximum.x - minimum.x),
+          Math.abs(maximum.y - minimum.y),
+          Math.abs(maximum.z - minimum.z)
+        );
+      } catch (_error) {}
+    }
+    return maximumDimension > 0 ? maximumDimension : null;
+  }
+
+  captureAnimationTargetValues(animationGroups = this.animationGroups) {
+    const owners = new Map();
+    for (const group of animationGroups ?? []) {
+      for (const targetedAnimation of group?.targetedAnimations ?? []) {
+        const path = targetedAnimation?.animation?.targetPropertyPath ?? [];
+        let owner = targetedAnimation?.target;
+        for (let index = 0; owner && index < path.length - 1; index++) {
+          owner = owner[path[index]];
+        }
+        const property = path[path.length - 1];
+        if (!owner || !property || owner[property] === undefined) {
+          continue;
+        }
+        const properties = owners.get(owner) ?? new Map();
+        if (!properties.has(property)) {
+          const value = owner[property];
+          properties.set(
+            property,
+            value?.clone?.() ??
+              (ArrayBuffer.isView(value) ? value.slice() : value)
+          );
+          owners.set(owner, properties);
+        }
+      }
+    }
+    return owners;
+  }
+
+  restoreAnimationTargetValues(snapshot) {
+    for (const [owner, properties] of snapshot ?? []) {
+      for (const [property, value] of properties) {
+        if (owner[property]?.copyFrom && value) {
+          owner[property].copyFrom(value);
+        } else {
+          owner[property] = value?.clone?.() ??
+            (ArrayBuffer.isView(value) ? value.slice() : value);
+        }
+        owner.markAsDirty?.(property);
+      }
+    }
+  }
+
+  applyAnimationGroupFrame(animationGroup, frame) {
+    let appliedTargetCount = 0;
+    for (const targetedAnimation of animationGroup?.targetedAnimations ?? []) {
+      const animation = targetedAnimation?.animation;
+      const path = animation?.targetPropertyPath ?? [];
+      let owner = targetedAnimation?.target;
+      for (let index = 0; owner && index < path.length - 1; index++) {
+        owner = owner[path[index]];
+      }
+      const property = path[path.length - 1];
+      if (
+        !owner ||
+        !property ||
+        owner[property] === undefined ||
+        typeof animation?.evaluate !== 'function'
+      ) {
+        continue;
+      }
+      const value = animation.evaluate(frame);
+      if (owner[property]?.copyFrom && value) {
+        owner[property].copyFrom(value);
+      } else {
+        owner[property] = value?.clone?.() ?? value;
+      }
+      owner.markAsDirty?.(property);
+      appliedTargetCount++;
+    }
+    return appliedTargetCount;
+  }
+
+  inspectPrimaryHeadRotationSafety(animationGroup, snapshot) {
+    const samples = [];
+    for (const targetedAnimation of animationGroup?.targetedAnimations ?? []) {
+      const targetName = `${targetedAnimation?.target?.name ?? ''}`
+        .replace(/^Clone of /, '')
+        .trim();
+      const path = targetedAnimation?.animation?.targetPropertyPath ?? [];
+      if (
+        !PRIMARY_HEAD_BONE_PATTERN.test(targetName) ||
+        path[path.length - 1] !== 'rotationQuaternion'
+      ) {
+        continue;
+      }
+      let owner = targetedAnimation.target;
+      for (let index = 0; owner && index < path.length - 1; index++) {
+        owner = owner[path[index]];
+      }
+      const property = path[path.length - 1];
+      const baselineQuaternion = snapshot?.get(owner)?.get(property);
+      const result = evaluateHeadRotationSafety({
+        baselineQuaternion,
+        currentQuaternion: owner?.[property],
+      });
+      if (result.measurable) {
+        samples.push({ targetName, ...result });
+      }
+    }
+    return {
+      pass: samples.every((sample) => sample.pass),
+      measurable: samples.length > 0,
+      samples,
+      maximumAngleDegrees: samples.reduce(
+        (maximum, sample) => Math.max(maximum, sample.angleDegrees ?? 0),
+        0
+      ),
+    };
+  }
+
+  validateAnimationBounds(animationGroup) {
+    if (!window.__spireSagePreview || !animationGroup) {
+      return { pass: true, measurable: false, samples: [] };
+    }
+    const safetyCacheKey = [
+      this.loadedModelVariation ?? this.modelName,
+      animationGroup.name ?? 'unnamed',
+    ].join(':').toLowerCase();
+    const cachedResult = animationSafetyCache.get(safetyCacheKey);
+    if (cachedResult) {
+      const result = { ...cachedResult, cached: true };
+      this.animationBoundsSafety = result;
+      return result;
+    }
+    const snapshot = this.captureAnimationTargetValues();
+    this.synchronizeSkeletonPose();
+    const baselineMaxDimension = this.getVisualMaxDimension();
+    const from = Number(animationGroup.from ?? 0);
+    const to = Number(animationGroup.to ?? from);
+    const samples = [];
+    let pass = true;
+    try {
+      for (const fraction of [0.1, 0.37, 0.63, 0.9]) {
+        const frame = Number.isFinite(from) && Number.isFinite(to)
+          ? from + (to - from) * fraction
+          : 0;
+        this.applyAnimationGroupFrame(animationGroup, frame);
+        this.synchronizeSkeletonPose();
+        const boundsResult = evaluateAnimatedBoundsSafety({
+          baselineMaxDimension,
+          currentMaxDimension: this.getVisualMaxDimension(),
+        });
+        const headRotation = this.inspectPrimaryHeadRotationSafety(
+          animationGroup,
+          snapshot
+        );
+        const samplePass = boundsResult.pass && headRotation.pass;
+        samples.push({
+          fraction,
+          frame,
+          ...boundsResult,
+          pass: samplePass,
+          headRotation,
+        });
+        if (!samplePass) {
+          pass = false;
+          break;
+        }
+      }
+    } finally {
+      this.restoreAnimationTargetValues(snapshot);
+      this.synchronizeSkeletonPose();
+    }
+    const result = {
+      pass,
+      measurable: samples.some((sample) => sample.measurable),
+      baselineMaxDimension,
+      headOrientationPass: samples.every((sample) => sample.headRotation?.pass !== false),
+      samples,
+    };
+    animationSafetyCache.set(safetyCacheKey, result);
+    this.animationBoundsSafety = result;
+    return result;
+  }
+
+  applyAnimationBoundsFallback() {
+    const snapshot = this.captureAnimationTargetValues();
+    const baselineMaxDimension = this.getVisualMaxDimension();
+    this.neutralSkeletonPoseApplied = false;
+    this.applyNeutralSkeletonPose();
+    this.synchronizeSkeletonPose();
+    const fallbackSafety = evaluateAnimatedBoundsSafety({
+      baselineMaxDimension,
+      currentMaxDimension: this.getVisualMaxDimension(),
+    });
+    if (!fallbackSafety.pass) {
+      this.restoreAnimationTargetValues(snapshot);
+      this.synchronizeSkeletonPose();
+    }
+    this.animationBoundsRejected = true;
+    this.animationBoundsFallbackSafe = fallbackSafety.pass;
+    if (fallbackSafety.pass) {
+      this.staticPreviewPoseApplied = true;
+      this.staticPreviewPoseTargetCount = Math.max(
+        1,
+        Number(this.staticPreviewPoseTargetCount ?? 0)
+      );
+    }
+    this.releaseStaticAnimationResources();
+    if (this.rootNode?.metadata) {
+      this.rootNode.metadata.animationBoundsRejected = true;
+      this.rootNode.metadata.animationBoundsFallbackSafe = fallbackSafety.pass;
+      this.rootNode.metadata.animationBoundsSafety = this.animationBoundsSafety;
+    }
+  }
+
+  applyNeutralSkeletonPose() {
+    if (this.neutralSkeletonPoseApplied) {
+      return true;
+    }
+    const playableGroups = this.getPlayableAnimationGroups();
+    const nativePoseGroup = this.animationGroups.find((group) =>
+      this.isPoseAnimation(group)
+    );
+    const basePoseGroup = this.nativePoseOnly
+      ? nativePoseGroup
+      : playableGroups.find(
+        (group) => this.getAnimationBaseName(group) === 'p04'
+      ) ?? playableGroups[0];
+    if (!basePoseGroup?.targetedAnimations?.length) {
+      return false;
+    }
+    this.animationGroups.forEach((group) => group.stop());
+    const frame = Number(basePoseGroup.from ?? 0);
+    let appliedTargetCount = 0;
+    for (const targetedAnimation of basePoseGroup.targetedAnimations) {
+      const animation = targetedAnimation.animation;
+      const target = targetedAnimation.target;
+      const path = animation?.targetPropertyPath ?? [];
+      if (!target || path.length === 0 || typeof animation.evaluate !== 'function') {
+        continue;
+      }
+      let owner = target;
+      for (let index = 0; index < path.length - 1; index++) {
+        owner = owner?.[path[index]];
+      }
+      const property = path[path.length - 1];
+      if (!owner || owner[property] === undefined) {
+        continue;
+      }
+      const value = animation.evaluate(frame);
+      if (owner[property]?.copyFrom && value) {
+        owner[property].copyFrom(value);
+      } else {
+        owner[property] = value?.clone?.() ?? value;
+      }
+      appliedTargetCount++;
+    }
+    if (this.nativePoseOnly) {
+      const compactModelName = `${this.modelName ?? ''}`
+        .slice(0, 3)
+        .toLowerCase();
+      const compactArmRotation =
+        COMPACT_NATIVE_ARM_NEUTRAL_ROTATIONS.get(compactModelName);
+      if (compactArmRotation) {
+        // Resolve the instantiated nodes, rather than relying only on the
+        // animation target list. Imported pose tracks can target wrapper nodes
+        // while the skinned hierarchy uses their instantiated descendants.
+        const poseTargets = [
+          this.rootNode,
+          ...(this.rootNode?.getDescendants?.(false) ?? []),
+          ...basePoseGroup.targetedAnimations.map(({ target }) => target),
+        ];
+        const findPoseTarget = (name) => poseTargets.find(
+          (target) =>
+            `${target?.name}`.replace(/^Clone of /, '').toLowerCase() === name
+        );
+        const leftBicep = findPoseTarget('bi_l');
+        const rightBicep = findPoseTarget('bi_r');
+        this.compactNativeArmTargetCount =
+          Number(!!leftBicep) + Number(!!rightBicep);
+        if (leftBicep?.rotate && rightBicep?.rotate) {
+          const rotationAxis =
+            compactArmRotation.axis === 'x'
+              ? BABYLON.Axis.X
+              : compactArmRotation.axis === 'y'
+                ? BABYLON.Axis.Y
+                : BABYLON.Axis.Z;
+          leftBicep.rotate(
+            rotationAxis,
+            compactArmRotation.amount,
+            BABYLON.Space.LOCAL
+          );
+          rightBicep.rotate(
+            rotationAxis,
+            -compactArmRotation.amount,
+            BABYLON.Space.LOCAL
+          );
+          appliedTargetCount += 2;
+          this.compactNativeArmNeutralized = true;
+          this.compactNativeArmNeutralRotation = compactArmRotation.amount;
+          this.compactNativeArmNeutralAxis = compactArmRotation.axis;
+        }
+      }
+      this.neutralSkeletonPoseApplied = appliedTargetCount > 0;
+      this.staticPreviewPoseApplied = appliedTargetCount > 0;
+      this.staticPreviewPoseTargetCount = appliedTargetCount;
+      this.staticPreviewPoseMaxDelta = appliedTargetCount > 0 ? 1 : 0;
+      if (this.rootNode?.metadata) {
+        this.rootNode.metadata.compactNativeArmNeutralized =
+          this.compactNativeArmNeutralized === true;
+        this.rootNode.metadata.compactNativeArmTargetCount =
+          this.compactNativeArmTargetCount ?? 0;
+      }
+      this.synchronizeSkeletonPose();
+      return this.neutralSkeletonPoseApplied;
+    }
+    const poseTargets = [
+      ...new Set(basePoseGroup.targetedAnimations.map(({ target }) => target)),
+    ];
+    const leftClavicle = poseTargets.find(
+      (target) => `${target?.name}`.replace(/^Clone of /, '').toLowerCase() === 'biclavl'
+    );
+    const rightClavicle = poseTargets.find(
+      (target) => `${target?.name}`.replace(/^Clone of /, '').toLowerCase() === 'biclavr'
+    );
+    if (!leftClavicle || !rightClavicle) {
+      return false;
+    }
+    leftClavicle.rotate(BABYLON.Axis.Z, 1, BABYLON.Space.LOCAL);
+    rightClavicle.rotate(BABYLON.Axis.Z, -1, BABYLON.Space.LOCAL);
+    this.neutralSkeletonPoseApplied = true;
+    this.staticPreviewPoseApplied = true;
+    this.staticPreviewPoseTargetCount = appliedTargetCount + 2;
+    this.staticPreviewPoseMaxDelta = 1;
+    this.synchronizeSkeletonPose();
+    return true;
+  }
+
   calculateSpawnScale() {
     if (this.modelName === 'fis') {
       return 0.005;
@@ -1073,6 +2234,86 @@ export class BabylonSpawn {
     this.updateNameplatePosition();
   }
 
+  remapSecondaryMeshSkeleton(mesh, targetSkeleton) {
+    const sourceSkeleton = mesh?.skeleton;
+    if (!sourceSkeleton || !targetSkeleton || sourceSkeleton === targetSkeleton) {
+      return {
+        pass: !!targetSkeleton,
+        remappedIndexCount: 0,
+        unresolvedBones: [],
+      };
+    }
+
+    const normalizeBoneName = (name) => `${name ?? ''}`
+      .replace(/^Clone of /i, '')
+      .trim()
+      .toLowerCase();
+    const targetBoneIndexByName = new Map();
+    for (let index = 0; index < (targetSkeleton.bones?.length ?? 0); index++) {
+      const name = normalizeBoneName(targetSkeleton.bones[index]?.name);
+      if (name && !targetBoneIndexByName.has(name)) {
+        targetBoneIndexByName.set(name, index);
+      }
+    }
+
+    const sourceBones = sourceSkeleton.bones ?? [];
+    const unresolvedBones = new Set();
+    let remappedIndexCount = 0;
+    const indexKinds = [
+      VertexBuffer?.MatricesIndicesKind ?? BABYLON.VertexBuffer?.MatricesIndicesKind,
+      VertexBuffer?.MatricesIndicesExtraKind ??
+        BABYLON.VertexBuffer?.MatricesIndicesExtraKind,
+    ].filter(Boolean);
+
+    const pendingBuffers = [];
+    for (const kind of indexKinds) {
+      const values = mesh.getVerticesData?.(kind);
+      if (!values?.length) {
+        continue;
+      }
+      const remappedValues = ArrayBuffer.isView(values)
+        ? new values.constructor(values)
+        : [...values];
+      for (let index = 0; index < remappedValues.length; index++) {
+        const sourceIndex = Math.trunc(Number(remappedValues[index]));
+        const sourceBone = sourceBones[sourceIndex];
+        if (!sourceBone) {
+          unresolvedBones.add(`index:${sourceIndex}`);
+          continue;
+        }
+        const sourceName = normalizeBoneName(sourceBone.name);
+        const targetIndex = targetBoneIndexByName.get(sourceName);
+        if (targetIndex === undefined) {
+          unresolvedBones.add(sourceBone.name ?? `index:${sourceIndex}`);
+          continue;
+        }
+        if (targetIndex !== sourceIndex) {
+          remappedValues[index] = targetIndex;
+          remappedIndexCount++;
+        }
+      }
+      pendingBuffers.push([kind, remappedValues]);
+    }
+
+    if (unresolvedBones.size > 0) {
+      return {
+        pass: false,
+        remappedIndexCount,
+        unresolvedBones: [...unresolvedBones].sort(),
+      };
+    }
+
+    for (const [kind, values] of pendingBuffers) {
+      mesh.updateVerticesData?.(kind, values, false, false);
+    }
+    mesh.skeleton = targetSkeleton;
+    return {
+      pass: true,
+      remappedIndexCount,
+      unresolvedBones: [],
+    };
+  }
+
   attachSecondaryMeshes(secondaryModel, targetSkeleton) {
     const secondaryRootNode = secondaryModel?.rootNodes?.[0];
     const secondaryMeshes = (secondaryRootNode?.getChildMeshes?.(false) ?? [])
@@ -1082,24 +2323,42 @@ export class BabylonSpawn {
           shouldAttachSecondaryMesh(this.modelName, name)
         )
       );
+    const attachedMeshes = [];
     for (const mesh of secondaryMeshes) {
-      mesh.parent = this.rootNode;
-      if (targetSkeleton && mesh.skeleton) {
-        mesh.skeleton = targetSkeleton;
+      const skeletonRemap = this.remapSecondaryMeshSkeleton(
+        mesh,
+        targetSkeleton
+      );
+      if (!skeletonRemap.pass) {
+        this.secondaryHeadBoneRemapFailureCount =
+          (this.secondaryHeadBoneRemapFailureCount ?? 0) + 1;
+        this.secondaryHeadBoneRemapFailures = [
+          ...(this.secondaryHeadBoneRemapFailures ?? []),
+          {
+            mesh: mesh.name,
+            unresolvedBones: skeletonRemap.unresolvedBones,
+          },
+        ];
+        continue;
       }
+      mesh.parent = this.rootNode;
       markSecondaryHeadMaterial(mesh.material);
       mesh.metadata = {
         ...mesh.metadata,
         spawn: this.metadata?.spawn ?? this.spawnEntry,
         secondaryHead: true,
+        secondaryHeadBoneRemapped: true,
+        secondaryHeadBoneRemappedIndexCount:
+          skeletonRemap.remappedIndexCount,
       };
+      attachedMeshes.push(mesh);
     }
     for (const skeleton of secondaryModel?.skeletons ?? []) {
       if (skeleton !== targetSkeleton) {
         skeleton.dispose?.();
       }
     }
-    return secondaryMeshes;
+    return attachedMeshes;
   }
 
   getMeshInfluencingBoneNames(mesh) {
@@ -1191,12 +2450,13 @@ export class BabylonSpawn {
    * @returns {boolean}
    */
   async initializeSpawn() {
-    const modelVariation =
-      this.spawnEntry.texture >= 10
-        ? `${this.modelName}${Number(this.spawnEntry.texture.toString()[0])
-          .toString()
-          .padStart(2, '0')}`
-        : this.modelName;
+    const modelVariation = getCharacterBodyModelVariation(
+      this.modelName,
+      this.spawnEntry.texture
+    );
+    this.requestedModelVariation = modelVariation;
+    this.loadedModelVariation = null;
+    this.bodyVariantFallback = false;
 
     let assetContainer = null;
     if (window.__spireSagePreview && modelVariation !== this.modelName) {
@@ -1204,29 +2464,83 @@ export class BabylonSpawn {
         await window.gameController.SpawnController.getAssetContainer(
           modelVariation,
           false,
-          { optional: true }
+            { optional: true, generateIfMissing: true }
         );
+      if (assetContainer) {
+        this.loadedModelVariation = modelVariation;
+      }
     }
     if (!assetContainer) {
+      const fallbackModelName =
+        modelVariation === this.modelName ? modelVariation : this.modelName;
       assetContainer =
         await window.gameController.SpawnController.getAssetContainer(
-          modelVariation === this.modelName ? modelVariation : this.modelName
+          fallbackModelName
         );
+      if (assetContainer) {
+        this.loadedModelVariation = fallbackModelName;
+        this.bodyVariantFallback = fallbackModelName !== modelVariation;
+      }
     }
     if (!assetContainer) {
       console.warn('Asset container not found for', modelVariation);
       return;
     }
-    this.instanceContainer = assetContainer.instantiateModelsToScene();
+    this.instanceContainer =
+      window.gameController.SpawnController.instantiateSpawnModel?.(
+        this.loadedModelVariation ?? this.modelName,
+        assetContainer
+      ) ?? assetContainer.instantiateModelsToScene();
     this.animationGroups = this.instanceContainer.animationGroups;
-
-    this.animationMap = mapAnimations(this.animationGroups);
+    this.previewAnimationDonor =
+      this.instanceContainer.__spirePreviewAnimationDonor ?? null;
+    this.resolvedModelAsset =
+      this.instanceContainer.__spireResolvedModelAsset ??
+      this.loadedModelVariation ??
+      this.modelName;
     this.rootNode = this.instanceContainer.rootNodes[0];
 
     if (!this.rootNode) {
       console.log('No root node for container spawn', this.spawn);
       return false;
     }
+    this.rootNode.metadata = {
+      ...this.rootNode.metadata,
+      requestedModelVariation: this.requestedModelVariation,
+      loadedModelVariation   : this.loadedModelVariation,
+      bodyVariantFallback    : this.bodyVariantFallback,
+    };
+    this.animationRetargeting = retargetDetachedAnimationTargets(
+      this.animationGroups,
+      [this.rootNode, ...(this.rootNode.getDescendants?.(false) ?? [])]
+    );
+    this.animationMap = mapAnimations(this.animationGroups);
+    const importedModelNodes = [
+      this.rootNode,
+      ...(this.rootNode.getDescendants?.(false) ?? []),
+    ];
+    const staticPoseOnlyByPolicy = isStaticPoseOnlyCharacterModel(
+      this.requestedModelVariation,
+      this.loadedModelVariation,
+      this.resolvedModelAsset,
+      this.modelName
+    );
+    const hasPlayablePreviewAnimationDonor =
+      this.previewAnimationDonor?.expected === true &&
+      this.previewAnimationDonor?.pass === true;
+    this.nativePoseOnly =
+      staticPoseOnlyByPolicy ||
+      (
+        !hasPlayablePreviewAnimationDonor &&
+        (
+          this.instanceContainer.__spireNativePoseOnly === true ||
+          importedModelNodes.some((node) =>
+            node?.metadata?.gltf?.extras?.spireNativePoseOnly === true ||
+            node?.metadata?.extras?.spireNativePoseOnly === true ||
+            node?.metadata?.spireNativePoseOnly === true
+          )
+        )
+      );
     const spawnId = this.spawnEntry.__spireSpawnId ?? this.spawn.id;
     this.rootNode.id = `spawn_${spawnId}`;
     this.rootNode.name = this.spawn.name;
@@ -1250,16 +2564,22 @@ export class BabylonSpawn {
     const variation =
       this.spawnEntry.helmtexture?.toString().padStart(2, '0') ?? '00';
     const container = await this.getSecondaryHeadContainer(variation);
-    let secondaryModel = null;
     if (container) {
-      secondaryModel = container.instantiateModelsToScene();
-      this.hasAttachedSecondaryHead =
-        this.attachSecondaryMeshes(secondaryModel, instanceSkeleton).length > 0;
-      if (
-        this.hasAttachedSecondaryHead &&
-        SEPARATE_HEAD_MODELS.has(this.modelName)
-      ) {
-        this.hideIntegratedHeadMeshes();
+      const secondaryModel = container.instantiateModelsToScene();
+      try {
+        this.hasAttachedSecondaryHead =
+          this.attachSecondaryMeshes(secondaryModel, instanceSkeleton).length > 0;
+        if (
+          this.hasAttachedSecondaryHead &&
+          SEPARATE_HEAD_MODELS.has(this.modelName)
+        ) {
+          this.hideIntegratedHeadMeshes();
+        }
+      } finally {
+        // Selected head meshes have been reparented to the primary root. The
+        // remaining root, skeleton and animation entries are temporary and
+        // otherwise accumulate once per spawned NPC.
+        secondaryModel.dispose();
       }
     }
 
@@ -1268,7 +2588,9 @@ export class BabylonSpawn {
 
     const hasAnimatedPose = this.getPlayableAnimationGroups().length > 0;
     const keepSkinnedHierarchy =
-      window.__spireSagePreview && !!instanceSkeleton && hasAnimatedPose;
+      window.__spireSagePreview &&
+      !!instanceSkeleton &&
+      (hasAnimatedPose || this.nativePoseOnly);
     const merged = keepSkinnedHierarchy
       ? null
       : Mesh.MergeMeshes(
@@ -1279,9 +2601,6 @@ export class BabylonSpawn {
         true,
         true
       );
-    if (secondaryModel && !keepSkinnedHierarchy) {
-      secondaryModel.dispose();
-    }
     if (merged) {
       if (skeletonRoot && instanceSkeleton) {
         skeletonRoot.parent = merged;
@@ -1293,12 +2612,10 @@ export class BabylonSpawn {
       this.rootNode.skeleton = skeletonRoot?.skeleton ?? instanceSkeleton;
 
       await this.applyTextureSwaps(merged, merged.material);
-      this.applyHeadTextureOrientation(merged, merged.material);
       this.applyMaterialRenderSettings(merged, merged.material);
     } else if (keepSkinnedHierarchy) {
       this.rootNode.skeleton = instanceSkeleton;
       await this.applyTextureSwaps(this.rootNode);
-      this.applyHeadTextureOrientation(this.rootNode);
       this.applyMaterialRenderSettings(this.rootNode);
     }
     this.rootNode.parent = this.parentNode;
@@ -1321,6 +2638,41 @@ export class BabylonSpawn {
       ...this.metadata,
       onlyOccluded: true,
       spawnRoot   : true,
+      requestedModelVariation: this.requestedModelVariation,
+      loadedModelVariation: this.loadedModelVariation,
+      resolvedModelAsset: this.resolvedModelAsset,
+      bodyVariantFallback: this.bodyVariantFallback === true,
+      bodyVariantTextureFallbackApplied:
+        this.bodyVariantTextureFallbackApplied === true,
+      bodyVariantTextureFallbackAppliedCount:
+        this.bodyVariantTextureFallbackAppliedCount ?? 0,
+      bodyVariantTextureFallbackAvailableCount:
+        this.bodyVariantTextureFallbackAvailableCount ?? 0,
+      bodyVariantTextureCoverageRequiredCount:
+        this.bodyVariantTextureCoverageRequiredCount ?? 0,
+      bodyVariantTextureCoverageAppliedCount:
+        this.bodyVariantTextureCoverageAppliedCount ?? 0,
+      nativePoseOnly: this.nativePoseOnly === true,
+      previewAnimationDonorExpected:
+        this.previewAnimationDonor?.expected === true,
+      previewAnimationDonorPass:
+        this.previewAnimationDonor?.pass === true,
+      previewAnimationDonorName:
+        this.previewAnimationDonor?.donorName ?? null,
+      previewAnimationDonorFailureReason:
+        this.previewAnimationDonor?.failureReason ?? null,
+      previewAnimationDonorGroupCount:
+        this.previewAnimationDonor?.attachedGroupCount ?? 0,
+      previewAnimationDonorTargetCount:
+        this.previewAnimationDonor?.attachedTargetCount ?? 0,
+      previewAnimationDonorBindRelativeTargetCount:
+        this.previewAnimationDonor?.bindRelativeTargetCount ?? 0,
+      previewAnimationDonorBindLockedRotationTargetNames:
+        this.previewAnimationDonor?.bindLockedRotationTargetNames ?? [],
+      previewAnimationDonorUnmatchedTargetNames:
+        this.previewAnimationDonor?.unmatchedTargetNames ?? [],
+      compactNativeArmNeutralized:
+        this.compactNativeArmNeutralized === true,
     };
     if (this.instance) {
       this.rootNode.addLODLevel(window.gameController.settings.spawnLOD, this.instance);
@@ -1378,24 +2730,270 @@ export class BabylonSpawn {
     }
     this.hideInvisibleBoundaryMeshes();
     this.normalizeToSpawnGround(this.spawn.z);
-    this.createNameplate();
-
-    const anim =
-      this.animationGroups.find((ag) => ag.name === 'Clone of p01') ??
-      this.getPlayableAnimationGroups()?.[0];
-    if (anim) {
-      this.disableLoopedAnimation();
-      anim.play(true);
-      this.normalizeAnimatedGroundPose();
+    if (!this.isNameplateEligible()) {
+      this.previewNameplateDeferred = false;
+    } else if (!window.__spireSageSkipBulkNameplates) {
+      this.createNameplate();
+    } else {
+      this.previewNameplateDeferred = true;
     }
-    setTimeout(() => {
+
+    if (window.__spireSagePreview && window.__spireSageBulkSpawnLoading) {
+      this.previewAnimationDeferred = true;
+    } else {
+      this.startInitialAnimation();
+    }
+
+    return true;
+  }
+
+  startInitialAnimation({
+    skipGroundNormalization = false,
+    schedulePostInitialize = true,
+  } = {}) {
+    if (this.disposed || !this.rootNode) {
+      return;
+    }
+    this.previewAnimationDeferred = false;
+    const anim = this.getPreferredVisualAnimationGroup();
+    this.recordVisualAnimationSelection(anim);
+    if (anim && this.isDynamicVisualAnimationGroup(anim)) {
+      const boundsSafety = this.validateAnimationBounds(anim);
+      if (boundsSafety.pass) {
+        this.retainSelectedVisualAnimationResources(anim);
+        this.disableLoopedAnimation();
+        anim.play(true);
+      } else {
+        console.warn('[SageAnimation] rejected unsafe animation', {
+          modelName: this.modelName,
+          spawnId: this.spawnEntry.__spireSpawnId ?? this.spawn.id,
+          animation: anim.name,
+          boundsSafety,
+        });
+        this.animationHeadOrientationRejected =
+          boundsSafety.headOrientationPass === false;
+        this.applyAnimationBoundsFallback();
+      }
+      if (!skipGroundNormalization) {
+        this.normalizeAnimatedGroundPose();
+      }
+    } else {
+      if (!this.applyStaticAnimationPose()) {
+        this.applyNeutralSkeletonPose();
+      }
+      if (!skipGroundNormalization) {
+        this.normalizeAnimatedGroundPose();
+      }
+    }
+    if (!schedulePostInitialize) {
+      return;
+    }
+    const initializedRoot = this.rootNode;
+    this.postInitializeTimer = setTimeout(() => {
+      this.postInitializeTimer = null;
+      if (
+        this.disposed ||
+        !initializedRoot ||
+        this.rootNode !== initializedRoot ||
+        initializedRoot.isDisposed?.()
+      ) {
+        return;
+      }
       this.normalizeAnimatedGroundPose();
-      this.rootNode.refreshBoundingInfo?.(true, true);
+      initializedRoot.refreshBoundingInfo?.(true, true);
       this.playAnimation();
       this.normalizeAnimatedGroundPose();
     }, 1000);
+  }
 
-    return true;
+  applyStaticAnimationPose() {
+    if (this.disposed || !this.rootNode) {
+      return false;
+    }
+    const animationGroup = this.getPreferredVisualAnimationGroup();
+    if (!animationGroup?.targetedAnimations?.length) {
+      return this.applyNeutralSkeletonPose();
+    }
+    const from = Number(animationGroup.from ?? 0);
+    const to = Number(animationGroup.to ?? from);
+    const frame = Number.isFinite(from) && Number.isFinite(to)
+      ? from + (to - from) * 0.37
+      : 0;
+    let appliedTargetCount = 0;
+    let maxValueDelta = 0;
+    for (const targetedAnimation of animationGroup.targetedAnimations) {
+      const animation = targetedAnimation.animation;
+      const target = targetedAnimation.target;
+      const path = animation?.targetPropertyPath ?? [];
+      if (!target || path.length === 0 || typeof animation.evaluate !== 'function') {
+        continue;
+      }
+      let owner = target;
+      for (let index = 0; index < path.length - 1; index++) {
+        owner = owner?.[path[index]];
+      }
+      const property = path[path.length - 1];
+      if (!owner || owner[property] === undefined) {
+        continue;
+      }
+      const previousValue = owner[property];
+      const value = animation.evaluate(frame);
+      const previousComponents = previousValue?.asArray?.() ??
+        previousValue?.toArray?.() ??
+        (Number.isFinite(previousValue) ? [previousValue] : []);
+      const nextComponents = value?.asArray?.() ??
+        value?.toArray?.() ??
+        (Number.isFinite(value) ? [value] : []);
+      for (
+        let index = 0;
+        index < Math.min(previousComponents.length, nextComponents.length);
+        index++
+      ) {
+        maxValueDelta = Math.max(
+          maxValueDelta,
+          Math.abs(nextComponents[index] - previousComponents[index])
+        );
+      }
+      if (previousValue?.copyFrom && value) {
+        previousValue.copyFrom(value);
+      } else {
+        owner[property] = value?.clone?.() ?? value;
+      }
+      target.markAsDirty?.(property);
+      appliedTargetCount++;
+    }
+    this.synchronizeSkeletonPose();
+    this.previewAnimationDeferred = false;
+    this.staticPreviewPoseApplied = appliedTargetCount > 0 && maxValueDelta > 0.00001;
+    this.staticPreviewPoseTargetCount = appliedTargetCount;
+    this.staticPreviewPoseMaxDelta = maxValueDelta;
+    if (this.staticPreviewPoseApplied) {
+      this.releaseStaticAnimationResources();
+    }
+    return this.staticPreviewPoseApplied;
+  }
+
+  releaseStaticAnimationResources() {
+    // Bulk zone previews keep one live animation per model and pose duplicate
+    // NPCs at a representative frame. Once that frame has been applied, their
+    // cloned animation groups are no longer needed and otherwise dominate both
+    // scene bookkeeping and memory in spawn-heavy zones.
+    for (const animationGroup of this.animationGroups) {
+      animationGroup?.stop?.();
+      animationGroup?.dispose?.();
+    }
+    this.animationGroups = [];
+    this.animationMap = {};
+    this.animatables = [];
+    if (this.instanceContainer) {
+      this.instanceContainer.animationGroups = [];
+    }
+  }
+
+  retainSelectedVisualAnimationResources(selectedAnimationGroup) {
+    if (!selectedAnimationGroup || this.animationGroups.length <= 1) {
+      return;
+    }
+    let disposedGroupCount = 0;
+    for (const animationGroup of this.animationGroups) {
+      if (animationGroup === selectedAnimationGroup) {
+        continue;
+      }
+      animationGroup?.stop?.();
+      animationGroup?.dispose?.();
+      disposedGroupCount++;
+    }
+    this.animationGroups = [selectedAnimationGroup];
+    this.animationMap = mapAnimations(this.animationGroups);
+    this.animatables = [];
+    this.animationResourcePrunedCount =
+      Number(this.animationResourcePrunedCount ?? 0) + disposedGroupCount;
+    if (this.instanceContainer) {
+      this.instanceContainer.animationGroups = this.animationGroups;
+    }
+  }
+
+  async promoteToLiveAnimation() {
+    if (this.disposed || !this.rootNode) {
+      return false;
+    }
+    const existingAnimation = this.getPreferredVisualAnimationGroup();
+    if (existingAnimation && this.isDynamicVisualAnimationGroup(existingAnimation)) {
+      this.startInitialAnimation({ schedulePostInitialize: false });
+      return true;
+    }
+    if (this.nativePoseOnly) {
+      return false;
+    }
+    if (this.selectedAnimationPromotionPromise) {
+      return this.selectedAnimationPromotionPromise;
+    }
+
+    this.selectedAnimationPromotionPromise = (async () => {
+      const modelVariation = this.loadedModelVariation ?? this.modelName;
+      const assetContainer =
+        await window.gameController?.SpawnController?.getAssetContainer?.(
+          modelVariation
+        );
+      if (!assetContainer || this.disposed || !this.rootNode) {
+        this.selectedAnimationPromotionFailed = true;
+        return false;
+      }
+
+      const temporaryInstance = assetContainer.instantiateModelsToScene();
+      const animationGroups = [...(temporaryInstance.animationGroups ?? [])];
+      const animationRetargeting = retargetDetachedAnimationTargets(
+        animationGroups,
+        [this.rootNode, ...(this.rootNode.getDescendants?.(false) ?? [])]
+      );
+      const animationVitality = inspectAnimationSetVitality(animationGroups);
+      const canPromote =
+        animationGroups.length > 0 &&
+        animationRetargeting.unresolvedTargetCount === 0 &&
+        animationVitality.dynamicGroupCount > 0;
+
+      if (!canPromote) {
+        for (const animationGroup of animationGroups) {
+          animationGroup?.dispose?.();
+        }
+        temporaryInstance.animationGroups = [];
+        temporaryInstance.dispose?.();
+        this.selectedAnimationPromotionFailed = true;
+        return false;
+      }
+
+      // The cloned roots and skeletons are temporary; only their animation
+      // groups are retained after all targets have been deterministically
+      // rebound to this spawn's existing nodes.
+      temporaryInstance.animationGroups = [];
+      temporaryInstance.dispose?.();
+      this.animationGroups = animationGroups;
+      this.animationMap = mapAnimations(animationGroups);
+      this.animationRetargeting = animationRetargeting;
+      if (this.instanceContainer) {
+        this.instanceContainer.animationGroups = animationGroups;
+      }
+      this.staticPreviewPoseApplied = false;
+      this.selectedAnimationPromoted = true;
+      this.selectedAnimationPromotionFailed = false;
+      this.startInitialAnimation({ schedulePostInitialize: false });
+      return true;
+    })();
+
+    try {
+      return await this.selectedAnimationPromotionPromise;
+    } finally {
+      this.selectedAnimationPromotionPromise = null;
+    }
+  }
+
+  demoteSelectedLiveAnimation() {
+    if (!this.selectedAnimationPromoted) {
+      return false;
+    }
+    const applied = this.applyStaticAnimationPose();
+    this.selectedAnimationPromoted = false;
+    return applied;
   }
 
   enableLoopedAnimation() {
@@ -1440,21 +3038,41 @@ export class BabylonSpawn {
       return;
     }
 
-    const anim =
-      this.animationGroups.find((ag) => ag.name === 'Clone of p01') ??
-      this.getPlayableAnimationGroups()?.[0];
+    const anim = this.getPreferredVisualAnimationGroup();
 
-    if (anim) {
+    if (anim && this.isDynamicVisualAnimationGroup(anim)) {
       this.disableLoopedAnimation();
       anim.play(true);
+      this.normalizeAnimatedGroundPose();
+    } else {
+      if (!this.applyStaticAnimationPose()) {
+        this.applyNeutralSkeletonPose();
+      }
       this.normalizeAnimatedGroundPose();
     }
   }
 
   dispose() {
+    this.disposed = true;
+    this.selectedAnimationPromotionPromise = null;
+    if (this.postInitializeTimer !== null) {
+      clearTimeout(this.postInitializeTimer);
+      this.postInitializeTimer = null;
+    }
     this.disposeNameplate();
-    this.rootNode?.dispose();
+    const rootNode = this.rootNode;
     this.rootNode = null;
+    // instantiateModelsToScene returns ownership of its root nodes, cloned
+    // skeletons and cloned animation groups. Disposing only the visible root
+    // leaves the latter two registered with the scene across zone changes.
+    this.instanceContainer?.dispose?.();
+    this.instanceContainer = null;
+    if (rootNode && !rootNode.isDisposed?.()) {
+      rootNode.dispose();
+    }
+    this.animationGroups = [];
+    this.animationMap = {};
+    this.animatables = [];
     this.instance?.dispose();
     this.instance = null;
   }
@@ -1472,7 +3090,17 @@ export class BabylonSpawn {
     this.nameplateMesh = null;
   }
 
-  createNameplate() {
+  createNameplate({ validationRepresentative = false } = {}) {
+    if (!this.isNameplateEligible()) {
+      this.nameplateRequired = false;
+      this.nameplateValidationRepresentative = false;
+      this.previewNameplateDeferred = false;
+      this.disposeNameplate();
+      return;
+    }
+    this.nameplateRequired = true;
+    this.nameplateValidationRepresentative = validationRepresentative === true;
+    this.previewNameplateDeferred = false;
     if (
       typeof DynamicTexture !== 'function' ||
       typeof StandardMaterial !== 'function' ||
@@ -1573,6 +3201,7 @@ export class BabylonSpawn {
       nameplate  : true,
       planeHeight,
       spawn      : this.metadata?.spawn ?? this.spawnEntry,
+      textLines  : [...textLines],
     };
 
     this.nameplateMesh = plane;

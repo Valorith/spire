@@ -127,7 +127,11 @@ export class PFSArchive {
         continue;
       }
 
-      const filenameBuffer = new Uint8Array(buffer.slice(offset, offset + size));
+      // `size` is the uncompressed filename-table length, not the number of
+      // compressed bytes stored in the archive. Small tables can compress to
+      // a larger block, so slicing to `offset + size` truncates valid PFS
+      // archives such as the classic `global*_chr2.s3d` head archives.
+      const filenameBuffer = new Uint8Array(buffer.slice(offset, dirOffset));
       let filenameInflated;
       try {
         filenameInflated = this.inflateByFileOffset(filenameBuffer, 0, size);

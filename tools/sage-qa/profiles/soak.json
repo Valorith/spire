@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "soak",
+  "description": "Repeated zone-transition validation with resource plateau and heap-growth budgets.",
+  "zoneValidation": {
+    "enabled": true,
+    "zones": ["unrest", "rivervale", "greatdivide"],
+    "cycles": 3,
+    "timeoutMs": 900000,
+    "isolateZones": false
+  },
+  "raceAudit": {
+    "enabled": false,
+    "modelSelection": { "mode": "explicit", "models": [] }
+  },
+  "staticTextureAudit": { "enabled": false },
+  "visualSamples": [],
+  "soak": {
+    "enabled": true,
+    "warmupCycles": 1,
+    "resourceKeys": ["meshes", "materials", "textures", "skeletons", "animationGroups", "transformNodes"],
+    "resourceTolerancePercent": 2,
+    "resourceToleranceAbsolute": 6,
+    "maxJsHeapGrowthMB": 384
+  },
+  "artifacts": {
+    "screenshotMode": "failures",
+    "traceMode": "never",
+    "keepRuns": 8,
+    "maxTotalMB": 1024
+  }
+}

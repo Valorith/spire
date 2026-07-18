@@ -27,6 +27,12 @@ const LoadingDialog = React.lazy(() =>
 const SageValidationHarness = React.lazy(() =>
   import('../validation/validation-harness').then((module) => ({ default: module.SageValidationHarness }))
 );
+const RaceFaceAudit = React.lazy(() =>
+  import('../validation/race-face-audit').then((module) => ({ default: module.RaceFaceAudit }))
+);
+const RaceArchiveAudit = React.lazy(() =>
+  import('../validation/race-archive-audit').then((module) => ({ default: module.RaceArchiveAudit }))
+);
 
 const ZoneLoadingOverlay = ({
   title = 'Preparing Zone Editor',
@@ -292,9 +298,17 @@ export const Main = ({ onBootStateChange } = {}) => {
             },
           })}
         >
-          <ConfirmProvider>
+          <ConfirmProvider
+            defaultOptions={{
+              dialogProps: {
+                sx: { zIndex: 200100 },
+              },
+            }}
+          >
             <Suspense fallback={null}>
               <SageValidationHarness />
+              <RaceArchiveAudit />
+              <RaceFaceAudit />
             </Suspense>
             <Stack
               onDragOver={(e) => {

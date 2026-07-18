@@ -395,16 +395,16 @@ const applyQuery = (collection, searchParams) => {
 
   let result = [...collection];
 
-  if (whereClauses.length > 0) {
-    result = result.filter((entry) =>
-      whereClauses.every((clause) => matchesClause(entry, clause))
-    );
-  }
-
-  if (whereOrClauses.length > 0) {
-    result = result.filter((entry) =>
-      whereOrClauses.some((clause) => matchesClause(entry, clause))
-    );
+  if (whereClauses.length > 0 || whereOrClauses.length > 0) {
+    result = result.filter((entry) => {
+      const matchesWhere =
+        whereClauses.length > 0 &&
+        whereClauses.every((clause) => matchesClause(entry, clause));
+      const matchesWhereOr =
+        whereOrClauses.length > 0 &&
+        whereOrClauses.some((clause) => matchesClause(entry, clause));
+      return matchesWhere || matchesWhereOr;
+    });
   }
 
   if (orderByFields.length > 0) {

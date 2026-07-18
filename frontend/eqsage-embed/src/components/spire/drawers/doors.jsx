@@ -71,7 +71,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
     return new Spire.SpireApiTypes.DoorApi(...Spire.SpireApi.cfg());
   }, [Spire]);
 
-  const loadDoors = useCallback(async () => {
+  const loadDoors = useCallback(async (forceReload = false) => {
     if (!Spire || !selectedZone?.short_name) {
       doorsRef.current = [];
       return [];
@@ -81,6 +81,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
       Spire,
       selectedZone,
       availableModelSet: availableModelsLoaded ? availableModelSet : null,
+      forceReload,
     });
     doorsRef.current = doors;
 
@@ -166,7 +167,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
     createDoorApi()
       .deleteDoor({ id: selectedMesh.dataReference.id })
       .then(async () => {
-        await loadDoors();
+        await loadDoors(true);
         deleteLocal();
         openAlert(`Deleted ${selectedMesh.name}`);
       })
@@ -261,21 +262,45 @@ export const DoorsDrawer = ({ selectedObject }) => {
       const scale = doRandom
         ? getRandomNumber(scaleClamp[0], scaleClamp[1])
         : mesh?.scaling?.y ?? 1;
-      const templateDoor = doorsRef.current[0] || {};
       const nextDoorId =
         Math.max(0, ...doorsRef.current.map((door) => door.doorid ?? 0)) + 1;
       const draftDoor = toDoorPlacement({
-        ...templateDoor,
-        id     : undefined,
-        doorid : nextDoorId,
-        heading: degreesToEqHeading(rotationY),
-        name   : selectedModel,
-        pos_x  : Math.round(z),
-        pos_y  : Math.round(x),
-        pos_z  : Math.round(y),
-        size   : Math.max(1, Math.round(scale * 100)),
-        version: selectedZone?.version ?? 0,
-        zone   : selectedZone?.short_name,
+        buffer                : 0,
+        client_version_mask   : 0xffffffff,
+        close_timer_ms        : 0,
+        content_flags         : null,
+        content_flags_disabled: null,
+        dest_heading          : 0,
+        dest_instance         : 0,
+        dest_x                : 0,
+        dest_y                : 0,
+        dest_z                : 0,
+        dest_zone             : null,
+        disable_timer         : 0,
+        door_param            : 0,
+        doorid                : nextDoorId,
+        doorisopen            : 0,
+        dz_switch_id          : 0,
+        guild                 : 0,
+        heading               : degreesToEqHeading(rotationY),
+        incline               : 0,
+        invert_state          : 0,
+        is_ldon_door          : 0,
+        keyitem               : 0,
+        lockpick              : 0,
+        max_expansion         : -1,
+        min_expansion         : -1,
+        name                  : selectedModel,
+        nokeyring             : 0,
+        opentype              : 0,
+        pos_x                 : Math.round(z),
+        pos_y                 : Math.round(x),
+        pos_z                 : Math.round(y),
+        size                  : Math.max(1, Math.round(scale * 100)),
+        triggerdoor           : 0,
+        triggertype           : 0,
+        version               : selectedZone?.version ?? 0,
+        zone                  : selectedZone?.short_name,
       });
 
       const payload = stripDoorEditorFields(
@@ -287,7 +312,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
         const createdDoor = Array.isArray(response?.data)
           ? response.data[0]
           : response?.data;
-        await loadDoors();
+        await loadDoors(true);
         openAlert(`Created ${createdDoor?.name ?? selectedModel}`);
       } catch (e) {
         console.warn('Error creating door', e);
@@ -511,6 +536,11 @@ export const DoorsDrawer = ({ selectedObject }) => {
             }
             size="small"
             sx={{ margin: '5px 0' }}
+            slotProps={{
+              popper: {
+                sx: { zIndex: 200100 },
+              },
+            }}
             isOptionEqualToValue={(option, value) => option.key === value?.key}
             onChange={async (e, values) => {
               setSelectedModel(values?.model ?? '');

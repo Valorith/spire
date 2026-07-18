@@ -1,10 +1,13 @@
-import { FILE_TYPE, VERSION } from './constants';
+import {
+  FILE_TYPE,
+  PREVIEW_CHARACTER_CACHE_VERSION,
+  PREVIEW_ZONE_OBJECT_CACHE_VERSION,
+  VERSION,
+} from './constants';
 import { S3DDecoder } from '../s3d/s3d-decoder';
 import { Document } from '@gltf-transform/core';
 import { EQGDecoder } from '../eqg/eqg-decoder';
 import { getEQFile, getEQFileExists } from '../util/fileHandler';
-
-const PREVIEW_CHARACTER_CACHE_VERSION = 12;
 
 const isSpirePreview = () =>
   typeof window !== 'undefined' && !!window.__spireSagePreview;
@@ -71,10 +74,24 @@ export class EQFileHandle {
   }
 
   get #type() {
-    const eqgExists = this.#fileHandles.some(f => f.name === `${this.name}.eqg`);
-    const s3dExists = this.#fileHandles.some(f => f.name === `${this.name}.s3d`);
-  
-    return eqgExists ? FILE_TYPE.EQG : s3dExists ? FILE_TYPE.S3D : FILE_TYPE.NONE;
+    const normalizedNames = this.#fileHandles.map((file) =>
+      `${file.name ?? ''}`.toLowerCase()
+    );
+    const baseName = this.name.toLowerCase();
+    const eqgExists = normalizedNames.includes(`${baseName}.eqg`);
+    const s3dExists = normalizedNames.includes(`${baseName}.s3d`);
+
+    if (eqgExists || s3dExists) {
+      return eqgExists ? FILE_TYPE.EQG : FILE_TYPE.S3D;
+    }
+
+    // Character-only validation intentionally supplies archives such as
+    // greatdivide_chr.s3d without the zone's primary greatdivide.s3d. Treat a
+    // homogeneous filtered archive set as its real format so the decoder runs
+    // instead of reporting a successful no-op.
+    const anyEqg = normalizedNames.some((name) => name.endsWith('.eqg'));
+    const anyS3d = normalizedNames.some((name) => name.endsWith('.s3d'));
+    return anyEqg ? FILE_TYPE.EQG : anyS3d ? FILE_TYPE.S3D : FILE_TYPE.NONE;
   }
   
 
@@ -112,29 +129,44 @@ export class EQFileHandle {
         existingMetadata?.spireCharacterTextures === true &&
         existingMetadata?.spireCharacterCacheVersion === PREVIEW_CHARACTER_CACHE_VERSION
       );
+    const previewZoneObjectCacheReady =
+      !isSpirePreview() ||
+      existingMetadata?.spireZoneObjectCacheVersion === PREVIEW_ZONE_OBJECT_CACHE_VERSION;
     logFileHandleStep(this.name, 'cache:checked', {
       glbExists      : exists,
       metadataVersion: existingMetadata?.version ?? null,
       previewCharacterCacheReady,
+      previewZoneObjectCacheReady,
       expectedVersion: VERSION,
     });
     if (
       exists &&
       existingMetadata?.version === VERSION &&
       previewCharacterCacheReady &&
+      previewZoneObjectCacheReady &&
       !this.#settings.forceReload
     ) {
       logFileHandleStep(this.name, 'cache:hit, skipping translation');
       return;
     }
+    const decoderOptions = {
+      ...this.#options,
+      // A stale character cache must overwrite already-exported model GLBs.
+      // Otherwise the archive pass succeeds and advances the cache marker while
+      // leaving old UV/material data on disk.
+      forceWrite:
+        isSpirePreview() &&
+        (!previewCharacterCacheReady || !previewZoneObjectCacheReady),
+    };
     if (type === FILE_TYPE.EQG) {
       logFileHandleStep(this.name, 'decoder:eqg:start');
-      const eqgDecoder = new EQGDecoder(this, this.#options);
+      const eqgDecoder = new EQGDecoder(this, decoderOptions);
       await eqgDecoder.process();
       logFileHandleStep(this.name, 'decoder:eqg:processed');
       if (doExport) {
         logFileHandleStep(this.name, 'decoder:eqg:export:start');
         await eqgDecoder.export();
+        await this.#processSupplementalArchives(type, decoderOptions);
         logFileHandleStep(this.name, 'decoder:eqg:export:done', {
           seconds: ((performance.now() - startedAt) / 1000).toFixed(2),
         });
@@ -142,12 +174,13 @@ export class EQFileHandle {
       }
     } else if (type === FILE_TYPE.S3D) {
       logFileHandleStep(this.name, 'decoder:s3d:start');
-      const s3dDecoder = new S3DDecoder(this, this.#options);
+      const s3dDecoder = new S3DDecoder(this, decoderOptions);
       await s3dDecoder.process();
       logFileHandleStep(this.name, 'decoder:s3d:processed');
       if (doExport) {
         logFileHandleStep(this.name, 'decoder:s3d:export:start');
         await s3dDecoder.export();
+        await this.#processSupplementalArchives(type, decoderOptions);
         logFileHandleStep(this.name, 'decoder:s3d:export:done', {
           seconds: ((performance.now() - startedAt) / 1000).toFixed(2),
         });
@@ -161,5 +194,52 @@ export class EQFileHandle {
     logFileHandleStep(this.name, 'process:done', {
       seconds: ((performance.now() - startedAt) / 1000).toFixed(2),
     });
+  }
+
+  async #processSupplementalArchives(primaryType, decoderOptions) {
+    const lowerName = this.name.toLowerCase();
+    const supplementalHandles = this.#fileHandles.filter((file) => {
+      const fileName = file.name.toLowerCase();
+      if (primaryType === FILE_TYPE.EQG) {
+        return fileName.endsWith('.s3d') && fileName !== `${lowerName}.s3d`;
+      }
+      if (primaryType === FILE_TYPE.S3D) {
+        return fileName.endsWith('.eqg') && fileName !== `${lowerName}.eqg`;
+      }
+      return false;
+    });
+
+    if (supplementalHandles.length === 0) {
+      return;
+    }
+
+    const supplementalType =
+      primaryType === FILE_TYPE.EQG ? FILE_TYPE.S3D : FILE_TYPE.EQG;
+    logFileHandleStep(this.name, 'decoder:supplemental:start', {
+      handles: supplementalHandles.map((file) => file.name),
+      type   : supplementalType,
+    });
+    const supplementalFileHandle = new EQFileHandle(
+      this.name,
+      supplementalHandles,
+      this.#rootFileHandle,
+      this.#settings,
+      decoderOptions
+    );
+    await supplementalFileHandle.initialize();
+
+    if (supplementalType === FILE_TYPE.S3D) {
+      const decoder = new S3DDecoder(supplementalFileHandle, decoderOptions);
+      await decoder.process();
+      await decoder.export();
+    } else {
+      const decoder = new EQGDecoder(supplementalFileHandle, {
+        ...decoderOptions,
+        modelDestination: 'objects',
+      });
+      await decoder.process();
+      await decoder.export();
+    }
+    logFileHandleStep(this.name, 'decoder:supplemental:done');
   }
 }

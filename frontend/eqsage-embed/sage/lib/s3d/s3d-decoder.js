@@ -16,7 +16,11 @@ import {
   getEQRootDir,
   writeEQFile,
 } from '../util/fileHandler';
-import { VERSION, ZONE_VERSION } from '../model/constants';
+import {
+  PREVIEW_CHARACTER_MODEL_CACHE_VERSION,
+  VERSION,
+  ZONE_VERSION,
+} from '../model/constants';
 import { fragmentNameCleaner } from '../util/util';
 import { S3DAnimationWriter, animationMap } from '../util/animation-helper';
 import { EQGDecoder } from '../eqg/eqg-decoder';
@@ -26,6 +30,13 @@ import { Wld, WldType } from './wld/wld';
 import { ActorType } from './animation/actor';
 import { globals } from '../globals';
 import { optimizeBoundingBoxes } from './bsp/region-utils';
+import {
+  getCharacterHeadOrientationPolicy,
+} from '../util/character-texture-orientation';
+import {
+  getCharacterAnimationCompatibility,
+  STATIC_POSE_ONLY_CHARACTER_MODELS,
+} from '../util/character-animation-policy';
 
 const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
 
@@ -59,48 +70,13 @@ const shouldSkipPreviewImages = (fileName, zoneName) =>
   !isZoneObjectArchive(fileName);
 
 const CLASSIC_MALE_LEG_SPIKE_MODELS = new Set(['bam', 'erm', 'hum']);
-const CLASSIC_HEAD_TEXTURE_V_PRESERVE_MODELS = new Set([
-  'baf',
-  'bam',
-  'daf',
-  'dam',
-  'dwf',
-  'dwm',
-  'elf',
-  'elm',
-  'erf',
-  'erm',
-  'gnf',
-  'gnm',
-  'haf',
-  'ham',
-  'hif',
-  'him',
-  'hof',
-  'hom',
-  'huf',
-  'hum',
-  'ikf',
-  'ikm',
-  'ogf',
-  'ogm',
-  'trf',
-  'trm',
-]);
-const CHARACTER_HEAD_TEXTURE_PATTERN =
-  /^[a-z0-9]{3}(?:he(?:\d{2}|sk)\d{2}|fa\d{4})$/i;
-
-const shouldPreserveClassicHeadTextureV = (materialName) => {
-  const name = `${materialName ?? ''}`.toLowerCase();
-  const modelName = name.slice(0, 3);
-  return (
-    CLASSIC_HEAD_TEXTURE_V_PRESERVE_MODELS.has(modelName) &&
-    CHARACTER_HEAD_TEXTURE_PATTERN.test(name)
-  );
+// DDS decoding flips image pixels vertically before they are cached as PNG.
+// Every discrete head needs one effective V correction. A single shared policy
+// drives geometry conversion, legacy-cache compensation, and validation.
+const shouldFlipSkinnedMeshV = (materialName) => {
+  const policy = getCharacterHeadOrientationPolicy(materialName);
+  return policy.isCharacterHead ? policy.geometryUvFlipped : true;
 };
-
-const shouldFlipSkinnedMeshV = (materialName) =>
-  !shouldPreserveClassicHeadTextureV(materialName);
 
 const getClassicMaleLegSpikeModel = (materialName) => {
   const match = `${materialName ?? ''}`.match(/^([a-z0-9]{3})lg000[12]$/i);
@@ -231,12 +207,29 @@ export class S3DDecoder {
   ) {
     for (const mesh of meshes) {
       const material = mesh.materialList;
-      const baseName = (name || mesh.name).split('_')[0].toLowerCase();
+      const rawBaseName = (name || mesh.name).split('_')[0].toLowerCase();
+      const primarySkeletonAlias =
+        path === 'models' &&
+        mesh === skeleton?.meshes?.[0] &&
+        /^[a-z0-9]{3}$/i.test(`${skeleton?.modelBase ?? ''}`)
+          ? skeleton.modelBase.toLowerCase()
+          : null;
+      const characterAlias = path === 'models'
+        ? rawBaseName.match(/^([a-z0-9]{3})(?:mesh|(?:[a-z0-9]{3})?bod)$/)?.[1]
+        : null;
+      const baseName = primarySkeletonAlias ?? characterAlias ?? rawBaseName;
       const scrubbedName = material.name.split('_')[0].toLowerCase();
       const document = new Document(scrubbedName);
       const buffer = document.createBuffer();
       const scene = document.createScene(scrubbedName);
       const secondary = /he\d+/.test(baseName);
+      // Do not let generation order decide whether a known compact rig gets
+      // its native pose. Without this marker, a cached GLB can be loaded as a
+      // playable character even though it contains POS only, leaving the body
+      // folded or in a T-pose at runtime.
+      let nativePoseOnly =
+        !secondary && STATIC_POSE_ONLY_CHARACTER_MODELS.has(baseName);
+      let animationCompatibility = null;
 
       // Write skeleton data to json if we're a supplier of animations for other models
       if (!secondary && Object.values(animationMap).includes(baseName)) {
@@ -274,15 +267,28 @@ export class S3DDecoder {
             'json'
           ));
         if (existingAnimations) {
-          for (const [key, value] of Object.entries(existingAnimations)) {
-            if (secondary) {
-              continue;
-            }
-            if (!skeleton.animations[key]) {
-              skeleton.animations[key] = {
-                ...value,
-                animModelBase: baseName,
-              };
+          animationCompatibility = getCharacterAnimationCompatibility({
+            targetPoseTracks:
+              skeleton.animations.pos?.tracksCleanedStripped,
+            donorPoseTracks:
+              existingAnimations.pos?.tracksCleanedStripped,
+            nativeAnimationKeys: Object.keys(skeleton.animations),
+          });
+          nativePoseOnly =
+            !secondary &&
+            (STATIC_POSE_ONLY_CHARACTER_MODELS.has(baseName) ||
+              animationCompatibility.useNativePoseOnly);
+          if (!nativePoseOnly) {
+            for (const [key, value] of Object.entries(existingAnimations)) {
+              if (secondary) {
+                continue;
+              }
+              if (!skeleton.animations[key]) {
+                skeleton.animations[key] = {
+                  ...value,
+                  animModelBase: baseName,
+                };
+              }
             }
           }
         } else {
@@ -296,6 +302,11 @@ export class S3DDecoder {
 
       node.setExtras({
         secondaryMeshes: skeleton.secondaryMeshes.length,
+        spireCharacterModelCacheVersion:
+          PREVIEW_CHARACTER_MODEL_CACHE_VERSION,
+        spireNativePoseOnly: nativePoseOnly,
+        spireAnimationExactBoneCoverage:
+          animationCompatibility?.exactCoverage ?? null,
       });
 
       scene.addChild(node);
@@ -316,6 +327,14 @@ export class S3DDecoder {
           console.warn(`S3D model had no material link ${name}`);
           continue;
         }
+        const headOrientation = getCharacterHeadOrientationPolicy(name);
+        gltfMat.setExtras({
+          ...(gltfMat.getExtras?.() ?? {}),
+          spireCharacterHead   : headOrientation.isCharacterHead,
+          spireSkinnedVFlipped : shouldFlipSkinnedMeshV(name),
+          spireRuntimeHeadVFlipped:
+            headOrientation.runtimeTextureVFlipped,
+        });
 
         let sharedPrimitive = primitiveMap[name];
         if (!sharedPrimitive) {
@@ -493,6 +512,11 @@ export class S3DDecoder {
       const bytes = await io.writeBinary(document);
 
       await writeEQFile(path, `${baseName}.glb`, bytes);
+      if (isSpirePreview() && /\d{2}$/.test(baseName)) {
+        console.log(
+          `[SageCharacterExport] wrote ${baseName}.glb from ${wld.name}:${mesh.name}`
+        );
+      }
     }
   }
 
@@ -759,7 +783,12 @@ export class S3DDecoder {
       // }
 
       const bytes = await io.writeBinary(document);
-      await writeEQFile(path, `${skeleton.modelBase}.glb`, bytes);
+      // A character skeleton can own alternate body meshes such as HUM01
+      // (robes). Writing every mesh under the skeleton name silently
+      // overwrites hum.glb and makes the requested hum01.glb impossible to
+      // resolve at runtime. `baseName` preserves the primary skeleton alias
+      // while keeping distinct appearance meshes addressable.
+      await writeEQFile(path, `${baseName}.glb`, bytes);
     }
   }
   /**
@@ -790,6 +819,21 @@ export class S3DDecoder {
       }
       return isAnimationSupplier ? -1 : 1;
     });
+    if (isSpirePreview()) {
+      console.log(`[SageCharacterExport] inventory ${JSON.stringify({
+        archive: wld.name,
+        skeletons: wld.skeletons.map((skeleton) => ({
+          modelBase: skeleton?.modelBase ?? null,
+          meshes: (skeleton?.meshes ?? []).map((mesh) => mesh?.name).slice(0, 24),
+          secondaryMeshes: (skeleton?.secondaryMeshes ?? [])
+            .map((mesh) => mesh?.name)
+            .slice(0, 24),
+        })),
+        meshInventory: wld.meshes
+          .map((mesh) => mesh?.name)
+          .slice(0, 48),
+      })}`);
+    }
 
     const AnimationSources = {};
     for (const skeleton of wld.skeletons) {
@@ -876,7 +920,10 @@ export class S3DDecoder {
    * @param {*} itemExport
    */
   async exportSkeletalActor(wld, skeleton, name, path = 'objects') {
-    const meshes = [];
+    const meshes = [
+      ...(skeleton.meshes ?? []),
+      ...(skeleton.secondaryMeshes ?? []),
+    ];
     let boneIdx = -1;
 
     for (const [idx, bone] of Object.entries(skeleton.skeleton)) {
@@ -885,7 +932,9 @@ export class S3DDecoder {
         bone.meshReference.mesh &&
         bone.meshReference.mesh.materialList
       ) {
-        meshes.push(bone.meshReference.mesh);
+        if (!meshes.includes(bone.meshReference.mesh)) {
+          meshes.push(bone.meshReference.mesh);
+        }
         boneIdx = +idx;
       }
     }
@@ -1175,6 +1224,13 @@ export class S3DDecoder {
           );
           break;
         case ActorType.SKELETAL:
+          if (path === 'models') {
+            // Character WLD skeletons were already exported by exportModels.
+            // Exporting their actor definitions again writes each referenced
+            // mesh to the same model filename, so the final head fragment can
+            // overwrite the complete character body.
+            break;
+          }
           await this.exportSkeletalActor(
             wld,
             obj.fragments[0].reference,
@@ -1297,10 +1353,20 @@ export class S3DDecoder {
 
     // Loop over each mesh in the zone.
     let processedMeshes = 0;
+    let lastMeshYieldAt = performance.now();
     for (const mesh of wld.meshes) {
-      if (processedMeshes++ % 3 === 0) {
-        globals.GlobalStore.actions.setLoadingText(`Exporting zone mesh ${processedMeshes} of ${wld.meshes.length}`);
+      processedMeshes++;
+      const now = performance.now();
+      if (
+        processedMeshes === 1 ||
+        processedMeshes === wld.meshes.length ||
+        now - lastMeshYieldAt >= 16
+      ) {
+        globals.GlobalStore.actions.setLoadingText(
+          `Exporting zone mesh ${processedMeshes} of ${wld.meshes.length}`
+        );
         await yieldToBrowser();
+        lastMeshYieldAt = performance.now();
       }
       let polygonIndex = 0;
       // Process each material group within the mesh.
@@ -1473,9 +1539,9 @@ export class S3DDecoder {
         continue;
       }
       let [name] = eqMaterial.name.toLowerCase().split(/_mdf/i);
-
-      if (/m\d+/.test(name) && eqMaterial.bitmapInfo?.reference) {
-        name = eqMaterial.bitmapInfo.reference.bitmapNames[0].name;
+      const bitmapNames = eqMaterial.bitmapInfo?.reference?.bitmapNames ?? [];
+      if (bitmapNames.length > 0) {
+        name = bitmapNames[0].name;
       }
       const gltfMaterial = document
         .createMaterial()
@@ -1526,16 +1592,18 @@ export class S3DDecoder {
       //     0x42, 0x60, 0x82,
       //   ]);
       // }
-      const texture = document
-        .createTexture(name.toLowerCase())
-        // .setImage(image)
-        .setURI(`/eq/textures/${name}`)
-        .setExtras({
-          name,
-          eqShader: eqMaterial.shaderType
-        })
-        .setMimeType('image/png');
-      gltfMaterial.setBaseColorTexture(texture);
+      if (bitmapNames.length > 0) {
+        const texture = document
+          .createTexture(name.toLowerCase())
+          // .setImage(image)
+          .setURI(`/eq/textures/${name}`)
+          .setExtras({
+            name,
+            eqShader: eqMaterial.shaderType
+          })
+          .setMimeType('image/png');
+        gltfMaterial.setBaseColorTexture(texture);
+      }
       switch (eqMaterial.shaderType) {
         case ShaderType.TransparentMasked:
           gltfMaterial
@@ -1556,6 +1624,11 @@ export class S3DDecoder {
           gltfMaterial.setAlphaMode('BLEND');
           gltfMaterial.setAlpha(0);
           gltfMaterial.setExtras({ boundary: true });
+          break;
+        case ShaderType.Invisible:
+          gltfMaterial.setAlphaMode('BLEND');
+          gltfMaterial.setAlpha(0);
+          gltfMaterial.setExtras({ ...extras, invisible: true });
           break;
         default:
           gltfMaterial.setAlphaMode('OPAQUE');
@@ -1623,7 +1696,7 @@ export class S3DDecoder {
       a.name === `${this.#fileHandle.name}.s3d` ? 1 : -1
     );
     for (const file of this.#fileHandle.fileHandles) {
-      const extension = file.name.split('.').pop();
+      const extension = file.name.split('.').pop().toLowerCase();
       switch (extension) {
         case 's3d':
           await this.processS3D(
@@ -1679,6 +1752,9 @@ export class S3DDecoder {
         case 'xmi':
           break;
         case 'emt':
+          break;
+        case 'eqg':
+        case 'zon':
           break;
         default:
           console.warn(

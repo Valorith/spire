@@ -66,3 +66,8 @@ node_modules/
 
 # Local scratch images created during browser/UI debugging
 tmp-*.png
+
+# Local build and browser diagnostics
+/.tmp/
+/debug.log
+frontend/eqsage-embed/vite.config.js.timestamp-*.mjs

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "name": "compact-rigs",
+  "description": "Fast regression loop for compact rigs that borrow animation from classic skeleton hierarchies.",
+  "zoneValidation": {
+    "enabled": true,
+    "zones": ["akanon", "qeynos", "greatdivide"],
+    "cycles": 1,
+    "timeoutMs": 420000
+  },
+  "raceAudit": {
+    "enabled": true,
+    "bootstrapZone": "blackburrow",
+    "batchSize": 4,
+    "timeoutMs": 420000,
+    "modelSelection": {
+      "mode": "explicit",
+      "models": ["qcm", "qcf", "clm", "clf"]
+    }
+  },
+  "visualSamples": [
+    { "model": "qcm", "face": 0, "texture": 0, "helmTexture": 0 },
+    { "model": "qcf", "face": 0, "texture": 0, "helmTexture": 0 },
+    { "model": "clm", "face": 0, "texture": 0, "helmTexture": 0 },
+    { "model": "clf", "face": 0, "texture": 0, "helmTexture": 0 }
+  ],
+  "visualValidation": {
+    "repetitions": 2,
+    "maximumWhitePixelRatio": 0.22
+  },
+  "artifacts": {
+    "screenshotMode": "final",
+    "traceMode": "failures",
+    "keepRuns": 12,
+    "maxTotalMB": 1536
+  }
+}

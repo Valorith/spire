@@ -125,10 +125,10 @@ export class Wld {
     if (typeMap[this.name]) {
       return typeMap[this.name];
     }
-    if (this.name.endsWith("_obj.wld")) {
+    if (/_obj\d*\.wld$/i.test(this.name)) {
       return WldType.Objects;
     }
-    if (this.name.endsWith("_chr.wld")) {
+    if (/_chr\d*\.wld$/i.test(this.name)) {
       return WldType.Characters;
     }
     if (this.name.startsWith("gequip")) {

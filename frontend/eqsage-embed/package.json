@@ -167,6 +167,10 @@
     "dev": "vite --mode development",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vite build",
     "build:watch": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vite build --watch",
+    "audit:race-skin-textures": "node scripts/audit-race-skin-textures.mjs",
+    "sync:race-data": "node scripts/sync-race-data.mjs",
+    "report:race-face-audit": "node scripts/generate-race-face-audit.mjs",
+    "plan:race-face-zones": "node scripts/plan-unresolved-race-zones.mjs",
     "bundle-visualize": "npx vite-bundle-visualizer"
   },
   "eslintConfig": {

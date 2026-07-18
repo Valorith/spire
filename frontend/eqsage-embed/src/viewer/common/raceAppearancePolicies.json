@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "classicFaceModels": [
+    "baf",
+    "bam",
+    "daf",
+    "dam",
+    "dwf",
+    "dwm",
+    "elf",
+    "elm",
+    "erf",
+    "erm",
+    "gnf",
+    "gnm",
+    "haf",
+    "ham",
+    "hif",
+    "him",
+    "hof",
+    "hom",
+    "huf",
+    "hum",
+    "ikf",
+    "ikm",
+    "ogf",
+    "ogm",
+    "trf",
+    "trm"
+  ]
+}

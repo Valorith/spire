@@ -115,6 +115,7 @@ let cachedDirHandle = null;
 const handles = {};
 const previewReadCache = new Map();
 let previewReadCacheBytes = 0;
+const directoryWriteRevisions = new Map();
 const MAX_PREVIEW_READ_CACHE_BYTES = 32 * 1024 * 1024;
 const MAX_PREVIEW_READ_CACHE_ENTRY_BYTES = 4 * 1024 * 1024;
 
@@ -206,6 +207,16 @@ export const clearPreviewReadCache = () => {
   previewReadCacheBytes = 0;
 };
 
+export const getEQFileDirectoryRevision = (directory) =>
+  directoryWriteRevisions.get(directory) ?? 0;
+
+const advanceEQFileDirectoryRevision = (directory) => {
+  directoryWriteRevisions.set(
+    directory,
+    getEQFileDirectoryRevision(directory) + 1
+  );
+};
+
 export const getEQSageDir = async () => {
   const rootHandle = getActiveRootHandle();
   if (!rootHandle) {
@@ -283,6 +294,7 @@ export const writeEQFile = async (directory, name, buffer, subdir = undefined) =
     await writable.close();
     if (!subdir) {
       cacheRead(directory, name, cloneArrayBuffer(buffer));
+      advanceEQFileDirectoryRevision(directory);
     }
     return true;
   }

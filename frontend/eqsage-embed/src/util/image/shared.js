@@ -16,8 +16,6 @@ export const ShaderType = {
   Boundary                       : 11,
 };
 
-const Jimp = globalThis.Jimp; // eslint-disable-line
-
 const fullAlphaToDoubleAlphaThreshold = 64;
 const alphaShaderMap = {
   [ShaderType.Transparent25]           : 64,
@@ -33,6 +31,13 @@ export const normalizeTextureName = (name) =>
 
 export async function parseTexture(name, shaderType, data) {
   name = name.toLowerCase().replace(/\.\w+$/, '');
+  // The browser build registers Jimp on the global object. Resolve it at call
+  // time rather than capturing it during module initialization so dynamic
+  // chunk ordering cannot permanently cache an undefined decoder.
+  const Jimp = globalThis.Jimp; // eslint-disable-line
+  if (!Jimp?.read || !Jimp?.MIME_PNG) {
+    throw new Error('Browser texture decoder did not initialize');
+  }
 
   if (new DataView(data).getUint16(0, true) === 0x4d42) {
     try {

@@ -131,26 +131,216 @@ const collectSpawnVisualStats = async (gameController) => {
     return null;
   }
 
-  const deadline = Date.now() + 5000;
+  // Large cities can finish their spawn graph before the last shared texture
+  // has decoded. Keep this validation-only wait bounded, and require several
+  // consecutive clean observations so a single transient frame cannot pass.
+  const deadline = Date.now() + 30000;
+  const requiredStableReadyPolls = 3;
+  const settleStartedAt = Date.now();
+  let pollCount = 0;
+  let stableReadyPolls = 0;
   let visualStats = null;
   do {
+    try {
+      // Validation runs while the normal render loop is paused by loading.
+      // Render explicitly so late textures can upload and animations advance.
+      gameController.currentScene?.render?.();
+    } catch (_error) {}
     await wait(250);
+    pollCount++;
     visualStats = spawnController.collectSpawnVisualStats();
-    const texturesReady =
-      visualStats.texturelessSpawnCount === 0 &&
-      visualStats.pendingTextureCount === 0;
-    const animationsReady =
-      visualStats.tPoseRiskCount === 0 &&
-      visualStats.nonPlayingAnimationCount === 0;
-    const groundReady =
-      (visualStats.belowGroundSpawnCount ?? 0) === 0 &&
-      (visualStats.aboveGroundSpawnCount ?? 0) === 0;
-    if (texturesReady && animationsReady && groundReady) {
-      return visualStats;
+    const transientTexturesReady =
+      visualStats.pendingTextureCount === 0 &&
+      (visualStats.appearanceTexturePendingCount ?? 0) === 0;
+    // Terminal correctness failures cannot heal with time. Report them after
+    // textures settle instead of burning the entire timeout on every bad pose,
+    // fallback, or nameplate so QA remains fast and actionable.
+    if (transientTexturesReady) {
+      stableReadyPolls++;
+    } else {
+      stableReadyPolls = 0;
+    }
+    if (stableReadyPolls >= requiredStableReadyPolls) {
+      break;
     }
   } while (Date.now() < deadline);
 
+  if (visualStats) {
+    visualStats.validationSettle = {
+      elapsedMs: Date.now() - settleStartedAt,
+      pollCount,
+      requiredStableReadyPolls,
+      stableReadyPolls,
+      timedOut: stableReadyPolls < requiredStableReadyPolls,
+      pendingTextureCount: visualStats.pendingTextureCount,
+      appearanceTexturePendingCount:
+        visualStats.appearanceTexturePendingCount ?? 0,
+    };
+    visualStats.runtimeAnimation = await collectRuntimeAnimationProbe(
+      gameController
+    );
+  }
   return visualStats;
+};
+
+const getPlayingSpawnAnimationProbes = (gameController) => {
+  const spawnController = gameController?.SpawnController;
+  const probes = [];
+  const observedModelAssets = new Set();
+  for (const [spawnId, spawn] of Object.entries(spawnController?.spawns ?? {})) {
+    const playingGroups = (spawn.animationGroups ?? []).filter(
+      (group) =>
+        group?.targetedAnimations?.length > 0 &&
+        !spawnController.isPoseAnimationGroup(group) &&
+        spawnController.isAnimationGroupPlaying(group)
+    );
+    if (playingGroups.length === 0) {
+      continue;
+    }
+    if (spawnController.isTPoseValidationExcludedModel(spawn.modelName)) {
+      continue;
+    }
+    // Every instance of one resolved asset receives the same deterministic
+    // preferred clip. Babylon appends instance-specific suffixes to cloned
+    // AnimationGroup names, so a model+group-name key accidentally probes all
+    // hundreds of clones. Per-instance play state is already counted above;
+    // expensive frame seeking only needs one representative per source asset.
+    const modelAssetKey = `${
+      spawn.resolvedModelAsset ??
+      spawn.loadedModelVariation ??
+      spawn.modelName ??
+      'unknown'
+    }`.toLowerCase();
+    if (observedModelAssets.has(modelAssetKey)) {
+      continue;
+    }
+    observedModelAssets.add(modelAssetKey);
+    probes.push({ spawnId, spawn, group: playingGroups[0] });
+  }
+  return probes;
+};
+
+const captureSpawnAnimationPose = (spawn, animationGroup) => {
+  const root = spawn?.rootNode;
+  const nodes = [root, ...(root?.getDescendants?.(false) ?? [])].filter(Boolean);
+  const nodeSet = new Set(nodes);
+  const meshes = nodes.filter(
+    (node) => typeof node?.getTotalVertices === 'function' && node.getTotalVertices() > 0
+  );
+  const skeletons = new Set([
+    ...(spawn?.instanceContainer?.skeletons ?? []),
+    ...(spawn?.skeletons ?? []),
+    root?.skeleton,
+    ...meshes.map((mesh) => mesh?.skeleton),
+  ].filter(Boolean));
+  const values = [];
+  let nonFiniteMatrixCount = 0;
+  const append = (matrix) => {
+    for (const value of Array.from(matrix ?? [])) {
+      if (Number.isFinite(value)) values.push(Number(value));
+      else {
+        values.push(null);
+        nonFiniteMatrixCount++;
+      }
+    }
+  };
+  for (const skeleton of skeletons) {
+    skeleton.computeAbsoluteTransforms?.();
+    for (const bone of skeleton?.bones ?? []) {
+      append(bone?.getFinalMatrix?.()?.m ?? bone?._finalMatrix?.m);
+    }
+  }
+  const targets = new Set();
+  for (const targetedAnimation of animationGroup?.targetedAnimations ?? []) {
+    const target = targetedAnimation?.target;
+    if (!target || targets.has(target)) continue;
+    targets.add(target);
+    if (typeof target.getFinalMatrix === 'function') {
+      append(target.getFinalMatrix()?.m ?? target?._finalMatrix?.m);
+    } else if (nodeSet.has(target) && typeof target.getWorldMatrix === 'function') {
+      target.computeWorldMatrix?.(true);
+      append(target.getWorldMatrix()?.m);
+    }
+  }
+  return { values, nonFiniteMatrixCount, targetCount: targets.size };
+};
+
+const collectRuntimeAnimationProbe = async (gameController) => {
+  const scene = gameController?.currentScene;
+  const probes = getPlayingSpawnAnimationProbes(gameController);
+  const frameFractions = [0.1, 0.37, 0.63, 0.9];
+  const samples = [];
+  let movingSpawnCount = 0;
+  let stationaryAnimatedSpawnCount = 0;
+  let nonFiniteMatrixCount = 0;
+  for (const { spawnId, spawn, group } of probes) {
+    const from = Number(group?.from ?? 0);
+    const to = Number(group?.to ?? from);
+    const previousFrame = Number(
+      group?._animatables?.[0]?.masterFrame ??
+      group?._animatables?.[0]?.currentFrame ??
+      from
+    );
+    const wasPlaying = gameController.SpawnController.isAnimationGroupPlaying(group);
+    const poses = [];
+    group.pause?.();
+    for (const fraction of frameFractions) {
+      group.goToFrame?.(from + ((to - from) * fraction));
+      poses.push(captureSpawnAnimationPose(spawn, group));
+    }
+    const baseline = poses[0]?.values ?? [];
+    let maxMatrixDelta = 0;
+    let changedValueCount = 0;
+    for (const pose of poses) {
+      nonFiniteMatrixCount += pose.nonFiniteMatrixCount;
+      if (pose.values.length !== baseline.length) continue;
+      for (let index = 0; index < baseline.length; index++) {
+        const startValue = baseline[index];
+        const endValue = pose.values[index];
+        if (!Number.isFinite(startValue) || !Number.isFinite(endValue)) continue;
+        const delta = Math.abs(endValue - startValue);
+        maxMatrixDelta = Math.max(maxMatrixDelta, delta);
+        changedValueCount += delta > 0.00001 ? 1 : 0;
+      }
+    }
+    if (wasPlaying) {
+      group.play?.(true);
+      group.goToFrame?.(previousFrame);
+    }
+    const moving = maxMatrixDelta > 0.00001 && changedValueCount > 0;
+    movingSpawnCount += moving ? 1 : 0;
+    stationaryAnimatedSpawnCount += moving ? 0 : 1;
+    const poseNonFiniteCount = poses.reduce(
+      (total, pose) => total + pose.nonFiniteMatrixCount,
+      0
+    );
+    if ((!moving || poseNonFiniteCount > 0) && samples.length < 10) {
+      samples.push({
+        spawnId,
+        modelName: spawn.modelName ?? 'unknown',
+        groupName: group?.name ?? null,
+        frameCount: poses.length,
+        valueCount: baseline.length,
+        targetCount: poses[0]?.targetCount ?? 0,
+        maxMatrixDelta,
+        changedValueCount,
+        nonFiniteMatrixCount: poseNonFiniteCount,
+      });
+    }
+  }
+  try {
+    scene?.render?.();
+  } catch (_error) {}
+  return {
+    mode: 'deterministic-frame-seek',
+    probeStrategy: 'one-per-resolved-model-asset',
+    frameFractions,
+    probedSpawnCount: probes.length,
+    movingSpawnCount,
+    stationaryAnimatedSpawnCount,
+    nonFiniteMatrixCount,
+    samples,
+  };
 };
 
 const getMaterialSlots = (material) => {
@@ -208,6 +398,9 @@ const isTextureReady = (texture) => {
 };
 
 const getDoorModelName = (mesh) => {
+  if (mesh.metadata?.doorModelName) {
+    return `${mesh.metadata.doorModelName}`.toLowerCase();
+  }
   const dataReferenceName = mesh.dataReference?.name;
   if (dataReferenceName) {
     return `${dataReferenceName}`.toLowerCase();
@@ -266,6 +459,9 @@ const collectDoorVisualStatsNow = (gameController) => {
         if (isTextureReady(texture)) {
           stats.readyTextureCount++;
         } else {
+          const size = texture.getSize?.() ?? {};
+          const internalTexture =
+            texture.getInternalTexture?.() ?? texture._texture ?? null;
           stats.pendingTextureCount++;
           if (stats.pendingTextureSamples.length < 10) {
             stats.pendingTextureSamples.push({
@@ -273,6 +469,11 @@ const collectDoorVisualStatsNow = (gameController) => {
               modelName,
               material: material.name,
               texture: texture.name ?? texture.url,
+              width: Number(size.width ?? internalTexture?.width ?? 0),
+              height: Number(size.height ?? internalTexture?.height ?? 0),
+              hasInternalTexture: Boolean(internalTexture),
+              internalReady: internalTexture?.isReady ?? null,
+              loadingError: internalTexture?._loadingError ?? null,
             });
           }
         }
@@ -467,11 +668,16 @@ const collectGeometryArtifactStats = (gameController) => {
   }
 
   oversizedMeshes.sort((a, b) => b.maxDimension - a.maxDimension);
+  const oversizedSpawnMeshes = oversizedMeshes.filter(
+    (mesh) => mesh.spawnModel || mesh.spawnName
+  );
   return {
     hiddenMaterialLeakCount: hiddenMaterialLeaks.length,
     hiddenMaterialLeaks: hiddenMaterialLeaks.slice(0, 20),
     oversizedMeshCount: oversizedMeshes.length,
     oversizedMeshes: oversizedMeshes.slice(0, 40),
+    oversizedSpawnMeshCount: oversizedSpawnMeshes.length,
+    oversizedSpawnMeshes: oversizedSpawnMeshes.slice(0, 40),
   };
 };
 
@@ -543,20 +749,62 @@ const emitZoneValidation = async ({
     visualStats.texturedSlotCount > 0 &&
     visualStats.texturelessSpawnCount === 0 &&
     visualStats.pendingTextureCount === 0 &&
+    (visualStats.appearanceTextureDecodeFailureCount ?? 0) === 0 &&
     (visualStats.belowGroundSpawnCount ?? 0) === 0 &&
     (visualStats.aboveGroundSpawnCount ?? 0) === 0 &&
     (visualStats.onePixelTextureCount ?? 0) === 0 &&
-    (visualStats.fallbackTextureCount ?? 0) === 0;
+    (visualStats.fallbackTextureCount ?? 0) === 0 &&
+    (visualStats.verticallyFlippedHeadTextureCount ?? 0) === 0 &&
+    (visualStats.bodyVariantFallbackCount ?? 0) === 0 &&
+    (visualStats.secondaryHeadBoneRemapFailureCount ?? 0) === 0;
+  const runtimeAnimationPass =
+    !!visualStats?.runtimeAnimation &&
+    (
+      Number(visualStats?.animatedSkeletonSpawnCount ?? 0) === 0 ||
+      Number(visualStats.runtimeAnimation.probedSpawnCount ?? 0) > 0
+    ) &&
+    Number(visualStats.runtimeAnimation.movingSpawnCount ?? 0) ===
+      Number(visualStats.runtimeAnimation.probedSpawnCount ?? 0) &&
+    Number(visualStats.runtimeAnimation.stationaryAnimatedSpawnCount ?? 0) === 0 &&
+    Number(visualStats.runtimeAnimation.nonFiniteMatrixCount ?? 0) === 0;
   const animationPass =
     !!visualStats &&
-    visualStats.skeletonSpawnCount > 0 &&
-    visualStats.animatedSkeletonSpawnCount === visualStats.skeletonSpawnCount &&
+    (
+      visualStats.skeletonSpawnCount === 0 ||
+      visualStats.animatedSkeletonSpawnCount +
+        visualStats.staticPosedSkeletonSpawnCount ===
+        visualStats.skeletonSpawnCount
+    ) &&
     visualStats.tPoseRiskCount === 0 &&
+    (visualStats.motionlessAnimationCount ?? 0) === 0 &&
+    (visualStats.excessAnimationGroupCount ?? 0) === 0 &&
+    (visualStats.unresolvedAnimationTargetCount ?? 0) === 0 &&
+    (visualStats.nonFiniteBoneMatrixCount ?? 0) === 0 &&
+    (visualStats.selectedAnimationPromotionFailureCount ?? 0) === 0 &&
+      (visualStats.animationBoundsRejectionCount ?? 0) === 0 &&
+      (visualStats.animationHeadOrientationRejectionCount ?? 0) === 0 &&
+      runtimeAnimationPass &&
     visualStats.nonPlayingAnimationCount === 0;
+  const nameplatePass =
+    !!visualStats &&
+    Number(visualStats.nameplateExpectedCount ?? 0) > 0 &&
+    Number(visualStats.nameplateExpectedCount ?? 0) ===
+      Number(visualStats.nameplateEligibleSpawnCount ?? 0) &&
+    Number(visualStats.nameplateCount ?? 0) ===
+      Number(visualStats.nameplateExpectedCount ?? 0) &&
+    Number(visualStats.nameplateVisibleCount ?? 0) ===
+      Number(visualStats.nameplateExpectedCount ?? 0) &&
+    Number(visualStats.nameplateTexturedCount ?? 0) ===
+      Number(visualStats.nameplateExpectedCount ?? 0) &&
+    Number(visualStats.nameplateAboveModelCount ?? 0) ===
+      Number(visualStats.nameplateExpectedCount ?? 0) &&
+    Number(visualStats.nameplateFailureCount ?? 0) === 0;
   const boundaryPass =
     gameController?.settings?.importBoundary === true ||
     boundaryMeshes.length === 0;
-  const geometryPass = (geometryStats?.hiddenMaterialLeakCount ?? 0) === 0;
+  const geometryPass =
+    (geometryStats?.hiddenMaterialLeakCount ?? 0) === 0 &&
+    (geometryStats?.oversizedSpawnMeshCount ?? 0) === 0;
   const doorPass =
     doorPoints.length === 0 ||
     (
@@ -571,6 +819,24 @@ const emitZoneValidation = async ({
       doorVisualStats.fallbackTextureCount === 0 &&
       doorVisualStats.onePixelTextureCount === 0
     );
+  const scene = gameController?.currentScene;
+  const performanceMemory = window.performance?.memory;
+  const runtimeMemory = performanceMemory
+    ? {
+      jsHeapLimitBytes: Number(performanceMemory.jsHeapSizeLimit ?? 0),
+      jsHeapTotalBytes: Number(performanceMemory.totalJSHeapSize ?? 0),
+      jsHeapUsedBytes: Number(performanceMemory.usedJSHeapSize ?? 0),
+    }
+    : null;
+  const sceneResources = {
+    animationGroups: scene?.animationGroups?.length ?? 0,
+    geometries: scene?.geometries?.length ?? 0,
+    materials: scene?.materials?.length ?? 0,
+    meshes: scene?.meshes?.length ?? 0,
+    skeletons: scene?.skeletons?.length ?? 0,
+    textures: scene?.textures?.length ?? 0,
+    transformNodes: scene?.transformNodes?.length ?? 0,
+  };
   const report = {
     zone: selectedZone?.short_name ?? null,
     longName: selectedZone?.long_name ?? null,
@@ -596,17 +862,20 @@ const emitZoneValidation = async ({
     lodProxyCount,
     boundaryMeshCount: boundaryMeshes.length,
     boundaryMeshes: boundaryMeshes.map((mesh) => mesh.name).slice(0, 20),
-    sceneMeshCount: gameController?.currentScene?.meshes?.length ?? 0,
+    sceneMeshCount: sceneResources.meshes,
+    sceneResources,
+    runtimeMemory,
     pass: {
       canvas: canvasPass,
       movement: movementPass,
       spawns: spawnPass,
       textures: texturePass,
       animations: animationPass,
+      nameplates: nameplatePass,
       boundary: boundaryPass,
       geometry: geometryPass,
       doors: doorPass,
-      all: canvasPass && movementPass && spawnPass && texturePass && animationPass && boundaryPass && geometryPass && doorPass,
+      all: canvasPass && movementPass && spawnPass && texturePass && animationPass && nameplatePass && boundaryPass && geometryPass && doorPass,
     },
     timestamp: new Date().toISOString(),
   };

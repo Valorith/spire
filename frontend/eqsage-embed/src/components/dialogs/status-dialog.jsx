@@ -25,7 +25,27 @@ export const StatusDialog = ({
     fsHandleName: fsHandle?.name ?? null,
   });
   const [_type, setType] = useState('unknown');
+  const [selectingDirectory, setSelectingDirectory] = useState(false);
+  const [selectionError, setSelectionError] = useState('');
   const { Spire } = useMainContext();
+
+  const selectDirectory = async () => {
+    if (selectingDirectory) {
+      return;
+    }
+    setSelectingDirectory(true);
+    setSelectionError('');
+    try {
+      await onFolderSelected();
+    } catch (error) {
+      console.error('[SageStatusDialog] directory selection failed', error);
+      setSelectionError(
+        error?.message || 'The directory could not be selected. Please try again.'
+      );
+    } finally {
+      setSelectingDirectory(false);
+    }
+  };
 
   useEffect(() => {
     setTimeout(() => {
@@ -184,14 +204,22 @@ export const StatusDialog = ({
                 including all the s3d/eqg files.
               </Typography>
               <Button
-                onClick={async () => {
-                  await onFolderSelected();
-                }}
+                onClick={selectDirectory}
+                disabled={selectingDirectory}
                 variant={'outlined'}
                 sx={{ margin: '0 auto' }}
               >
-                Select EQ Directory
+                {selectingDirectory ? 'Selecting Directory…' : 'Select EQ Directory'}
               </Button>
+              {selectionError && (
+                <Typography
+                  role="alert"
+                  sx={{ fontSize: 15, marginTop: 2, textAlign: 'center' }}
+                  color="error.main"
+                >
+                  {selectionError}
+                </Typography>
+              )}
             </Stack>
           )}
         </div>

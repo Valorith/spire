@@ -46,8 +46,8 @@ export class EQGAnimationWriter {
     for (const ani of animation.boneAnimations) {
       const node = this.skeletonNodes.find((n) => n.getName() === ani.boneName);
       const bone = this.bones.find((b) => b.name === ani.boneName);
-      if (!bone) {
-        console.log(`No bone for node ${ani.boneName}`);
+      if (!bone || !node) {
+        console.log(`No skeleton target for animation node ${ani.boneName}`);
         continue;
       }
 
@@ -94,18 +94,18 @@ export class EQGAnimationWriter {
     for (const [_idx, ani] of Object.entries(animation.boneAnimations)) {
       const node = this.skeletonNodes.find((n) => n.getName() === ani.boneName);
       const bone = this.bones.find((b) => b.name === ani.boneName);
-      if (!bone) {
-        console.log(`No bone for node ${ani.boneName}`);
+      if (!bone || !node) {
+        console.log(`No skeleton target for animation node ${ani.boneName}`);
         continue;
       }
-      const [rotX, rotY, rotZ, rotW] = node.getWorldRotation();
-      const [x, y, z] = node.getWorldTranslation();
       const aniParents = [];
       const boneAccum = { ...bone };
       let parent = bone.parent;
       while (parent) {
         const parentAnimation = animation.boneAnimations.find(ba => ba.boneName === parent.name); // eslint-disable-line
-        aniParents.push(parentAnimation);
+        if (parentAnimation) {
+          aniParents.push(parentAnimation);
+        }
         boneAccum.rotX += parent.rotX;
         boneAccum.rotY += parent.rotY;
         boneAccum.rotZ += parent.rotZ;
@@ -120,6 +120,9 @@ export class EQGAnimationWriter {
         const frameAcc = { ...frame };
         for (const p of aniParents) {
           const parentFrame = p.animationFrames[idx];
+          if (!parentFrame) {
+            continue;
+          }
           frameAcc.rotX += parentFrame.rotX;
           frameAcc.rotY += parentFrame.rotY;
           frameAcc.rotZ += parentFrame.rotZ;

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -8,6 +9,37 @@ import (
 	"github.com/EQEmuTools/spire/internal/env"
 	"github.com/labstack/echo/v4"
 )
+
+func TestRetrySageFsIOSucceedsAfterTransientFailures(t *testing.T) {
+	attempts := 0
+	retries, err := retrySageFsIO(func() error {
+		attempts++
+		if attempts < sageFsIOAttempts {
+			return errors.New("transient")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected transient operation to recover: %v", err)
+	}
+	if attempts != sageFsIOAttempts || retries != sageFsIOAttempts-1 {
+		t.Fatalf("expected %d attempts and %d retries, got %d attempts and %d retries", sageFsIOAttempts, sageFsIOAttempts-1, attempts, retries)
+	}
+}
+
+func TestRetrySageFsIOReturnsPersistentFailure(t *testing.T) {
+	attempts := 0
+	retries, err := retrySageFsIO(func() error {
+		attempts++
+		return errors.New("persistent")
+	})
+	if err == nil || err.Error() != "persistent" {
+		t.Fatalf("expected persistent error, got %v", err)
+	}
+	if attempts != sageFsIOAttempts || retries != sageFsIOAttempts-1 {
+		t.Fatalf("expected %d attempts and %d retries, got %d attempts and %d retries", sageFsIOAttempts, sageFsIOAttempts-1, attempts, retries)
+	}
+}
 
 func TestRequireLocalSageFsRequestRejectsNonLoopbackPeerWithoutOrigin(t *testing.T) {
 	t.Setenv("APP_ENV", env.AppEnvLocal)

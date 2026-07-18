@@ -27,12 +27,19 @@ export const BabylonZone = () => {
   const [viewerDetail, setViewerDetail] = useState('');
   const [viewerReady, setViewerReady] = useState(false);
   const [viewerError, setViewerError] = useState(null);
+  const zoneLoadRunRef = useRef(0);
 
   useEffect(() => {
     if (!selectedZone || !gameController) {
       return;
     }
+    const zoneLoadRun = ++zoneLoadRunRef.current;
+    const abortController = new AbortController();
     let current = true;
+    const isCurrent = () =>
+      current &&
+      zoneLoadRun === zoneLoadRunRef.current &&
+      !abortController.signal.aborted;
     setViewerReady(false);
     setViewerError(null);
     setViewerDetail('');
@@ -51,7 +58,7 @@ export const BabylonZone = () => {
         });
         setViewerStage('Loading zone processor');
         const { processZone } = await import('./processZone');
-        if (!current) {
+        if (!isCurrent()) {
           return;
         }
         setViewerStage('Processing zone assets');
@@ -62,31 +69,32 @@ export const BabylonZone = () => {
           false,
           gameController,
           (stage, detail = '') => {
-            if (!current) {
+            if (!isCurrent()) {
               return;
             }
             setViewerStage(stage);
             setViewerDetail(detail);
-          }
+          },
+          abortController.signal
         );
-        if (!current) {
+        if (!isCurrent()) {
           return;
         }
         setViewerStage('Loading Babylon bridge');
         const { default: bjs } = await import('@bjs');
-        if (!current) {
+        if (!isCurrent()) {
           return;
         }
         setViewerStage('Loading viewer runtime');
         await bjs.prepareZoneViewer((stage) => {
-          if (current) {
+          if (isCurrent()) {
             setViewerStage(stage);
           }
         });
-        while (current && !canvasRef.current) {
+        while (isCurrent() && !canvasRef.current) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
-        if (!current) {
+        if (!isCurrent()) {
           return;
         }
         debugSageLog('Ref', canvasRef.current);
@@ -94,7 +102,7 @@ export const BabylonZone = () => {
         await gameController.loadEngine(canvasRef.current, loadSettings.webgpu);
         gameController.setLoading(true);
         rendererPaused = true;
-        if (!current) {
+        if (!isCurrent()) {
           return;
         }
         window.addEventListener('resize', gameController.resize);
@@ -106,9 +114,10 @@ export const BabylonZone = () => {
         setViewerDetail('');
         await gameController.ZoneController.loadModel(
           selectedZone.short_name,
-          zoneMetadata && typeof zoneMetadata === 'object' ? zoneMetadata : null
+          zoneMetadata && typeof zoneMetadata === 'object' ? zoneMetadata : null,
+          abortController.signal
         );
-        if (!current) {
+        if (!isCurrent()) {
           return;
         }
         gameController.setLoading(false);
@@ -117,7 +126,7 @@ export const BabylonZone = () => {
         setViewerDetail('');
         setViewerReady(true);
       } catch (e) {
-        if (!current) {
+        if (!isCurrent()) {
           return;
         }
         setViewerError(e);
@@ -127,6 +136,17 @@ export const BabylonZone = () => {
           message: errorDetail,
           stack  : e?.stack ?? null,
         };
+        window.dispatchEvent(
+          new CustomEvent('spire-sage-zone-validation-error', {
+            detail: {
+              zone     : selectedZone.short_name,
+              longName : selectedZone.long_name ?? selectedZone.short_name,
+              error    : errorDetail,
+              stack    : e?.stack ?? null,
+              timestamp: new Date().toISOString(),
+            },
+          })
+        );
         setViewerDetail(errorDetail);
         gameController.openAlert?.(
           'Error loading zone. Check console output.',
@@ -139,7 +159,7 @@ export const BabylonZone = () => {
           gameController.setLoading(false);
         }
       } finally {
-        if (rendererPaused) {
+        if (rendererPaused && isCurrent()) {
           gameController.setLoading(false);
         }
       }
@@ -147,6 +167,10 @@ export const BabylonZone = () => {
 
     return () => {
       current = false;
+      abortController.abort();
+      zoneLoadRunRef.current += 1;
+      gameController.ZoneController.cancelPendingLoad?.();
+      gameController.setLoading(false);
       window.removeEventListener('resize', gameController.resize);
       window.removeEventListener('keydown', gameController.keyDown);
     };

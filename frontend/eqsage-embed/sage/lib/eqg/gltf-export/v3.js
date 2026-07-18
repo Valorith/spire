@@ -10,20 +10,31 @@ import draco3d from 'draco3dgltf';
 import { locateStaticAsset } from '../../../../src/static-assets';
 
 
-const io = new WebIO()
-  .registerDependencies({
-    'draco3d.decoder': await draco3d.createDecoderModule({
-      locateFile: locateStaticAsset,
-      print   : console.log,
-      printErr: console.error,
-    }),
-    'draco3d.encoder': await draco3d.createEncoderModule({
-      locateFile: locateStaticAsset,
-      print   : console.log,
-      printErr: console.error,
-    }),
-  })
-  .registerExtensions(ALL_EXTENSIONS);
+const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
+let dracoDependenciesPromise = null;
+
+const ensureDracoDependencies = async () => {
+  if (!dracoDependenciesPromise) {
+    dracoDependenciesPromise = Promise.all([
+      draco3d.createDecoderModule({
+        locateFile: locateStaticAsset,
+        print   : console.log,
+        printErr: console.error,
+      }),
+      draco3d.createEncoderModule({
+        locateFile: locateStaticAsset,
+        print   : console.log,
+        printErr: console.error,
+      }),
+    ]).then(([decoder, encoder]) => {
+      io.registerDependencies({
+        'draco3d.decoder': decoder,
+        'draco3d.encoder': encoder,
+      });
+    });
+  }
+  return dracoDependenciesPromise;
+};
 // Helper function to convert uint32 (assumed format 0xAARRGGBB) to normalized [r, g, b, a]
 function uint32ToRGBA(color) {
   const a = ((color >> 24) & 0xFF) / 255;
@@ -32,6 +43,11 @@ function uint32ToRGBA(color) {
   const b = (color & 0xFF) / 255;
   return [r, g, b, a];
 }
+
+const isSpirePreview = () =>
+  typeof window !== 'undefined' && !!window.__spireSagePreview;
+
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 export async function exportv3(zoneName) {
   const document = new Document();
@@ -85,7 +101,16 @@ export async function exportv3(zoneName) {
         .setSpecularColorFactor([0, 0, 0]);
       gltfMaterial.setExtension('KHR_materials_specular', specular);
       for (const prop of mat.properties) {
+        if (prop.type !== 2) {
+          continue;
+        }
         const [name] = prop.valueS.toLowerCase().split('.');
+        if (
+          !name ||
+          (mat.name.toLowerCase() === 'failsafeshader' && name === 'grid_standard')
+        ) {
+          continue;
+        }
         const texture = document
           .createTexture(name)
           // .setImage(new Uint8Array(await getEQFile('textures', `${name}.png`)))
@@ -113,6 +138,7 @@ export async function exportv3(zoneName) {
 
   const terrain = this.zone.terrain;
   const writtenModels = {};
+  let processedPolygons = 0;
 
   for (const [name, mod] of Object.entries(this.models)) {
     if (!name.includes('ter_')) {
@@ -137,12 +163,15 @@ export async function exportv3(zoneName) {
         await writeMetadata.call(this, placeable, zoneMetadata, modelFile, writtenModels, true);
         continue;
       }
-      console.log('mod', mod);
       if (mod) {
         const primitiveMap = {};
         // Process each polygon in the model geometry.
         // (Renaming inner loop variable to "poly" for clarity.)
         for (const poly of mod.geometry.polys) {
+          processedPolygons++;
+          if (processedPolygons % 5000 === 0) {
+            await yieldToBrowser();
+          }
           if (poly.material === -1) {
             continue;
           }
@@ -217,7 +246,6 @@ export async function exportv3(zoneName) {
           const col3 = uint32ToRGBA(lit[poly.verts[2]]);
           sharedPrimitive.colors.push(...col1, ...col2, ...col3);
         }
-        console.log('Pri', primitiveMap);
         // Now create accessors for each primitive.
         for (const { gltfPrim, indices, vecs, normals, uv, colors } of Object.values(primitiveMap)) {
           const idc = new Uint16Array(indices);
@@ -275,17 +303,18 @@ export async function exportv3(zoneName) {
   `${this.zone.name.replace('.zon', '.json')}`,
   JSON.stringify(zoneMetadata)
   );
-  console.log('Start', document);
-  try {
-    await document.transform(
-      // Compress mesh geometry with Draco.
-      draco({ ...DRACO_DEFAULTS, quantizationVolume: 'scene' })
-    );
-  } catch (e) {
-    console.log('Error with draco compression', e);
+  if (!isSpirePreview()) {
+    try {
+      await ensureDracoDependencies();
+      await document.transform(
+        // Compress mesh geometry with Draco.
+        draco({ ...DRACO_DEFAULTS, quantizationVolume: 'scene' })
+      );
+    } catch (e) {
+      console.log('Error with draco compression', e);
+    }
   }
- 
-  console.log('Finish draco');
+
   const bytes = await io.writeBinary(document);
   await writeEQFile('zones', `${zoneName}.glb`, bytes.buffer);
 }

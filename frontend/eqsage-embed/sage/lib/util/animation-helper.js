@@ -29,6 +29,8 @@ export const animationMap = {
   bet: 'spi',
   cpf: 'cpm',
   frg: 'fro',
+  frm: 'elm',
+  frf: 'elf',
   gam: 'gar',
   ghu: 'gob',
   fpm: 'elm',
@@ -317,7 +319,6 @@ export class S3DAnimationWriter {
     const poseArray = isCharacterAnimation
       ? skeleton.animations['pos'].tracksCleanedStripped
       : skeleton.animations['pos'].tracksCleaned;
-
     if (poseArray === null) {
       return;
     }
@@ -334,7 +335,6 @@ export class S3DAnimationWriter {
           skeleton.modelBase
         )
         : Animation.CleanBoneName(skeleton.boneMapping[i]);
-
       if (
         staticPose ||
         shouldUsePoseForCharacterHeadBone(skeleton, boneName, animationKey) ||

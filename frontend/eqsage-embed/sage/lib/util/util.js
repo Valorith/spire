@@ -18,6 +18,8 @@ export const decodeString = (reader, size) => {
  * @param {import('../s3d/wld/wld-fragment').WldFragment} fragment
  * @param {boolean} toLower
  */
+const unmappedFragmentClasses = new Set();
+
 export const fragmentNameCleaner = (fragment, toLower = true) => {
   const typeMap = {
     MaterialList     : '_MP',
@@ -35,7 +37,11 @@ export const fragmentNameCleaner = (fragment, toLower = true) => {
       .replace(typeMap[fragment.ClassName], '')
       .replace(typeMap[fragment.ClassName].toLowerCase(), '');
   } else {
-    console.warn('Not mapped', fragment.ClassName);
+    const className = fragment.ClassName?.name ?? `${fragment.ClassName}`;
+    if (!unmappedFragmentClasses.has(className)) {
+      unmappedFragmentClasses.add(className);
+      console.warn('Not mapped', className);
+    }
   }
 
   if (toLower) {

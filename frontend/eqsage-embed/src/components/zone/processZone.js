@@ -1,12 +1,48 @@
-import { ZONE_VERSION } from 'sage-core/model/constants';
+import {
+  PREVIEW_CHARACTER_CACHE_VERSION as CHARACTER_CACHE_VERSION,
+  PREVIEW_ZONE_OBJECT_CACHE_VERSION,
+  ZONE_VERSION,
+} from 'sage-core/model/constants';
+import {
+  getCharacterSourceFamilyStem,
+  orderCharacterModelSourceFiles,
+  PREVIEW_MODEL_SOURCE_FILES,
+} from '../../viewer/common/raceModelResolution';
+import raceModelMetadata from '../../viewer/common/raceModelMetadata.json';
 
 export const GLOBAL_VERSION = 2.0;
-export const PREVIEW_CHARACTER_CACHE_VERSION = 12;
+// Global/zone cache compatibility remains at the last successfully published
+// marker. Character exporter policy changes are invalidated per model from GLB
+// metadata in SpawnController; coupling them to this global marker causes an
+// unnecessary full-client rebuild during ordinary zone loads.
+export const PREVIEW_CHARACTER_CACHE_VERSION = CHARACTER_CACHE_VERSION;
 
 const getActiveController = (controller) => controller ?? window.gameController ?? null;
 let processingDepsPromise = null;
 let fileHandlerDepsPromise = null;
 let globalStorePromise = null;
+let characterArchiveQueue = Promise.resolve();
+const characterArchivePromisesByRoot = new WeakMap();
+const characterSourceArchivePromisesByRoot = new WeakMap();
+const rootFileManifestPromises = new WeakMap();
+
+const getRootPromiseMap = (cache, rootFileSystemHandle) => {
+  let promiseMap = cache.get(rootFileSystemHandle);
+  if (!promiseMap) {
+    promiseMap = new Map();
+    cache.set(rootFileSystemHandle, promiseMap);
+  }
+  return promiseMap;
+};
+
+const throwIfZoneLoadAborted = (signal) => {
+  if (!signal?.aborted) {
+    return;
+  }
+  const error = new Error('Zone load was cancelled');
+  error.name = 'AbortError';
+  throw error;
+};
 
 const getProcessingDeps = async () => {
   if (!processingDepsPromise) {
@@ -60,9 +96,30 @@ const collectMatchingRootFiles = async (
   onProgress = null
 ) => {
   const handles = [];
-  let scanned = 0;
+  let manifestPromise = rootFileManifestPromises.get(rootFileSystemHandle);
+  if (!manifestPromise) {
+    const pendingManifest = (async () => {
+      const manifest = [];
+      for await (const fileHandle of rootFileSystemHandle.values()) {
+        manifest.push(fileHandle);
+        if (manifest.length % 250 === 0) {
+          await yieldToBrowser();
+        }
+      }
+      return manifest;
+    })();
+    manifestPromise = pendingManifest.catch((error) => {
+      if (rootFileManifestPromises.get(rootFileSystemHandle) === manifestPromise) {
+        rootFileManifestPromises.delete(rootFileSystemHandle);
+      }
+      throw error;
+    });
+    rootFileManifestPromises.set(rootFileSystemHandle, manifestPromise);
+  }
+  const manifest = await manifestPromise;
 
-  for await (const fileHandle of rootFileSystemHandle.values()) {
+  let scanned = 0;
+  for (const fileHandle of manifest) {
     scanned++;
     if (scanned % 250 === 0) {
       onProgress?.(scanned, handles.length, fileHandle.name);
@@ -139,10 +196,14 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
       emitStage(reportStage, 'Scanning global dependency archives');
       handles.push(...await collectMatchingRootFiles(
         rootFileSystemHandle,
-        new RegExp('^global.*\\.s3d', 'i'),
+        new RegExp('^global.*\\.(?:s3d|eqg)$', 'i'),
         (name) => {
           const lowerName = name.toLowerCase();
-          return /^global.*_chr\d*\.s3d$/.test(lowerName) || lowerName.includes('global_obj');
+          return (
+            /^global.*_chr\d*\.s3d$/.test(lowerName) ||
+            lowerName.includes('global_obj') ||
+            lowerName === 'globalgdb.eqg'
+          );
         },
         (scanned, found, latest) => {
           if (found <= 5 || scanned % 1000 === 0) {
@@ -210,6 +271,216 @@ export async function processGlobal(settings, rootFileSystemHandle, standalone =
       `Finished dependency processing in ${((performance.now() - startedAt) / 1000).toFixed(2)}s`
     );
   }
+}
+
+export async function processCharacterModelArchive(
+  modelName,
+  settings,
+  rootFileSystemHandle,
+  reportStage = null,
+  sourceFiles = [],
+  { stopAfterFirstSuccessfulSource = false } = {}
+) {
+  const normalizedModelName = `${modelName ?? ''}`.trim().toLowerCase();
+  const requestedSourceFiles = orderCharacterModelSourceFiles(normalizedModelName, [
+    ...sourceFiles,
+    ...(raceModelMetadata[normalizedModelName]?.sourceFiles ?? []),
+    ...(PREVIEW_MODEL_SOURCE_FILES[normalizedModelName] ?? []),
+  ]);
+  emitStage(
+    reportStage,
+    'Character model archive request',
+    `${normalizedModelName || 'unknown'}; root=${rootFileSystemHandle ? 'ready' : 'missing'}; sources=${requestedSourceFiles.length}`
+  );
+  if (!normalizedModelName || !rootFileSystemHandle) {
+    return false;
+  }
+
+  const characterArchivePromises = getRootPromiseMap(
+    characterArchivePromisesByRoot,
+    rootFileSystemHandle
+  );
+  const characterSourceArchivePromises = getRootPromiseMap(
+    characterSourceArchivePromisesByRoot,
+    rootFileSystemHandle
+  );
+  const existingPromise = settings?.forceReload
+    ? null
+    : characterArchivePromises.get(normalizedModelName);
+  if (existingPromise) {
+    emitStage(reportStage, 'Reusing character archive request', normalizedModelName);
+    return existingPromise;
+  }
+
+  const processSourceArchive = async (requestedSourceFile) => {
+    const sourceFile = `${requestedSourceFile ?? ''}`.trim().toLowerCase();
+    if (!sourceFile || !/\.(?:eqg|s3d)$/i.test(sourceFile)) {
+      return false;
+    }
+    const existingSourcePromise = settings?.forceReload
+      ? null
+      : characterSourceArchivePromises.get(sourceFile);
+    if (existingSourcePromise) {
+      emitStage(reportStage, 'Reusing character source archive', sourceFile);
+      return existingSourcePromise;
+    }
+
+    const pendingSourcePromise = characterArchiveQueue.then(async () => {
+      const archiveName = sourceFile.replace(/\.(?:eqg|s3d)$/i, '');
+      const escapedArchiveName = archiveName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      emitStage(reportStage, 'Searching character source archive', sourceFile);
+      const { EQFileHandle } = await getProcessingDeps();
+      const handles = await collectMatchingRootFiles(
+        rootFileSystemHandle,
+        new RegExp(
+          `^${escapedArchiveName}(?:\\.(?:eqg|s3d)|_assets\\.txt)$`,
+          'i'
+        )
+      );
+      const hasRequestedSource = handles.some(
+        (handle) => handle.name.toLowerCase() === sourceFile
+      );
+      if (!hasRequestedSource) {
+        emitStage(reportStage, 'Character source archive not found', sourceFile);
+        return false;
+      }
+
+      emitStage(reportStage, 'Loading character source archive', sourceFile);
+      const archive = new EQFileHandle(
+        archiveName,
+        handles,
+        rootFileSystemHandle,
+        {
+          ...settings,
+          forceReload: true,
+        }
+      );
+      await archive.initialize();
+      const processed = await archive.process();
+      emitStage(
+        reportStage,
+        'Character source archive translation complete',
+        `${sourceFile}: result=${processed === true ? 'exported' : String(processed)}; handles=${handles.map((handle) => handle.name).join(',')}`
+      );
+      return processed === true;
+    });
+
+    const sourcePromise = pendingSourcePromise.then(
+      (processed) => {
+        if (
+          !processed &&
+          characterSourceArchivePromises.get(sourceFile) === sourcePromise
+        ) {
+          characterSourceArchivePromises.delete(sourceFile);
+        }
+        return processed;
+      },
+      (error) => {
+        if (characterSourceArchivePromises.get(sourceFile) === sourcePromise) {
+          characterSourceArchivePromises.delete(sourceFile);
+        }
+        throw error;
+      }
+    );
+
+    characterSourceArchivePromises.set(sourceFile, sourcePromise);
+    characterArchiveQueue = sourcePromise.catch(() => false);
+    return sourcePromise;
+  };
+
+  const pendingProcessingPromise = (async () => {
+    let processedAnySource = false;
+    const expandedSourceFiles = [];
+    for (const sourceFile of requestedSourceFiles) {
+      if (!expandedSourceFiles.includes(sourceFile)) {
+        expandedSourceFiles.push(sourceFile);
+      }
+      const familyStem = getCharacterSourceFamilyStem(sourceFile);
+      if (!familyStem) {
+        continue;
+      }
+      const escapedFamilyStem = familyStem.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&'
+      );
+      const familyHandles = await collectMatchingRootFiles(
+        rootFileSystemHandle,
+        new RegExp(`^${escapedFamilyStem}\\d*\\.s3d$`, 'i')
+      );
+      for (const handle of familyHandles.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true })
+      )) {
+        const familySourceFile = handle.name.toLowerCase();
+        if (!expandedSourceFiles.includes(familySourceFile)) {
+          expandedSourceFiles.push(familySourceFile);
+        }
+      }
+    }
+
+    for (const sourceFile of expandedSourceFiles) {
+      try {
+        const processedSource = await processSourceArchive(sourceFile);
+        emitStage(
+          reportStage,
+          'Character source archive result',
+          `${sourceFile}: ${processedSource ? 'processed' : 'not processed'}`
+        );
+        processedAnySource = processedSource || processedAnySource;
+        if (processedSource && stopAfterFirstSuccessfulSource) {
+          break;
+        }
+      } catch (error) {
+        emitStage(
+          reportStage,
+          'Character source archive error',
+          `${sourceFile}: ${error?.message ?? String(error)}`
+        );
+        console.warn(
+          `Unable to process character source ${sourceFile} for ${normalizedModelName}`,
+          error
+        );
+      }
+    }
+    if (processedAnySource) {
+      return true;
+    }
+
+    const escapedName = normalizedModelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const handles = await collectMatchingRootFiles(
+      rootFileSystemHandle,
+      new RegExp(`^${escapedName}(?:_chr\\d*\\.s3d|\\.s3d|\\.eqg)$`, 'i')
+    );
+
+    for (const handle of handles) {
+      processedAnySource =
+        (await processSourceArchive(handle.name)) || processedAnySource;
+    }
+
+    return processedAnySource;
+  })();
+
+  const processingPromise = pendingProcessingPromise.then(
+    (processed) => {
+      if (
+        !processed &&
+        characterArchivePromises.get(normalizedModelName) === processingPromise
+      ) {
+        characterArchivePromises.delete(normalizedModelName);
+      }
+      return processed;
+    },
+    (error) => {
+      if (
+        characterArchivePromises.get(normalizedModelName) === processingPromise
+      ) {
+        characterArchivePromises.delete(normalizedModelName);
+      }
+      throw error;
+    }
+  );
+
+  characterArchivePromises.set(normalizedModelName, processingPromise);
+  return processingPromise;
 }
 
 export async function processEquip(settings, rootFileSystemHandle, standalone = false, controller = null, reportStage = null) {
@@ -307,11 +578,21 @@ export async function processEquip(settings, rootFileSystemHandle, standalone = 
   }
 }
 
-export async function processZone(zoneName, settings, rootFileSystemHandle, _onlyChr = false, controller = null, reportStage = null) {
+export async function processZone(
+  zoneName,
+  settings,
+  rootFileSystemHandle,
+  _onlyChr = false,
+  controller = null,
+  reportStage = null,
+  signal = null
+) {
+  throwIfZoneLoadAborted(signal);
   const [{ getEQFile, getEQFileExists, writeEQFile }, GlobalStore] = await Promise.all([
     getFileHandlerDeps(),
     getGlobalStore(),
   ]);
+  throwIfZoneLoadAborted(signal);
   const startedAt = performance.now();
   const activeGameController = getActiveController(controller);
   if (activeGameController) {
@@ -331,6 +612,7 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
       getEQFile('data', 'global.json', 'json'),
       getEQFileExists('models', 'hum.glb'),
     ]);
+    throwIfZoneLoadAborted(signal);
     logZoneStep(zoneName, 'Global cache status', {
       ...(v || {}),
       fallbackModelExists,
@@ -357,6 +639,7 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
         activeGameController,
         reportStage
       );
+      throwIfZoneLoadAborted(signal);
     }
 
     emitStage(reportStage, `Checking cached ${zoneName} zone assets`);
@@ -364,6 +647,7 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
       getEQFile('zones', `${zoneName}.json`, 'json'),
       getEQFileExists('zones', `${zoneName}.glb`),
     ]);
+    throwIfZoneLoadAborted(signal);
     logZoneStep(zoneName, 'Zone cache status', {
       glbExists      : exists,
       metadataVersion: existingMetadata?.version ?? null,
@@ -376,15 +660,21 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
         existingMetadata?.spireCharacterTextures === true &&
         existingMetadata?.spireCharacterCacheVersion === PREVIEW_CHARACTER_CACHE_VERSION
       );
+    const previewZoneObjectCacheReady =
+      !isPreviewBridge() ||
+      existingMetadata?.spireZoneObjectCacheVersion === PREVIEW_ZONE_OBJECT_CACHE_VERSION;
     if (
       exists &&
       existingMetadata?.version === ZONE_VERSION &&
       previewCharacterCacheReady &&
-      !settings?.forceReload
+      previewZoneObjectCacheReady &&
+      !settings?.forceReload &&
+      !_onlyChr
     ) {
       emitStage(reportStage, `Using cached ${zoneName} zone assets`);
       logZoneStep(zoneName, 'Zone cache hit, skipping archive scan');
       await primeCachedZoneAssets(zoneName, existingMetadata, getEQFile, reportStage);
+      throwIfZoneLoadAborted(signal);
       return existingMetadata;
     }
 
@@ -403,7 +693,8 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
       handles.push(...await collectMatchingRootFiles(
         rootFileSystemHandle,
         new RegExp(`^${zoneName}[_\\.].*`, 'i'),
-        () => true,
+        (fileName) =>
+          !_onlyChr || /_chr\d*\.(?:s3d|eqg)$/i.test(fileName),
         (_scanned, found, latest) => {
           if (found <= 5 || found % 25 === 0) {
             emitStage(
@@ -417,6 +708,7 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
           });
         }
       ));
+      throwIfZoneLoadAborted(signal);
     } catch (e) {
       console.warn('Error', e, handles);
       emitStage(reportStage, `Scanning ${zoneName} zone archives failed`, e?.message || String(e));
@@ -425,11 +717,18 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
 
     emitStage(reportStage, `Preparing ${zoneName} asset archive`, `${handles.length} matching files`);
     logZoneStep(zoneName, 'Zone archive scan complete', summarizeHandles(handles));
+    // A character-only pass is an explicit cache refresh. The outer zone-cache
+    // guard already bypasses cached data for this mode, so the nested archive
+    // handle must do the same or it will report success without translating
+    // any character models.
+    const processingSettings = _onlyChr
+      ? { ...settings, forceReload: true }
+      : settings;
     const obj = new EQFileHandle(
       zoneName,
       handles,
       rootFileSystemHandle,
-      settings
+      processingSettings
     );
     emitStage(reportStage, `Initializing ${zoneName} asset archive`);
     logZoneStep(zoneName, 'Initializing zone archive');
@@ -438,6 +737,7 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
       () => obj.initialize(),
       reportStage
     );
+    throwIfZoneLoadAborted(signal);
     emitStage(reportStage, `Processing ${zoneName} asset archive`);
     logZoneStep(zoneName, 'Processing zone archive');
     match = await withStageContext(
@@ -445,6 +745,7 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
       () => obj.process(),
       reportStage
     );
+    throwIfZoneLoadAborted(signal);
     if (isPreviewBridge()) {
       const metadata = (await getEQFile('zones', `${zoneName}.json`, 'json')) || {};
       await writeEQFile(
@@ -455,6 +756,7 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
           spireCharacterModels  : true,
           spireCharacterTextures: true,
           spireCharacterCacheVersion: PREVIEW_CHARACTER_CACHE_VERSION,
+          spireZoneObjectCacheVersion: PREVIEW_ZONE_OBJECT_CACHE_VERSION,
         })
       );
     }
@@ -463,11 +765,16 @@ export async function processZone(zoneName, settings, rootFileSystemHandle, _onl
     if (watchdog) {
       window.clearInterval(watchdog);
     }
-    GlobalStore.actions.setLoading(false);
+    if (!signal?.aborted) {
+      GlobalStore.actions.setLoading(false);
+    }
     logZoneStep(
       zoneName,
       `Finished zone processing in ${((performance.now() - startedAt) / 1000).toFixed(2)}s`
     );
   }
-  return (await getEQFile('zones', `${zoneName}.json`, 'json')) || match;
+  throwIfZoneLoadAborted(signal);
+  const result = (await getEQFile('zones', `${zoneName}.json`, 'json')) || match;
+  throwIfZoneLoadAborted(signal);
+  return result;
 }

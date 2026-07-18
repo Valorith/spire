@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CommonDialog } from './common';
 import Box from '@mui/material/Box';
 import Collapse from '@mui/material/Collapse';
@@ -15,7 +15,8 @@ import { v4 } from 'uuid';
 
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import { Button, FormControl, Stack, TextField } from '@mui/material';
+import { Autocomplete, Button, FormControl, Stack, TextField } from '@mui/material';
+import { useDebouncedCallback } from 'use-debounce';
 import { gameController } from '../../../viewer/controllers/GameController';
 import BABYLON from '@bjs';
 import { useMainContext } from '../../main/context';
@@ -23,14 +24,45 @@ import { useZoneContext } from '../../zone/zone-context';
 import { useAlertContext } from '../../../context/alerts';
 import { useOverlayContext } from '../provider';
 
-const { Vector3 } = BABYLON;
+const { Tools, Vector3 } = BABYLON;
 export const NpcDialog = ({ onClose }) => {
   const [spawnFilter, setSpawnFilter] = useState('');
-  const { selectedZone } = useMainContext();
+  const [newSpawnNpc, setNewSpawnNpc] = useState(null);
+  const [newSpawnNpcInput, setNewSpawnNpcInput] = useState('');
+  const [newSpawnNpcOptions, setNewSpawnNpcOptions] = useState([]);
+  const [newSpawnNpcOpen, setNewSpawnNpcOpen] = useState(false);
+  const [creatingSpawn, setCreatingSpawn] = useState(false);
+  const npcSearchRunRef = useRef(0);
+  const { selectedZone, Spire } = useMainContext();
   const { toggleDialog } = useOverlayContext();
   const { spawns, loadCallback } = useZoneContext();
   const { openAlert } = useAlertContext();
   const [hidden, setHidden] = useState(false);
+  const runNewSpawnNpcSearch = useCallback(async (value) => {
+    const searchRun = ++npcSearchRunRef.current;
+    const query = `${value ?? ''}`.trim();
+    if (!query || !Spire) {
+      setNewSpawnNpcOptions([]);
+      setNewSpawnNpcOpen(false);
+      return;
+    }
+    try {
+      const npcs = (await Spire.Npcs.listNpcsByName(query)) ?? [];
+      if (searchRun === npcSearchRunRef.current) {
+        setNewSpawnNpcOptions(npcs);
+        setNewSpawnNpcOpen(npcs.length > 0);
+      }
+    } catch (_error) {
+      if (searchRun === npcSearchRunRef.current) {
+        setNewSpawnNpcOptions([]);
+        setNewSpawnNpcOpen(false);
+      }
+    }
+  }, [Spire]);
+  const searchNewSpawnNpcs = useDebouncedCallback(
+    runNewSpawnNpcSearch,
+    350
+  );
   const filteredSpawns = useMemo(
     () => {
       const normalizedFilter = spawnFilter?.trim()?.toLowerCase();
@@ -48,40 +80,105 @@ export const NpcDialog = ({ onClose }) => {
   );
 
   const addSpawn = useCallback(async () => {
+    if (!newSpawnNpc || creatingSpawn || !Spire) {
+      return;
+    }
     setHidden(true);
     gameController.ZoneController.pickRaycastForLoc(async (loc) => {
       setHidden(false);
       if (!loc) {
         return;
       }
-      const { Spire } = gameController;
-
+      setCreatingSpawn(true);
       const spawn2Api = new Spire.SpireApiTypes.Spawn2Api(
         ...Spire.SpireApi.cfg()
       );
       const spawnGroupApi = new Spire.SpireApiTypes.SpawngroupApi(
         ...Spire.SpireApi.cfg()
       );
-      // First create spawn group
-      const spawnGroup = await spawnGroupApi.createSpawngroup({
-        spawngroup: { name: v4() },
-      });
-      const createResult = await spawn2Api.createSpawn2({
-        spawn2: {
-          zone         : selectedZone.short_name,
-          x            : loc.z,
-          y            : loc.x,
-          z            : loc.y,
-          spawngroup_id: spawnGroup.data.id,
-          min_expansion: -1,
-          max_expansion: -1,
-        },
-      });
-      openAlert(`Created new spawn at location [${loc.z} ${loc.x} ${loc.y}]`);
-      loadCallback({ type: 'create', spawn: createResult.data });
-      toggleDialog('npc', false);
+      const spawnEntryApi = new Spire.SpireApiTypes.SpawnentryApi(
+        ...Spire.SpireApi.cfg()
+      );
+      let createdSpawnGroupId = null;
+      let createdSpawnId = null;
+      try {
+        const spawnGroup = await spawnGroupApi.createSpawngroup({
+          spawngroup: { name: v4() },
+        });
+        createdSpawnGroupId = spawnGroup.data.id;
+        const createResult = await spawn2Api.createSpawn2({
+          spawn2: {
+            _condition   : 0,
+            cond_value  : 1,
+            heading     : 0,
+            max_expansion: -1,
+            min_expansion: -1,
+            pathgrid    : 0,
+            respawntime : 1200,
+            spawngroup_id: createdSpawnGroupId,
+            variance    : 0,
+            version     : Number(selectedZone.version ?? 0),
+            x           : loc.z,
+            y           : loc.x,
+            z           : loc.y,
+            zone        : selectedZone.short_name,
+          },
+        });
+        createdSpawnId = createResult.data.id;
+        const spawnEntry = {
+          chance                : 100,
+          condition_value_filter: 1,
+          content_flags         : null,
+          content_flags_disabled: null,
+          max_expansion         : -1,
+          max_time              : 0,
+          min_expansion         : -1,
+          min_time              : 0,
+          npc_id                : newSpawnNpc.id,
+          npc_type              : newSpawnNpc,
+          spawngroup_id         : createdSpawnGroupId,
+        };
+        await spawnEntryApi.createSpawnentry({
+          id        : createdSpawnGroupId,
+          spawnentry: spawnEntry,
+        });
+
+        await loadCallback({
+          type : 'create',
+          spawn: {
+            ...createResult.data,
+            spawnentries: [spawnEntry],
+          },
+        });
+        openAlert(`Created new spawn at location [${loc.z} ${loc.x} ${loc.y}]`);
+        setNewSpawnNpc(null);
+        setNewSpawnNpcInput('');
+        setNewSpawnNpcOptions([]);
+        toggleDialog('npc', false);
+      } catch (error) {
+        if (createdSpawnId) {
+          await spawn2Api.deleteSpawn2({ id: createdSpawnId }).catch(() => {});
+        }
+        if (createdSpawnGroupId) {
+          await spawnGroupApi
+            .deleteSpawngroup({ id: createdSpawnGroupId })
+            .catch(() => {});
+        }
+        console.warn('Error creating spawn', error);
+        openAlert('Failed to create spawn. No partial spawn was kept.', 'warning');
+      } finally {
+        setCreatingSpawn(false);
+      }
     });
-  }, [selectedZone, loadCallback, openAlert, toggleDialog]);
+  }, [
+    Spire,
+    creatingSpawn,
+    loadCallback,
+    newSpawnNpc,
+    openAlert,
+    selectedZone,
+    toggleDialog,
+  ]);
 
   useEffect(() => {
     const meshes =
@@ -96,6 +193,10 @@ export const NpcDialog = ({ onClose }) => {
       }
     }
   }, [filteredSpawns]);
+  useEffect(() => () => {
+    npcSearchRunRef.current += 1;
+    searchNewSpawnNpcs.cancel();
+  }, [searchNewSpawnNpcs]);
   return (
     <CommonDialog
       noEscClose={hidden}
@@ -117,7 +218,12 @@ export const NpcDialog = ({ onClose }) => {
       onClose={onClose}
       title={'Spawns'}
     >
-      <Stack alignItems={'center'} justifyContent={'center'} direction="row">
+      <Stack
+        alignItems={'center'}
+        justifyContent={'center'}
+        direction="row"
+        flexWrap="wrap"
+      >
         <FormControl
           margin="dense"
           size="small"
@@ -138,12 +244,66 @@ export const NpcDialog = ({ onClose }) => {
             }}
           />
         </FormControl>
+        <Autocomplete
+          disablePortal
+          ListboxProps={{
+            onMouseDown: (event) => event.preventDefault(),
+          }}
+          open={newSpawnNpcOpen}
+          value={newSpawnNpc}
+          inputValue={newSpawnNpcInput}
+          options={newSpawnNpcOptions}
+          getOptionLabel={(option) =>
+            `${option?.name ?? 'Unknown NPC'} - Level ${option?.level ?? '?'}`
+          }
+          isOptionEqualToValue={(option, value) => option?.id === value?.id}
+          onChange={(_event, value) => {
+            setNewSpawnNpc(value);
+            setNewSpawnNpcInput(
+              value
+                ? `${value?.name ?? 'Unknown NPC'} - Level ${value?.level ?? '?'}`
+                : ''
+            );
+            setNewSpawnNpcOpen(false);
+          }}
+          onInputChange={(_event, value, reason) => {
+            if (reason === 'input') {
+              setNewSpawnNpcInput(value);
+              setNewSpawnNpcOpen(Boolean(value.trim()));
+              searchNewSpawnNpcs(value);
+            }
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="NPC for New Spawn"
+              helperText="Select an NPC before placing the spawn"
+              onFocus={() => {
+                if (newSpawnNpcOptions.length > 0) {
+                  setNewSpawnNpcOpen(true);
+                }
+              }}
+              onBlur={() => {
+                setTimeout(() => setNewSpawnNpcOpen(false), 150);
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === 'Escape') {
+                  setNewSpawnNpcOpen(false);
+                }
+              }}
+            />
+          )}
+          size="small"
+          sx={{ m: 1, width: 320 }}
+        />
         <Button
           startIcon={<AddCircleIcon />}
           sx={{ height: '40px', marginBottom: '20px' }}
+          disabled={!newSpawnNpc || creatingSpawn}
           onClick={addSpawn}
         >
-          Add Spawn
+          {creatingSpawn ? 'Creating Spawn...' : 'Add Spawn'}
         </Button>
       </Stack>
       <CollapsibleTable spawns={filteredSpawns} />
@@ -198,16 +358,17 @@ function Row(props) {
           <Button
             className="ui-dialog-btn"
             onClick={() => {
-              gameController.CameraController.camera.position = new Vector3(
-                spawn.y,
-                spawn.z + 20,
-                spawn.x
+              const camera = gameController.CameraController.camera;
+              const target = new Vector3(spawn.y, spawn.z + 3, spawn.x);
+              const heading =
+                Tools.ToRadians(Number(spawn.heading ?? 0)) - Math.PI / 2;
+              const cameraDistance = 12;
+              camera.position = new Vector3(
+                target.x + Math.sin(heading) * cameraDistance,
+                target.y + 3,
+                target.z + Math.cos(heading) * cameraDistance
               );
-              gameController.CameraController.camera.rotation = new Vector3(
-                1.57,
-                1.548,
-                0
-              );
+              camera.setTarget(target);
             }}
           >
             Teleport

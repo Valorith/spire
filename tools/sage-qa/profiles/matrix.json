@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "name": "matrix",
+  "description": "Broad classic and expansion-zone renderer matrix with high-risk race variants.",
+  "zoneValidation": {
+    "enabled": true,
+    "zones": [
+      "qeynos",
+      "freporte",
+      "gfaydark",
+      "crushbone",
+      "unrest",
+      "rivervale",
+      "blackburrow",
+      "befallen",
+      "fieldofbone",
+      "kaesora",
+      "iceclad",
+      "greatdivide"
+    ],
+    "cycles": 1,
+    "timeoutMs": 900000
+  },
+  "raceAudit": {
+    "enabled": true,
+    "bootstrapZone": "blackburrow",
+    "batchSize": 10,
+    "timeoutMs": 600000,
+    "modelSelection": {
+      "mode": "explicit",
+      "models": [
+        "hum", "huf", "bam", "baf", "elm", "elf", "dam", "daf",
+        "dwm", "dwf", "trm", "trf", "ogm", "ogf", "ikm", "ikf",
+        "gnm", "gnf", "fsg", "wlm"
+      ]
+    }
+  },
+  "visualSamples": [
+    { "model": "hum", "face": 7, "texture": 0, "helmTexture": 0 },
+    { "model": "elm", "face": 6, "texture": 0, "helmTexture": 0 },
+    { "model": "ogm", "face": 4, "texture": 0, "helmTexture": 0 },
+    { "model": "trm", "face": 3, "texture": 0, "helmTexture": 0 },
+    { "model": "fsg", "face": 0, "texture": 0, "helmTexture": 0 }
+  ],
+  "artifacts": {
+    "screenshotMode": "final",
+    "traceMode": "failures",
+    "keepRuns": 10,
+    "maxTotalMB": 2048
+  }
+}

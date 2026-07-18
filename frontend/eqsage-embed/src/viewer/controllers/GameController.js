@@ -6,9 +6,15 @@ import { skyController } from './SkyController';
 import { zoneController } from './ZoneController';
 
 import { GlobalStore } from '../../state';
-import { getEQDir, getEQFile, getFiles } from 'sage-core/util/fileHandler';
+import {
+  getEQDir,
+  getEQFile,
+  getEQFileDirectoryRevision,
+  getFiles,
+} from 'sage-core/util/fileHandler';
 import { assetUrl } from '../../embed-config';
 import { textureAnimationMap } from '../helpers/textureAnimationMap';
+import { getCharacterHeadOrientationPolicy } from 'sage-core/util/character-texture-orientation';
 
 const { Engine, ThinEngine, WebGPUEngine, Database, SceneLoader, GLTFLoader } =
   BABYLON;
@@ -83,6 +89,8 @@ const textureAliasCache = new Map();
 const missingTextureWarnings = new Set();
 let textureFileIndexPromise = null;
 let textureFileIndex = null;
+let textureFileIndexPromiseRevision = -1;
+let textureFileIndexRevision = -1;
 const patchedGltfLoaders = new WeakSet();
 
 // Keep Sage's normal exact texture lookup as the first candidate. These
@@ -179,7 +187,8 @@ const buildTextureCandidates = (rawName, { allowCharacterFallbacks = true } = {}
 const getTextureMimeType = (name) =>
   name.endsWith('.jpg') || name.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
 
-const isIgnorableMissingTexture = (name) => /^m000\d+$/i.test(`${name ?? ''}`);
+const isIgnorableMissingTexture = (name) =>
+  /^(?:m000\d+|none)$/i.test(`${name ?? ''}`);
 
 const fallbackPngData = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
@@ -225,7 +234,10 @@ const isTinyPngTexture = (data, fileName = '') => {
 
 const getCharacterSkinTextureCandidates = (rawName) => {
   const base = textureBaseName(rawName).toLowerCase().replace(/\.\w+$/, '');
-  const match = base.match(/^([a-z0-9]{3})([a-z]{2})(00)(\d{2})$/);
+  // Classic character archives use small fully-transparent numeric textures
+  // as "show skin here" sentinels. This applies to armor variants as well as
+  // texture 00, so resolve every numeric variant back to the matching SK slot.
+  const match = base.match(/^([a-z0-9]{3})([a-z]{2})(\d{2})(\d{2})$/);
   if (!match) {
     return [];
   }
@@ -239,6 +251,7 @@ const getCharacterSkinTextureCandidates = (rawName) => {
   for (const prefix of prefixes) {
     const texturePrefix = `${prefix}${part}`;
     candidates.push(`${texturePrefix}sk${slot}`);
+    candidates.push(`${texturePrefix}00${slot}`);
     candidates.push(`${texturePrefix}sk01`);
   }
   return candidates.filter(
@@ -391,16 +404,51 @@ const hydrateMissingGlbImages = async (url, fileBuffer) => {
 
   gltf.buffers = gltf.buffers?.length ? gltf.buffers : [{ byteLength: 0 }];
   gltf.bufferViews = gltf.bufferViews ?? [];
+  const usedMaterialIndices = new Set(
+    (gltf.meshes ?? []).flatMap((mesh) =>
+      (mesh.primitives ?? [])
+        .map((primitive) => primitive.material)
+        .filter(Number.isInteger)
+    )
+  );
+  const usedTextureIndices = new Set();
+  const collectTextureIndices = (value, propertyName = '') => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    if (
+      /texture$/i.test(propertyName) &&
+      Number.isInteger(value.index)
+    ) {
+      usedTextureIndices.add(value.index);
+    }
+    for (const [key, child] of Object.entries(value)) {
+      collectTextureIndices(child, key);
+    }
+  };
+  for (const materialIndex of usedMaterialIndices) {
+    collectTextureIndices(gltf.materials?.[materialIndex]);
+  }
+  const usedImageIndices = new Set(
+    Array.from(usedTextureIndices)
+      .map((textureIndex) => gltf.textures?.[textureIndex]?.source)
+      .filter(Number.isInteger)
+  );
   const binParts = [binChunk.data];
   let binLength = binChunk.data.byteLength;
   let hydrated = false;
 
-  for (const image of images) {
+  for (const [imageIndex, image] of images.entries()) {
     if (image.uri || image.bufferView !== undefined) {
       continue;
     }
 
     const textureName = image.name ?? image.extras?.name;
+    if (!textureName) {
+      // Older EQG exports retained unreferenced image records for numeric
+      // material properties. They are not renderable texture slots.
+      continue;
+    }
     const resolvedTexture = await getTextureFileData(textureName, {
       allowCharacterFallbacks: /\/eq\/models\//i.test(url),
     });
@@ -419,7 +467,7 @@ const hydrateMissingGlbImages = async (url, fileBuffer) => {
     if (!textureData) {
       continue;
     }
-    if (usedPreviewFallback) {
+    if (usedPreviewFallback && usedImageIndices.has(imageIndex)) {
       missingPreviewTextures.push(textureName ?? 'missing-texture');
     }
 
@@ -656,10 +704,15 @@ const normalizeMissingGlbImageUris = async (url, fileBuffer) => {
 };
 
 const getTextureFileIndex = async () => {
-  if (textureFileIndex) {
+  const currentRevision = getEQFileDirectoryRevision('textures');
+  if (textureFileIndex && textureFileIndexRevision === currentRevision) {
     return textureFileIndex;
   }
-  if (!textureFileIndexPromise) {
+  if (
+    !textureFileIndexPromise ||
+    textureFileIndexPromiseRevision !== currentRevision
+  ) {
+    textureFileIndexPromiseRevision = currentRevision;
     textureFileIndexPromise = (async () => {
       const index = new Map();
       const textureDir = await getEQDir('textures');
@@ -683,11 +736,17 @@ const getTextureFileIndex = async () => {
       return index;
     })()
       .then((index) => {
-        textureFileIndex = index;
+        if (getEQFileDirectoryRevision('textures') === currentRevision) {
+          textureFileIndex = index;
+          textureFileIndexRevision = currentRevision;
+        }
         return index;
       })
       .finally(() => {
-        textureFileIndexPromise = null;
+        if (textureFileIndexPromiseRevision === currentRevision) {
+          textureFileIndexPromise = null;
+          textureFileIndexPromiseRevision = -1;
+        }
       });
   }
 
@@ -993,10 +1052,20 @@ export class GameController {
       creationFlags,
       useSRGBBuffer
     ) {
-      const doFlip =
-        controller.ZoneBuilderController?.scene ||
-        (!url?.includes('eq/models') && !/\w+\d{4}/.test(url));
-      return origCreate.call(
+      const normalizedTextureName = `${url ?? ''}`
+        .split(/[\\/]/)
+        .pop()
+        ?.replace(/\s+\(Base Color\)$/i, '')
+        .replace(/\.(?:png|dds|bmp)$/i, '');
+      const headOrientation =
+        getCharacterHeadOrientationPolicy(normalizedTextureName);
+      const isInlineTextureUrl = /^(?:blob:|data:)/i.test(`${url ?? ''}`);
+      const doFlip = headOrientation.isCharacterHead || isInlineTextureUrl
+        ? Boolean(_invertY)
+        : controller.ZoneBuilderController?.scene ||
+          (!url?.includes('eq/models') &&
+            !/\w+(?:\d{4}|sk\d{2})(?:\s+\(Base Color\))?$/i.test(url));
+      const internalTexture = origCreate.call(
         this,
         url,
         noMipmap,
@@ -1014,6 +1083,12 @@ export class GameController {
         creationFlags,
         useSRGBBuffer
       );
+      if (internalTexture) {
+        internalTexture._spireSageRequestedInvertY = Boolean(_invertY);
+        internalTexture._spireSageUploadInvertY = doFlip;
+        internalTexture._spireSageTextureName = normalizedTextureName;
+      }
+      return internalTexture;
     };
 
     // Override DB factory

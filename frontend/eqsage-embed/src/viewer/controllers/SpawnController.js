@@ -1,6 +1,13 @@
 import BABYLON from '@bjs';
+import { AnimationGroup } from '@babylonjs/core/Animations/animationGroup';
 import assimpjs from '../../modules/assimp';
 import raceData from '../common/raceData.json';
+import {
+  getCharacterArchiveBaseModelName,
+  PREVIEW_ALIAS_FIRST_MODELS,
+  PREVIEW_CLIENT_FALLBACKS,
+  PREVIEW_MODEL_ALIASES,
+} from '../common/raceModelResolution';
 import { GameControllerChild } from './GameControllerChild';
 import { BabylonSpawn } from '../models/BabylonSpawn';
 import { GlobalStore } from '../../state';
@@ -8,10 +15,19 @@ import { getEQFile, getEQFileExists } from 'sage-core/util/fileHandler';
 import {
   GLOBAL_VERSION,
   PREVIEW_CHARACTER_CACHE_VERSION,
+  processCharacterModelArchive,
   processGlobal,
 } from '../../components/zone/processZone';
 import { locateStaticAsset } from '../../static-assets';
 import { createGltfTransformIo, loadGltfTransformModules } from '../../util/gltf-transform';
+import {
+  inspectAnimationGroupVitality,
+  inspectAnimationSetVitality,
+} from '../helpers/animationValidation';
+import { getCharacterHeadOrientationPolicy } from 'sage-core/util/character-texture-orientation';
+import {
+  PREVIEW_CHARACTER_MODEL_CACHE_VERSION,
+} from 'sage-core/model/constants';
 
 const {
   AbstractMesh,
@@ -39,19 +55,112 @@ const isUsableWorldY = (value) =>
   Number.isFinite(value) && Math.abs(value) < 1000000;
 
 const POSE_ANIMATION_PATTERN = /^(?:Clone of )?pos$/i;
+const normalizeAnimationTargetName = (value) =>
+  `${value ?? ''}`.replace(/^Clone of /, '').trim().toLowerCase();
 const POST_LOAD_GROUND_CLEARANCE = 0.03;
+const T_POSE_VALIDATION_EXCLUDED_MODELS = new Set(['tpf', 'tpm', 'tpn']);
+const COMPACT_NATIVE_ARM_NORMALIZATION_MODELS = new Set([
+  'qcf',
+  'clm',
+  'clf',
+]);
 
-const PREVIEW_MODEL_ALIASES = {
-  iks: 'ikm',
-  ivf: 'huf',
-  ivm: 'hum',
-  pre: 'launch',
-  ship: 'launch',
-  ske: 'lskmesh',
-  tpn: 'tpnbod',
-  wol: 'wolmesh',
-  wom: 'wolmesh',
+// These generated files exist but cannot be rendered. Prefer their explicit
+// semantic alias so each zone load does not pay for a guaranteed GLB failure.
+const PREVIEW_OBJECT_MODEL_ALIASES = {
+  brl: 'obj_barrel_wood_',
 };
+
+const PREVIEW_ANIMATION_DONORS = {
+  // These classic guard/brownie variants ship with geometry and POS only.
+  // Each mapping is based on the actual named skeleton, not its bone count:
+  // BGM is an exact 25-bone match for BRM/FEM/GFM and GEF is an exact
+  // 24-bone match for FEF/GFF.
+  brm: 'bgm',
+  fef: 'gef',
+  fem: 'bgm',
+  gff: 'gef',
+  gfm: 'bgm',
+  // The female Shade archive contains geometry and its bind pose but no
+  // playable clips. SDM has the identical 52-node skeleton, so use its clips
+  // rather than leaving SDF collapsed in the imported bind pose.
+  sdf: 'sdm',
+  // Neutral Shissar geometry likewise ships with only POS. SHM has the exact
+  // same 74 named bones and supplies the playable movement set. SHF uses SHM
+  // as a complete model fallback because retargeting its collapsed source
+  // geometry deforms the body.
+  shn: 'shm',
+};
+
+// QA escape hatch for comparing a bind-pose-only character against its
+// retargeted preview animation. This is intentionally opt-in and only honored
+// by Sage's validation preview, so normal zone rendering cannot silently lose
+// animation coverage.
+const previewAnimationDonorDisabled = () =>
+  typeof window !== 'undefined' &&
+  !!window.__spireSagePreview &&
+  new URLSearchParams(window.location.search).get(
+    'sageRaceFacePreviewDisableDonor'
+  ) === '1';
+
+// Cross-race animation donors may use the same semantic head/neck bone names
+// with different local bind axes. Applying their quaternion delta can turn an
+// otherwise valid face upside down even when every target resolves. Keep the
+// target model's own head chain orientation; torso and limb rotations still
+// provide the visible idle/movement pose that removes the T-pose.
+const PREVIEW_CHARACTER_HEAD_MATERIAL_PATTERN =
+  /^[a-z0-9]{3}he(?:\d{2}|sk)\d{2}$/i;
+const isPreviewHeadOrNeckRotationTarget = (name) =>
+  /^(?:he|head|hehead|head_point|ne|neck|neneck\d*)$/i.test(`${name ?? ''}`);
+const hasSemanticPreviewHeadTarget = (names) =>
+  ['he', 'head', 'hehead'].some((name) => names.has(name));
+
+const getPreviewHeadInfluencingBoneNames = (container) => {
+  const names = new Set();
+  for (const mesh of container?.meshes ?? []) {
+    const material = mesh?.material;
+    const materials = Array.isArray(material?.subMaterials)
+      ? material.subMaterials
+      : [material];
+    const isHeadMesh = materials.some((candidate) =>
+      PREVIEW_CHARACTER_HEAD_MATERIAL_PATTERN.test(
+        `${candidate?.name ?? ''}`.replace(/_mdf.*$/i, '')
+      )
+    );
+    if (!isHeadMesh) {
+      continue;
+    }
+    const skeleton = mesh?.skeleton ?? container?.skeletons?.[0];
+    const bones = skeleton?.bones ?? [];
+    const addWeightedBoneIndices = (indices = [], weights = []) => {
+      indices = indices ?? [];
+      weights = weights ?? [];
+      const count = Math.min(indices.length, weights.length);
+      for (let index = 0; index < count; index++) {
+        if (Number(weights[index]) <= 0) {
+          continue;
+        }
+        const boneName = normalizeAnimationTargetName(
+          bones[Number(indices[index])]?.name
+        );
+        if (boneName) {
+          names.add(boneName);
+        }
+      }
+    };
+    addWeightedBoneIndices(
+      mesh.getVerticesData?.('matricesIndices'),
+      mesh.getVerticesData?.('matricesWeights')
+    );
+    addWeightedBoneIndices(
+      mesh.getVerticesData?.('matricesIndicesExtra'),
+      mesh.getVerticesData?.('matricesWeightsExtra')
+    );
+  }
+  return names;
+};
+
+const INTENTIONAL_SOLID_TEXTURES = new Set(['DERCH0001']);
 
 /**
  * @typedef {import('@babylonjs/core').AssetContainer} AssetContainer
@@ -69,9 +178,11 @@ class SpawnController extends GameControllerChild {
    * @type {Object.<string, Promise<AssetContainer>}
    */
   assetContainers = {};
+  modelAvailabilityPromises = {};
 
   assetFallbacks = {};
   missingAssets = {};
+  resolvedModelAssets = {};
 
   /**
    * @type {Mesh}
@@ -112,6 +223,7 @@ class SpawnController extends GameControllerChild {
   dispose() {
     this.spawnLoadToken++;
     this.assetContainers = {};
+    this.modelAvailabilityPromises = {};
     this.clearPostLoadGroundSnapTimers();
     this.clearSpawnSelection();
     if (this.currentScene) {
@@ -203,6 +315,7 @@ class SpawnController extends GameControllerChild {
   }
 
   clearSpawnSelection({ clearPath = true } = {}) {
+    this.spawns[this.selectedSpawnId]?.demoteSelectedLiveAnimation?.();
     this.selectedSpawnId = null;
     if (this.targetRing) {
       this.ZoneController?.glowLayer?.removeIncludedOnlyMesh?.(this.targetRing);
@@ -362,12 +475,20 @@ class SpawnController extends GameControllerChild {
     if (!spawn || spawn.gridIdx !== undefined) {
       return;
     }
-    this.selectedSpawnId =
+    const nextSelectedSpawnId =
       spawn.__spireSpawnId ??
       spawn.id ??
       spawn.spawn2_id ??
       spawn.spawn_id ??
       null;
+    if (this.selectedSpawnId !== nextSelectedSpawnId) {
+      this.spawns[this.selectedSpawnId]?.demoteSelectedLiveAnimation?.();
+    }
+    this.selectedSpawnId = nextSelectedSpawnId;
+    const selectedVisual = this.getSpawnVisual(spawn);
+    if (selectedVisual?.staticPreviewPoseApplied) {
+      void selectedVisual.promoteToLiveAnimation?.();
+    }
     this.showTargetRing(spawn);
     if (showPath) {
       this.showSpawnPath(spawn.pathgrid ? spawn.grid ?? [] : []);
@@ -728,7 +849,10 @@ class SpawnController extends GameControllerChild {
    * @returns {Promise<AssetContainer>}
    */
   async loadAssetContainerFromEQ(folder, file) {
-    const fileBuffer = await this.gc.loadEQGltfFile?.(folder, file);
+    let fileBuffer = await this.gc.loadEQGltfFile?.(folder, file);
+    if (!fileBuffer && folder === 'models') {
+      fileBuffer = await this.gc.loadEQGltfFile?.('objects', file);
+    }
     if (!fileBuffer) {
       return null;
     }
@@ -758,13 +882,180 @@ class SpawnController extends GameControllerChild {
     return this.assetContainers[key];
   }
 
+  getStaleHeadOrientationMaterials(container) {
+    return (container?.materials ?? []).filter((material) => {
+      const policy = getCharacterHeadOrientationPolicy(material?.name);
+      if (!policy.isCharacterHead) {
+        return false;
+      }
+      const extras =
+        material?.metadata?.gltf?.extras ??
+        material?.metadata?.extras ??
+        material?.metadata ??
+        {};
+      const exportedFlip = extras.spireSkinnedVFlipped;
+      // Older GLBs did not record orientation metadata. Some of those files
+      // already contain the correct conversion, so only an explicit mismatch
+      // is safe to invalidate automatically.
+      return (
+        typeof exportedFlip === 'boolean' &&
+        exportedFlip !== policy.geometryUvFlipped
+      );
+    });
+  }
+
+  getCharacterContainerExtras(container) {
+    return [
+      ...(container?.rootNodes ?? []),
+      ...(container?.rootNodes ?? []).flatMap(
+        (root) => root.getDescendants?.(false) ?? []
+      ),
+    ].map((node) =>
+      node?.metadata?.gltf?.extras ??
+      node?.metadata?.extras ??
+      node?.metadata ??
+      {}
+    );
+  }
+
+  getStaleCharacterModelPolicy(container, file) {
+    const modelName = `${file ?? ''}`.replace(/\.glb$/i, '').toLowerCase();
+    if (
+      !window.__spireSagePreview ||
+      !/^[a-z0-9]{3}$/.test(modelName) ||
+      (container?.skeletons?.length ?? 0) === 0
+    ) {
+      return null;
+    }
+
+    const extras = this.getCharacterContainerExtras(container);
+    const policyExtras = extras.find((entry) =>
+      Object.prototype.hasOwnProperty.call(entry, 'spireNativePoseOnly')
+    );
+    const playableAnimationCount = (container?.animationGroups ?? []).filter(
+      (animationGroup) =>
+        !POSE_ANIMATION_PATTERN.test(`${animationGroup?.name ?? ''}`) &&
+        (animationGroup?.targetedAnimations?.length ?? 0) > 0
+    ).length;
+
+    if (
+      playableAnimationCount === 0 &&
+      policyExtras?.spireNativePoseOnly !== true
+    ) {
+      return policyExtras
+        ? 'missing-playable-animation'
+        : 'missing-native-pose-policy';
+    }
+    if (
+      policyExtras &&
+      policyExtras.spireCharacterModelCacheVersion !==
+        PREVIEW_CHARACTER_MODEL_CACHE_VERSION
+    ) {
+      return 'stale-character-model-cache-version';
+    }
+    return null;
+  }
+
+  getMissingModelTextures(file) {
+    if (!window.__spireSagePreview) {
+      return [];
+    }
+    const key = `/eq/models/${file}`;
+    return [
+      ...new Set(window.__spireSageMissingModelTextures?.[key] ?? []),
+    ];
+  }
+
   async getFirstAssetContainer(folder, files, originalName, options = {}) {
-    const { aliasFiles = [], optional = false } = options;
+    const {
+      aliasFiles = [],
+      generateIfMissing = false,
+      optional = false,
+      skipOrientationRefresh = false,
+      skipCharacterPolicyRefresh = false,
+      skipMissingTextureRefresh = false,
+      skipMissingRefresh = false,
+    } = options;
     const requestedFile = `${originalName}.glb`;
     const aliasFileSet = new Set(aliasFiles);
     for (const file of files) {
       const container = await this.getCachedAssetContainer(folder, file);
       if (container) {
+        const characterPolicyRefreshReason =
+          !skipCharacterPolicyRefresh && folder === 'models'
+            ? this.getStaleCharacterModelPolicy(container, file)
+            : null;
+        const missingModelTextures =
+          !skipMissingTextureRefresh && folder === 'models'
+            ? this.getMissingModelTextures(file)
+            : [];
+        if (characterPolicyRefreshReason || missingModelTextures.length > 0) {
+          const archiveModelName = `${file}`.replace(/\.glb$/i, '').toLowerCase();
+          console.warn(
+            `Refreshing ${archiveModelName} before first use`,
+            characterPolicyRefreshReason ?? 'missing-model-textures',
+            missingModelTextures
+          );
+          const generated = await processCharacterModelArchive(
+            archiveModelName,
+            { ...this.gc.settings, forceReload: true },
+            this.gc.rootFileSystemHandle,
+            null,
+            [],
+            { stopAfterFirstSuccessfulSource: true }
+          );
+          if (generated) {
+            container.dispose?.();
+            delete window.__spireSageMissingModelTextures?.[`/eq/models/${file}`];
+            for (const candidate of files) {
+              delete this.assetContainers[`${folder}/${candidate}`];
+            }
+            return this.getFirstAssetContainer(folder, files, originalName, {
+              ...options,
+              skipCharacterPolicyRefresh: true,
+              skipMissingTextureRefresh: true,
+            });
+          }
+        }
+        const staleHeadMaterials =
+          !skipOrientationRefresh &&
+          window.__spireSagePreview &&
+          folder === 'models'
+            ? this.getStaleHeadOrientationMaterials(container)
+            : [];
+        if (staleHeadMaterials.length > 0) {
+          const baseModelName =
+            `${originalName ?? ''}`.toLowerCase().match(
+              /^([a-z0-9]{3})(?:he\d{2})?$/
+            )?.[1] ?? originalName;
+          console.warn(
+            `Refreshing ${baseModelName} because ${file} has stale head UV metadata`,
+            staleHeadMaterials.map((material) => material.name)
+          );
+          const generated = await processCharacterModelArchive(
+            baseModelName,
+            { ...this.gc.settings, forceReload: true },
+            this.gc.rootFileSystemHandle,
+            null,
+            [],
+            { stopAfterFirstSuccessfulSource: true }
+          );
+          if (generated) {
+            container.dispose?.();
+            for (const candidate of files) {
+              delete this.assetContainers[`${folder}/${candidate}`];
+            }
+            return this.getFirstAssetContainer(
+              folder,
+              files,
+              originalName,
+              { ...options, skipOrientationRefresh: true }
+            );
+          }
+        }
+        if (folder === 'models') {
+          this.resolvedModelAssets[originalName] = `${file}`.replace(/\.glb$/i, '');
+        }
         if (file !== requestedFile && !aliasFileSet.has(file)) {
           this.assetFallbacks[originalName] = file;
           console.warn(
@@ -774,27 +1065,315 @@ class SpawnController extends GameControllerChild {
         return container;
       }
     }
+    if (
+      (!optional || generateIfMissing) &&
+      !skipMissingRefresh &&
+      window.__spireSagePreview &&
+      folder === 'models'
+    ) {
+      const archiveModelName = getCharacterArchiveBaseModelName(originalName);
+      const generated = await processCharacterModelArchive(
+        archiveModelName,
+        generateIfMissing
+          ? { ...this.gc.settings, forceReload: true }
+          : this.gc.settings,
+        this.gc.rootFileSystemHandle,
+        null,
+        [],
+        { stopAfterFirstSuccessfulSource: true }
+      );
+      if (generated) {
+        for (const file of files) {
+          delete this.assetContainers[`${folder}/${file}`];
+          const container = await this.getCachedAssetContainer(folder, file);
+          if (container) {
+            return container;
+          }
+        }
+      }
+    }
     if (!optional) {
       this.missingAssets[originalName] = files;
     }
     return null;
   }
 
+  async addPreviewAnimationDonor(modelName, modelContainer) {
+    const donorName = PREVIEW_ANIMATION_DONORS[modelName];
+    if (!donorName || !modelContainer || previewAnimationDonorDisabled()) {
+      return;
+    }
+    if (modelContainer.__spirePreviewAnimationDonor?.donorName === donorName) {
+      return;
+    }
+    const hasPlayableAnimation = modelContainer.animationGroups?.some(
+      (animationGroup) =>
+        !POSE_ANIMATION_PATTERN.test(`${animationGroup?.name ?? ''}`) &&
+        animationGroup?.targetedAnimations?.length > 0
+    );
+    if (hasPlayableAnimation) {
+      return;
+    }
+
+    // A focused race audit may not have exported the donor yet. Generate it
+    // from its authoritative archive on demand instead of depending on a
+    // previous zone/model run having warmed the browser cache.
+    const donorContainer = await this.getAssetContainer(
+      donorName,
+      false,
+      { generateIfMissing: true, optional: true }
+    );
+    if (!donorContainer) {
+      modelContainer.__spirePreviewAnimationDonorFailureReason =
+        'donor-container-missing';
+      return;
+    }
+    const donorHasPlayableAnimation = donorContainer.animationGroups?.some(
+      (animationGroup) =>
+        !POSE_ANIMATION_PATTERN.test(`${animationGroup?.name ?? ''}`) &&
+        animationGroup?.targetedAnimations?.length > 0
+    );
+    if (!donorHasPlayableAnimation) {
+      modelContainer.__spirePreviewAnimationDonorFailureReason =
+        'donor-has-no-playable-animation';
+      return;
+    }
+
+    // AssetContainer only clones animation groups that were present during
+    // import reliably. Keep the donor source alongside this container and
+    // attach fresh groups to each instantiated spawn below. Validating or
+    // animating this cached source container would let a donor appear healthy
+    // while the visible clone remains in its bind pose.
+    modelContainer.__spirePreviewAnimationDonor = {
+      donorName,
+      donorContainer,
+    };
+    delete modelContainer.__spirePreviewAnimationDonorFailureReason;
+  }
+
+  instantiateSpawnModel(modelName, modelContainer, nameFunction) {
+    const instanceContainer = modelContainer.instantiateModelsToScene(
+      nameFunction
+    );
+    // Babylon does not guarantee that arbitrary GLTF extras survive every
+    // AssetContainer clone path. Preserve the exporter-approved native-pose
+    // policy on the instance explicitly so live zone spawns make the same
+    // animation decision as the structural race audit.
+    instanceContainer.__spireNativePoseOnly =
+      this.getCharacterContainerExtras(modelContainer).some(
+        (entry) => entry.spireNativePoseOnly === true
+      );
+    const donor = modelContainer.__spirePreviewAnimationDonor ?? null;
+    const donorDisabled = previewAnimationDonorDisabled();
+    const donorEvidence = {
+      expected: !!PREVIEW_ANIMATION_DONORS[modelName] && !donorDisabled,
+      disabled: donorDisabled,
+      donorName: donor?.donorName ?? PREVIEW_ANIMATION_DONORS[modelName] ?? null,
+      failureReason:
+        modelContainer.__spirePreviewAnimationDonorFailureReason ?? null,
+      attachedGroupCount: 0,
+      attachedTargetCount: 0,
+      bindRelativeTargetCount: 0,
+      bindLockedRotationTargetNames: [],
+      unmatchedTargetNames: [],
+      pass: !PREVIEW_ANIMATION_DONORS[modelName] || donorDisabled,
+    };
+    instanceContainer.__spirePreviewAnimationDonor = donorEvidence;
+    instanceContainer.__spireResolvedModelAsset =
+      this.resolvedModelAssets[modelName] ?? modelName;
+    if (!donor?.donorContainer) {
+      return instanceContainer;
+    }
+
+    const instanceNodes = [
+      ...(instanceContainer.rootNodes ?? []),
+      ...(instanceContainer.rootNodes ?? []).flatMap(
+        (root) => root.getDescendants?.(false) ?? []
+      ),
+    ].filter(Boolean);
+    const targetNodesByName = new Map();
+    for (const node of instanceNodes) {
+      const name = normalizeAnimationTargetName(node?.name);
+      if (!name) {
+        continue;
+      }
+      const candidates = targetNodesByName.get(name) ?? [];
+      candidates.push(node);
+      targetNodesByName.set(name, candidates);
+    }
+    const bindLockedRotationTargets = new Set(
+      [...targetNodesByName.keys()].filter(isPreviewHeadOrNeckRotationTarget)
+    );
+    // Some Luclin-era skeletons expose only anonymous bone### names. In that
+    // case, derive the complete head chain from the actual HE mesh weights and
+    // preserve those bind rotations. This prevents a cross-race donor from
+    // turning a correctly skinned face upside down while still animating the
+    // torso and limbs.
+    if (!hasSemanticPreviewHeadTarget(targetNodesByName)) {
+      for (const boneName of getPreviewHeadInfluencingBoneNames(modelContainer)) {
+        bindLockedRotationTargets.add(boneName);
+      }
+    }
+
+    // A donor-marked source had no native playable clips. Discard any groups
+    // opportunistically cloned from a prior cached mutation and recreate them
+    // against the actual visible instance so ownership and targets are clear.
+    const poseGroups = [];
+    for (const animationGroup of instanceContainer.animationGroups ?? []) {
+      if (POSE_ANIMATION_PATTERN.test(`${animationGroup?.name ?? ''}`)) {
+        poseGroups.push(animationGroup);
+      } else {
+        animationGroup?.dispose?.();
+      }
+    }
+    instanceContainer.animationGroups = poseGroups;
+
+    const unmatchedTargetNames = new Set();
+    const getPoseValues = (container) => {
+      const values = new Map();
+      const poseGroup = (container.animationGroups ?? []).find((group) =>
+        POSE_ANIMATION_PATTERN.test(`${group?.name ?? ''}`)
+      );
+      const frame = Number(poseGroup?.from ?? 0);
+      for (const targetedAnimation of poseGroup?.targetedAnimations ?? []) {
+        const animation = targetedAnimation.animation;
+        const targetName = normalizeAnimationTargetName(
+          targetedAnimation.target?.name
+        );
+        const property = `${animation?.targetProperty ?? ''}`;
+        const value = animation?.evaluate?.(frame);
+        if (targetName && property && value !== undefined) {
+          values.set(`${targetName}|${property}`, value?.clone?.() ?? value);
+        }
+      }
+      return values;
+    };
+    const targetPoseValues = getPoseValues(modelContainer);
+    const donorPoseValues = getPoseValues(donor.donorContainer);
+    const bindLockedRotationTargetNames = new Set();
+    const createBindRelativeAnimation = (animation, targetName) => {
+      const property = `${animation?.targetProperty ?? ''}`;
+      const key = `${targetName}|${property}`;
+      const targetBase = targetPoseValues.get(key);
+      const donorBase = donorPoseValues.get(key);
+      if (!targetBase || !donorBase) {
+        return null;
+      }
+      const retargetValue = (value) => {
+        if (!value) {
+          return value;
+        }
+        if (/rotationquaternion/i.test(property)) {
+          if (bindLockedRotationTargets.has(targetName)) {
+            bindLockedRotationTargetNames.add(targetName);
+            return targetBase?.clone?.() ?? targetBase;
+          }
+          const donorInverse = BABYLON.Quaternion.Inverse(donorBase);
+          return targetBase
+            .multiply(donorInverse)
+            .multiply(value)
+            .normalize();
+        }
+        if (/position|translation/i.test(property)) {
+          // Bone translations encode the donor's limb lengths. Applying even
+          // their animated deltas to a different mesh stretches the hierarchy
+          // and can move the head outside the body. Preserve the target model's
+          // own local placement; rotation carries the visible motion safely.
+          return targetBase?.clone?.() ?? targetBase;
+        }
+        if (/scal/i.test(property)) {
+          return targetBase?.clone?.() ?? targetBase;
+        }
+        return value?.clone?.() ?? value;
+      };
+      const clonedAnimation = animation.clone();
+      clonedAnimation.setKeys(
+        (animation.getKeys?.() ?? []).map((animationKey) => ({
+          ...animationKey,
+          value: retargetValue(animationKey.value),
+        }))
+      );
+      return clonedAnimation;
+    };
+    for (const donorGroup of donor.donorContainer.animationGroups ?? []) {
+      if (POSE_ANIMATION_PATTERN.test(`${donorGroup?.name ?? ''}`)) {
+        continue;
+      }
+      const animationGroup = new AnimationGroup(
+        `Clone of ${`${donorGroup.name ?? ''}`.replace(/^Clone of /, '')}`,
+        this.currentScene
+      );
+      animationGroup.metadata = {
+        ...animationGroup.metadata,
+        spirePreviewAnimationDonor: true,
+        spirePreviewAnimationDonorName: donor.donorName,
+      };
+      for (const targetedAnimation of donorGroup.targetedAnimations ?? []) {
+        const targetName = normalizeAnimationTargetName(
+          targetedAnimation.target?.name
+        );
+        const candidates = targetNodesByName.get(targetName) ?? [];
+        if (candidates.length !== 1) {
+          unmatchedTargetNames.add(targetName || '<unnamed>');
+          continue;
+        }
+        const bindRelativeAnimation = createBindRelativeAnimation(
+          targetedAnimation.animation,
+          targetName
+        );
+        if (!bindRelativeAnimation) {
+          unmatchedTargetNames.add(`${targetName || '<unnamed>'}:bind-pose`);
+          continue;
+        }
+        animationGroup.addTargetedAnimation(bindRelativeAnimation, candidates[0]);
+        donorEvidence.bindRelativeTargetCount++;
+      }
+      if (animationGroup.targetedAnimations.length === 0) {
+        animationGroup.dispose();
+        continue;
+      }
+      instanceContainer.animationGroups.push(animationGroup);
+      donorEvidence.attachedGroupCount++;
+      donorEvidence.attachedTargetCount +=
+        animationGroup.targetedAnimations.length;
+    }
+    donorEvidence.bindLockedRotationTargetNames = [
+      ...bindLockedRotationTargetNames,
+    ].sort();
+    donorEvidence.unmatchedTargetNames = [...unmatchedTargetNames].sort();
+    donorEvidence.pass =
+      donorEvidence.attachedGroupCount > 0 &&
+      donorEvidence.attachedTargetCount > 0 &&
+      donorEvidence.bindRelativeTargetCount === donorEvidence.attachedTargetCount;
+    return instanceContainer;
+  }
+
   getAssetContainer(modelName, secondary = false, options = {}) {
     const key = `model/${modelName}/${
-      secondary ? 'secondary' : options.optional ? 'optional' : 'primary'
+      secondary
+        ? 'secondary'
+        : options.generateIfMissing
+          ? 'generated'
+          : options.optional
+            ? 'optional'
+            : 'primary'
     }`;
     if (!this.assetContainers[key]) {
       const allowFallbackModels =
         !window.__spireSagePreview && !window.__spireSageStrictSpawnModels;
       const previewAlias =
         !secondary && window.__spireSagePreview
-          ? PREVIEW_MODEL_ALIASES[modelName]
+          ? PREVIEW_MODEL_ALIASES[modelName] ??
+            PREVIEW_CLIENT_FALLBACKS[modelName]
           : null;
+      const previewAliasFirst =
+        previewAlias && PREVIEW_ALIAS_FIRST_MODELS.has(modelName);
       const files = secondary
         ? [`${modelName}.glb`]
         : previewAlias
-          ? [`${previewAlias}.glb`]
+          ? previewAliasFirst
+            ? [`${previewAlias}.glb`, `${modelName}.glb`]
+            : [`${modelName}.glb`, `${previewAlias}.glb`]
         : allowFallbackModels
           ? [
             `${modelName}.glb`,
@@ -804,15 +1383,36 @@ class SpawnController extends GameControllerChild {
             'zom.glb',
           ]
           : [`${modelName}.glb`];
-      this.assetContainers[key] = this.getFirstAssetContainer(
-        'models',
-        files,
-        modelName,
-        {
-          aliasFiles: previewAlias ? [`${previewAlias}.glb`] : [],
-          optional  : secondary || !!options.optional,
+      const previewObjectAlias =
+        !secondary && window.__spireSagePreview
+          ? PREVIEW_OBJECT_MODEL_ALIASES[modelName]
+          : null;
+      this.assetContainers[key] = (async () => {
+        const modelContainer = await this.getFirstAssetContainer(
+          'models',
+          files,
+          modelName,
+          {
+            aliasFiles: previewAlias ? [`${previewAlias}.glb`] : [],
+            generateIfMissing: !!options.generateIfMissing,
+            optional         : secondary || !!options.optional,
+          }
+        );
+        if (!secondary && window.__spireSagePreview && modelContainer) {
+          await this.addPreviewAnimationDonor(modelName, modelContainer);
         }
-      );
+        if (modelContainer || !previewObjectAlias) {
+          return modelContainer;
+        }
+        const objectContainer = await this.getCachedAssetContainer(
+          'objects',
+          `${previewObjectAlias}.glb`
+        );
+        if (objectContainer) {
+          delete this.missingAssets[modelName];
+        }
+        return objectContainer;
+      })();
     }
     return this.assetContainers[key];
   }
@@ -821,6 +1421,7 @@ class SpawnController extends GameControllerChild {
     this.assetContainers = {};
     this.assetFallbacks = {};
     this.missingAssets = {};
+    this.resolvedModelAssets = {};
   }
 
   getObjectAssetContainer(objectName, path = 'objects') {
@@ -1397,21 +1998,33 @@ class SpawnController extends GameControllerChild {
     return this.modelExport;
   }
 
-  async addSpawn(modelName, models) {
+  async addSpawn(modelName, models, loadToken = this.spawnLoadToken) {
     let loaded = 0;
-    for (const [_idx, spawnEntry] of Object.entries(models)) {
+    const spawnEntries = Object.values(models);
+    const initializeEntry = async (spawnEntry) => {
+      if (loadToken !== this.spawnLoadToken) {
+        return;
+      }
+      let babylonSpawn = null;
       try {
-        const babylonSpawn = new BabylonSpawn(
+        babylonSpawn = new BabylonSpawn(
           spawnEntry,
           modelName,
           this.zoneSpawnsNode,
           this.sphereMat
         );
-        if (await babylonSpawn.initializeSpawn()) {
-          this.spawns[spawnEntry.__spireSpawnId ?? spawnEntry.id] = babylonSpawn;
-          loaded++;
+        if (!(await babylonSpawn.initializeSpawn())) {
+          babylonSpawn.dispose();
+          return;
         }
+        if (loadToken !== this.spawnLoadToken) {
+          babylonSpawn.dispose();
+          return;
+        }
+        this.spawns[spawnEntry.__spireSpawnId ?? spawnEntry.id] = babylonSpawn;
+        loaded++;
       } catch (error) {
+        babylonSpawn?.dispose?.();
         console.warn(
           `Error loading spawn model ${modelName} spawn ${spawnEntry?.id}: ${
             error?.message ?? error
@@ -1419,35 +2032,99 @@ class SpawnController extends GameControllerChild {
         );
       }
       await yieldToBrowser();
+    };
+
+    if (!window.__spireSagePreview || spawnEntries.length <= 1) {
+      for (const spawnEntry of spawnEntries) {
+        await initializeEntry(spawnEntry);
+        if (loadToken !== this.spawnLoadToken) {
+          break;
+        }
+      }
+      return loaded;
     }
+
+    // Preview validation zones commonly contain hundreds of instances that
+    // share one already-loaded model. A small worker pool keeps Babylon and
+    // texture setup responsive while avoiding the multi-minute serial load and
+    // the memory spike an unbounded Promise.all would create.
+    let nextIndex = 0;
+    const hardwareConcurrency = Number(window.navigator?.hardwareConcurrency) || 4;
+    const workerCount = Math.min(
+      12,
+      Math.max(4, Math.floor(hardwareConcurrency * 0.75)),
+      spawnEntries.length
+    );
+    const worker = async () => {
+      while (loadToken === this.spawnLoadToken) {
+        const index = nextIndex++;
+        if (index >= spawnEntries.length) {
+          return;
+        }
+        await initializeEntry(spawnEntries[index]);
+      }
+    };
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
     return loaded;
   }
 
   async deleteSpawn(spawn) {
-    this.spawns[spawn.id]?.dispose();
+    const spawnId = spawn?.__spireSpawnId ?? spawn?.id;
+    const existingSpawn = this.spawns[spawnId];
+    existingSpawn?.dispose();
+    delete this.spawns[spawnId];
+    if (this.selectedSpawnId === spawnId) {
+      this.clearSpawnSelection();
+    }
   }
 
-  resolveSpawnModel(npcType) {
+  getSpawnModelCandidates(npcType) {
     if (!npcType) {
-      return null;
+      return [];
     }
-    const model = raceData.find((r) => r.id === npcType.race);
+    const model = raceData.find((r) => Number(r.id) === Number(npcType.race));
     const gender =
       npcType.gender !== undefined &&
       npcType.gender !== null &&
       npcType.gender !== ''
         ? `${Number(npcType.gender)}`
         : null;
-    const realModel = [
-      gender ? model?.[gender] : null,
-      model?.['2'],
-      model?.['0'],
-      model?.['1'],
-    ].find(Boolean);
-    if (realModel) {
-      return realModel.toLowerCase();
+    const matchingRaces = model
+      ? [
+        model,
+        ...raceData.filter(
+          (candidate) =>
+            Number(candidate.id) !== Number(model.id) &&
+            `${candidate.name ?? ''}`.trim().toLowerCase() ===
+              `${model.name ?? ''}`.trim().toLowerCase()
+        ),
+      ]
+      : [];
+    return [...new Set(matchingRaces.flatMap((candidate) => [
+      gender ? candidate?.[gender] : null,
+      candidate?.['2'],
+      candidate?.['0'],
+      candidate?.['1'],
+    ]).filter(Boolean).map((entry) => entry.toLowerCase()))];
+  }
+
+  resolveSpawnModel(npcType) {
+    return this.getSpawnModelCandidates(npcType)[0] ??
+      (window.__spireSagePreview ? null : 'hum');
+  }
+
+  async resolveAvailableSpawnModel(npcType) {
+    const candidates = this.getSpawnModelCandidates(npcType);
+    for (const modelName of candidates) {
+      this.modelAvailabilityPromises[modelName] ??= Promise.all([
+        getEQFileExists('models', `${modelName}.glb`),
+        getEQFileExists('objects', `${modelName}.glb`),
+      ]).then((availability) => availability.some(Boolean));
+      if (await this.modelAvailabilityPromises[modelName]) {
+        return modelName;
+      }
     }
-    return window.__spireSagePreview ? null : 'hum';
+    return candidates[0] ?? (window.__spireSagePreview ? null : 'hum');
   }
 
   async updateSpawn(spawn) {
@@ -1457,12 +2134,13 @@ class SpawnController extends GameControllerChild {
       ...spawn,
     };
     this.spawns[spawn.id]?.dispose();
-    const realModel = this.resolveSpawnModel(firstSpawn);
+    delete this.spawns[spawn.id];
+    const realModel = await this.resolveAvailableSpawnModel(firstSpawn);
     if (!realModel) {
       console.warn('Cannot update spawn without a resolved NPC model', spawn);
       return;
     }
-    this.addSpawn(realModel, [newSpawn]);
+    await this.addSpawn(realModel, [newSpawn], this.spawnLoadToken);
   }
 
   getMaterialTexture(material) {
@@ -1511,34 +2189,81 @@ class SpawnController extends GameControllerChild {
     return POSE_ANIMATION_PATTERN.test(`${animationGroup?.name ?? ''}`);
   }
 
+  isTPoseValidationExcludedModel(modelName) {
+    return T_POSE_VALIDATION_EXCLUDED_MODELS.has(modelName);
+  }
+
   collectSpawnVisualStats() {
-    const stats = {
+    const nameplateEligibleModels = new Set();
+      const stats = {
       spawnCount: Object.keys(this.spawns).length,
       materialSlotCount: 0,
       texturedSlotCount: 0,
       readyTextureCount: 0,
       pendingTextureCount: 0,
       fallbackTextureCount: 0,
+      appearanceTexturePendingCount: 0,
+      appearanceTextureDecodeFailureCount: 0,
       tinyTextureCount: 0,
       onePixelTextureCount: 0,
       belowGroundSpawnCount: 0,
       aboveGroundSpawnCount: 0,
       texturelessSpawnCount: 0,
+      headTextureCount: 0,
+      verticallyFlippedHeadTextureCount: 0,
+      bodyVariantFallbackCount: 0,
+      secondaryHeadBoneRemapFailureCount: 0,
       skeletonSpawnCount: 0,
       animatedSkeletonSpawnCount: 0,
       tPoseRiskCount: 0,
+      motionlessAnimationCount: 0,
+      staticPosedSkeletonSpawnCount: 0,
+      selectedAnimationPromotionFailureCount: 0,
+      animationBoundsRejectionCount: 0,
+      animationHeadOrientationRejectionCount: 0,
+      neutralIdleSelectionFailureCount: 0,
+      nativePoseOnlySkeletonSpawnCount: 0,
+      compactNativeArmNormalizationFailureCount: 0,
+      nonFiniteBoneMatrixCount: 0,
+      nonFiniteSkeletonSpawnCount: 0,
+      bindPoseCloneGroupCount: 0,
+      dynamicAnimationGroupCount: 0,
+      detachedAnimationTargetCount: 0,
+      retargetedAnimationTargetCount: 0,
+      unresolvedAnimationTargetCount: 0,
       nonPlayingAnimationCount: 0,
       animationGroupCount: 0,
       playingAnimationGroupCount: 0,
+      excessAnimationGroupCount: 0,
+      nameplateExpectedCount: 0,
+      nameplateCount: 0,
+      nameplateVisibleCount: 0,
+      nameplateTexturedCount: 0,
+      nameplateAboveModelCount: 0,
+        nameplateFailureCount: 0,
+        nameplateEligibleSpawnCount: 0,
+        nameplateEligibleModelCount: 0,
       byModel: {},
       texturelessSamples: [],
       pendingTextureSamples: [],
       fallbackTextureSamples: [],
+      appearanceTextureDecodeFailureSamples: [],
       tinyTextureSamples: [],
       onePixelTextureSamples: [],
+      headTextureSamples: [],
+      bodyVariantFallbackSamples: [],
+      secondaryHeadBoneRemapFailureSamples: [],
       belowGroundSamples: [],
       aboveGroundSamples: [],
       animationRiskSamples: [],
+      animationBoundsRejectionSamples: [],
+      animationHeadOrientationRejectionSamples: [],
+      neutralIdleSelectionFailureSamples: [],
+      selectedVisualAnimationSamples: [],
+      animationRetargetingSamples: [],
+      animationResourceSamples: [],
+      nonFiniteBoneMatrixSamples: [],
+      nameplateFailureSamples: [],
     };
 
     for (const [spawnId, spawn] of Object.entries(this.spawns)) {
@@ -1556,23 +2281,230 @@ class SpawnController extends GameControllerChild {
           readyTextureCount: 0,
           pendingTextureCount: 0,
           fallbackTextureCount: 0,
+          appearanceTexturePendingCount: 0,
+          appearanceTextureDecodeFailureCount: 0,
           tinyTextureCount: 0,
           onePixelTextureCount: 0,
           belowGroundSpawnCount: 0,
           aboveGroundSpawnCount: 0,
           texturelessSpawnCount: 0,
+          headTextureCount: 0,
+          verticallyFlippedHeadTextureCount: 0,
+          bodyVariantFallbackCount: 0,
+          secondaryHeadBoneRemapFailureCount: 0,
           skeletonSpawnCount: 0,
           animatedSkeletonSpawnCount: 0,
           tPoseRiskCount: 0,
+          motionlessAnimationCount: 0,
+          staticPosedSkeletonSpawnCount: 0,
+          selectedAnimationPromotionFailureCount: 0,
+          animationBoundsRejectionCount: 0,
+          animationHeadOrientationRejectionCount: 0,
+          neutralIdleSelectionFailureCount: 0,
+          selectedVisualAnimationNames: [],
+          nativePoseOnlySkeletonSpawnCount: 0,
+          compactNativeArmNormalizationFailureCount: 0,
+          nonFiniteBoneMatrixCount: 0,
+          nonFiniteSkeletonSpawnCount: 0,
+          bindPoseCloneGroupCount: 0,
+          dynamicAnimationGroupCount: 0,
+          detachedAnimationTargetCount: 0,
+          retargetedAnimationTargetCount: 0,
+          unresolvedAnimationTargetCount: 0,
           nonPlayingAnimationCount: 0,
           animationGroupCount: 0,
           playingAnimationGroupCount: 0,
+          excessAnimationGroupCount: 0,
+          nameplateExpectedCount: 0,
+          nameplateCount: 0,
+          nameplateVisibleCount: 0,
+          nameplateTexturedCount: 0,
+          nameplateAboveModelCount: 0,
+          nameplateFailureCount: 0,
         };
       }
       const modelStats = stats.byModel[modelName];
       modelStats.spawns++;
+      const appearanceTextureDecodeFailureCount = Number(
+        spawn.appearanceTextureDecodeFailureCount ?? 0
+      );
+      if (appearanceTextureDecodeFailureCount > 0) {
+        stats.appearanceTextureDecodeFailureCount +=
+          appearanceTextureDecodeFailureCount;
+        modelStats.appearanceTextureDecodeFailureCount +=
+          appearanceTextureDecodeFailureCount;
+        if (stats.appearanceTextureDecodeFailureSamples.length < 10) {
+          stats.appearanceTextureDecodeFailureSamples.push({
+            spawnId,
+            modelName,
+            textures: (spawn.appearanceTextureDecodeFailures ?? []).slice(0, 12),
+          });
+        }
+      }
+      if (
+        spawn.selectedVisualAnimationName &&
+        !modelStats.selectedVisualAnimationNames.includes(
+          spawn.selectedVisualAnimationName
+        )
+      ) {
+        modelStats.selectedVisualAnimationNames.push(
+          spawn.selectedVisualAnimationName
+        );
+      }
+      if (
+        spawn.selectedVisualAnimationName &&
+        stats.selectedVisualAnimationSamples.length < 30
+      ) {
+        stats.selectedVisualAnimationSamples.push({
+          spawnId,
+          modelName,
+          selectedAnimation: spawn.selectedVisualAnimationName,
+          neutralIdleCandidates: spawn.neutralIdleCandidateNames ?? [],
+        });
+      }
+      if (spawn.neutralIdleSelectionPass === false) {
+        stats.neutralIdleSelectionFailureCount++;
+        modelStats.neutralIdleSelectionFailureCount++;
+        if (stats.neutralIdleSelectionFailureSamples.length < 10) {
+          stats.neutralIdleSelectionFailureSamples.push({
+            spawnId,
+            modelName,
+            selectedAnimation: spawn.selectedVisualAnimationName,
+            neutralIdleCandidates: spawn.neutralIdleCandidateNames ?? [],
+          });
+        }
+      }
+      if (
+        spawn.bodyVariantFallback === true &&
+        spawn.bodyVariantTextureFallbackApplied !== true
+      ) {
+        stats.bodyVariantFallbackCount++;
+        modelStats.bodyVariantFallbackCount++;
+        if (stats.bodyVariantFallbackSamples.length < 10) {
+          stats.bodyVariantFallbackSamples.push({
+            spawnId,
+            modelName,
+            requestedModelVariation: spawn.requestedModelVariation,
+            loadedModelVariation: spawn.loadedModelVariation,
+          });
+        }
+      }
+      if (spawn.selectedAnimationPromotionFailed === true) {
+        stats.selectedAnimationPromotionFailureCount++;
+        modelStats.selectedAnimationPromotionFailureCount++;
+      }
+      if (spawn.animationBoundsRejected === true) {
+        stats.animationBoundsRejectionCount++;
+        modelStats.animationBoundsRejectionCount++;
+        if (stats.animationBoundsRejectionSamples.length < 10) {
+          stats.animationBoundsRejectionSamples.push({
+            spawnId,
+            modelName,
+            fallbackSafe: spawn.animationBoundsFallbackSafe === true,
+            boundsSafety: spawn.animationBoundsSafety ?? null,
+          });
+        }
+        if (spawn.animationHeadOrientationRejected === true) {
+          stats.animationHeadOrientationRejectionCount++;
+          modelStats.animationHeadOrientationRejectionCount++;
+          if (stats.animationHeadOrientationRejectionSamples.length < 10) {
+            stats.animationHeadOrientationRejectionSamples.push({
+              spawnId,
+              modelName,
+              boundsSafety: spawn.animationBoundsSafety ?? null,
+            });
+          }
+        }
+      }
+      const secondaryHeadBoneRemapFailureCount = Number(
+        spawn.secondaryHeadBoneRemapFailureCount ?? 0
+      );
+      if (secondaryHeadBoneRemapFailureCount > 0) {
+        stats.secondaryHeadBoneRemapFailureCount +=
+          secondaryHeadBoneRemapFailureCount;
+        modelStats.secondaryHeadBoneRemapFailureCount +=
+          secondaryHeadBoneRemapFailureCount;
+        if (stats.secondaryHeadBoneRemapFailureSamples.length < 10) {
+          stats.secondaryHeadBoneRemapFailureSamples.push({
+            spawnId,
+            modelName,
+            failures: spawn.secondaryHeadBoneRemapFailures ?? [],
+          });
+        }
+      }
+      if (spawn.isNameplateEligible?.() !== false) {
+        nameplateEligibleModels.add(modelName);
+        stats.nameplateEligibleSpawnCount++;
+      }
+      if (spawn.nameplateRequired === true) {
+        stats.nameplateExpectedCount++;
+        modelStats.nameplateExpectedCount++;
+        spawn.updateNameplatePosition?.();
+        const nameplate = spawn.inspectNameplate?.() ?? {
+          present: false,
+          visible: false,
+          textured: false,
+          placement: { pass: false },
+          pass: false,
+        };
+        if (nameplate.present) {
+          stats.nameplateCount++;
+          modelStats.nameplateCount++;
+        }
+        if (nameplate.visible) {
+          stats.nameplateVisibleCount++;
+          modelStats.nameplateVisibleCount++;
+        }
+        if (nameplate.textured) {
+          stats.nameplateTexturedCount++;
+          modelStats.nameplateTexturedCount++;
+        }
+        if (nameplate.placement?.pass) {
+          stats.nameplateAboveModelCount++;
+          modelStats.nameplateAboveModelCount++;
+        }
+        if (!nameplate.pass) {
+          stats.nameplateFailureCount++;
+          modelStats.nameplateFailureCount++;
+          if (stats.nameplateFailureSamples.length < 10) {
+            stats.nameplateFailureSamples.push({
+              spawnId,
+              modelName,
+              ...nameplate,
+            });
+          }
+        }
+      }
+      const animationRetargeting = spawn.animationRetargeting ?? {};
+      const detachedAnimationTargetCount = Number(
+        animationRetargeting.detachedTargetCount ?? 0
+      );
+      const retargetedAnimationTargetCount = Number(
+        animationRetargeting.retargetedTargetCount ?? 0
+      );
+      const unresolvedAnimationTargetCount = Number(
+        animationRetargeting.unresolvedTargetCount ?? 0
+      );
+      stats.detachedAnimationTargetCount += detachedAnimationTargetCount;
+      stats.retargetedAnimationTargetCount += retargetedAnimationTargetCount;
+      stats.unresolvedAnimationTargetCount += unresolvedAnimationTargetCount;
+      modelStats.detachedAnimationTargetCount += detachedAnimationTargetCount;
+      modelStats.retargetedAnimationTargetCount += retargetedAnimationTargetCount;
+      modelStats.unresolvedAnimationTargetCount += unresolvedAnimationTargetCount;
+      if (
+        unresolvedAnimationTargetCount > 0 &&
+        stats.animationRetargetingSamples.length < 10
+      ) {
+        stats.animationRetargetingSamples.push({
+          spawnId,
+          modelName,
+          ...animationRetargeting,
+        });
+      }
       const missingModelTextures =
-        window.__spireSageMissingModelTextures?.[`/eq/models/${modelName}.glb`] ?? [];
+        window.__spireSageMissingModelTextures?.[`/eq/models/${modelName}.glb`] ??
+        window.__spireSageMissingModelTextures?.[`/eq/objects/${modelName}.glb`] ??
+        [];
       if (missingModelTextures.length > 0) {
         stats.fallbackTextureCount += missingModelTextures.length;
         modelStats.fallbackTextureCount += missingModelTextures.length;
@@ -1627,13 +2559,34 @@ class SpawnController extends GameControllerChild {
         if (!texture) {
           continue;
         }
+        if (material.metadata?.spireAppearanceTexturePending === true) {
+          stats.appearanceTexturePendingCount++;
+          modelStats.appearanceTexturePendingCount++;
+        }
+        const textureReady = this.isTextureReady(texture);
+        if (
+          material.metadata?.spireAppearanceTextureDecodeFailed === true &&
+          !textureReady
+        ) {
+          stats.appearanceTextureDecodeFailureCount++;
+          modelStats.appearanceTextureDecodeFailureCount++;
+          if (stats.appearanceTextureDecodeFailureSamples.length < 10) {
+            stats.appearanceTextureDecodeFailureSamples.push({
+              spawnId,
+              modelName,
+              textures: [material.name],
+            });
+          }
+        }
         spawnTexturedSlots++;
         stats.texturedSlotCount++;
         modelStats.texturedSlotCount++;
-        if (this.isTextureReady(texture)) {
+        if (textureReady) {
           stats.readyTextureCount++;
           modelStats.readyTextureCount++;
         } else {
+          const internalTexture =
+            texture.getInternalTexture?.() ?? texture._texture ?? null;
           spawnPendingTextures++;
           stats.pendingTextureCount++;
           modelStats.pendingTextureCount++;
@@ -1643,6 +2596,16 @@ class SpawnController extends GameControllerChild {
               modelName,
               material: material.name,
               texture: texture.name ?? texture.url,
+              url: texture.url ?? null,
+              appearancePending:
+                material.metadata?.spireAppearanceTexturePending === true,
+              appearanceDecodeAttempts:
+                material.metadata?.spireAppearanceTextureDecodeAttempts ?? null,
+              appearanceDecodeLastError:
+                material.metadata?.spireAppearanceTextureDecodeLastError ?? null,
+              hasInternalTexture: Boolean(internalTexture),
+              internalReady: internalTexture?.isReady ?? null,
+              loadingError: internalTexture?._loadingError ?? null,
             });
           }
         }
@@ -1657,14 +2620,73 @@ class SpawnController extends GameControllerChild {
           width,
           height,
         };
-        if ((width > 0 && width <= 8) || (height > 0 && height <= 8)) {
+        if (/^[a-z0-9]{3}he(?:\d{2}|sk)\d{2}$/i.test(material.name ?? '')) {
+          stats.headTextureCount++;
+          modelStats.headTextureCount++;
+          const requestedInvertY =
+            texture._texture?._spireSageRequestedInvertY;
+          const uploadInvertY =
+            texture._texture?._spireSageUploadInvertY;
+          const uploadOrientationMismatch =
+            typeof requestedInvertY === 'boolean' &&
+            typeof uploadInvertY === 'boolean' &&
+            requestedInvertY !== uploadInvertY;
+          const geometryUvFlipped =
+            material.metadata?.gltf?.extras?.spireSkinnedVFlipped === true ||
+            material.metadata?.extras?.spireSkinnedVFlipped === true ||
+            material.metadata?.spireSkinnedVFlipped === true;
+          const orientationPolicy =
+            getCharacterHeadOrientationPolicy(material.name);
+          const expectsGeometryUvFlip =
+            orientationPolicy.geometryUvFlipped;
+          const expectsRuntimeTextureVFlip =
+            orientationPolicy.runtimeTextureVFlipped;
+          const runtimeTextureVFlipped = Number(texture.vScale ?? 1) < 0;
+          const expectedEffectiveVFlip =
+            expectsGeometryUvFlip !== expectsRuntimeTextureVFlip;
+          const effectiveVFlip =
+            geometryUvFlipped !== runtimeTextureVFlipped;
+          if (
+            effectiveVFlip !== expectedEffectiveVFlip ||
+            uploadOrientationMismatch
+          ) {
+            stats.verticallyFlippedHeadTextureCount++;
+            modelStats.verticallyFlippedHeadTextureCount++;
+          }
+          if (stats.headTextureSamples.length < 20) {
+            stats.headTextureSamples.push({
+              ...textureSample,
+              face: Number(spawn.spawnEntry?.face ?? spawn.spawn?.face ?? 0),
+              helmTexture: Number(spawn.spawnEntry?.helmtexture ?? 0),
+              invertY: texture.invertY,
+              requestedInvertY,
+              uploadInvertY,
+              uploadOrientationMismatch,
+              geometryUvFlipped,
+              runtimeTextureVFlipped,
+              expectsGeometryUvFlip,
+              expectsRuntimeTextureVFlip,
+              effectiveVFlip,
+              expectedEffectiveVFlip,
+              vOffset: texture.vOffset,
+              vScale: texture.vScale,
+            });
+          }
+        }
+        if (
+          material.metadata?.transparentTextureSentinel === true &&
+          material.metadata?.transparentTextureSentinelSuppressed !== true
+        ) {
           stats.tinyTextureCount++;
           modelStats.tinyTextureCount++;
           if (stats.tinyTextureSamples.length < 10) {
             stats.tinyTextureSamples.push(textureSample);
           }
         }
-        if ((width > 0 && width <= 1) || (height > 0 && height <= 1)) {
+        if (
+          ((width > 0 && width <= 1) || (height > 0 && height <= 1)) &&
+          !INTENTIONAL_SOLID_TEXTURES.has(`${material?.name ?? ''}`.toUpperCase())
+        ) {
           stats.onePixelTextureCount++;
           modelStats.onePixelTextureCount++;
           if (stats.onePixelTextureSamples.length < 10) {
@@ -1745,6 +2767,39 @@ class SpawnController extends GameControllerChild {
 
       const hasSkeleton =
         !!root.skeleton || meshes.some((mesh) => !!mesh?.skeleton);
+      const skeletons = new Set(
+        [root.skeleton, ...meshes.map((mesh) => mesh?.skeleton)].filter(Boolean)
+      );
+      let spawnNonFiniteBoneMatrixCount = 0;
+      for (const skeleton of skeletons) {
+        for (const bone of skeleton?.bones ?? []) {
+          const values = bone?.getFinalMatrix?.()?.m ?? bone?._finalMatrix?.m;
+          if (!values || values.length === 0) {
+            continue;
+          }
+          const nonFiniteValueCount = Array.from(values).filter(
+            (value) => !Number.isFinite(value)
+          ).length;
+          if (nonFiniteValueCount === 0) {
+            continue;
+          }
+          spawnNonFiniteBoneMatrixCount += nonFiniteValueCount;
+          if (stats.nonFiniteBoneMatrixSamples.length < 10) {
+            stats.nonFiniteBoneMatrixSamples.push({
+              spawnId,
+              modelName,
+              bone: bone.name,
+              nonFiniteValueCount,
+            });
+          }
+        }
+      }
+      if (spawnNonFiniteBoneMatrixCount > 0) {
+        stats.nonFiniteBoneMatrixCount += spawnNonFiniteBoneMatrixCount;
+        stats.nonFiniteSkeletonSpawnCount++;
+        modelStats.nonFiniteBoneMatrixCount += spawnNonFiniteBoneMatrixCount;
+        modelStats.nonFiniteSkeletonSpawnCount++;
+      }
       const animationGroups = spawn.animationGroups ?? [];
       const playableGroups = animationGroups.filter(
         (animationGroup) =>
@@ -1754,15 +2809,89 @@ class SpawnController extends GameControllerChild {
       const playingGroups = playableGroups.filter((animationGroup) =>
         this.isAnimationGroupPlaying(animationGroup)
       );
+      const animationVitality = inspectAnimationSetVitality(animationGroups);
+      const poseGroup = animationGroups.find((animationGroup) =>
+        this.isPoseAnimationGroup(animationGroup)
+      ) ?? null;
+      const playingVitality = playingGroups.map((animationGroup) =>
+        inspectAnimationGroupVitality(animationGroup, poseGroup)
+      );
+      const hasPlayingVisualPose = playingVitality.some(
+        (group) => group.hasVisualPose
+      );
       stats.animationGroupCount += playableGroups.length;
       modelStats.animationGroupCount += playableGroups.length;
       stats.playingAnimationGroupCount += playingGroups.length;
       modelStats.playingAnimationGroupCount += playingGroups.length;
+      if (playableGroups.length > 1) {
+        const excessGroupCount = playableGroups.length - 1;
+        stats.excessAnimationGroupCount += excessGroupCount;
+        modelStats.excessAnimationGroupCount += excessGroupCount;
+        if (stats.animationResourceSamples.length < 10) {
+          stats.animationResourceSamples.push({
+            spawnId,
+            modelName,
+            playableGroupCount: playableGroups.length,
+            selectedAnimation: spawn.selectedVisualAnimationName,
+          });
+        }
+      }
+      stats.bindPoseCloneGroupCount += animationVitality.bindPoseCloneGroupCount;
+      modelStats.bindPoseCloneGroupCount +=
+        animationVitality.bindPoseCloneGroupCount;
+      stats.dynamicAnimationGroupCount += animationVitality.dynamicGroupCount;
+      modelStats.dynamicAnimationGroupCount +=
+        animationVitality.dynamicGroupCount;
 
-      if (hasSkeleton) {
+      if (hasSkeleton && !T_POSE_VALIDATION_EXCLUDED_MODELS.has(modelName)) {
         stats.skeletonSpawnCount++;
         modelStats.skeletonSpawnCount++;
-        if (playableGroups.length === 0) {
+        if (spawn.neutralIdleSelectionPass === false) {
+          stats.tPoseRiskCount++;
+          modelStats.tPoseRiskCount++;
+          if (stats.animationRiskSamples.length < 10) {
+            stats.animationRiskSamples.push({
+              spawnId,
+              modelName,
+              reason: 'non-neutral-idle-selected',
+              selectedAnimation: spawn.selectedVisualAnimationName,
+              neutralIdleCandidates: spawn.neutralIdleCandidateNames ?? [],
+            });
+          }
+        } else if (spawnNonFiniteBoneMatrixCount > 0) {
+          stats.tPoseRiskCount++;
+          modelStats.tPoseRiskCount++;
+          if (stats.animationRiskSamples.length < 10) {
+            stats.animationRiskSamples.push({
+              spawnId,
+              modelName,
+              reason: 'non-finite-runtime-bone-matrix',
+              nonFiniteValueCount: spawnNonFiniteBoneMatrixCount,
+            });
+          }
+        } else if (
+          spawn.nativePoseOnly &&
+          COMPACT_NATIVE_ARM_NORMALIZATION_MODELS.has(modelName) &&
+          spawn.compactNativeArmNeutralized !== true
+        ) {
+          stats.tPoseRiskCount++;
+          stats.compactNativeArmNormalizationFailureCount++;
+          modelStats.tPoseRiskCount++;
+          modelStats.compactNativeArmNormalizationFailureCount++;
+          if (stats.animationRiskSamples.length < 10) {
+            stats.animationRiskSamples.push({
+              spawnId,
+              modelName,
+              reason: 'compact-native-arm-normalization-not-applied',
+              targetCount: spawn.compactNativeArmTargetCount ?? 0,
+            });
+          }
+        } else if (spawn.nativePoseOnly && spawn.staticPreviewPoseApplied) {
+          stats.staticPosedSkeletonSpawnCount++;
+          modelStats.staticPosedSkeletonSpawnCount++;
+          stats.nativePoseOnlySkeletonSpawnCount++;
+          modelStats.nativePoseOnlySkeletonSpawnCount++;
+        } else if (playableGroups.length === 0) {
           stats.tPoseRiskCount++;
           modelStats.tPoseRiskCount++;
           if (stats.animationRiskSamples.length < 10) {
@@ -1783,6 +2912,27 @@ class SpawnController extends GameControllerChild {
               animationGroups: playableGroups.map((group) => group.name),
             });
           }
+        } else if (!hasPlayingVisualPose) {
+          stats.tPoseRiskCount++;
+          stats.motionlessAnimationCount++;
+          modelStats.tPoseRiskCount++;
+          modelStats.motionlessAnimationCount++;
+          if (stats.animationRiskSamples.length < 10) {
+            stats.animationRiskSamples.push({
+              spawnId,
+              modelName,
+              reason: 'playing-animation-matches-bind-pose',
+              playingGroups: playingVitality,
+              animationVitality: {
+                playableGroupCount: animationVitality.playableGroupCount,
+                dynamicGroupCount: animationVitality.dynamicGroupCount,
+                visuallyPosedGroupCount:
+                  animationVitality.visuallyPosedGroupCount,
+                bindPoseCloneGroupCount:
+                  animationVitality.bindPoseCloneGroupCount,
+              },
+            });
+          }
         } else {
           stats.animatedSkeletonSpawnCount++;
           modelStats.animatedSkeletonSpawnCount++;
@@ -1798,6 +2948,7 @@ class SpawnController extends GameControllerChild {
       }
     }
 
+    stats.nameplateEligibleModelCount = nameplateEligibleModels.size;
     return stats;
   }
 
@@ -1805,7 +2956,9 @@ class SpawnController extends GameControllerChild {
     if (!this.currentScene) {
       return;
     }
-    const loadToken = ++this.spawnLoadToken;
+    const loadToken = skipDispose
+      ? this.spawnLoadToken
+      : ++this.spawnLoadToken;
 
     this.zoneSpawnsNode = this.currentScene?.getNodeById('zone-spawns');
     if (!this.zoneSpawnsNode) {
@@ -1816,6 +2969,9 @@ class SpawnController extends GameControllerChild {
     this.clearPostLoadGroundSnapTimers();
     if (!skipDispose) {
       this.clearSpawnSelection();
+      for (const spawn of Object.values(this.spawns)) {
+        spawn?.dispose?.();
+      }
       this.zoneSpawnsNode.getChildren().forEach((c) => c.dispose());
       this.spawns = {};
       this.assetFallbacks = {};
@@ -1865,7 +3021,7 @@ class SpawnController extends GameControllerChild {
         skippedNoNpcType++;
         continue;
       }
-      const realModel = this.resolveSpawnModel(firstSpawn);
+      const realModel = await this.resolveAvailableSpawnModel(firstSpawn);
       if (!realModel) {
         unresolvedModelSpawns.push({
           gender: firstSpawn.gender,
@@ -1924,6 +3080,12 @@ class SpawnController extends GameControllerChild {
       );
     }
 
+    if (typeof window !== 'undefined' && window.__spireSagePreview) {
+      window.__spireSageBulkSpawnLoading = true;
+      window.__spireSageSkipBulkNameplates = new URLSearchParams(
+        window.location.search
+      ).has('sageValidateZones');
+    }
     try {
       for (const [modelName, models] of Object.entries(spawnList)) {
         if (loadToken !== this.spawnLoadToken) {
@@ -1932,7 +3094,7 @@ class SpawnController extends GameControllerChild {
         this.actions.setLoadingText(
           `Loaded ${loadedCount} of ${count} spawns`
         );
-        const loadedForModel = await this.addSpawn(modelName, models);
+        const loadedForModel = await this.addSpawn(modelName, models, loadToken);
         if (loadToken !== this.spawnLoadToken) {
           return;
         }
@@ -1942,7 +3104,46 @@ class SpawnController extends GameControllerChild {
         );
         await yieldToBrowser();
       }
+      if (typeof window !== 'undefined' && window.__spireSagePreview) {
+        window.__spireSageBulkSpawnLoading = false;
+        const loadedSpawns = Object.values(this.spawns);
+        const scene = this.currentScene;
+        const animationsWereEnabled = scene?.animationsEnabled !== false;
+        if (scene) {
+          scene.animationsEnabled = false;
+        }
+        try {
+          for (let index = 0; index < loadedSpawns.length; index++) {
+            if (loadToken !== this.spawnLoadToken) {
+              return;
+            }
+            if (loadedSpawns[index].previewAnimationDeferred) {
+              const loadedSpawn = loadedSpawns[index];
+              loadedSpawn.startInitialAnimation({
+                skipGroundNormalization: true,
+                schedulePostInitialize: false,
+              });
+            }
+            if (loadedSpawns[index].previewNameplateDeferred) {
+              loadedSpawns[index].createNameplate({
+                validationRepresentative: true,
+              });
+            }
+            if (index % 50 === 49) {
+              await yieldToBrowser();
+            }
+          }
+        } finally {
+          if (scene) {
+            scene.animationsEnabled = animationsWereEnabled;
+          }
+        }
+      }
     } finally {
+      if (typeof window !== 'undefined' && window.__spireSagePreview) {
+        window.__spireSageBulkSpawnLoading = false;
+        window.__spireSageSkipBulkNameplates = false;
+      }
       if (typeof window !== 'undefined' && window.__spireSagePreview) {
         const sceneChildren = this.zoneSpawnsNode?.getChildren?.() ?? [];
         const stats = {
@@ -1971,7 +3172,9 @@ class SpawnController extends GameControllerChild {
       if (loadToken === this.spawnLoadToken && loadedCount > 0) {
         this.schedulePostLoadGroundSnap(loadToken);
       }
-      GlobalStore.actions.setLoading(false);
+      if (loadToken === this.spawnLoadToken) {
+        GlobalStore.actions.setLoading(false);
+      }
     }
   }
 

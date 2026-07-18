@@ -10,6 +10,7 @@ import {
 import { EQGAnimationWriter } from './eqg-animation';
 
 const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 export async function writeMetadata(
   infP,
@@ -50,12 +51,15 @@ export async function writeMetadata(
  * @this {import('../eqg-decoder').EQGDecoder}
  * @returns
  */
-export async function writeModels(modelFile, mod) {
+export async function writeModels(modelFile, mod, destination = 'objects') {
   modelFile = modelFile.replace('.mod', '');
   const diskFileName = `${modelFile}.glb`;
-  await appendObjectMetadata(modelFile, `${this.name}.eqg`);
+  if (destination === 'objects') {
+    await appendObjectMetadata(modelFile, `${this.name}.eqg`);
+  }
   if (
-    (await getEQFileExists('objects', diskFileName)) &&
+    (await getEQFileExists(destination, diskFileName)) &&
+    !this.options?.forceWrote &&
     !modelFile.includes('et_drbanner') &&
     !modelFile.includes('dest') &&
     !modelFile.includes('ggy') &&
@@ -121,7 +125,16 @@ export async function writeModels(modelFile, mod) {
       .setSpecularColorFactor([0, 0, 0]);
     gltfMaterial.setExtension('KHR_materials_specular', specular);
     for (const prop of mat.properties) {
+      if (prop.type !== 2) {
+        continue;
+      }
       const [name] = prop.valueS.toLowerCase().split('.');
+      if (
+        !name ||
+        (mat.name.toLowerCase() === 'failsafeshader' && name === 'grid_standard')
+      ) {
+        continue;
+      }
       const texture = document
         .createTexture(name)
         .setMimeType('image/png')
@@ -161,8 +174,13 @@ export async function writeModels(modelFile, mod) {
   }
   const primitiveMap = {};
   const gltfMesh = document.createMesh(modelFile);
+  let processedPolygons = 0;
 
   for (const p of mod.geometry.polys) {
+    processedPolygons++;
+    if (processedPolygons % 5000 === 0) {
+      await yieldToBrowser();
+    }
     if (p.material === -1) {
       continue;
     }
@@ -340,9 +358,9 @@ export async function writeModels(modelFile, mod) {
 
     for (const [name, ani] of Object.entries(this.animations)) {
       //  if (name.startsWith(modelFile)) {
-      console.log('ani', ani);
       animWriter.applyAnimation(ani, name);
       animWriter.applyAnimation(ani, name, true);
+      await yieldToBrowser();
       // }
     }
 
@@ -364,5 +382,5 @@ export async function writeModels(modelFile, mod) {
   }
 
   const bytes = await io.writeBinary(document);
-  await writeEQFile("objects", diskFileName, bytes.buffer); // eslint-disable-line
+  await writeEQFile(destination, diskFileName, bytes.buffer);
 }

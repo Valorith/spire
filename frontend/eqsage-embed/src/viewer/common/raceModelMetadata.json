@@ -1,0 +1,6471 @@
+{
+  "aam": {
+    "sourceFiles": [
+      "aam.eqg",
+      "hohonora_chr.s3d",
+      "hohonorb_chr.s3d",
+      "poair_chr.s3d",
+      "potimea_chr.s3d",
+      "povalor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ahf": {
+    "sourceFiles": [
+      "ahf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ahm": {
+    "sourceFiles": [
+      "ahm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "akm": {
+    "sourceFiles": [
+      "akheva_chr.s3d",
+      "griegsend_chr.s3d",
+      "maiden_chr.s3d",
+      "maiden_chr2.s3d",
+      "pojustice_chr.s3d",
+      "poknowledge_chr.s3d",
+      "twilight_chr.s3d",
+      "umbral_chr.s3d",
+      "vexthal_chr.s3d",
+      "vexthal_chr2.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "akn": {
+    "sourceFiles": [
+      "akheva_chr.s3d",
+      "maiden_chr.s3d",
+      "poknowledge_chr.s3d",
+      "vexthal_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ala": {
+    "sourceFiles": [
+      "ala.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 20,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "all": {
+    "sourceFiles": [
+      "blackburrow_chr.s3d",
+      "butcher_chr.s3d",
+      "cauldron_chr.s3d",
+      "cazicthule_chr.s3d",
+      "crushbone_chr.s3d",
+      "feerrott_chr.s3d",
+      "felwithea_chr.s3d",
+      "felwitheb_chr.s3d",
+      "global6_chr.s3d",
+      "gukbottom_chr.s3d",
+      "guktop_chr.s3d",
+      "innothule_chr.s3d",
+      "katta_chr.s3d",
+      "lakerathe_chr.s3d",
+      "lavastorm_chr.s3d",
+      "neriakb_chr.s3d",
+      "neriakc_chr.s3d",
+      "nurga_chr.s3d",
+      "oasis_chr.s3d",
+      "qcat_chr.s3d",
+      "rathemtn_chr.s3d",
+      "sro_chr.s3d",
+      "timorous_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "amy": {
+    "sourceFiles": [
+      "amy.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ans": {
+    "sourceFiles": [
+      "ans.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "apx": {
+    "sourceFiles": [
+      "apx.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "asm": {
+    "sourceFiles": [
+      "asm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "avi": {
+    "sourceFiles": [
+      "airplane_chr.s3d",
+      "butcher_chr.s3d",
+      "cauldron_chr.s3d",
+      "freportw_chr.s3d",
+      "lakerathe_chr.s3d",
+      "oot_chr.s3d",
+      "pojustice_chr.s3d",
+      "poknowledge_chr.s3d",
+      "southkarana_chr.s3d",
+      "steamfont_chr.s3d",
+      "timorous_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "avk": {
+    "sourceFiles": [
+      "avk.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "baf": {
+    "sourceFiles": [
+      "global4_chr.s3d",
+      "global_chr.s3d",
+      "globalbaf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bal": {
+    "sourceFiles": [
+      "bal.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bam": {
+    "sourceFiles": [
+      "global4_chr.s3d",
+      "global_chr.s3d",
+      "globalbam_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 5
+  },
+  "bas": {
+    "sourceFiles": [
+      "bas.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bat": {
+    "sourceFiles": [
+      "bat.eqg",
+      "befallen_chr.s3d",
+      "beholder_chr.s3d",
+      "burningwood_chr.s3d",
+      "butcher_chr.s3d",
+      "cabwest_chr.s3d",
+      "erudsxing_chr.s3d",
+      "feerrott_chr.s3d",
+      "freporte_chr.s3d",
+      "freportw_chr.s3d",
+      "frozenshadow_chr.s3d",
+      "gfaydark_chr.s3d",
+      "gukbottom_chr.s3d",
+      "katta_chr.s3d",
+      "kithicor_chr.s3d",
+      "lfaydark_chr.s3d",
+      "maiden_chr.s3d",
+      "misty_chr.s3d",
+      "necropolis_chr.s3d",
+      "oggok_chr.s3d",
+      "paineel_chr.s3d",
+      "paw_chr.s3d",
+      "qcat_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "qrg_chr.s3d",
+      "soldunga_chr.s3d",
+      "soldungb_chr.s3d",
+      "tenebrous_chr.s3d",
+      "thurgadina_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bea": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "blackburrow_chr.s3d",
+      "cauldron_chr.s3d",
+      "commons_chr.s3d",
+      "ecommons_chr.s3d",
+      "everfrost_chr.s3d",
+      "global2_chr.s3d",
+      "growthplane_chr.s3d",
+      "halas_chr.s3d",
+      "kithicor_chr.s3d",
+      "misty_chr.s3d",
+      "nektulos_chr.s3d",
+      "northkarana_chr.s3d",
+      "permafrost_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeynos_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "qrg_chr.s3d",
+      "rathemtn_chr.s3d",
+      "rivervale_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bel": {
+    "sourceFiles": [
+      "bel.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bet": {
+    "sourceFiles": [
+      "beholder_chr.s3d",
+      "butcher_chr.s3d",
+      "ecommons_chr.s3d",
+      "erudsxing_chr.s3d",
+      "feerrott_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "freporte_chr.s3d",
+      "freportw_chr.s3d",
+      "kithicor_chr.s3d",
+      "lakerathe_chr.s3d",
+      "misty_chr.s3d",
+      "necropolis_chr.s3d",
+      "nektulos_chr.s3d",
+      "northkarana_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "paineel_chr.s3d",
+      "pojustice_chr.s3d",
+      "qcat_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "rathemtn_chr.s3d",
+      "sebilis_chr.s3d",
+      "soldungb_chr.s3d",
+      "sro_chr.s3d",
+      "tox_chr.s3d",
+      "unrest_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bfc": {
+    "sourceFiles": [
+      "bfc.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bfr": {
+    "sourceFiles": [
+      "bfr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bgb": {
+    "sourceFiles": [
+      "bgb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bgm": {
+    "sourceFiles": [
+      "beholder_chr.s3d",
+      "erudsxing_chr.s3d",
+      "freporte_chr.s3d",
+      "freportn_chr.s3d",
+      "freportw_chr.s3d",
+      "highkeep_chr.s3d",
+      "lakerathe_chr.s3d",
+      "mseru_chr.s3d",
+      "neriaka_chr.s3d",
+      "northkarana_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "paw_chr.s3d",
+      "qcat_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeynos_chr.s3d",
+      "sro_chr.s3d",
+      "steamfont_chr.s3d",
+      "unrest_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bkd": {
+    "sourceFiles": [
+      "bkd.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bkn": {
+    "sourceFiles": [
+      "hohonora_chr.s3d",
+      "hohonorb_chr.s3d",
+      "potimea_chr.s3d",
+      "povalor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "blv": {
+    "sourceFiles": [
+      "blv.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bnf": {
+    "sourceFiles": [
+      "bnf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bnm": {
+    "sourceFiles": [
+      "bnm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bny": {
+    "sourceFiles": [
+      "bny.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 7,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "box": {
+    "sourceFiles": [
+      "box_chr.s3d",
+      "veeshan_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bre": {
+    "sourceFiles": [
+      "bre.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "brf": {
+    "sourceFiles": [
+      "wakening_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "brm": {
+    "sourceFiles": [
+      "butcher_chr.s3d",
+      "cauldron_chr.s3d",
+      "gfaydark_chr.s3d",
+      "growthplane2_chr.s3d",
+      "lfaydark_chr.s3d",
+      "poknowledge_chr.s3d",
+      "qrg_chr.s3d",
+      "rivervale_chr.s3d",
+      "steamfont_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "brl": {
+    "sourceFiles": [
+      "brl_chr.s3d",
+      "veeshan_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "brn": {
+    "sourceFiles": [
+      "dalnir_chr.s3d",
+      "droga_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "frontiermtns_chr.s3d",
+      "kurn_chr.s3d",
+      "nurga_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "brx": {
+    "sourceFiles": [
+      "brx.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "btl": {
+    "sourceFiles": [
+      "btl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "btn": {
+    "sourceFiles": [
+      "btn.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bur": {
+    "sourceFiles": [
+      "bur.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bwd": {
+    "sourceFiles": [
+      "bwd_chr.s3d",
+      "eastwastes_chr2.s3d",
+      "eastwastesshard_chr2.s3d",
+      "hohonora_chr.s3d",
+      "pofire_chr.s3d",
+      "sleeper_chr2.s3d",
+      "solrotower_chr.s3d",
+      "swampofnohope_chr2.s3d",
+      "veeshan_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "bxi": {
+    "sourceFiles": [
+      "bxi.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cak": {
+    "sourceFiles": [
+      "cak.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cam": {
+    "sourceFiles": [
+      "cam.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cdf": {
+    "sourceFiles": [
+      "cdf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cdm": {
+    "sourceFiles": [
+      "cdm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cdr": {
+    "sourceFiles": [
+      "cdr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cen": {
+    "sourceFiles": [
+      "northkarana_chr.s3d",
+      "pojustice_chr.s3d",
+      "poknowledge_chr.s3d",
+      "qeynos_chr.s3d",
+      "qrg_chr.s3d",
+      "southkarana_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cht": {
+    "sourceFiles": [
+      "cht.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "clf": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "poinnovation_chr.s3d",
+      "soldunga_chr.s3d",
+      "steamfont_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "clm": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "lfaydark_chr.s3d",
+      "overthere_chr.s3d",
+      "poinnovation_chr.s3d",
+      "soldunga_chr.s3d",
+      "steamfont_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cls": {
+    "sourceFiles": [
+      "cls.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "clw": {
+    "sourceFiles": [
+      "clw.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cnt": {
+    "sourceFiles": [
+      "cnt.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 6,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cof": {
+    "sourceFiles": [
+      "cobaltscar_chr.s3d",
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "greatdivide_chr.s3d",
+      "iceclad_chr2.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "thurgadina_chr.s3d",
+      "thurgadinb_chr.s3d",
+      "velketor_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "com": {
+    "sourceFiles": [
+      "cobaltscar_chr.s3d",
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "greatdivide_chr.s3d",
+      "iceclad_chr2.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "necropolis_chr.s3d",
+      "pofire_chr.s3d",
+      "skyshrine_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "thurgadina_chr.s3d",
+      "thurgadinb_chr.s3d",
+      "velketor_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cpf": {
+    "sourceFiles": [
+      "stonebrunt_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cpm": {
+    "sourceFiles": [
+      "stonebrunt_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cpt": {
+    "sourceFiles": [
+      "cpt_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "crh": {
+    "sourceFiles": [
+      "crh.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "crl": {
+    "sourceFiles": [
+      "crl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cse": {
+    "sourceFiles": [
+      "cse.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cst": {
+    "sourceFiles": [
+      "cst_chr.s3d",
+      "veeshan_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cub": {
+    "sourceFiles": [
+      "potimeb_chr.s3d",
+      "skyshrine_chr.s3d",
+      "thurgadinb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cwg": {
+    "sourceFiles": [
+      "cwg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "cwr": {
+    "sourceFiles": [
+      "cwr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "daf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globaldaf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dam": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globaldam_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 3
+  },
+  "dcf": {
+    "sourceFiles": [
+      "dcf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dcm": {
+    "sourceFiles": [
+      "dcm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ddm": {
+    "sourceFiles": [
+      "ddm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ddv": {
+    "sourceFiles": [
+      "ddv.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dev": {
+    "sourceFiles": [
+      "charasis_chr.s3d",
+      "dalnir_chr.s3d",
+      "kaesora_chr.s3d",
+      "skyfire_chr.s3d",
+      "swampofnohope_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dke": {
+    "sourceFiles": [
+      "dke.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dkf": {
+    "sourceFiles": [
+      "dkf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 7,
+    "minBeards": 0,
+    "maxBeards": 3
+  },
+  "dkm": {
+    "sourceFiles": [
+      "dkm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 8,
+    "minBeards": 0,
+    "maxBeards": 11
+  },
+  "dma": {
+    "sourceFiles": [
+      "dma.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dpf": {
+    "sourceFiles": [
+      "dpf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dpm": {
+    "sourceFiles": [
+      "dpm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dr2": {
+    "sourceFiles": [
+      "dr2_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "hohonora_chr.s3d",
+      "necropolis_chr.s3d",
+      "pofire_chr.s3d",
+      "skyshrine_chr.s3d",
+      "sleeper_chr.s3d",
+      "solrotower_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "veeshan_chr.s3d",
+      "wakening_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dra": {
+    "sourceFiles": [
+      "arena_chr.s3d",
+      "dra_chr.s3d",
+      "dreadlands_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "emeraldjungle_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "firiona_chr.s3d",
+      "hohonora_chr.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "necropolis_chr.s3d",
+      "permafrost_chr.s3d",
+      "pofire_chr.s3d",
+      "skyfire_chr.s3d",
+      "skyshrine_chr2.s3d",
+      "sleeper_chr.s3d",
+      "soldungb_chr.s3d",
+      "solrotower_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "veeshan_chr.s3d",
+      "wakening_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 7,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 7,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dre": {
+    "sourceFiles": [
+      "dre.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "drf": {
+    "sourceFiles": [
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "pojustice_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "drg": {
+    "sourceFiles": [
+      "drg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 5,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "drk": {
+    "sourceFiles": [
+      "airplane_chr.s3d",
+      "beholder_chr.s3d",
+      "butcher_chr.s3d",
+      "cobaltscar_chr.s3d",
+      "frozenshadow_chr.s3d",
+      "global6_chr.s3d",
+      "lavastorm_chr.s3d",
+      "necropolis_chr.s3d",
+      "rathemtn_chr.s3d",
+      "skyfire_chr.s3d",
+      "skyshrine_chr.s3d",
+      "sleeper_chr.s3d",
+      "soldunga_chr.s3d",
+      "soldungb_chr.s3d",
+      "solrotower_chr.s3d",
+      "steamfont_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "timorous_chr.s3d",
+      "veeshan_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "drl": {
+    "sourceFiles": [
+      "drl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "drm": {
+    "sourceFiles": [
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "pojustice_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "drv": {
+    "sourceFiles": [
+      "drv_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dvl": {
+    "sourceFiles": [
+      "dvl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dvm": {
+    "sourceFiles": [
+      "hateplane_chr.s3d",
+      "mistmoore_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dvs": {
+    "sourceFiles": [
+      "dvs.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dwf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globaldwf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "dwm": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globaldwm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 5
+  },
+  "eef": {
+    "sourceFiles": [
+      "eef.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "eem": {
+    "sourceFiles": [
+      "eem.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "efe": {
+    "sourceFiles": [
+      "efe_chr.s3d",
+      "poair_chr.s3d",
+      "pofire_chr.s3d",
+      "solrotower_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "efr": {
+    "sourceFiles": [
+      "arena_chr.s3d",
+      "frozenshadow_chr.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "pofire_chr.s3d",
+      "pojustice_chr.s3d",
+      "solrotower_chr.s3d",
+      "velketor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "egm": {
+    "sourceFiles": [
+      "erudnext_chr.s3d",
+      "erudnint_chr.s3d",
+      "neriaka_chr.s3d",
+      "tox_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ele": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "poair_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "elf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalelf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "elm": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalelm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "epf": {
+    "sourceFiles": [
+      "epf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "epm": {
+    "sourceFiles": [
+      "epm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "erf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalerf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 8,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "erm": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalerm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 5,
+    "minBeards": 0,
+    "maxBeards": 5
+  },
+  "eve": {
+    "sourceFiles": [
+      "eve.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "exo": {
+    "sourceFiles": [
+      "exo.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "faf": {
+    "sourceFiles": [
+      "airplane_chr.s3d",
+      "felwithea_chr.s3d",
+      "felwitheb_chr.s3d",
+      "gfaydark_chr.s3d",
+      "lfaydark_chr.s3d",
+      "poknowledge_chr.s3d",
+      "qrg_chr.s3d",
+      "rivervale_chr.s3d",
+      "tox_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fbf": {
+    "sourceFiles": [
+      "fbf_chr.s3d",
+      "udk_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fbm": {
+    "sourceFiles": [
+      "fbm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fef": {
+    "sourceFiles": [
+      "felwithea_chr.s3d",
+      "felwitheb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fem": {
+    "sourceFiles": [
+      "crushbone_chr.s3d",
+      "felwithea_chr.s3d",
+      "felwitheb_chr.s3d",
+      "firiona_chr.s3d",
+      "gfaydark_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fgi": {
+    "sourceFiles": [
+      "burningwood_chr.s3d",
+      "dreadlands_chr.s3d",
+      "firiona_chr.s3d",
+      "frontiermtns_chr.s3d",
+      "postorms_chr.s3d",
+      "warslikswood_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fgp": {
+    "sourceFiles": [
+      "fgp.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fgt": {
+    "sourceFiles": [
+      "fgt.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fis": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "cabeast_chr.s3d",
+      "cazicthule_chr.s3d",
+      "cobaltscar_chr.s3d",
+      "crushbone_chr.s3d",
+      "dawnshroud_chr.s3d",
+      "erudnext_chr.s3d",
+      "erudnint_chr.s3d",
+      "erudsxing_chr.s3d",
+      "feerrott_chr.s3d",
+      "felwithea_chr.s3d",
+      "felwitheb_chr.s3d",
+      "freporte_chr.s3d",
+      "grobb_chr.s3d",
+      "gukbottom_chr.s3d",
+      "guktop_chr.s3d",
+      "halas_chr.s3d",
+      "kaladima_chr.s3d",
+      "kaladimb_chr.s3d",
+      "kedge_chr.s3d",
+      "kerraridge_chr.s3d",
+      "lakerathe_chr.s3d",
+      "mistmoore_chr.s3d",
+      "neriakb_chr.s3d",
+      "neriakc_chr.s3d",
+      "oggok_chr.s3d",
+      "oot_chr.s3d",
+      "paw_chr.s3d",
+      "postorms_chr.s3d",
+      "powater_chr.s3d",
+      "qcat_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeynos_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "qrg_chr.s3d",
+      "rivervale_chr.s3d",
+      "runnyeye_chr.s3d",
+      "sirens_chr.s3d",
+      "tox_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fkn": {
+    "sourceFiles": [
+      "fkn.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fmt": {
+    "sourceFiles": [
+      "frog_mount_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fng": {
+    "sourceFiles": [
+      "fng.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fpm": {
+    "sourceFiles": [
+      "befallen_chr.s3d",
+      "commons_chr.s3d",
+      "ecommons_chr.s3d",
+      "freporte_chr.s3d",
+      "freportn_chr.s3d",
+      "freportw_chr.s3d",
+      "neriaka_chr.s3d",
+      "nro_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fra": {
+    "sourceFiles": [
+      "fra.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "frd": {
+    "sourceFiles": [
+      "frd.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "frf": {
+    "sourceFiles": [
+      "globalpcfroglok_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "frg": {
+    "sourceFiles": [
+      "chardok_chr.s3d",
+      "fearplane_chr.s3d",
+      "feerrott_chr.s3d",
+      "firiona_chr.s3d",
+      "globalfroglok_chr.s3d",
+      "grobb_chr.s3d",
+      "gukbottom_chr.s3d",
+      "guktop_chr.s3d",
+      "innothule_chr.s3d",
+      "kurn_chr.s3d",
+      "lakerathe_chr.s3d",
+      "najena_chr.s3d",
+      "oggok_chr.s3d",
+      "pojustice_chr.s3d",
+      "ponightmare_chr.s3d",
+      "qcat_chr.s3d",
+      "sebilis_chr.s3d",
+      "swampofnohope_chr.s3d",
+      "trakanon_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "frm": {
+    "sourceFiles": [
+      "globalpcfroglok_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fry": {
+    "sourceFiles": [
+      "fry.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fsg": {
+    "sourceFiles": [
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "greatdivide_chr.s3d",
+      "iceclad_chr.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "skyshrine_chr.s3d",
+      "thurgadina_chr.s3d",
+      "wakening_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "fun": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "feerrott_chr.s3d",
+      "grobb_chr.s3d",
+      "gukbottom_chr.s3d",
+      "guktop_chr.s3d",
+      "innothule_chr.s3d",
+      "kurn_chr.s3d",
+      "mischiefplane_chr.s3d",
+      "runnyeye_chr.s3d",
+      "sebilis_chr.s3d",
+      "unrest_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gam": {
+    "sourceFiles": [
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "skyshrine_chr.s3d",
+      "sleeper_chr.s3d",
+      "velketor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gar": {
+    "sourceFiles": [
+      "befallen_chr.s3d",
+      "erudnext_chr.s3d",
+      "erudnint_chr.s3d",
+      "gukbottom_chr.s3d",
+      "hateplane_chr.s3d",
+      "katta_chr.s3d",
+      "lavastorm_chr.s3d",
+      "mistmoore_chr.s3d",
+      "najena_chr.s3d",
+      "neriaka_chr.s3d",
+      "neriakb_chr.s3d",
+      "neriakc_chr.s3d",
+      "oot_chr.s3d",
+      "overthere_chr.s3d",
+      "pojustice_chr.s3d",
+      "runnyeye_chr.s3d",
+      "soldungb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gbl": {
+    "sourceFiles": [
+      "gbl_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gbm": {
+    "sourceFiles": [
+      "gbm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gbn": {
+    "sourceFiles": [
+      "gbn.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 12,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gdm": {
+    "sourceFiles": [
+      "cauldron_chr.s3d",
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "frozenshadow_chr.s3d",
+      "pojustice_chr.s3d",
+      "thurgadina_chr.s3d",
+      "thurgadinb_chr.s3d",
+      "unrest_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gef": {
+    "sourceFiles": [
+      "fieldofbone_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gen": {
+    "sourceFiles": [
+      "gen.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gfc": {
+    "sourceFiles": [
+      "gfc.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gff": {
+    "sourceFiles": [
+      "felwithea_chr.s3d",
+      "gfaydark_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gfm": {
+    "sourceFiles": [
+      "crushbone_chr.s3d",
+      "gfaydark_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gfo": {
+    "sourceFiles": [
+      "gfo.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gfr": {
+    "sourceFiles": [
+      "gfr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gfs": {
+    "sourceFiles": [
+      "gfs.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ggy": {
+    "sourceFiles": [
+      "ggy.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gia": {
+    "sourceFiles": [
+      "commons_chr.s3d",
+      "eastkarana_chr.s3d",
+      "everfrost_chr.s3d",
+      "northkarana_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "oot_chr.s3d",
+      "permafrost_chr.s3d",
+      "pojustice_chr.s3d",
+      "postorms_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "rathemtn_chr.s3d",
+      "soldungb_chr.s3d",
+      "southkarana_chr.s3d",
+      "sro_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gig": {
+    "sourceFiles": [
+      "gig.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "glb": {
+    "sourceFiles": [
+      "glb.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "glm": {
+    "sourceFiles": [
+      "glm.eqg",
+      "glm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gnd": {
+    "sourceFiles": [
+      "gnd.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gnf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalgnf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gnl": {
+    "sourceFiles": [
+      "gnl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gnm": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalgnm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 5
+  },
+  "gnn": {
+    "sourceFiles": [
+      "beholder_chr.s3d",
+      "blackburrow_chr.s3d",
+      "eastkarana_chr.s3d",
+      "everfrost_chr.s3d",
+      "halas_chr.s3d",
+      "highkeep_chr.s3d",
+      "iceclad_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "lakerathe_chr.s3d",
+      "paw_chr.s3d",
+      "pojustice_chr.s3d",
+      "poknowledge_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeynos_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "qrg_chr.s3d",
+      "southkarana_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gob": {
+    "sourceFiles": [
+      "beholder_chr.s3d",
+      "blackburrow_chr.s3d",
+      "butcher_chr.s3d",
+      "cauldron_chr.s3d",
+      "everfrost_chr.s3d",
+      "freportw_chr.s3d",
+      "halas_chr.s3d",
+      "highkeep_chr.s3d",
+      "kaladima_chr.s3d",
+      "kaladimb_chr.s3d",
+      "kedge_chr.s3d",
+      "kithicor_chr.s3d",
+      "lakerathe_chr.s3d",
+      "lavastorm_chr.s3d",
+      "misty_chr.s3d",
+      "najena_chr.s3d",
+      "nurga_chr.s3d",
+      "oasis_chr.s3d",
+      "oot_chr.s3d",
+      "permafrost_chr.s3d",
+      "rivervale_chr.s3d",
+      "runnyeye_chr.s3d",
+      "soldunga_chr.s3d",
+      "soldungb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gol": {
+    "sourceFiles": [
+      "befallen_chr.s3d",
+      "beholder_chr.s3d",
+      "blackburrow_chr.s3d",
+      "cauldron_chr.s3d",
+      "cazicthule_chr.s3d",
+      "citymist_chr.s3d",
+      "erudnext_chr.s3d",
+      "erudnint_chr.s3d",
+      "fearplane_chr.s3d",
+      "felwithea_chr.s3d",
+      "felwitheb_chr.s3d",
+      "freportw_chr.s3d",
+      "gfaydark_chr.s3d",
+      "gukbottom_chr.s3d",
+      "hateplane_chr.s3d",
+      "hateplaneb_chr.s3d",
+      "highkeep_chr.s3d",
+      "hole_chr.s3d",
+      "kaladima_chr.s3d",
+      "kaladimb_chr.s3d",
+      "lavastorm_chr.s3d",
+      "mistmoore_chr.s3d",
+      "najena_chr.s3d",
+      "nektulos_chr.s3d",
+      "neriaka_chr.s3d",
+      "neriakb_chr.s3d",
+      "neriakc_chr.s3d",
+      "overthere_chr.s3d",
+      "paineel_chr.s3d",
+      "poeartha_chr.s3d",
+      "poearthb_chr.s3d",
+      "pofire_chr.s3d",
+      "potimea_chr.s3d",
+      "qeynos_chr.s3d",
+      "runnyeye_chr.s3d",
+      "soldunga_chr.s3d",
+      "solrotower_chr.s3d",
+      "tox_chr.s3d",
+      "unrest_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gom": {
+    "sourceFiles": [
+      "frozenshadow_chr.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "pofire_chr.s3d",
+      "skyshrine_chr.s3d",
+      "sleeper_chr.s3d",
+      "thurgadinb_chr.s3d",
+      "velketor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "goo": {
+    "sourceFiles": [
+      "cazicthule_chr2.s3d",
+      "charasis_chr.s3d",
+      "citymist_chr.s3d",
+      "dalnir_chr.s3d",
+      "frozenshadow_chr.s3d",
+      "goo_chr.s3d",
+      "kurn_chr.s3d",
+      "necropolis_chr.s3d",
+      "netherbian_chr.s3d",
+      "podisease_chr.s3d",
+      "poinnovation_chr.s3d",
+      "potactics_chr.s3d",
+      "thurgadina_chr.s3d",
+      "vexthal_chr.s3d",
+      "wakening_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gor": {
+    "sourceFiles": [
+      "arena_chr.s3d",
+      "burningwood_chr.s3d",
+      "emeraldjungle_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "greatdivide_chr.s3d",
+      "mischiefplane_chr.s3d",
+      "stonebrunt_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gpf": {
+    "sourceFiles": [
+      "gpf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gpm": {
+    "sourceFiles": [
+      "gpm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gra": {
+    "sourceFiles": [
+      "gra.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "grf": {
+    "sourceFiles": [
+      "grobb_chr.s3d",
+      "innothule_chr.s3d",
+      "neriaka_chr2.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gri": {
+    "sourceFiles": [
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "gri_chr.s3d",
+      "iceclad_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "potimea_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "grl": {
+    "sourceFiles": [
+      "grl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "grm": {
+    "sourceFiles": [
+      "grobb_chr.s3d",
+      "guktop_chr.s3d",
+      "innothule_chr.s3d",
+      "neriaka_chr2.s3d",
+      "neriakc_chr.s3d",
+      "oggok_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "grn": {
+    "sourceFiles": [
+      "grn.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gsf": {
+    "sourceFiles": [
+      "pofire_chr.s3d",
+      "solrotower_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gsm": {
+    "sourceFiles": [
+      "powater_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gsn": {
+    "sourceFiles": [
+      "grimling_chr.s3d",
+      "poeartha_chr.s3d",
+      "potorment_chr.s3d",
+      "thegrey_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gul": {
+    "sourceFiles": [
+      "gul.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gum": {
+    "sourceFiles": [
+      "gum.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gus": {
+    "sourceFiles": [
+      "gus.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gya": {
+    "sourceFiles": [
+      "gya.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "gyo": {
+    "sourceFiles": [
+      "gyo.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "haf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalhaf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ham": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalham_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 3
+  },
+  "hdl": {
+    "sourceFiles": [
+      "hdl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hhm": {
+    "sourceFiles": [
+      "highkeep_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hif": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalhif_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "him": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalhim_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 3
+  },
+  "hlf": {
+    "sourceFiles": [
+      "everfrost_chr.s3d",
+      "halas_chr.s3d",
+      "southkarana_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hlg": {
+    "sourceFiles": [
+      "hlg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hlm": {
+    "sourceFiles": [
+      "everfrost_chr.s3d",
+      "halas_chr.s3d",
+      "southkarana_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hnf": {
+    "sourceFiles": [
+      "hnf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 5,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hnm": {
+    "sourceFiles": [
+      "hnm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 7,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hof": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalhof_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hom": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalhom_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 5
+  },
+  "hpf": {
+    "sourceFiles": [
+      "hpf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hpm": {
+    "sourceFiles": [
+      "hpm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hrp": {
+    "sourceFiles": [
+      "hrp.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hrs": {
+    "sourceFiles": [
+      "hrs.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hsf": {
+    "sourceFiles": [
+      "frog_mount_chr.s3d",
+      "gunthak_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hsm": {
+    "sourceFiles": [
+      "global5_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hsn": {
+    "sourceFiles": [
+      "ponightmare_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "huf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalhuf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "hum": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalhum_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 5
+  },
+  "hyc": {
+    "sourceFiles": [
+      "hyc.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "i11": {
+    "sourceFiles": [
+      "i11.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "i19": {
+    "sourceFiles": [
+      "i19.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 10,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "i20": {
+    "sourceFiles": [
+      "i20.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "i21": {
+    "sourceFiles": [
+      "i21.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "icf": {
+    "sourceFiles": [
+      "cabeast_chr.s3d",
+      "cabwest_chr.s3d",
+      "charasis_chr.s3d",
+      "dalnir_chr.s3d",
+      "droga_chr.s3d",
+      "emeraldjungle_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "frontiermtns_chr.s3d",
+      "lakeofillomen_chr.s3d",
+      "overthere_chr.s3d",
+      "sebilis_chr.s3d",
+      "swampofnohope_chr.s3d",
+      "timorous_chr.s3d",
+      "trakanon_chr.s3d",
+      "warslikswood_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "icm": {
+    "sourceFiles": [
+      "cabeast_chr.s3d",
+      "cabwest_chr.s3d",
+      "charasis_chr.s3d",
+      "dalnir_chr.s3d",
+      "droga_chr.s3d",
+      "emeraldjungle_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "frontiermtns_chr.s3d",
+      "lakeofillomen_chr.s3d",
+      "overthere_chr.s3d",
+      "sebilis_chr.s3d",
+      "swampofnohope_chr.s3d",
+      "timorous_chr.s3d",
+      "trakanon_chr.s3d",
+      "warslikswood_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "icn": {
+    "sourceFiles": [
+      "cabeast_chr.s3d",
+      "cabwest_chr.s3d",
+      "charasis_chr.s3d",
+      "chardok_chr.s3d",
+      "droga_chr.s3d",
+      "emeraldjungle_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "frontiermtns_chr.s3d",
+      "kaesora_chr.s3d",
+      "karnor_chr.s3d",
+      "lakeofillomen_chr.s3d",
+      "overthere_chr.s3d",
+      "sebilis_chr.s3d",
+      "swampofnohope_chr.s3d",
+      "timorous_chr.s3d",
+      "trakanon_chr.s3d",
+      "warslikswood_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ikf": {
+    "sourceFiles": [
+      "global4_chr.s3d",
+      "globalikf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ikg": {
+    "sourceFiles": [
+      "povalor_chr.s3d",
+      "ssratemple_chr.s3d",
+      "thegrey_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ikm": {
+    "sourceFiles": [
+      "global4_chr.s3d",
+      "globalikm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ivm": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "potorment_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "iwf": {
+    "sourceFiles": [
+      "iwf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "iwm": {
+    "sourceFiles": [
+      "iwm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "izf": {
+    "sourceFiles": [
+      "izf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "izm": {
+    "sourceFiles": [
+      "izm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "jkr": {
+    "sourceFiles": [
+      "jkr_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kaf": {
+    "sourceFiles": [
+      "butcher_chr.s3d",
+      "kaladima_chr.s3d",
+      "kaladimb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kam": {
+    "sourceFiles": [
+      "butcher_chr.s3d",
+      "crushbone_chr.s3d",
+      "kaladima_chr.s3d",
+      "kaladimb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kbd": {
+    "sourceFiles": [
+      "kbd.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 5,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kdg": {
+    "sourceFiles": [
+      "kdg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kef": {
+    "sourceFiles": [
+      "global7_chr.s3d",
+      "globalkef_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kem": {
+    "sourceFiles": [
+      "global7_chr.s3d",
+      "globalkem_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kob": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "crushbone_chr.s3d",
+      "erudnext_chr.s3d",
+      "grobb_chr.s3d",
+      "guktop_chr.s3d",
+      "innothule_chr.s3d",
+      "kerraridge_chr.s3d",
+      "paineel_chr.s3d",
+      "poknowledge_chr.s3d",
+      "potactics_chr.s3d",
+      "skyshrine_chr.s3d",
+      "soldunga_chr.s3d",
+      "soldungb_chr.s3d",
+      "steamfont_chr.s3d",
+      "stonebrunt_chr.s3d",
+      "torgiran_chr.s3d",
+      "tox_chr.s3d",
+      "unrest_chr.s3d",
+      "velketor_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "kor": {
+    "sourceFiles": [
+      "kor.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "krf": {
+    "sourceFiles": [
+      "krf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "krm": {
+    "sourceFiles": [
+      "krm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "krn": {
+    "sourceFiles": [
+      "krn.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "launch": {
+    "sourceFiles": [
+      "erudnext_chr.s3d",
+      "halas_chr.s3d",
+      "iceclad_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "launchm": {
+    "sourceFiles": [
+      "cabeast_chr.s3d",
+      "cabwest_chr.s3d",
+      "droga_chr.s3d",
+      "nurga_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "lim": {
+    "sourceFiles": [
+      "arena_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "postorms_chr.s3d",
+      "potimea_chr.s3d",
+      "qeynos_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "liz": {
+    "sourceFiles": [
+      "cazicthule_chr.s3d",
+      "feerrott_chr.s3d",
+      "guktop_chr.s3d",
+      "innothule_chr.s3d",
+      "oggok_chr.s3d",
+      "oot_chr.s3d",
+      "rathemtn_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "lmf": {
+    "sourceFiles": [
+      "lmf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "lmm": {
+    "sourceFiles": [
+      "lmm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "lth": {
+    "sourceFiles": [
+      "lth.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "lyc": {
+    "sourceFiles": [
+      "frozenshadow_chr.s3d",
+      "iceclad_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mam": {
+    "sourceFiles": [
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "everfrost_chr.s3d",
+      "potimea_chr.s3d",
+      "southkarana_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mbr": {
+    "sourceFiles": [
+      "mbr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mbx": {
+    "sourceFiles": [
+      "mbx.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mcs": {
+    "sourceFiles": [
+      "mcs.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mdr": {
+    "sourceFiles": [
+      "mdr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mfr": {
+    "sourceFiles": [
+      "mfr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mgl": {
+    "sourceFiles": [
+      "mgl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mhy": {
+    "sourceFiles": [
+      "mhy.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mim": {
+    "sourceFiles": [
+      "befallen_chr.s3d",
+      "blackburrow_chr.s3d",
+      "cobaltscar_chr.s3d",
+      "gukbottom_chr.s3d",
+      "hateplane_chr.s3d",
+      "hole_chr.s3d",
+      "katta_chr.s3d",
+      "mim_chr.s3d",
+      "mischiefplane_chr.s3d",
+      "mistmoore_chr.s3d",
+      "najena_chr.s3d",
+      "neriakc_chr.s3d",
+      "podisease_chr.s3d",
+      "runnyeye_chr.s3d",
+      "shadeweaver_chr.s3d",
+      "sharvahl_chr.s3d",
+      "sseru_chr.s3d",
+      "unrest_chr.s3d",
+      "vexthal_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mkg": {
+    "sourceFiles": [
+      "mkg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mki": {
+    "sourceFiles": [
+      "mki.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mmf": {
+    "sourceFiles": [
+      "mmf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mmm": {
+    "sourceFiles": [
+      "mmm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mpg": {
+    "sourceFiles": [
+      "mpg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mph": {
+    "sourceFiles": [
+      "mph.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mpu": {
+    "sourceFiles": [
+      "mpu.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mrh": {
+    "sourceFiles": [
+      "mrh.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mrt": {
+    "sourceFiles": [
+      "mrt.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "msd": {
+    "sourceFiles": [
+      "msd.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "msl": {
+    "sourceFiles": [
+      "msl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mso": {
+    "sourceFiles": [
+      "mso.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mta": {
+    "sourceFiles": [
+      "mta.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mth": {
+    "sourceFiles": [
+      "mth.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mtr": {
+    "sourceFiles": [
+      "mtr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mud": {
+    "sourceFiles": [
+      "mud.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 9,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "mwr": {
+    "sourceFiles": [
+      "mwr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 9,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "net": {
+    "sourceFiles": [
+      "fungusgrove_chr.s3d",
+      "griegsend_chr.s3d",
+      "netherbian_chr.s3d",
+      "sseru_chr.s3d",
+      "umbral_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ngm": {
+    "sourceFiles": [
+      "hateplane_chr.s3d",
+      "nektulos_chr.s3d",
+      "neriaka_chr.s3d",
+      "neriakb_chr.s3d",
+      "neriakc_chr.s3d",
+      "overthere_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "nin": {
+    "sourceFiles": [
+      "nin_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ogf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalogf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ogm": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globalogm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "okf": {
+    "sourceFiles": [
+      "feerrott_chr.s3d",
+      "innothule_chr.s3d",
+      "oggok_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "okm": {
+    "sourceFiles": [
+      "feerrott_chr.s3d",
+      "innothule_chr.s3d",
+      "oggok_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "onm": {
+    "sourceFiles": [
+      "onm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "opf": {
+    "sourceFiles": [
+      "opf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "opm": {
+    "sourceFiles": [
+      "opm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "orb": {
+    "sourceFiles": [
+      "orb.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "orc": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "befallen_chr.s3d",
+      "blackburrow_chr.s3d",
+      "butcher_chr.s3d",
+      "cauldron_chr.s3d",
+      "commons_chr.s3d",
+      "crushbone_chr.s3d",
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "ecommons_chr.s3d",
+      "everfrost_chr.s3d",
+      "felwithea_chr.s3d",
+      "freporte_chr.s3d",
+      "freportn_chr.s3d",
+      "freportw_chr.s3d",
+      "gfaydark_chr.s3d",
+      "highkeep_chr.s3d",
+      "kaladima_chr.s3d",
+      "kaladimb_chr.s3d",
+      "kithicor_chr.s3d",
+      "lakerathe_chr.s3d",
+      "lfaydark_chr.s3d",
+      "misty_chr.s3d",
+      "nektulos_chr.s3d",
+      "neriaka_chr.s3d",
+      "neriakb_chr.s3d",
+      "neriakc_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "paw_chr.s3d",
+      "permafrost_chr.s3d",
+      "pojustice_chr.s3d",
+      "poknowledge_chr.s3d",
+      "rathemtn_chr.s3d",
+      "rivervale_chr.s3d",
+      "runnyeye_chr.s3d",
+      "sro_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ork": {
+    "sourceFiles": [
+      "ork.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 15,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 15,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "otm": {
+    "sourceFiles": [
+      "pojustice_chr.s3d",
+      "poknowledge_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "paf": {
+    "sourceFiles": [
+      "paf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "pg3": {
+    "sourceFiles": [
+      "pg3.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "phx": {
+    "sourceFiles": [
+      "poair_chr.s3d",
+      "pofire_chr.s3d",
+      "potimeb_chr.s3d",
+      "solrotower_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "pif": {
+    "sourceFiles": [
+      "airplane_chr.s3d",
+      "erudsxing_chr.s3d",
+      "felwithea_chr.s3d",
+      "felwitheb_chr.s3d",
+      "gfaydark_chr.s3d",
+      "lfaydark_chr.s3d",
+      "poknowledge_chr.s3d",
+      "qrg_chr.s3d",
+      "rivervale_chr.s3d",
+      "tox_chr.s3d",
+      "wakening_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "pma": {
+    "sourceFiles": [
+      "pma.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 7,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "pre": {
+    "sourceFiles": [
+      "butcher_chr.s3d",
+      "erudnext_chr.s3d",
+      "erudsxing_chr.s3d",
+      "freporte_chr.s3d",
+      "oot_chr.s3d",
+      "overthere_chr.s3d",
+      "qeynos_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "prt": {
+    "sourceFiles": [
+      "prt.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "pum": {
+    "sourceFiles": [
+      "beholder_chr.s3d",
+      "cauldron_chr.s3d",
+      "commons_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "ecommons_chr.s3d",
+      "everfrost_chr.s3d",
+      "growthplane_chr.s3d",
+      "halas_chr.s3d",
+      "iceclad_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "kerraridge_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "potimea_chr.s3d",
+      "pum_chr.s3d",
+      "rathemtn_chr.s3d",
+      "sro_chr.s3d",
+      "steamfont_chr.s3d",
+      "stonebrunt_chr.s3d",
+      "wakening_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "qcf": {
+    "sourceFiles": [
+      "commons_chr.s3d",
+      "droga_chr.s3d",
+      "eastkarana_chr.s3d",
+      "ecommons_chr.s3d",
+      "freporte_chr.s3d",
+      "freportn_chr.s3d",
+      "freportw_chr.s3d",
+      "highkeep_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "kithicor_chr.s3d",
+      "lakerathe_chr.s3d",
+      "lavastorm_chr.s3d",
+      "mistmoore_chr.s3d",
+      "neriaka_chr.s3d",
+      "northkarana_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "oot_chr.s3d",
+      "qcat_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeynos_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "qrg_chr.s3d",
+      "rathemtn_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "qcm": {
+    "sourceFiles": [
+      "commons_chr.s3d",
+      "eastkarana_chr.s3d",
+      "ecommons_chr.s3d",
+      "erudsxing_chr.s3d",
+      "freporte_chr.s3d",
+      "freportn_chr.s3d",
+      "freportw_chr.s3d",
+      "highkeep_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "kithicor_chr.s3d",
+      "lakerathe_chr.s3d",
+      "lavastorm_chr.s3d",
+      "neriaka_chr.s3d",
+      "northkarana_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "oot_chr.s3d",
+      "qcat_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeynos_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "qrg_chr.s3d",
+      "rathemtn_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rak": {
+    "sourceFiles": [
+      "rak_chr.s3d",
+      "veeshan_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ral": {
+    "sourceFiles": [
+      "global2_chr.s3d",
+      "potactics_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rap": {
+    "sourceFiles": [
+      "cazicthule_chr2.s3d",
+      "rap_chr.s3d",
+      "skyshrine_chr2.s3d",
+      "templeveeshan_chr.s3d",
+      "veeshan_chr.s3d",
+      "wakening_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rat": {
+    "sourceFiles": [
+      "akanon_chr.s3d",
+      "befallen_chr.s3d",
+      "blackburrow_chr.s3d",
+      "cabwest_chr.s3d",
+      "cauldron_chr.s3d",
+      "crushbone_chr.s3d",
+      "feerrott_chr.s3d",
+      "felwithea_chr.s3d",
+      "freporte_chr.s3d",
+      "freportn_chr.s3d",
+      "freportw_chr.s3d",
+      "grobb_chr.s3d",
+      "guktop_chr.s3d",
+      "hateplane_chr.s3d",
+      "highkeep_chr.s3d",
+      "innothule_chr.s3d",
+      "kaladimb_chr.s3d",
+      "kerraridge_chr.s3d",
+      "kithicor_chr.s3d",
+      "mischiefplane_chr.s3d",
+      "misty_chr.s3d",
+      "necropolis_chr.s3d",
+      "neriaka_chr.s3d",
+      "neriakb_chr.s3d",
+      "neriakc_chr.s3d",
+      "nurga_chr.s3d",
+      "oggok_chr.s3d",
+      "paineel_chr.s3d",
+      "paw_chr.s3d",
+      "podisease_chr.s3d",
+      "poinnovation_chr.s3d",
+      "pojustice_chr.s3d",
+      "qcat_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeynos_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "rivervale_chr.s3d",
+      "soldunga_chr.s3d",
+      "steamfont_chr.s3d",
+      "thurgadina_chr.s3d",
+      "tox_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rdg": {
+    "sourceFiles": [
+      "rdg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rem": {
+    "sourceFiles": [
+      "echo_chr.s3d",
+      "griegsend_chr.s3d",
+      "gunthak_chr.s3d",
+      "hohonora_chr.s3d",
+      "letalis_chr.s3d",
+      "mseru_chr.s3d",
+      "postorms_chr.s3d",
+      "rem_chr.s3d",
+      "sseru_chr.s3d",
+      "thedeep_chr.s3d",
+      "torgiran_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rhi": {
+    "sourceFiles": [
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rhp": {
+    "sourceFiles": [
+      "cazicthule_chr2.s3d",
+      "dawnshroud_chr.s3d",
+      "griegsend_chr.s3d",
+      "grimling_chr.s3d",
+      "hollowshade_chr.s3d",
+      "letalis_chr.s3d",
+      "mseru_chr.s3d",
+      "scarlet_chr.s3d",
+      "shadeweaver_chr.s3d",
+      "sharvahl_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rif": {
+    "sourceFiles": [
+      "misty_chr.s3d",
+      "rivervale_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rim": {
+    "sourceFiles": [
+      "mischiefplane_chr.s3d",
+      "misty_chr.s3d",
+      "rivervale_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rkp": {
+    "sourceFiles": [
+      "rkp.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rom": {
+    "sourceFiles": [
+      "rom_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rpt": {
+    "sourceFiles": [
+      "rpt.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rtn": {
+    "sourceFiles": [
+      "rtn.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "rzm": {
+    "sourceFiles": [
+      "hohonora_chr.s3d",
+      "potactics_chr.s3d",
+      "potimeb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sat": {
+    "sourceFiles": [
+      "sat.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "scc": {
+    "sourceFiles": [
+      "scc.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sco": {
+    "sourceFiles": [
+      "sco.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "scr": {
+    "sourceFiles": [
+      "cabeast_chr.s3d",
+      "cabwest_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "firiona_chr.s3d",
+      "postorms_chr.s3d",
+      "scr_chr.s3d",
+      "sharvahl_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "scu": {
+    "sourceFiles": [
+      "scu.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sdf": {
+    "sourceFiles": [
+      "paludal_chr.s3d",
+      "pojustice_chr.s3d",
+      "sdf_chr.s3d",
+      "twilight_chr.s3d",
+      "umbral_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sdm": {
+    "sourceFiles": [
+      "sdm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sed": {
+    "sourceFiles": [
+      "cobaltscar_chr.s3d",
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "powater_chr.s3d",
+      "sed_chr.s3d",
+      "skyshrine_chr.s3d",
+      "sleeper_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "veeshan_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sef": {
+    "sourceFiles": [
+      "sef_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "seg": {
+    "sourceFiles": [
+      "seg.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sem": {
+    "sourceFiles": [
+      "sem_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 4,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sha": {
+    "sourceFiles": [
+      "cobaltscar_chr.s3d",
+      "erudnext_chr.s3d",
+      "erudsxing_chr.s3d",
+      "freporte_chr.s3d",
+      "kedge_chr.s3d",
+      "lakerathe_chr.s3d",
+      "oot_chr.s3d",
+      "powater_chr.s3d",
+      "qcat_chr.s3d",
+      "qeynos_chr.s3d",
+      "sirens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "shf": {
+    "sourceFiles": [
+      "griegsend_chr.s3d",
+      "ssratemple_chr.s3d",
+      "thedeep_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ship": {
+    "sourceFiles": [
+      "butcher_chr.s3d",
+      "erudnext_chr.s3d",
+      "erudsxing_chr.s3d",
+      "firiona_chr.s3d",
+      "freporte_chr.s3d",
+      "iceclad_chr.s3d",
+      "oot_chr.s3d",
+      "qeynos_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "shl": {
+    "sourceFiles": [
+      "shl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "shm": {
+    "sourceFiles": [
+      "shm_chr.s3d",
+      "ssratemple_chr.s3d",
+      "thedeep_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "shn": {
+    "sourceFiles": [
+      "echo_chr.s3d",
+      "griegsend_chr.s3d",
+      "pojustice_chr.s3d",
+      "potimea_chr.s3d",
+      "ssratemple_chr.s3d",
+      "thedeep_chr.s3d",
+      "thegrey_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "shs": {
+    "sourceFiles": [
+      "shs.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 5,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sif": {
+    "sourceFiles": [
+      "sif_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sim": {
+    "sourceFiles": [
+      "cabeast_chr.s3d",
+      "cabwest_chr.s3d",
+      "charasis_chr.s3d",
+      "chardok_chr.s3d",
+      "citymist_chr.s3d",
+      "dalnir_chr.s3d",
+      "droga_chr.s3d",
+      "emeraldjungle_chr.s3d",
+      "kaesora_chr.s3d",
+      "karnor_chr.s3d",
+      "kurn_chr.s3d",
+      "overthere_chr.s3d",
+      "pojustice_chr.s3d",
+      "sebilis_chr.s3d",
+      "sim_chr.s3d",
+      "thegrey_chr.s3d",
+      "trakanon_chr.s3d",
+      "veeshan_chr.s3d",
+      "warslikswood_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sin": {
+    "sourceFiles": [
+      "sin.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sir": {
+    "sourceFiles": [
+      "sir_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ske": {
+    "sourceFiles": [
+      "global_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ski": {
+    "sourceFiles": [
+      "ski.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "skt": {
+    "sourceFiles": [
+      "skt_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "smd": {
+    "sourceFiles": [
+      "smd.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "sna": {
+    "sourceFiles": [
+      "acrylia_chr.s3d",
+      "akanon_chr.s3d",
+      "beholder_chr.s3d",
+      "blackburrow_chr.s3d",
+      "butcher_chr.s3d",
+      "cauldron_chr.s3d",
+      "cazicthule_chr.s3d",
+      "commons_chr.s3d",
+      "eastkarana_chr.s3d",
+      "ecommons_chr.s3d",
+      "erudsxing_chr.s3d",
+      "feerrott_chr.s3d",
+      "freporte_chr.s3d",
+      "freportw_chr.s3d",
+      "innothule_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "kithicor_chr.s3d",
+      "lakerathe_chr.s3d",
+      "lavastorm_chr.s3d",
+      "misty_chr.s3d",
+      "necropolis_chr.s3d",
+      "nektulos_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "paineel_chr.s3d",
+      "paw_chr.s3d",
+      "postorms_chr.s3d",
+      "qcat_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "runnyeye_chr.s3d",
+      "sro_chr.s3d",
+      "stonebrunt_chr.s3d",
+      "tox_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "snd": {
+    "sourceFiles": [
+      "snd.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "snk": {
+    "sourceFiles": [
+      "snk.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "spd": {
+    "sourceFiles": [
+      "codecay_chr.s3d",
+      "nightmareb_chr2.s3d",
+      "poair_chr.s3d",
+      "podisease_chr.s3d",
+      "poeartha_chr.s3d",
+      "pofire_chr.s3d",
+      "poinnovation_chr.s3d",
+      "ponightmare_chr.s3d",
+      "potimea_chr.s3d",
+      "potorment_chr.s3d",
+      "povalor_chr.s3d",
+      "spd_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "spi": {
+    "sourceFiles": [
+      "acrylia_chr.s3d",
+      "akanon_chr.s3d",
+      "beholder_chr.s3d",
+      "butcher_chr.s3d",
+      "cazicthule_chr.s3d",
+      "cazicthule_chr2.s3d",
+      "commons_chr.s3d",
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "droga_chr.s3d",
+      "eastkarana_chr.s3d",
+      "ecommons_chr.s3d",
+      "erudsxing_chr.s3d",
+      "everfrost_chr.s3d",
+      "fearplane_chr.s3d",
+      "feerrott_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "freportn_chr.s3d",
+      "gfaydark_chr.s3d",
+      "grobb_chr2.s3d",
+      "gukbottom_chr.s3d",
+      "guktop_chr.s3d",
+      "hateplane_chr.s3d",
+      "hole_chr.s3d",
+      "kaesora_chr.s3d",
+      "kithicor_chr.s3d",
+      "lfaydark_chr.s3d",
+      "mistmoore_chr.s3d",
+      "misty_chr.s3d",
+      "najena_chr.s3d",
+      "necropolis_chr.s3d",
+      "nektulos_chr.s3d",
+      "nro_chr.s3d",
+      "nurga_chr.s3d",
+      "oasis_chr.s3d",
+      "permafrost_chr.s3d",
+      "qcat_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "skyshrine_chr.s3d",
+      "soldunga_chr.s3d",
+      "soldungb_chr.s3d",
+      "sro_chr.s3d",
+      "steamfont_chr.s3d",
+      "thurgadina_chr.s3d",
+      "tox_chr.s3d",
+      "velketor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "spq": {
+    "sourceFiles": [
+      "spq.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 8,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "spt": {
+    "sourceFiles": [
+      "spt.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "spx": {
+    "sourceFiles": [
+      "spx.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "srk": {
+    "sourceFiles": [
+      "srk.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "srn": {
+    "sourceFiles": [
+      "srn.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "srw": {
+    "sourceFiles": [
+      "burningwood_chr.s3d",
+      "chardok_chr.s3d",
+      "citymist_chr.s3d",
+      "dalnir_chr.s3d",
+      "dreadlands_chr.s3d",
+      "frontiermtns_chr.s3d",
+      "karnor_chr.s3d",
+      "lakeofillomen_chr.s3d",
+      "overthere_chr.s3d",
+      "pojustice_chr.s3d",
+      "poknowledge_chr.s3d",
+      "swampofnohope_chr.s3d",
+      "trakanon_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "stc": {
+    "sourceFiles": [
+      "kurn_chr.s3d",
+      "lakeofillomen_chr.s3d",
+      "overthere_chr.s3d",
+      "postorms_chr.s3d",
+      "stonebrunt_chr.s3d",
+      "trakanon_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "stg": {
+    "sourceFiles": [
+      "bothunder_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "greatdivide_chr.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "potactics_chr.s3d",
+      "skyshrine_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "velketor_chr.s3d",
+      "wakening_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "stm": {
+    "sourceFiles": [
+      "eastwastes_chr2.s3d",
+      "eastwastesshard_chr2.s3d",
+      "kael_chr.s3d",
+      "kaelshard_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "velketor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "swc": {
+    "sourceFiles": [
+      "swc.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "swi": {
+    "sourceFiles": [
+      "swi.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "syn": {
+    "sourceFiles": [
+      "syn_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tar": {
+    "sourceFiles": [
+      "tar.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 8,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tbf": {
+    "sourceFiles": [
+      "tbf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tbl": {
+    "sourceFiles": [
+      "tbl_chr.s3d",
+      "veeshan_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tbm": {
+    "sourceFiles": [
+      "tbm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tef": {
+    "sourceFiles": [
+      "tef_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "teg": {
+    "sourceFiles": [
+      "akheva_chr.s3d",
+      "echo_chr.s3d",
+      "griegsend_chr.s3d",
+      "letalis_chr.s3d",
+      "maiden_chr.s3d",
+      "mseru_chr.s3d",
+      "netherbian_chr.s3d",
+      "scarlet_chr.s3d",
+      "shadeweaver_chr.s3d",
+      "tenebrous_chr.s3d",
+      "twilight_chr.s3d",
+      "umbral_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 8,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tel": {
+    "sourceFiles": [
+      "tel.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tem": {
+    "sourceFiles": [
+      "tem_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ten": {
+    "sourceFiles": [
+      "befallen_chr.s3d",
+      "blackburrow_chr.s3d",
+      "cazicthule_chr2.s3d",
+      "crystal_chr.s3d",
+      "crystalshard_chr.s3d",
+      "fearplane_chr.s3d",
+      "najena_chr.s3d",
+      "permafrost_chr.s3d",
+      "ten_chr.s3d",
+      "thurgadinb_chr.s3d",
+      "unrest_chr.s3d",
+      "velketor_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tgl": {
+    "sourceFiles": [
+      "tgl_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tig": {
+    "sourceFiles": [
+      "arena_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "stonebrunt_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tnf": {
+    "sourceFiles": [
+      "tnf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tnm": {
+    "sourceFiles": [
+      "tnm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tnt": {
+    "sourceFiles": [
+      "tnt.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tpb": {
+    "sourceFiles": [
+      "tpb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tpl": {
+    "sourceFiles": [
+      "tpl.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tpn": {
+    "sourceFiles": [
+      "global6_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tra": {
+    "sourceFiles": [
+      "tra.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "trf": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globaltrf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 3,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "trm": {
+    "sourceFiles": [
+      "global_chr.s3d",
+      "globaltrm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "trn": {
+    "sourceFiles": [
+      "jaggedpine_chr.s3d",
+      "poeartha_chr.s3d",
+      "ponightmare_chr.s3d",
+      "postorms_chr.s3d",
+      "trn_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "trw": {
+    "sourceFiles": [
+      "potactics_chr.s3d",
+      "potimeb_chr.s3d",
+      "potorment_chr.s3d",
+      "trw_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tse": {
+    "sourceFiles": [
+      "tse.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tsm": {
+    "sourceFiles": [
+      "tsm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "ttb": {
+    "sourceFiles": [
+      "ttb_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tzf": {
+    "sourceFiles": [
+      "tzf_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "tzm": {
+    "sourceFiles": [
+      "tzm_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "uni": {
+    "sourceFiles": [
+      "butcher_chr.s3d",
+      "cazicthule_chr.s3d",
+      "fearplane_chr.s3d",
+      "gfaydark_chr.s3d",
+      "growthplane_chr.s3d",
+      "lavastorm_chr.s3d",
+      "lfaydark_chr.s3d",
+      "mischiefplane_chr.s3d",
+      "mistmoore_chr.s3d",
+      "misty_chr.s3d",
+      "nektulos_chr.s3d",
+      "qrg_chr.s3d",
+      "steamfont_chr.s3d",
+      "wakening_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "unm": {
+    "sourceFiles": [
+      "unm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "vaf": {
+    "sourceFiles": [
+      "vaf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "vam": {
+    "sourceFiles": [
+      "vam.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "vek": {
+    "sourceFiles": [
+      "vek_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "vnm": {
+    "sourceFiles": [
+      "vnm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "vpm": {
+    "sourceFiles": [
+      "griegsend_chr.s3d",
+      "katta_chr.s3d",
+      "maiden_chr.s3d",
+      "shadeweaver_chr.s3d",
+      "tenebrous_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "vrm": {
+    "sourceFiles": [
+      "mischiefplane_chr.s3d",
+      "necropolis_chr.s3d",
+      "pojustice_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wal": {
+    "sourceFiles": [
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "iceclad_chr.s3d",
+      "sirens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "was": {
+    "sourceFiles": [
+      "burningwood_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wil": {
+    "sourceFiles": [
+      "airplane_chr.s3d",
+      "growthplane_chr.s3d",
+      "jaggedpine_chr.s3d",
+      "kurn_chr.s3d",
+      "sirens_chr.s3d",
+      "stonebrunt_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wlf": {
+    "sourceFiles": [
+      "wlf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wlm": {
+    "sourceFiles": [
+      "cobaltscar_chr.s3d",
+      "eastwastes_chr.s3d",
+      "eastwastesshard_chr.s3d",
+      "greatdivide_chr.s3d",
+      "growthplane_chr.s3d",
+      "sirens_chr.s3d",
+      "stonebrunt_chr.s3d",
+      "thurgadinb_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 3,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "woe": {
+    "sourceFiles": [
+      "global6_chr.s3d",
+      "global_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wof": {
+    "sourceFiles": [
+      "chardok_chr.s3d",
+      "fieldofbone_chr.s3d",
+      "global6_chr.s3d",
+      "nurga_chr.s3d",
+      "warslikswood_chr.s3d",
+      "wof_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wok": {
+    "sourceFiles": [
+      "wok.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 2,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 2,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wol": {
+    "sourceFiles": [
+      "eastkarana_chr.s3d",
+      "ecommons_chr.s3d",
+      "everfrost_chr.s3d",
+      "feerrott_chr.s3d",
+      "firiona_chr.s3d",
+      "freporte_chr.s3d",
+      "freportw_chr.s3d",
+      "gfaydark_chr.s3d",
+      "global6_chr.s3d",
+      "growthplane_chr.s3d",
+      "halas_chr.s3d",
+      "kithicor_chr.s3d",
+      "lfaydark_chr.s3d",
+      "misty_chr.s3d",
+      "nektulos_chr.s3d",
+      "northkarana_chr.s3d",
+      "nro_chr.s3d",
+      "paw_chr.s3d",
+      "permafrost_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "qrg_chr.s3d",
+      "rivervale_chr.s3d",
+      "southkarana_chr.s3d",
+      "sro_chr.s3d",
+      "warrens_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 3,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wrm": {
+    "sourceFiles": [
+      "wrm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 5,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wur": {
+    "sourceFiles": [
+      "eastwastes_chr2.s3d",
+      "eastwastesshard_chr2.s3d",
+      "greatdivide_chr.s3d",
+      "necropolis_chr.s3d",
+      "skyshrine_chr.s3d",
+      "sleeper_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "veeshan_chr.s3d",
+      "westwastes_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wwf": {
+    "sourceFiles": [
+      "wwf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 4,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wyr": {
+    "sourceFiles": [
+      "wyr.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 6,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "wyv": {
+    "sourceFiles": [
+      "cobaltscar_chr.s3d",
+      "eastwastes_chr2.s3d",
+      "eastwastesshard_chr2.s3d",
+      "necropolis_chr.s3d",
+      "skyshrine_chr.s3d",
+      "sleeper_chr.s3d",
+      "sleeper_chr2.s3d",
+      "solrotower_chr.s3d",
+      "templeveeshan_chr.s3d",
+      "veeshan_chr.s3d",
+      "westwastes_chr.s3d",
+      "wyv_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "xef": {
+    "sourceFiles": [
+      "xef.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "xem": {
+    "sourceFiles": [
+      "xem.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "xhf": {
+    "sourceFiles": [
+      "xhf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "xhm": {
+    "sourceFiles": [
+      "xhm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "yak": {
+    "sourceFiles": [
+      "greatdivide_chr.s3d",
+      "growthplane_chr.s3d",
+      "poknowledge_chr.s3d",
+      "wakening_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "yet": {
+    "sourceFiles": [
+      "charasis_chr.s3d",
+      "dreadlands_chr.s3d",
+      "frontiermtns_chr.s3d",
+      "timorous_chr.s3d",
+      "warslikswood_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "zmf": {
+    "sourceFiles": [
+      "zmf.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "zmm": {
+    "sourceFiles": [
+      "zmm.eqg"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "zof": {
+    "sourceFiles": [
+      "befallen_chr.s3d",
+      "commons_chr.s3d",
+      "ecommons_chr.s3d",
+      "fearplane_chr.s3d",
+      "frozenshadow_chr.s3d",
+      "halas_chr.s3d",
+      "hateplane_chr.s3d",
+      "hole_chr.s3d",
+      "innothule_chr.s3d",
+      "katta_chr.s3d",
+      "kithicor_chr.s3d",
+      "mistmoore_chr.s3d",
+      "misty_chr.s3d",
+      "nektulos_chr.s3d",
+      "neriakb_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "paineel_chr.s3d",
+      "rathemtn_chr.s3d",
+      "sro_chr.s3d",
+      "unrest_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  },
+  "zom": {
+    "sourceFiles": [
+      "befallen_chr.s3d",
+      "commons_chr.s3d",
+      "eastkarana_chr.s3d",
+      "ecommons_chr.s3d",
+      "erudsxing_chr.s3d",
+      "fearplane_chr.s3d",
+      "feerrott_chr.s3d",
+      "frozenshadow_chr.s3d",
+      "halas_chr.s3d",
+      "hateplane_chr.s3d",
+      "hole_chr.s3d",
+      "innothule_chr.s3d",
+      "katta_chr.s3d",
+      "kithicor_chr.s3d",
+      "lakerathe_chr.s3d",
+      "lfaydark_chr.s3d",
+      "mistmoore_chr.s3d",
+      "misty_chr.s3d",
+      "nektulos_chr.s3d",
+      "neriakb_chr.s3d",
+      "northkarana_chr.s3d",
+      "nro_chr.s3d",
+      "oasis_chr.s3d",
+      "paineel_chr.s3d",
+      "paw_chr.s3d",
+      "qcat_chr.s3d",
+      "qey2hh1_chr.s3d",
+      "qeynos2_chr.s3d",
+      "qeytoqrg_chr.s3d",
+      "rathemtn_chr.s3d",
+      "southkarana_chr.s3d",
+      "sro_chr.s3d",
+      "unrest_chr.s3d"
+    ],
+    "minTexture": 0,
+    "maxTexture": 0,
+    "minHelmTexture": 0,
+    "maxHelmTexture": 0,
+    "minHair": 0,
+    "maxHair": 0,
+    "minBeards": 0,
+    "maxBeards": 0
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "name": "full",
+  "description": "Release-grade validation of all available mapped race models plus repeated multi-zone loading.",
+  "zoneValidation": {
+    "enabled": true,
+    "zones": [
+      "qeynos", "freporte", "gfaydark", "crushbone", "unrest", "rivervale",
+      "blackburrow", "befallen", "fieldofbone", "kaesora", "iceclad", "greatdivide"
+    ],
+    "cycles": 3,
+    "timeoutMs": 1800000
+  },
+  "raceAudit": {
+    "enabled": true,
+    "bootstrapZone": "blackburrow",
+    "batchSize": 24,
+    "timeoutMs": 900000,
+    "modelSelection": { "mode": "available", "models": [] }
+  },
+  "visualSamples": [
+    { "model": "hum", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "huf", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "qcf", "face": 0, "texture": 1, "helmTexture": 1, "invariants": { "requireArmsDown": true } },
+    { "model": "qcf", "face": 0, "texture": 4, "helmTexture": 1, "invariants": { "requireArmsDown": true } },
+    { "model": "hum", "face": 6, "texture": 16, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "elm", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "ogm", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "trm", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "dwm", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "ikm", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "fsg", "face": 0, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } }
+  ],
+  "visualValidation": {
+    "repetitions": 2,
+    "maximumWhitePixelRatio": 0.18
+  },
+  "soak": {
+    "enabled": true,
+    "warmupCycles": 1,
+    "resourceTolerancePercent": 2,
+    "resourceToleranceAbsolute": 6,
+    "maxJsHeapGrowthMB": 512
+  },
+  "memory": {
+    "maxUsedPercent": 85,
+    "minFreeMB": 8192,
+    "checkAttempts": 3,
+    "settleMs": 3000
+  },
+  "artifacts": {
+    "screenshotMode": "failures",
+    "traceMode": "never",
+    "maxTracedZoneReports": 12,
+    "keepRuns": 6,
+    "maxTotalMB": 3072
+  }
+}

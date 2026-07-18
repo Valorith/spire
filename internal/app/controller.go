@@ -246,6 +246,44 @@ type sageFsEntry struct {
 }
 
 var sageFsRootValidationCache sync.Map
+var sageFsFileMu sync.RWMutex
+
+const sageFsIOAttempts = 3
+
+func retrySageFsIO(operation func() error) (int, error) {
+	var err error
+	for attempt := 0; attempt < sageFsIOAttempts; attempt++ {
+		if err = operation(); err == nil {
+			return attempt, nil
+		}
+		if attempt+1 < sageFsIOAttempts {
+			time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
+		}
+	}
+	return sageFsIOAttempts - 1, err
+}
+
+func openSageFsFile(target string) (*os.File, int, error) {
+	var file *os.File
+	retries, err := retrySageFsIO(func() error {
+		var openErr error
+		file, openErr = os.Open(target)
+		if os.IsNotExist(openErr) {
+			return nil
+		}
+		return openErr
+	})
+	if file == nil && err == nil {
+		return nil, retries, os.ErrNotExist
+	}
+	return file, retries, err
+}
+
+func setSageFsRetryHeader(c echo.Context, retries int) {
+	if retries > 0 {
+		c.Response().Header().Set("X-Sage-Fs-Retries", fmt.Sprintf("%d", retries))
+	}
+}
 
 func (d *Controller) sageFsValidate(c echo.Context) error {
 	if err := d.requireLocalSageFsRequest(c); err != nil {
@@ -314,9 +352,12 @@ func (d *Controller) sageFsReadFile(c echo.Context) error {
 	if err != nil {
 		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
 	}
+	sageFsFileMu.RLock()
+	defer sageFsFileMu.RUnlock()
 
-	fileInfo, err := os.Stat(target)
-	if os.IsNotExist(err) || (err == nil && !fileInfo.Mode().IsRegular()) {
+	file, retries, err := openSageFsFile(target)
+	setSageFsRetryHeader(c, retries)
+	if os.IsNotExist(err) {
 		c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		c.Response().Header().Set("X-Sage-Preview-Missing", "1")
 		return c.NoContent(http.StatusOK)
@@ -324,12 +365,17 @@ func (d *Controller) sageFsReadFile(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
 	}
+	defer file.Close()
 
-	file, err := os.Open(target)
+	fileInfo, err := file.Stat()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
 	}
-	defer file.Close()
+	if !fileInfo.Mode().IsRegular() {
+		c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		c.Response().Header().Set("X-Sage-Preview-Missing", "1")
+		return c.NoContent(http.StatusOK)
+	}
 
 	c.Response().Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	return c.Stream(http.StatusOK, "application/octet-stream", file)
@@ -344,6 +390,8 @@ func (d *Controller) sageFsMkdir(c echo.Context) error {
 	if err != nil {
 		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
 	}
+	sageFsFileMu.Lock()
+	defer sageFsFileMu.Unlock()
 
 	if err := os.MkdirAll(target, 0755); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
@@ -366,10 +414,19 @@ func (d *Controller) sageFsWriteFile(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+	sageFsFileMu.Lock()
+	defer sageFsFileMu.Unlock()
+	mkdirRetries, err := retrySageFsIO(func() error {
+		return os.MkdirAll(filepath.Dir(target), 0755)
+	})
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
 	}
-	if err := os.WriteFile(target, body, 0644); err != nil {
+	writeRetries, err := retrySageFsIO(func() error {
+		return os.WriteFile(target, body, 0644)
+	})
+	setSageFsRetryHeader(c, mkdirRetries+writeRetries)
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
 	}
 
@@ -385,6 +442,8 @@ func (d *Controller) sageFsDeleteFile(c echo.Context) error {
 	if err != nil {
 		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
 	}
+	sageFsFileMu.Lock()
+	defer sageFsFileMu.Unlock()
 
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
@@ -402,6 +461,8 @@ func (d *Controller) sageFsDeleteFolder(c echo.Context) error {
 	if err != nil {
 		return c.JSON(statusCodeForSageFsError(err), echo.Map{"error": err.Error()})
 	}
+	sageFsFileMu.Lock()
+	defer sageFsFileMu.Unlock()
 
 	if err := os.RemoveAll(target); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})

@@ -91,7 +91,16 @@ export async function exportv4(zoneName) {
         .setSpecularColorFactor([0, 0, 0]);
       gltfMaterial.setExtension('KHR_materials_specular', specular);
       for (const prop of mat.properties) {
+        if (prop.type !== 2) {
+          continue;
+        }
         const [name] = prop.valueS.toLowerCase().split('.');
+        if (
+          !name ||
+          (mat.name.toLowerCase() === 'failsafeshader' && name === 'grid_standard')
+        ) {
+          continue;
+        }
         const texture = document
           .createTexture(name)
           .setURI(`/eq/textures/${name}`)

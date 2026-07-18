@@ -133,8 +133,11 @@ class ImageProcessor {
     const modelDir = await getEQDir('textures');
     if (modelDir) {
       const files = await getFiles(modelDir, undefined, true);
+      const existingTextureNames = new Set(
+        files.map((fileName) => fileName.toLowerCase().split('.')[0])
+      );
       unionImages = unionImages.filter(
-        (i) => !files.some((f) => f.split('.')[0] === i.name.split('.')[0])
+        (image) => !existingTextureNames.has(image.name.toLowerCase().split('.')[0])
       );
     }
     if (!unionImages.length) {

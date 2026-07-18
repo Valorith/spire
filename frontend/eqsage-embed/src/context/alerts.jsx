@@ -42,12 +42,26 @@ export const AlertProvider = ({ children }) => {
         openAlert,
       }}
     >
-      <Snackbar open={open} autoHideDuration={3000} onClose={handleClose}>
+      <Snackbar
+        open={open}
+        autoHideDuration={3000}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{
+          zIndex       : 200100,
+          pointerEvents: 'none',
+          maxWidth     : 'calc(100vw - 32px)',
+        }}
+      >
         <Alert
           onClose={handleClose}
           severity={severity}
           variant="filled"
-          sx={{ width: '100%' }}
+          sx={{
+            width        : 'auto',
+            maxWidth     : 560,
+            pointerEvents: 'auto',
+          }}
         >
           {message}
         </Alert>

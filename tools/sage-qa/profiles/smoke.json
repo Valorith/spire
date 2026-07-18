@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "name": "smoke",
+  "description": "Fast representative validation for local development and pull requests.",
+  "zoneValidation": {
+    "enabled": true,
+    "zones": ["blackburrow", "unrest", "qeynos"],
+    "cycles": 1,
+    "timeoutMs": 300000
+  },
+  "raceAudit": {
+    "enabled": true,
+    "bootstrapZone": "blackburrow",
+    "batchSize": 8,
+    "timeoutMs": 420000,
+    "modelSelection": {
+      "mode": "explicit",
+      "models": [
+        "hum", "huf", "elm", "ogm", "trm", "dwm", "ikm", "fsg",
+        "gsf", "tpn", "abh", "tbu", "qcm", "qcf"
+      ]
+    }
+  },
+  "visualSamples": [
+    { "model": "hum", "face": 7, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "ogm", "face": 4, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "fsg", "face": 0, "texture": 0, "helmTexture": 0, "invariants": { "requireArmsDown": true } },
+    { "model": "qcm", "face": 0, "texture": 0, "helmTexture": 0 },
+    { "model": "qcf", "face": 0, "texture": 0, "helmTexture": 0 }
+  ],
+  "visualValidation": {
+    "repetitions": 2,
+    "maximumWhitePixelRatio": 0.18
+  },
+  "artifacts": {
+    "screenshotMode": "final",
+    "traceMode": "failures",
+    "keepRuns": 12,
+    "maxTotalMB": 1536
+  }
+}
