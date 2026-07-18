@@ -601,49 +601,184 @@ test.describe('Sage preview UI', () => {
     }
   })
 
-  test('opens the standalone model review with runtime-faithful appearance evidence', async ({ page }) => {
-    test.setTimeout(180000)
+  test('exercises the standalone model review lifecycle with stable runtime resources', async ({ page }) => {
+    test.setTimeout(240000)
     const eqRoot = process.env.SPIRE_SAGE_EQ_DIR || 'C:/EQEmuCW-Live'
     test.skip(
       !fs.existsSync(path.join(eqRoot, 'eqsage', 'models', 'hum.glb')),
       'requires local Sage generated character assets'
     )
 
+    const screenshotDirectory = path.resolve('output', 'playwright', 'model-viewer')
+    await fs.promises.mkdir(screenshotDirectory, { recursive: true })
+    const pageErrors: string[] = []
+    const modelReviewErrors: string[] = []
+    const failedModelRequests: string[] = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+    page.on('console', (message) => {
+      if (
+        message.type() === 'error' &&
+        message.text().includes('[SageModelReview]')
+      ) {
+        modelReviewErrors.push(message.text())
+      }
+    })
+    page.on('response', (response) => {
+      if (
+        response.status() >= 400 &&
+        /\/eqsage\/models\/(hum|qcf)(?:\d+)?\.glb(?:\?|$)/i.test(response.url())
+      ) {
+        failedModelRequests.push(`${response.status()} ${response.url()}`)
+      }
+    })
+
+    await page.setViewportSize({ width: 1600, height: 1000 })
+
     await page.goto(
-      `${previewBaseUrl}/sage?sageEqDir=${encodeURIComponent(eqRoot)}&sageModelReview=1&sageModel=hum&sageCacheBust=model-review-test`,
+      `${previewBaseUrl}/sage?sageEqDir=${encodeURIComponent(eqRoot)}&sageModelReview=1&sageModel=hum&sageCacheBust=model-review-lifecycle-test`,
       { waitUntil: 'load' }
     )
 
     await expect(page.getByRole('main', { name: 'Sage Model Review' })).toBeVisible()
     await expect(page.locator('canvas#modelReviewCanvas')).toHaveCount(1)
-    await expect.poll(() => page.evaluate(() => (
-      (window as any).__spireSageModelReview ?? null
-    )), { timeout: 120000 }).toMatchObject({
-      ready: true,
-      model: 'hum',
-      view : 'front',
-      diagnostics: {
-        animationPass  : true,
-        orientationPass: true,
-      },
-    })
 
-    await expect(page.getByText('Resolved asset').locator('..')).toContainText('HUM')
-    await expect(page.getByLabel('Clip').locator('option')).not.toHaveCount(0)
-    await page.keyboard.press('4')
-    await expect.poll(() => page.evaluate(() => (
-      (window as any).__spireSageModelReview?.view ?? null
-    ))).toBe('head')
-    expect(new URL(page.url()).searchParams.get('sageModelView')).toBe('head')
+    const waitForReady = async (model: string, view?: string) => {
+      await expect.poll(() => page.evaluate(() => {
+        const review = (window as any).__spireSageModelReview
+        return review && {
+          animationPass  : review.diagnostics?.animationPass ?? false,
+          appearancePass : review.diagnostics?.appearance?.invariantPass ?? false,
+          model           : review.model,
+          orientationPass: review.diagnostics?.orientationPass ?? false,
+          ready           : review.ready,
+          view            : review.view,
+        }
+      }), { timeout: 120000 }).toMatchObject({
+        animationPass  : true,
+        appearancePass : true,
+        model,
+        orientationPass: true,
+        ready           : true,
+        ...(view ? { view } : {}),
+      })
+    }
 
     const selectReviewedModel = async (query: string, buttonName: string, model: string) => {
       await page.getByRole('textbox', { name: 'Search models' }).fill(query)
       await page.getByRole('button', { name: buttonName, exact: true }).click()
-      await expect.poll(() => page.evaluate(() => ({
-        model: (window as any).__spireSageModelReview?.model ?? null,
-        ready: (window as any).__spireSageModelReview?.ready ?? false,
-      })), { timeout: 120000 }).toEqual({ model, ready: true })
+      await waitForReady(model)
     }
+
+    await waitForReady('hum', 'front')
+
+    await expect(page.getByText('Resolved asset').locator('..')).toContainText('HUM')
+    await expect(page.locator('.model-review-count span').first()).toContainText(/\d+ models/)
+    await expect(page.locator('.model-review-badge.is-pass')).toHaveCount(3)
+    await expect(page.getByLabel('Clip').locator('option')).not.toHaveCount(0)
+    expect(await page.evaluate(() => {
+      const scene = (window as any).gameController?.currentScene
+      const enabledLights = (scene?.lights ?? []).filter((light: any) =>
+        light?.isEnabled?.() !== false
+      )
+      return {
+        environmentIntensity: scene?.environmentIntensity,
+        environmentTexture  : scene?.environmentTexture ?? null,
+        glowEnabled         : (() => {
+          const glowLayer = (window as any).gameController?.ZoneController?.glowLayer
+          return typeof glowLayer?.isEnabled === 'function'
+            ? glowLayer.isEnabled()
+            : glowLayer?.isEnabled ?? glowLayer?._isEnabled
+        })(),
+        lightIntensities    : enabledLights.map((light: any) => light.intensity),
+      }
+    })).toEqual({
+      environmentIntensity: 0,
+      environmentTexture  : null,
+      glowEnabled         : false,
+      lightIntensities    : [0.85],
+    })
+
+    await page.screenshot({
+      path    : path.join(screenshotDirectory, '01-hum-front-overview.png'),
+      fullPage: true,
+    })
+
+    await page.keyboard.press('4')
+    await waitForReady('hum', 'head')
+    expect(new URL(page.url()).searchParams.get('sageModelView')).toBe('head')
+
+    await page.getByLabel('Face').selectOption('3')
+    await expect.poll(() => new URL(page.url()).searchParams.get('sageModelFace')).toBe('3')
+    await waitForReady('hum', 'head')
+    await page.getByLabel('Body').selectOption('2')
+    await expect.poll(() => new URL(page.url()).searchParams.get('sageModelTexture')).toBe('2')
+    await waitForReady('hum', 'head')
+    await page.getByLabel('Helm').selectOption('1')
+    await expect.poll(() => new URL(page.url()).searchParams.get('sageModelHelm')).toBe('1')
+    await waitForReady('hum', 'head')
+
+    const clipOptions = await page.getByLabel('Clip').locator('option').evaluateAll((options) =>
+      options.map((option) => ({
+        label: option.textContent?.trim() ?? '',
+        value: (option as HTMLOptionElement).value,
+      }))
+    )
+    expect(clipOptions.length).toBeGreaterThan(1)
+    await page.getByLabel('Clip').selectOption(clipOptions[1].value)
+    const playButton = page.getByRole('button', { name: /animation/ })
+    if (await playButton.getAttribute('aria-label') === 'Play animation') {
+      await playButton.click()
+    }
+    await expect(playButton).toHaveAttribute('aria-label', 'Pause animation')
+    const animationFrame = page.getByLabel('Animation frame')
+    const frameRange = await animationFrame.evaluate((element) => ({
+      max: Number((element as HTMLInputElement).max),
+      min: Number((element as HTMLInputElement).min),
+    }))
+    expect(frameRange.max).toBeGreaterThan(frameRange.min)
+    const targetFrame = frameRange.min + (frameRange.max - frameRange.min) / 2
+    await animationFrame.fill(String(targetFrame))
+    await expect(playButton).toHaveAttribute('aria-label', 'Play animation')
+    await expect(page.locator('.model-review-playback output')).toContainText(
+      String(Math.round(targetFrame))
+    )
+
+    const reviewNote = 'E2E: inspect face 3, body 2, helm 1 in head view'
+    await page.getByRole('textbox', { name: 'Review note' }).fill(reviewNote)
+    await page.getByRole('button', { name: 'Flag issue' }).click()
+    await expect(page.getByRole('button', { name: 'Flag issue' })).toHaveClass(/is-issue/)
+    await expect(page.locator('.model-review-count span').nth(1)).toContainText('1 reviewed')
+
+    await page.screenshot({
+      path    : path.join(screenshotDirectory, '02-hum-head-variant-flagged.png'),
+      fullPage: true,
+    })
+
+    await page.reload({ waitUntil: 'load' })
+    await waitForReady('hum', 'head')
+    await expect(page.getByRole('textbox', { name: 'Review note' })).toHaveValue(reviewNote)
+    await expect(page.getByRole('button', { name: 'Flag issue' })).toHaveClass(/is-issue/)
+    expect(new URL(page.url()).searchParams.get('sageModelFace')).toBe('3')
+    expect(new URL(page.url()).searchParams.get('sageModelTexture')).toBe('2')
+    expect(new URL(page.url()).searchParams.get('sageModelHelm')).toBe('1')
+
+    await page.getByRole('button', { name: 'Issues', exact: true }).click()
+    await expect(page.locator('[data-review-model="hum"]')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Unreviewed', exact: true }).click()
+    await expect(page.locator('[data-review-model="hum"]')).toHaveCount(0)
+    await page.getByRole('button', { name: 'All', exact: true }).click()
+
+    await page.getByRole('textbox', { name: 'Search models' }).fill('')
+    const initialModel = await page.evaluate(() => (window as any).__spireSageModelReview?.model)
+    await page.getByRole('button', { name: 'Next model' }).click()
+    await expect.poll(() => page.evaluate(() => (
+      (window as any).__spireSageModelReview?.ready === true
+        ? (window as any).__spireSageModelReview?.model
+        : null
+    )), { timeout: 120000 }).not.toBe(initialModel)
+    await page.keyboard.press('ArrowLeft')
+    await waitForReady(initialModel)
+
     const readReviewResources = () => page.evaluate(() => {
       const scene = (window as any).gameController?.currentScene
       return {
@@ -660,11 +795,35 @@ test.describe('Sage preview UI', () => {
     await expect.poll(() => page.evaluate(() => (
       (window as any).__spireSageModelReview?.diagnostics?.compactNativeArmNeutralized ?? false
     ))).toBe(true)
+    await page.locator('[title="Rear view (3)"]').click()
+    await waitForReady('qcf', 'back')
+
+    await page.screenshot({
+      path    : path.join(screenshotDirectory, '03-qcf-rear-compact-rig.png'),
+      fullPage: true,
+    })
+
     const settledResources = await readReviewResources()
-    await selectReviewedModel('hum', 'HUM Human', 'hum')
-    await selectReviewedModel('qcf', 'QCF Human', 'qcf')
+    for (let iteration = 0; iteration < 4; iteration++) {
+      await selectReviewedModel('hum', 'HUM Human', 'hum')
+      await selectReviewedModel('qcf', 'QCF Human', 'qcf')
+    }
     const repeatedResources = await readReviewResources()
     expect(repeatedResources).toEqual(settledResources)
+
+    await page.goto(
+      `${previewBaseUrl}/sage?sageEqDir=${encodeURIComponent(eqRoot)}&sageModelReview=1&sageModel=not-a-model&sageCacheBust=model-review-invalid-deep-link`,
+      { waitUntil: 'load' }
+    )
+    await expect.poll(() => page.evaluate(() => (
+      (window as any).__spireSageModelReview?.ready === true
+        ? (window as any).__spireSageModelReview?.model
+        : null
+    )), { timeout: 120000 }).not.toBe('not-a-model')
+
+    expect(pageErrors).toEqual([])
+    expect(modelReviewErrors).toEqual([])
+    expect(failedModelRequests).toEqual([])
   })
 
   test('frames real local zone geometry instead of opening on a blank safe-point view', async ({ page }) => {

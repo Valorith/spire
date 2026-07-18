@@ -314,7 +314,10 @@ export const ModelReviewWorkspace = () => {
         if (!current) return;
 
         modelController.swapBackground('none');
-        modelController.glowLayer?.setEnabled?.(false);
+        if (modelController.glowLayer) {
+          modelController.glowLayer.isEnabled = false;
+          modelController.glowLayer.intensity = 0;
+        }
         controller.CameraController.rotate(false);
         const scene = modelController.scene;
         scene.environmentTexture?.dispose?.();
