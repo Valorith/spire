@@ -2644,14 +2644,12 @@ export default {
         return
       }
 
-      const routeData = this.$router.resolve({
+      this.$router.push({
         path: ROUTE.ITEMS_EVOLVING,
         query: {
           evoId: this.item.evoid
         }
-      })
-
-      window.open(routeData.href, "_blank", "noopener")
+      }).catch(() => {})
     },
     getTargetTypeColor(targetType) {
       return Items.getTargetTypeColor(targetType);

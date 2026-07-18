@@ -303,7 +303,8 @@ test.describe('Evolving Items Editor', () => {
     await page.goBack();
     await page.waitForSelector('#item-edit-card', { timeout: 20000 });
     await page.locator('.eq-tab-box-fancy a').filter({ hasText: 'Evolving' }).click();
-    await page.locator('#evoitem').fill('0');
+    await page.locator('label[for="evoitem"]').click();
+    await expect(page.locator('#evoitem')).not.toBeChecked();
     await page.locator('button').filter({ hasText: 'Save Item' }).click();
 
     await expect.poll(() => state.getLastSavedItem()?.evoitem).toBe(0);
