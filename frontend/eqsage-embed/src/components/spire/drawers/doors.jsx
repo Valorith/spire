@@ -25,11 +25,15 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import BABYLON from '@bjs';
 import { gameController } from '../../../viewer/controllers/GameController';
 import { useMainContext } from '@/components/main/context';
+import { useZoneContext } from '@/components/zone/zone-context';
 import { useAlertContext } from '@/context/alerts';
 import {
+  collectDoorLifecycleStats,
+  getRenderableDoors,
   loadDoorModelCatalog,
   loadDoorsForZone,
   degreesToEqHeading,
+  eqHeadingToDegrees,
   stripDoorEditorFields,
   toDoorPlacement,
   toDoorPayload,
@@ -46,6 +50,7 @@ const getDoorController = () =>
 export const DoorsDrawer = ({ selectedObject }) => {
   const { openAlert } = useAlertContext();
   const { selectedZone, Spire } = useMainContext();
+  const { setDoors } = useZoneContext();
   const [selectedModel, setSelectedModel] = useState('');
   const [doRandom, setDoRandom] = useState(false);
   const [rotateClamp, setRotateClamp] = useState([0, 360]);
@@ -56,8 +61,12 @@ export const DoorsDrawer = ({ selectedObject }) => {
   const [availableModels, setAvailableModels] = useState([]);
   const [availableModelsLoaded, setAvailableModelsLoaded] = useState(false);
   const [selectedMesh, setSelectedMesh] = useState(selectedObject);
+  const [mutationPending, setMutationPending] = useState(false);
   const editing = useRef(false);
   const doorsRef = useRef([]);
+  const missingModelsRef = useRef([]);
+  const persistQueueRef = useRef(Promise.resolve());
+  const persistVersionRef = useRef(0);
   const canTransformDoors = typeof getDoorController()?.editMesh === 'function';
   const availableModelSet = useMemo(
     () => new Set(availableModels.map((model) => model.toLowerCase())),
@@ -71,45 +80,103 @@ export const DoorsDrawer = ({ selectedObject }) => {
     return new Spire.SpireApiTypes.DoorApi(...Spire.SpireApi.cfg());
   }, [Spire]);
 
+  const refreshDoorStats = useCallback((doors = doorsRef.current) => {
+    const controller = getDoorController();
+    const renderableDoors = getRenderableDoors(doors);
+    return collectDoorLifecycleStats({
+      controller,
+      result: {
+        doors,
+        loadedMeshes  : controller?.doorNode?.getChildren?.().filter(
+          (node) => node?.dataReference
+        ).length ?? 0,
+        missingModels : missingModelsRef.current,
+        renderableDoors,
+      },
+      zoneKey: `${selectedZone?.short_name ?? ''}:${selectedZone?.version ?? 0}`,
+    });
+  }, [selectedZone?.short_name, selectedZone?.version]);
+
   const loadDoors = useCallback(async (forceReload = false) => {
     if (!Spire || !selectedZone?.short_name) {
       doorsRef.current = [];
-      return [];
+      missingModelsRef.current = [];
+      setDoors([]);
+      return {
+        doors          : [],
+        invisibleDoors : [],
+        loadedMeshes   : 0,
+        missingModels  : [],
+        renderableDoors: [],
+      };
     }
 
-    const { doors } = await loadDoorsForZone({
+    const result = await loadDoorsForZone({
       Spire,
       selectedZone,
       availableModelSet: availableModelsLoaded ? availableModelSet : null,
       forceReload,
     });
+    const doors = result.doors ?? [];
     doorsRef.current = doors;
+    missingModelsRef.current = result.missingModels ?? [];
+    setDoors(doors);
 
-    return doors;
+    return result;
   }, [
     Spire,
     selectedZone,
     availableModelSet,
     availableModelsLoaded,
+    setDoors,
   ]);
 
   const persistDoor = useCallback(
-    async (mesh = selectedMesh) => {
+    (mesh = selectedMesh) => {
       if (!mesh?.dataReference?.id || !selectedZone) {
-        return;
+        return Promise.resolve(null);
       }
 
       const payload = stripDoorEditorFields(
         toDoorPayload(mesh.dataReference, selectedZone, mesh)
       );
-      const doorsApi = createDoorApi();
-      await doorsApi.updateDoor({
-        id  : payload.id,
-        door: payload,
-      });
-      mesh.dataReference = toDoorPlacement(payload);
+      const persistVersion = ++persistVersionRef.current;
+      const queued = persistQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const doorsApi = createDoorApi();
+          const response = await doorsApi.updateDoor({
+            id  : payload.id,
+            door: payload,
+          });
+          const updatedDoor = Array.isArray(response?.data)
+            ? response.data[0]
+            : response?.data ?? payload;
+          if (
+            persistVersion === persistVersionRef.current &&
+            !mesh.isDisposed?.()
+          ) {
+            mesh.dataReference = toDoorPlacement(updatedDoor);
+          }
+          doorsRef.current = doorsRef.current.map((door) =>
+            Number(door.id) === Number(updatedDoor.id) ? updatedDoor : door
+          );
+          setDoors(doorsRef.current);
+          if (persistVersion === persistVersionRef.current) {
+            refreshDoorStats(doorsRef.current);
+          }
+          return updatedDoor;
+        });
+      persistQueueRef.current = queued;
+      return queued;
     },
-    [createDoorApi, selectedMesh, selectedZone]
+    [
+      createDoorApi,
+      refreshDoorStats,
+      selectedMesh,
+      selectedZone,
+      setDoors,
+    ]
   );
 
   const editMesh = useCallback(() => {
@@ -140,42 +207,64 @@ export const DoorsDrawer = ({ selectedObject }) => {
 
       selectedMesh.dataReference.scale = selectedMesh.scaling.y;
 
+      setMutationPending(true);
       persistDoor(selectedMesh)
         .then(() => openAlert(`Updated ${selectedMesh.name}`))
         .catch((e) => {
           console.warn('Error updating door', e);
           openAlert(`Error updating ${selectedMesh.name}`, 'warning');
-        });
+        })
+        .finally(() => setMutationPending(false));
     });
   }, [selectedMesh, persistDoor, openAlert]);
 
-  const deleteMesh = useCallback(() => {
-    if (!selectedMesh) {
+  const deleteMesh = useCallback(async () => {
+    const mesh = selectedMesh;
+    if (!mesh || mutationPending) {
       return;
     }
 
     const deleteLocal = () => {
-      selectedMesh.dispose();
+      const id = Number(mesh.dataReference?.id);
+      mesh.dispose();
+      if (Number.isFinite(id)) {
+        doorsRef.current = doorsRef.current.filter(
+          (door) => Number(door.id) !== id
+        );
+        setDoors(doorsRef.current);
+      }
       setSelectedMesh(null);
+      refreshDoorStats(doorsRef.current);
     };
 
-    if (!selectedMesh.dataReference?.id || !Spire) {
+    if (!mesh.dataReference?.id || !Spire) {
       deleteLocal();
       return;
     }
 
-    createDoorApi()
-      .deleteDoor({ id: selectedMesh.dataReference.id })
-      .then(async () => {
-        await loadDoors(true);
-        deleteLocal();
-        openAlert(`Deleted ${selectedMesh.name}`);
-      })
-      .catch((e) => {
-        console.warn('Error deleting door', e);
-        openAlert(`Error deleting ${selectedMesh.name}`, 'warning');
-      });
-  }, [Spire, createDoorApi, loadDoors, openAlert, selectedMesh]);
+    setMutationPending(true);
+    try {
+      await persistQueueRef.current.catch(() => undefined);
+      await createDoorApi().deleteDoor({ id: mesh.dataReference.id });
+      await loadDoors(true);
+      setSelectedMesh(null);
+      openAlert(`Deleted ${mesh.name}`);
+    } catch (e) {
+      console.warn('Error deleting door', e);
+      openAlert(`Error deleting ${mesh.name}`, 'warning');
+    } finally {
+      setMutationPending(false);
+    }
+  }, [
+    Spire,
+    createDoorApi,
+    loadDoors,
+    mutationPending,
+    openAlert,
+    refreshDoorStats,
+    selectedMesh,
+    setDoors,
+  ]);
 
   useEffect(() => {
     const clickCallback = (mesh) => {
@@ -192,6 +281,14 @@ export const DoorsDrawer = ({ selectedObject }) => {
     const controller = getDoorController();
     controller?.addClickCallback?.(clickCallback);
     const keydown = (e) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement ||
+        e.target?.isContentEditable
+      ) {
+        return;
+      }
       if (e.key.toLowerCase() === 'r') {
         editMesh();
       }
@@ -215,13 +312,13 @@ export const DoorsDrawer = ({ selectedObject }) => {
     let current = true;
     (async () => {
       try {
-        const doors = await loadDoors();
+        const result = await loadDoors();
         if (!current) {
           return;
         }
-        doorsRef.current = doors;
+        doorsRef.current = result.doors ?? [];
       } catch (e) {
-        console.log('err', e);
+        console.warn('Error loading doors', e);
         openAlert('Error updating zone', 'warning');
       }
     })();
@@ -239,16 +336,30 @@ export const DoorsDrawer = ({ selectedObject }) => {
   }, [selectedMesh]);
 
   useEffect(() => {
-    (async () => {
-      const { objectMap, availableModels } = await loadDoorModelCatalog();
-      setObjectMap(objectMap || {});
-      setAvailableModels(availableModels);
-      setAvailableModelsLoaded(true);
-    })();
-  }, []);
+    let current = true;
+    loadDoorModelCatalog()
+      .then(({ objectMap, availableModels }) => {
+        if (!current) {
+          return;
+        }
+        setObjectMap(objectMap || {});
+        setAvailableModels(availableModels);
+        setAvailableModelsLoaded(true);
+      })
+      .catch((error) => {
+        console.warn('Error loading door model catalog', error);
+        if (current) {
+          setAvailableModelsLoaded(true);
+          openAlert('Error loading door model catalog', 'warning');
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [openAlert]);
 
   const stamp = useCallback(() => {
-    if (!selectedModel) {
+    if (!selectedModel || mutationPending) {
       return;
     }
     const commitDoor = async (loc, mesh = null) => {
@@ -307,16 +418,24 @@ export const DoorsDrawer = ({ selectedObject }) => {
         toDoorPayload(draftDoor, selectedZone)
       );
 
+      setMutationPending(true);
       try {
         const response = await createDoorApi().createDoor({ door: payload });
         const createdDoor = Array.isArray(response?.data)
           ? response.data[0]
           : response?.data;
         await loadDoors(true);
+        const createdMesh = getDoorController()?.doorNode?.getChildren?.().find(
+          (candidate) =>
+            Number(candidate?.dataReference?.id) === Number(createdDoor?.id)
+        );
+        setSelectedMesh(createdMesh ?? null);
         openAlert(`Created ${createdDoor?.name ?? selectedModel}`);
       } catch (e) {
         console.warn('Error creating door', e);
         openAlert(`Error creating ${selectedModel}`, 'warning');
+      } finally {
+        setMutationPending(false);
       }
     };
 
@@ -324,25 +443,12 @@ export const DoorsDrawer = ({ selectedObject }) => {
     if (typeof controller?.pickRaycastForLoc !== 'function') {
       return;
     }
-    if (typeof controller.editMesh === 'function') {
-      controller.pickRaycastForLoc({
-      /**
-       *
-       * @param {{x: number, y: number, z: number} | null} loc
-       * @param {import('@babylonjs/core/Meshes/mesh').Mesh} mesh
-       * @returns
-       */
-      commitCallback: commitDoor,
-      modelName: selectedModel,
-      extraHtml: '<p>Left Mouse: Rotate and [Shift] Scale</p>',
-      });
-      return;
-    }
     controller.pickRaycastForLoc(commitDoor);
   }, [
     createDoorApi,
     doRandom,
     loadDoors,
+    mutationPending,
     openAlert,
     rotateClamp,
     scaleClamp,
@@ -390,7 +496,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
               fullWidth
               variant={'outlined'}
               sx={{ margin: '5px auto' }}
-              disabled={!selectedMesh || !canTransformDoors}
+              disabled={!selectedMesh || !canTransformDoors || mutationPending}
               onClick={editMesh}
             >
               <Typography
@@ -409,7 +515,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
               fullWidth
               variant={'outlined'}
               sx={{ margin: '5px auto' }}
-              disabled={!selectedMesh}
+              disabled={!selectedMesh || mutationPending}
               onClick={deleteMesh}
             >
               <Typography
@@ -435,10 +541,11 @@ export const DoorsDrawer = ({ selectedObject }) => {
             </Stack>
             <Stack direction="row">
               <TextField
-                disabled={!selectedMesh?.dataReference}
+                disabled={!selectedMesh?.dataReference || mutationPending}
                 size="small"
                 type="number"
                 inputProps={{
+                  'aria-label': 'Door X',
                   style: { textAlign: 'center' },
                 }}
                 sx={{ margin: 0, padding: 0 }}
@@ -449,13 +556,14 @@ export const DoorsDrawer = ({ selectedObject }) => {
                   forceRender({});
                 }}
                 onBlur={saveFieldEdit}
-                onKeyDown={(e) => e.key === 'Enter' && saveFieldEdit()}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
               ></TextField>
               <TextField
-                disabled={!selectedMesh?.dataReference}
+                disabled={!selectedMesh?.dataReference || mutationPending}
                 size="small"
                 type="number"
                 inputProps={{
+                  'aria-label': 'Door Y',
                   style: { textAlign: 'center' },
                 }}
                 sx={{ margin: 0, padding: 0 }}
@@ -466,13 +574,14 @@ export const DoorsDrawer = ({ selectedObject }) => {
                   forceRender({});
                 }}
                 onBlur={saveFieldEdit}
-                onKeyDown={(e) => e.key === 'Enter' && saveFieldEdit()}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
               ></TextField>
               <TextField
-                disabled={!selectedMesh?.dataReference}
+                disabled={!selectedMesh?.dataReference || mutationPending}
                 size="small"
                 type="number"
                 inputProps={{
+                  'aria-label': 'Door Z',
                   style: { textAlign: 'center' },
                 }}
                 sx={{ margin: 0, padding: 0 }}
@@ -483,8 +592,65 @@ export const DoorsDrawer = ({ selectedObject }) => {
                   forceRender({});
                 }}
                 onBlur={saveFieldEdit}
-                onKeyDown={(e) => e.key === 'Enter' && saveFieldEdit()}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
               ></TextField>
+            </Stack>
+            <Stack direction="row" sx={{ marginTop: '8px', gap: '8px' }}>
+              <TextField
+                fullWidth
+                disabled={!selectedMesh?.dataReference || mutationPending}
+                size="small"
+                type="number"
+                label="Heading (0-512)"
+                inputProps={{
+                  'aria-label': 'Door Heading',
+                  min         : 0,
+                  max         : 512,
+                  step        : 1,
+                }}
+                value={selectedMesh?.dataReference?.heading ?? ''}
+                onChange={(event) => {
+                  const heading = Number(event.target.value);
+                  selectedMesh.dataReference.heading = heading;
+                  selectedMesh.dataReference.rotateY = eqHeadingToDegrees(heading);
+                  selectedMesh.rotation.y = Tools.ToRadians(
+                    selectedMesh.dataReference.rotateY
+                  );
+                  forceRender({});
+                }}
+                onBlur={saveFieldEdit}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              <TextField
+                fullWidth
+                disabled={!selectedMesh?.dataReference || mutationPending}
+                size="small"
+                type="number"
+                label="Size (%)"
+                inputProps={{
+                  'aria-label': 'Door Size',
+                  min         : 1,
+                  step        : 1,
+                }}
+                value={selectedMesh?.dataReference?.size ?? ''}
+                onChange={(event) => {
+                  const size = Math.max(1, Number(event.target.value));
+                  selectedMesh.dataReference.size = size;
+                  selectedMesh.dataReference.scale = size / 100;
+                  selectedMesh.scaling.setAll(selectedMesh.dataReference.scale);
+                  forceRender({});
+                }}
+                onBlur={saveFieldEdit}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
             </Stack>
           </>
         </Stack>
@@ -566,7 +732,7 @@ export const DoorsDrawer = ({ selectedObject }) => {
           fullWidth
           variant={'outlined'}
           sx={{ margin: '5px auto' }}
-          disabled={!selectedModel}
+          disabled={!selectedModel || mutationPending}
           onClick={stamp}
         >
           <Typography

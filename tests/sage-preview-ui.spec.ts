@@ -290,6 +290,41 @@ const readSpawnSceneState = (page: Page, spawnId: number) =>
     }
   }, spawnId)
 
+const readDoorSceneState = (page: Page, doorId?: number) =>
+  page.evaluate((id) => {
+    const controller = (window as any).gameController?.ZoneController
+    const meshes = (controller?.doorNode?.getChildren?.() ?? [])
+      .filter((mesh: any) => mesh?.dataReference)
+    const mesh = id === undefined
+      ? null
+      : meshes.find((candidate: any) =>
+        Number(candidate.dataReference?.id) === Number(id)
+      )
+    return {
+      exists  : id === undefined ? undefined : Boolean(mesh && !mesh.isDisposed?.()),
+      ids     : meshes.map((candidate: any) => candidate.dataReference?.id),
+      position: mesh
+        ? { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z }
+        : null,
+      reference: mesh
+        ? {
+          heading: mesh.dataReference.heading,
+          id     : mesh.dataReference.id,
+          pos_x  : mesh.dataReference.pos_x,
+          pos_y  : mesh.dataReference.pos_y,
+          pos_z  : mesh.dataReference.pos_z,
+          size   : mesh.dataReference.size,
+        }
+        : null,
+      rotationYDegrees: mesh
+        ? Math.round(mesh.rotation.y * (180 / Math.PI) * 1_000_000) / 1_000_000
+        : null,
+      scale           : mesh?.scaling?.y ?? null,
+      sceneDoorCount  : meshes.length,
+      stats           : (window as any).__spireSageDoorStats ?? null,
+    }
+  }, doorId)
+
 test.describe('Sage preview UI', () => {
   test.beforeAll(async () => {
     const preview = createPreviewServer()
@@ -786,6 +821,229 @@ test.describe('Sage preview UI', () => {
     expect(alertMetrics.width).toBeLessThanOrEqual(600)
     expect(alertMetrics.outsideBlocked).toBe(false)
     await expect(alert).not.toBeVisible({ timeout: 5000 })
+  })
+
+  test('validates the complete door editor lifecycle across API and scene state', async ({ page }) => {
+    test.setTimeout(420000)
+    const eqRoot = process.env.SPIRE_SAGE_EQ_DIR || 'C:/EQEmuCW-Live'
+    test.skip(
+      !fs.existsSync(path.join(eqRoot, 'eqsage', 'zones', 'befallen.glb')),
+      'requires local Sage generated zone assets'
+    )
+
+    const enterBefallen = async () => {
+      await expect(page.getByRole('dialog', { name: 'EQ Sage: Zone Editor' })).toBeVisible()
+      await page.locator('[role="combobox"][aria-label="Expansion Filter"]').click()
+      await page.getByRole('option', { name: 'Original' }).click()
+      await page.keyboard.press('Escape')
+      await page.locator('[role="combobox"][aria-label="Zone"]').click()
+      await page.getByRole('option', { name: 'Befallen - befallen' }).click()
+      await page.getByRole('button', { name: 'Enter Zone Editor' }).click()
+      await waitForRealZoneReadiness(page)
+    }
+    const fetchDoors = async () => {
+      const response = await page.request.get(
+        `${previewBaseUrl}/api/v1/doors?where=zone__befallen.version__0&orderBy=doorid`
+      )
+      expect(response.ok()).toBeTruthy()
+      return response.json()
+    }
+    const selectDoorFromScene = (doorId: number) => page.evaluate((id) => {
+      const controller = (window as any).gameController?.ZoneController
+      const mesh = (controller?.doorNode?.getChildren?.() ?? []).find(
+        (candidate: any) => Number(candidate?.dataReference?.id) === Number(id)
+      )
+      if (!mesh) {
+        throw new Error(`No scene door found for ${id}`)
+      }
+      controller.onClick({
+        type    : 1,
+        pickInfo: { hit: true, pickedMesh: mesh },
+      })
+    }, doorId)
+    const updateDoorField = async (locator: Locator, value: string, doorId: number) => {
+      const response = page.waitForResponse(candidate =>
+        candidate.url().endsWith(`/api/v1/door/${doorId}`) &&
+        candidate.request().method() === 'PATCH' &&
+        candidate.status() === 200
+      )
+      await locator.fill(value)
+      await locator.press('Tab')
+      await response
+    }
+
+    await page.goto(
+      `${previewBaseUrl}/sage?sageEqDir=${encodeURIComponent(eqRoot)}&sageCacheBust=door-lifecycle-test`,
+      { waitUntil: 'load' }
+    )
+    await enterBefallen()
+    page.setDefaultTimeout(20_000)
+
+    const initialDoors = await fetchDoors()
+    expect(initialDoors).toHaveLength(1)
+    await expect.poll(() => readDoorSceneState(page)).toMatchObject({
+      sceneDoorCount: 1,
+      stats: {
+        loaded          : 1,
+        missingVisualCount: 0,
+        pass            : true,
+        requested       : 1,
+        sceneDoorCount  : 1,
+        staleVisualCount: 0,
+      },
+    })
+
+    await page.getByText('Doors', { exact: true }).click()
+    const doorSelector = page.getByRole('combobox', { name: 'Select Door' })
+    await doorSelector.click()
+    const doorOptions = page.getByRole('option')
+    expect(await doorOptions.count()).toBeGreaterThan(0)
+    await doorOptions.first().click()
+    const addDoorButton = page.getByRole('button', { name: /Add Door \[/ })
+    await expect(addDoorButton).toBeEnabled()
+
+    await page.evaluate(() => {
+      const controller = (window as any).gameController.ZoneController
+      controller.pickRaycastForLoc = (callback: (location: object) => void) => {
+        callback({ x: 11, y: 12, z: 13 })
+      }
+    })
+    const createResponse = page.waitForResponse(response =>
+      response.url().endsWith('/api/v1/door') &&
+      response.request().method() === 'PUT' &&
+      response.status() === 200
+    )
+    await addDoorButton.click()
+    const createdDoor = await (await createResponse).json()
+    expect(createdDoor).toMatchObject({
+      pos_x: 13,
+      pos_y: 11,
+      pos_z: 12,
+      zone : 'befallen',
+    })
+    await expect.poll(() => readDoorSceneState(page, createdDoor.id)).toMatchObject({
+      exists  : true,
+      position: { x: 11, y: 12, z: 13 },
+      stats   : {
+        loaded          : 2,
+        missingVisualCount: 0,
+        pass            : true,
+        requested       : 2,
+        sceneDoorCount  : 2,
+        staleVisualCount: 0,
+      },
+    })
+
+    await selectDoorFromScene(initialDoors[0].id)
+    await expect(page.getByRole('spinbutton', { name: 'Door X' })).toHaveValue(
+      String(initialDoors[0].pos_x)
+    )
+    await selectDoorFromScene(createdDoor.id)
+    const doorX = page.getByRole('spinbutton', { name: 'Door X' })
+    const doorY = page.getByRole('spinbutton', { name: 'Door Y' })
+    const doorZ = page.getByRole('spinbutton', { name: 'Door Z' })
+    const doorHeading = page.getByRole('spinbutton', { name: 'Door Heading' })
+    const doorSize = page.getByRole('spinbutton', { name: 'Door Size' })
+    await expect(doorX).toHaveValue('13')
+    await expect(doorY).toHaveValue('11')
+    await expect(doorZ).toHaveValue('12')
+
+    await updateDoorField(doorX, '25', createdDoor.id)
+    await updateDoorField(doorY, '35', createdDoor.id)
+    await updateDoorField(doorZ, '45', createdDoor.id)
+    await updateDoorField(doorHeading, '128', createdDoor.id)
+    await updateDoorField(doorSize, '125', createdDoor.id)
+    await expect.poll(async () => {
+      const doors = await fetchDoors()
+      return doors.find((door: any) => door.id === createdDoor.id)
+    }).toMatchObject({
+      heading: 128,
+      pos_x  : 25,
+      pos_y  : 35,
+      pos_z  : 45,
+      size   : 125,
+    })
+    await expect.poll(() => readDoorSceneState(page, createdDoor.id)).toMatchObject({
+      position        : { x: 35, y: 45, z: 25 },
+      rotationYDegrees: 270,
+      scale           : 1.25,
+      stats           : { pass: true, transformMismatchCount: 0 },
+    })
+
+    const transformResponse = page.waitForResponse(response =>
+      response.url().endsWith(`/api/v1/door/${createdDoor.id}`) &&
+      response.request().method() === 'PATCH' &&
+      response.status() === 200
+    )
+    await page.getByRole('button', { name: /Move\/Rotate\/Scale/ }).click()
+    await expect(page.locator('.raycast-tooltip')).toBeVisible()
+    await page.evaluate((id) => {
+      const controller = (window as any).gameController.ZoneController
+      const mesh = controller.doorNode.getChildren().find(
+        (candidate: any) => Number(candidate?.dataReference?.id) === Number(id)
+      )
+      mesh.position.set(40, 50, 30)
+      mesh.rotation.y = Math.PI * 1.5
+      mesh.scaling.setAll(1.5)
+    }, createdDoor.id)
+    await page.keyboard.press('t')
+    expect(await (await transformResponse).json()).toMatchObject({
+      heading: 128,
+      pos_x  : 30,
+      pos_y  : 40,
+      pos_z  : 50,
+      size   : 150,
+    })
+    await expect.poll(() => readDoorSceneState(page, createdDoor.id)).toMatchObject({
+      position: { x: 40, y: 50, z: 30 },
+      scale   : 1.5,
+      stats   : { pass: true },
+    })
+
+    await page.getByRole('button', { name: /Move\/Rotate\/Scale/ }).click()
+    await page.evaluate((id) => {
+      const controller = (window as any).gameController.ZoneController
+      const mesh = controller.doorNode.getChildren().find(
+        (candidate: any) => Number(candidate?.dataReference?.id) === Number(id)
+      )
+      mesh.position.set(400, 500, 300)
+      mesh.rotation.y = 0
+      mesh.scaling.setAll(3)
+    }, createdDoor.id)
+    await page.keyboard.press('Escape')
+    await expect.poll(() => readDoorSceneState(page, createdDoor.id)).toMatchObject({
+      position        : { x: 40, y: 50, z: 30 },
+      rotationYDegrees: 270,
+      scale           : 1.5,
+    })
+
+    const deleteResponse = page.waitForResponse(response =>
+      response.url().endsWith(`/api/v1/door/${createdDoor.id}`) &&
+      response.request().method() === 'DELETE' &&
+      response.status() === 200
+    )
+    await page.getByRole('button', { name: /Remove Door/ }).click()
+    await deleteResponse
+    await expect.poll(() => readDoorSceneState(page, createdDoor.id)).toMatchObject({
+      exists        : false,
+      sceneDoorCount: 1,
+      stats         : {
+        loaded          : 1,
+        missingVisualCount: 0,
+        pass            : true,
+        requested       : 1,
+        staleVisualCount: 0,
+      },
+    })
+    expect(await fetchDoors()).toHaveLength(1)
+
+    await page.reload({ waitUntil: 'load' })
+    await enterBefallen()
+    await expect.poll(() => readDoorSceneState(page, createdDoor.id)).toMatchObject({
+      exists        : false,
+      sceneDoorCount: 1,
+      stats         : { pass: true, requested: 1, sceneDoorCount: 1 },
+    })
   })
 
   test('cancels stale spawn work during rapid zone reloads', async ({ page }) => {

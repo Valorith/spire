@@ -202,6 +202,9 @@ class ZoneController extends GameControllerChild {
   pointerObserver = null;
   renderObserver = null;
   loadGeneration = 0;
+  activeMeshEditCleanup = null;
+  activeRaycastCleanup = null;
+  pickingRaycast = false;
 
   loadCallbacks = [];
   clickCallbacks = [];
@@ -234,6 +237,11 @@ class ZoneController extends GameControllerChild {
     this.zoneLoaded = false;
   };
   dispose() {
+    this.activeMeshEditCleanup?.(false);
+    this.activeMeshEditCleanup = null;
+    this.activeRaycastCleanup?.(null);
+    this.activeRaycastCleanup = null;
+    this.pickingRaycast = false;
     this.SpawnController.dispose();
     if (this.scene) {
       if (this.pointerObserver) {
@@ -439,18 +447,31 @@ class ZoneController extends GameControllerChild {
    */
   onClick = (pointerInfo) => {
     switch (pointerInfo.type) {
-      case PointerEventTypes.POINTERDOWN:
-        const spawn = pointerInfo.pickInfo.pickedMesh?.metadata?.spawn;
+      case PointerEventTypes.POINTERDOWN: {
+        const pickedMesh = pointerInfo.pickInfo.pickedMesh;
+        let doorMesh = pickedMesh;
+        while (doorMesh?.parent && doorMesh.parent !== this.doorNode) {
+          doorMesh = doorMesh.parent;
+        }
+        if (
+          pointerInfo.pickInfo.hit &&
+          doorMesh?.parent === this.doorNode &&
+          doorMesh?.dataReference
+        ) {
+          this.clickCallbacks.forEach((callback) => callback(doorMesh));
+          break;
+        }
+
+        const spawn = pickedMesh?.metadata?.spawn;
         if (
           pointerInfo.pickInfo.hit &&
           spawn &&
           typeof spawn === 'object'
         ) {
-          this.clickCallbacks.forEach((c) =>
-            c(spawn)
-          );
+          this.clickCallbacks.forEach((callback) => callback(spawn));
         }
         break;
+      }
       default:
         break;
     }
@@ -484,13 +505,136 @@ class ZoneController extends GameControllerChild {
     }
   }
 
+  /**
+   * Move, rotate, and scale a mesh against the active zone geometry.
+   * @param {Mesh} mesh
+   * @param {(commit: boolean) => void | Promise<void>} callback
+   */
+  editMesh(mesh, callback) {
+    if (!mesh || !this.scene || !this.canvas) {
+      return;
+    }
+    this.activeRaycastCleanup?.(null);
+    this.activeMeshEditCleanup?.(false);
+    this.pickingRaycast = true;
+
+    const originalPosition = mesh.position.clone();
+    const originalScale = mesh.scaling.clone();
+    const originalRotation = mesh.rotation.clone();
+    const originalPickable = mesh.isPickable;
+    const mouseInput = this.CameraController.camera?.inputs?.attached?.mouse;
+    const cameraButtons = [...(mouseInput?.buttons ?? [0, 1, 2])];
+    const pointLight = new PointLight(
+      'door-edit-light',
+      new Vector3(0, 10, 0),
+      this.scene
+    );
+    pointLight.intensity = 500;
+    pointLight.range = 300;
+    pointLight.radius = 50;
+    pointLight.diffuse = new Color3(1, 1, 1);
+    pointLight.position = mesh.position;
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'raycast-tooltip';
+    tooltip.innerHTML = '<p>[T] Commit - [ESC] Cancel</p><p>Left Mouse: Rotate and [Shift] Scale</p>';
+    document.body.appendChild(tooltip);
+
+    let lastX = null;
+    let lastY = null;
+    let finished = false;
+    mesh.isPickable = false;
+    if (mouseInput) {
+      mouseInput.buttons = [2];
+    }
+
+    const mouseMove = (event) => {
+      if (event.buttons === 1) {
+        let diffX = 0;
+        let diffY = 0;
+        if (lastX !== null && lastY !== null) {
+          diffX = event.clientX - lastX;
+          diffY = event.clientY - lastY;
+        }
+        if (event.shiftKey) {
+          mesh.scaling.setAll(Math.max(0.01, mesh.scaling.y - diffY / 50));
+        } else {
+          mesh.rotation.y += Tools.ToRadians(diffX);
+        }
+        lastX = event.clientX;
+        lastY = event.clientY;
+        event.stopPropagation();
+        event.preventDefault();
+        return;
+      }
+      lastX = null;
+      lastY = null;
+
+      const pickResult = this.scene.pick(
+        this.scene.pointerX,
+        this.scene.pointerY,
+        (candidate) => candidate !== mesh && candidate.isPickable,
+        false,
+        this.CameraController.camera
+      );
+      if (!pickResult.hit || !pickResult.pickedPoint) {
+        return;
+      }
+      const hitPoint = pickResult.pickedPoint;
+      mesh.position.copyFrom(hitPoint);
+      tooltip.style.left = `${event.pageX - tooltip.clientWidth / 2}px`;
+      tooltip.style.top = `${event.pageY + tooltip.clientHeight / 2}px`;
+      tooltip.innerHTML = `<p>[T] Commit - [ESC] Cancel</p>
+        <p>X: ${hitPoint.z.toFixed(2)}, Y: ${hitPoint.x.toFixed(2)}, Z: ${hitPoint.y.toFixed(2)}</p>
+        <p>Left Mouse: Rotate and [Shift] Scale</p>`;
+    };
+
+    const finish = async (commit) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      window.removeEventListener('keydown', keyHandler);
+      this.canvas.removeEventListener('mousemove', mouseMove);
+      if (mouseInput) {
+        mouseInput.buttons = cameraButtons;
+      }
+      mesh.isPickable = originalPickable;
+      if (!commit) {
+        mesh.position.copyFrom(originalPosition);
+        mesh.rotation.copyFrom(originalRotation);
+        mesh.scaling.copyFrom(originalScale);
+      }
+      pointLight.dispose();
+      tooltip.remove();
+      this.activeMeshEditCleanup = null;
+      this.pickingRaycast = false;
+      await callback?.(commit);
+    };
+    const keyHandler = (event) => {
+      if (event.key === 'Escape') {
+        finish(false);
+      } else if (event.key?.toLowerCase() === 't') {
+        finish(true);
+      }
+    };
+
+    this.activeMeshEditCleanup = finish;
+    window.addEventListener('keydown', keyHandler);
+    this.canvas.addEventListener('mousemove', mouseMove);
+  }
+
   pickRaycastForLoc(callback) {
     const zoneMesh = this.scene.getMeshByName('zone');
     if (!zoneMesh) {
       return;
     }
 
+    this.activeMeshEditCleanup?.(false);
+    this.activeRaycastCleanup?.(null);
+    const originalZonePickable = zoneMesh.isPickable;
     zoneMesh.isPickable = true;
+    this.pickingRaycast = true;
 
     // Create node for moving
     const raycastMesh = MeshBuilder.CreateSphere(
@@ -553,17 +697,23 @@ class ZoneController extends GameControllerChild {
         )}, Y: ${hitPoint.x.toFixed(2)}, Z: ${hitPoint.y.toFixed(2)}</p>`;
       }
     };
-    const self = this;
-    function finish(loc) {
+    let finished = false;
+    const finish = (loc) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
       window.removeEventListener('keydown', keyHandler);
-      self.canvas.removeEventListener('mousemove', mouseMove);
-      zoneMesh.isPickable = false;
+      this.canvas.removeEventListener('mousemove', mouseMove);
+      zoneMesh.isPickable = originalZonePickable;
       raycastMesh.dispose();
       pointLight.dispose();
-      document.body.removeChild(tooltip);
+      tooltip.remove();
+      this.activeRaycastCleanup = null;
+      this.pickingRaycast = false;
       callback(loc);
-    }
-    function keyHandler(e) {
+    };
+    const keyHandler = (e) => {
       if (e.key === 'Escape') {
         finish(null);
       }
@@ -571,7 +721,8 @@ class ZoneController extends GameControllerChild {
       if (e.key?.toLowerCase() === 't') {
         finish(chosenLocation);
       }
-    }
+    };
+    this.activeRaycastCleanup = finish;
     window.addEventListener('keydown', keyHandler);
     this.canvas.addEventListener('mousemove', mouseMove);
   }
@@ -601,6 +752,24 @@ class ZoneController extends GameControllerChild {
     if (value) {
     } else {
     }
+  }
+
+  assignGlow(mesh) {
+    if (!mesh || !this.glowLayer?.addIncludedOnlyMesh) {
+      return;
+    }
+    [mesh, ...(mesh.getChildMeshes?.(false) ?? [])].forEach((candidate) =>
+      this.glowLayer.addIncludedOnlyMesh(candidate)
+    );
+  }
+
+  unassignGlow(mesh) {
+    if (!mesh || !this.glowLayer?.removeIncludedOnlyMesh) {
+      return;
+    }
+    [mesh, ...(mesh.getChildMeshes?.(false) ?? [])].forEach((candidate) =>
+      this.glowLayer.removeIncludedOnlyMesh(candidate)
+    );
   }
 
   mergeMeshesWithMaterials = (meshes, scene) => {

@@ -1,11 +1,22 @@
-import BABYLON from '@bjs';
 import { getEQDir, getEQFile, getFiles } from 'sage-core/util/fileHandler';
+import {
+  getRenderableDoors,
+  isInvisibleDoor,
+  normalizeZoneVersion,
+  toDoorPlacement,
+} from './door-placement';
 
-const { Tools } = BABYLON;
-const EQ_HEADING_UNITS = 512;
-const DEGREES_PER_EQ_HEADING_UNIT = 360 / EQ_HEADING_UNITS;
-const DOOR_VISUAL_HEADING_OFFSET_DEGREES = 180;
-const INVISIBLE_DOOR_OPEN_TYPES = new Set([50, 53, 54]);
+export {
+  degreesToEqHeading,
+  eqHeadingToDegrees,
+  getRenderableDoors,
+  isInvisibleDoor,
+  normalizeZoneVersion,
+  stripDoorEditorFields,
+  toDoorPayload,
+  toDoorPlacement,
+} from './door-placement';
+
 const DOOR_MODEL_ALIASES = {
   chair2d      : 'chair2',
   gchair2      : 'chair2',
@@ -14,85 +25,6 @@ const DOOR_MODEL_ALIASES = {
 
 let doorModelCatalogPromise = null;
 const doorLoadStateByController = new WeakMap();
-
-export const normalizeZoneVersion = (zone) => {
-  const version = Number(zone?.version ?? 0);
-  return Number.isFinite(version) ? version : 0;
-};
-
-export const eqHeadingToDegrees = (heading = 0) => {
-  const value = Number(heading);
-  if (!Number.isFinite(value)) {
-    return DOOR_VISUAL_HEADING_OFFSET_DEGREES;
-  }
-
-  return value * DEGREES_PER_EQ_HEADING_UNIT + DOOR_VISUAL_HEADING_OFFSET_DEGREES;
-};
-
-export const degreesToEqHeading = (degrees = 0) => {
-  const value = Number(degrees);
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  const dbDegrees = value - DOOR_VISUAL_HEADING_OFFSET_DEGREES;
-  const normalizedDegrees = ((dbDegrees % 360) + 360) % 360;
-  return normalizedDegrees / DEGREES_PER_EQ_HEADING_UNIT;
-};
-
-export const toDoorPlacement = (door) => ({
-  ...door,
-  rotateX: 0,
-  rotateY: eqHeadingToDegrees(door.heading ?? 0),
-  rotateZ: 0,
-  scale  : (door.size ?? 100) / 100,
-  x      : door.pos_y ?? 0,
-  y      : door.pos_z ?? 0,
-  z      : door.pos_x ?? 0,
-});
-
-export const isInvisibleDoor = (door) =>
-  INVISIBLE_DOOR_OPEN_TYPES.has(Number(door?.opentype));
-
-export const getRenderableDoors = (doors = []) =>
-  doors.filter((door) => !isInvisibleDoor(door));
-
-export const toDoorPayload = (doorEntry, zone, mesh = null) => {
-  const position = mesh?.position;
-  const rotation = mesh?.rotation;
-  const scaling = mesh?.scaling;
-
-  return {
-    ...doorEntry,
-    heading: degreesToEqHeading(
-      doorEntry.rotateY ?? Tools.ToDegrees(rotation?.y ?? 0)
-    ),
-    name   : doorEntry.name,
-    pos_x  : Math.round(position?.z ?? doorEntry.z ?? doorEntry.pos_x ?? 0),
-    pos_y  : Math.round(position?.x ?? doorEntry.x ?? doorEntry.pos_y ?? 0),
-    pos_z  : Math.round(position?.y ?? doorEntry.y ?? doorEntry.pos_z ?? 0),
-    size   : Math.max(
-      1,
-      Math.round(((doorEntry.scale ?? scaling?.y) ?? 1) * 100)
-    ),
-    version: normalizeZoneVersion(zone ?? doorEntry),
-    zone   : zone?.short_name ?? doorEntry.zone,
-  };
-};
-
-export const stripDoorEditorFields = (doorEntry) => {
-  const payload = { ...doorEntry };
-  delete payload.rotateX;
-  delete payload.rotateY;
-  delete payload.rotateZ;
-  delete payload.scale;
-  delete payload.x;
-  delete payload.y;
-  delete payload.z;
-  delete payload.dataContainerReference;
-  delete payload.dataReference;
-  return payload;
-};
 
 export const loadDoorModelCatalog = async () => {
   if (!doorModelCatalogPromise) {
@@ -151,6 +83,109 @@ export const fetchDoorsForZone = async (Spire, selectedZone) => {
 
   const { data: doors } = await doorsApi.listDoors(queryBuilder.get());
   return Array.isArray(doors) ? doors : [];
+};
+
+const angularDistance = (left, right) =>
+  Math.abs(Math.atan2(Math.sin(left - right), Math.cos(left - right)));
+
+export const collectDoorLifecycleStats = ({
+  controller,
+  result,
+  zoneKey,
+} = {}) => {
+  const doors = Array.isArray(result?.doors) ? result.doors : [];
+  const renderableDoors = Array.isArray(result?.renderableDoors)
+    ? result.renderableDoors
+    : getRenderableDoors(doors);
+  const doorMeshes = (controller?.doorNode?.getChildren?.() ?? [])
+    .filter((node) => node?.dataReference);
+  const expectedById = new Map(
+    renderableDoors.map((door) => [Number(door.id), toDoorPlacement(door)])
+  );
+  const meshIds = doorMeshes.map((mesh) => Number(mesh.dataReference?.id));
+  const meshIdSet = new Set(meshIds);
+  let nonFinitePlacementCount = 0;
+  let positionMismatchCount = 0;
+  let transformMismatchCount = 0;
+
+  for (const mesh of doorMeshes) {
+    const expected = expectedById.get(Number(mesh.dataReference?.id));
+    const actual = [
+      mesh.position?.x,
+      mesh.position?.y,
+      mesh.position?.z,
+      mesh.rotation?.y,
+      mesh.scaling?.x,
+      mesh.scaling?.y,
+      mesh.scaling?.z,
+    ].map(Number);
+    if (!actual.every(Number.isFinite)) {
+      nonFinitePlacementCount++;
+      continue;
+    }
+    if (!expected) {
+      continue;
+    }
+    if (
+      Math.abs(actual[0] - Number(expected.x)) > 0.001 ||
+      Math.abs(actual[1] - Number(expected.y)) > 0.001 ||
+      Math.abs(actual[2] - Number(expected.z)) > 0.001
+    ) {
+      positionMismatchCount++;
+    }
+    const expectedRotationY = Number(expected.rotateY) * (Math.PI / 180);
+    if (
+      angularDistance(actual[3], expectedRotationY) > 0.001 ||
+      actual.slice(4).some((scale) =>
+        Math.abs(scale - Number(expected.scale)) > 0.001
+      )
+    ) {
+      transformMismatchCount++;
+    }
+  }
+
+  const missingVisualCount = renderableDoors.filter(
+    (door) => !meshIdSet.has(Number(door.id))
+  ).length;
+  const staleVisualCount = meshIds.filter((id) => !expectedById.has(id)).length;
+  const duplicateVisualIdCount = meshIds.length - meshIdSet.size;
+  const missingModels = Array.isArray(result?.missingModels)
+    ? result.missingModels
+    : [];
+  const stats = {
+    duplicateVisualIdCount,
+    hidden            : doors.length - renderableDoors.length,
+    loaded            : Number(result?.loadedMeshes ?? doorMeshes.length),
+    missingModelCount : missingModels.length,
+    missingModels,
+    missingVisualCount,
+    nonFinitePlacementCount,
+    pass:
+      Number(result?.loadedMeshes ?? doorMeshes.length) === renderableDoors.length &&
+      doorMeshes.length === renderableDoors.length &&
+      missingModels.length === 0 &&
+      missingVisualCount === 0 &&
+      staleVisualCount === 0 &&
+      duplicateVisualIdCount === 0 &&
+      nonFinitePlacementCount === 0 &&
+      positionMismatchCount === 0 &&
+      transformMismatchCount === 0,
+    positionMismatchCount,
+    requested         : doors.length,
+    sceneDoorCount    : doorMeshes.length,
+    staleVisualCount,
+    transformMismatchCount,
+    visibleRequested  : renderableDoors.length,
+    zoneKey,
+  };
+
+  if (typeof window !== 'undefined') {
+    window.__spireSageDoorStats = stats;
+    window.dispatchEvent(
+      new CustomEvent('spire-sage-door-stats', { detail: stats })
+    );
+  }
+  return stats;
 };
 
 export const loadDoorsForZone = async ({
@@ -302,7 +337,15 @@ export const loadDoorsForZone = async ({
   }
 
   try {
-    return await loadPromise;
+    const result = await loadPromise;
+    if (!result.cancelled) {
+      result.lifecycle = collectDoorLifecycleStats({
+        controller,
+        result,
+        zoneKey,
+      });
+    }
+    return result;
   } catch (error) {
     if (
       controller &&

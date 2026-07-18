@@ -68,6 +68,15 @@ import {
   PREVIEW_CLIENT_FALLBACKS,
 } from '../../../frontend/eqsage-embed/src/viewer/common/raceModelResolution.js';
 import {
+  degreesToEqHeading,
+  eqHeadingToDegrees,
+  getRenderableDoors,
+  isInvisibleDoor,
+  stripDoorEditorFields,
+  toDoorPayload,
+  toDoorPlacement,
+} from '../../../frontend/eqsage-embed/src/components/spire/door-placement.js';
+import {
   applyTextureAnimationFrame,
   getMaterialBaseColorTexture,
   isTextureAnimationFrameReady,
@@ -1165,6 +1174,71 @@ test('zone aggregation reconciles NPCs, textures, doors, and observed models', (
   assert.equal(result.animationGroupCount, 2);
   assert.equal(result.playingAnimationGroupCount, 2);
   assert.equal(result.excessAnimationGroupCount, 0);
+});
+
+test('door heading conversion preserves EQ orientation across a full turn', () => {
+  for (const heading of [0, 64, 128, 256, 384, 511]) {
+    const degrees = eqHeadingToDegrees(heading);
+    const roundTrip = degreesToEqHeading(degrees);
+    assert.ok(Math.abs(roundTrip - heading) < 0.000001);
+  }
+  assert.equal(eqHeadingToDegrees(Number.NaN), 180);
+  assert.equal(degreesToEqHeading(Number.NaN), 0);
+});
+
+test('door placement and payload round-trip axes, heading, scale, and editor fields', () => {
+  const source = {
+    id     : 42,
+    heading: 128,
+    name   : 'DOOR1',
+    pos_x  : 30,
+    pos_y  : 40,
+    pos_z  : 50,
+    size   : 125,
+    version: 0,
+    zone   : 'befallen',
+  };
+  const placement = toDoorPlacement(source);
+  assert.deepEqual(
+    {
+      rotateY: placement.rotateY,
+      scale  : placement.scale,
+      x      : placement.x,
+      y      : placement.y,
+      z      : placement.z,
+    },
+    { rotateY: 270, scale: 1.25, x: 40, y: 50, z: 30 }
+  );
+
+  const payload = stripDoorEditorFields(toDoorPayload(placement, {
+    short_name: 'befallen',
+    version   : 0,
+  }));
+  assert.deepEqual(
+    {
+      heading: payload.heading,
+      pos_x  : payload.pos_x,
+      pos_y  : payload.pos_y,
+      pos_z  : payload.pos_z,
+      size   : payload.size,
+    },
+    { heading: 128, pos_x: 30, pos_y: 40, pos_z: 50, size: 125 }
+  );
+  for (const key of ['rotateX', 'rotateY', 'rotateZ', 'scale', 'x', 'y', 'z']) {
+    assert.equal(key in payload, false);
+  }
+});
+
+test('door visibility policy excludes non-renderable teleport and trigger entries', () => {
+  const doors = [
+    { id: 1, opentype: 31 },
+    { id: 2, opentype: 50 },
+    { id: 3, opentype: 53 },
+    { id: 4, opentype: 54 },
+  ];
+  assert.equal(isInvisibleDoor(doors[0]), false);
+  assert.equal(isInvisibleDoor(doors[1]), true);
+  assert.deepEqual(getRenderableDoors(doors).map((door) => door.id), [1]);
 });
 
 test('nameplate placement requires the entire plane to clear the model top', () => {

@@ -50,7 +50,10 @@ export const SpireOverlay = ({ inZone }) => {
 
   useEffect(() => {
     const keyHandler = (e) => {
-      if (e.key === 'Escape') {
+      if (
+        e.key === 'Escape' &&
+        !window.gameController?.ZoneController?.pickingRaycast
+      ) {
         closeDialogs();
       }
     };
