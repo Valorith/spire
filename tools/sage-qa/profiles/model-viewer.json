@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "name": "model-viewer",
+  "description": "Focused QA of the production Sage model-review surface, including deterministic whole-model and face-focused evidence.",
+  "zoneValidation": {
+    "enabled": false,
+    "zones": ["blackburrow"],
+    "cycles": 1
+  },
+  "raceAudit": {
+    "enabled": false,
+    "forceRefresh": false,
+    "bootstrapZone": "blackburrow",
+    "batchSize": 1,
+    "modelSelection": {
+      "mode": "explicit",
+      "models": []
+    }
+  },
+  "staticTextureAudit": {
+    "enabled": false
+  },
+  "visualSamples": [
+    { "model": "hum", "face": 0, "texture": 0, "helmTexture": 0, "view": "front", "invariants": { "requireArmsDown": true } },
+    { "model": "hum", "face": 7, "texture": 0, "helmTexture": 0, "view": "face", "faceFocus": true, "invariants": { "requireArmsDown": true } },
+    { "model": "qcf", "face": 0, "texture": 0, "helmTexture": 0, "view": "back", "invariants": { "requireArmsDown": true } },
+    { "model": "sef", "face": 0, "texture": 0, "helmTexture": 0, "view": "face", "faceFocus": true },
+    { "model": "cpf", "face": 0, "texture": 0, "helmTexture": 0, "view": "face", "faceFocus": true },
+    { "model": "iks", "face": 0, "texture": 0, "helmTexture": 0, "view": "front" },
+    { "model": "iks", "face": 0, "texture": 0, "helmTexture": 0, "view": "face", "faceFocus": true },
+    { "model": "iks", "face": 0, "texture": 0, "helmTexture": 1, "view": "face", "faceFocus": true }
+  ],
+  "visualValidation": {
+    "surface": "model-review",
+    "timeoutMs": 120000,
+    "repetitions": 2,
+    "maximumWhitePixelRatio": 0.18,
+    "requireApprovedBaseline": false
+  },
+  "artifacts": {
+    "screenshotMode": "always",
+    "traceMode": "failures",
+    "keepRuns": 12,
+    "maxTotalMB": 1536
+  }
+}

@@ -22,7 +22,11 @@ import {
   verifyServedEmbedEntry,
   waitForModuleGraphReady,
 } from '../lib/server-readiness.mjs';
-import { buildRaceAuditUrl, buildZoneValidationUrl } from '../lib/urls.mjs';
+import {
+  buildModelReviewUrl,
+  buildRaceAuditUrl,
+  buildZoneValidationUrl,
+} from '../lib/urls.mjs';
 import {
   compareApprovedVisualBaseline,
   comparePreviewEvidence,
@@ -42,7 +46,9 @@ import {
 } from '../../../frontend/eqsage-embed/sage/lib/util/character-texture-orientation.js';
 import {
   evaluateAppearanceVariant,
+  evaluateSemanticHeadOrientation,
   evaluateFaceVariantDeterminism,
+  getSemanticHeadOrientationPolicy,
   inspectHeadTextureOrientation,
   isCharacterAppearanceMaterialName,
   isKnownEffectOnlyCharacterModel,
@@ -275,6 +281,62 @@ test('rear visual samples have distinct deterministic URLs and baseline keys', (
   );
 });
 
+test('model-review visual URLs preserve appearance, view, and face-focus state', () => {
+  const faceUrl = new URL(buildModelReviewUrl({
+    baseUrl: 'http://127.0.0.1:8080',
+    route: '/sage',
+    eqDirectory: 'C:\\EQ',
+    cacheBust: 'model-review-test',
+    sample: {
+      model: 'HUM',
+      face: 7,
+      texture: 16,
+      helmTexture: 2,
+      view: 'face',
+      faceFocus: true,
+    },
+  }));
+  assert.equal(faceUrl.searchParams.get('sageModelReview'), '1');
+  assert.equal(faceUrl.searchParams.get('sageModel'), 'hum');
+  assert.equal(faceUrl.searchParams.get('sageModelFace'), '7');
+  assert.equal(faceUrl.searchParams.get('sageModelTexture'), '16');
+  assert.equal(faceUrl.searchParams.get('sageModelHelm'), '2');
+  assert.equal(faceUrl.searchParams.get('sageModelView'), 'front');
+  assert.equal(faceUrl.searchParams.get('sageModelFaceFocus'), '1');
+  assert.equal(
+    visualBaselineKey({
+      model: 'hum',
+      face: 7,
+      texture: 16,
+      helmTexture: 2,
+      view: 'face',
+      faceFocus: true,
+    }),
+    'hum|face=7|texture=16|helm=2|view=face|face-focus=1'
+  );
+
+  const rearUrl = new URL(buildModelReviewUrl({
+    baseUrl: 'http://127.0.0.1:8080',
+    route: '/sage',
+    eqDirectory: 'C:\\EQ',
+    sample: { model: 'qcf', heading: 180 },
+  }));
+  assert.equal(rearUrl.searchParams.get('sageModelView'), 'back');
+  assert.equal(rearUrl.searchParams.get('sageModelFaceFocus'), '0');
+});
+
+test('model-viewer profile runs visual evidence on the production review surface', async () => {
+  const profile = await loadProfile({
+    repoRoot: process.cwd(),
+    profile: 'model-viewer',
+    args: {},
+  });
+  assert.equal(profile.visualValidation.surface, 'model-review');
+  assert.equal(profile.zoneValidation.enabled, false);
+  assert.equal(profile.raceAudit.enabled, false);
+  assert.ok(profile.visualSamples.some((sample) => sample.faceFocus === true));
+});
+
 test('classic body texture variants resolve to deterministic archive assets', () => {
   assert.equal(getCharacterBodyModelVariation('HUM', 0), 'hum');
   assert.equal(getCharacterBodyModelVariation('hum', 16), 'hum01');
@@ -384,6 +446,32 @@ test('head rotation safety rejects upside-down animation samples', () => {
   assert.ok(result.angleDegrees > 170);
 });
 
+test('semantic head orientation is explicit, model scoped, and fail closed', () => {
+  const policy = getSemanticHeadOrientationPolicy('IKS');
+  assert.deepEqual(policy.upperMaterials, ['ikshe0001', 'ikshe0006']);
+  assert.deepEqual(policy.lowerMaterials, ['ikshe0005']);
+  assert.equal(getSemanticHeadOrientationPolicy('ikm'), null);
+
+  assert.equal(evaluateSemanticHeadOrientation({
+    policy,
+    upperCenterY: 5.97,
+    lowerCenterY: 5.69,
+    modelHeight: 6.2,
+  }).pass, true);
+  assert.equal(evaluateSemanticHeadOrientation({
+    policy,
+    upperCenterY: 5.40,
+    lowerCenterY: 5.70,
+    modelHeight: 6.2,
+  }).pass, false);
+  assert.equal(evaluateSemanticHeadOrientation({
+    policy,
+    upperCenterY: null,
+    lowerCenterY: null,
+    modelHeight: 6.2,
+  }).pass, false);
+});
+
 test('spawn head safety samples deforming head bones, not attachment helpers', async () => {
   const source = await fs.readFile(
     path.resolve('frontend/eqsage-embed/src/viewer/models/BabylonSpawn.js'),
@@ -472,6 +560,22 @@ test('appearance invariant rejects one untextured rendered region', () => {
   }, { requireHeadTexture: true });
   assert.equal(result.invariantPass, false);
   assert.ok(result.invariantViolations.includes('untextured-rendered-material'));
+});
+
+test('visual evidence reports semantic head inversion as a named failure', () => {
+  const result = evaluatePreviewEvidence({
+    available: true,
+    meshCount: 1,
+    vertexCount: 3,
+    runtimeBounds: { width: 1, height: 2, depth: 1 },
+    staticBounds: { width: 1, height: 2, depth: 1 },
+    semanticHeadOrientation: { required: true, measurable: true, pass: false },
+    pixels: { foregroundPixelCount: 1000, whitePixelRatio: 0 },
+  }, {
+    requireAnimationMotion: false,
+    requireFullMaterialCoverage: false,
+  });
+  assert.ok(result.violations.includes('head-geometry-inverted'));
 });
 
 test('classic face invariant requires eight distinct texture signatures', () => {

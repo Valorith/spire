@@ -12,6 +12,7 @@ npm run qa:sage:compact -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:compact -- --eq-dir C:\EQEmuCW-Live --visual-models clf --no-zone-validation --no-race-audit --no-static-texture-audit
 npm run qa:sage:full -- --eq-dir C:\EQEmuCW-Live --race-models hum,huf,ogm --no-zone-validation --no-static-texture-audit
 npm run qa:sage:models -- --eq-dir C:\EQEmuCW-Live
+npm run qa:sage:viewer -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:matrix -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:soak -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:full -- --eq-dir C:\EQEmuCW-Live
@@ -31,6 +32,7 @@ When a memory guard or outer process interrupts a long race inventory, resume th
 - `smoke`: three zones, fourteen high-risk race models (including the Qeynos compact rigs), and five deterministic visual samples.
 - `compact-rigs`: focused Ak'Anon/Qeynos/Great Divide gate for compact skeletons, secondary heads, and collapsed classic parent-bone chains.
 - `model-regression`: focused cross-rig animation, skin, head, and runtime-pose coverage with repeated front/rear evidence for every audited model plus targeted body variants.
+- `model-viewer`: focused, repeated QA against the production Model Review workspace, including whole-model and face-focus evidence.
 - `matrix`: twelve classic and expansion zones, twenty high-risk race models, and five visual samples.
 - `soak`: three zones over three cycles with post-warmup resource plateau checks.
 - `full`: every available mapped race model, three complete zone cycles, and stricter memory headroom.
@@ -73,6 +75,8 @@ Every material check is scoped to submaterials actually referenced by rendered m
 ## Deterministic visual evidence
 
 Visual samples are not accepted from the page's pass flag alone. The runner independently collects runtime mesh/vertex counts, used-material texture coverage, skeleton and bone signatures, finite bone matrices, world bounds, arm vectors, and a normalized 16x16 WebGL pixel signature. Before the screenshot is frozen at its fixed normalized frame, animation-eligible models must produce finite pose changes across four fixed timeline fractions. Native-pose-only compact rigs are explicitly classified as static instead of being mislabeled as animated. `Math.random` is seeded before application code runs, browser locale/timezone/color/reduced-motion settings are fixed, service workers are blocked, and unrelated release traffic is fulfilled locally.
+
+Visual QA can run on either the legacy race-audit preview or the production Model Review workspace through `visualValidation.surface`. The `model-viewer` profile uses the latter and records the exact deep link, selected appearance values, camera view, face-focus state, and viewer framing diagnostics with every sample. Use `--visual-surface model-review` to apply that surface to another profile without changing its coverage list.
 
 Each sample is loaded at least twice in fresh browser contexts. Topology/material/skeleton signatures must match exactly; bounds and pixel signatures must remain within versioned profile tolerances. High-risk humanoid samples also require both forearms below the configured horizontal threshold, and selected profiles cap near-white pixel coverage as a second line of defense against white fallback skins.
 

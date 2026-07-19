@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Color4 } from '@babylonjs/core/Maths/math.color';
+import { Viewport } from '@babylonjs/core/Maths/math.viewport';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
@@ -27,25 +28,35 @@ const VIEW_OPTIONS = [
   { id: 'front', label: 'Front', key: '1' },
   { id: 'side', label: 'Side', key: '2' },
   { id: 'back', label: 'Rear', key: '3' },
-  { id: 'head', label: 'Head', key: '4' },
 ];
 
 const getInitialParams = () => {
   const params = new URLSearchParams(window.location.search);
+  const requestedView = params.get('sageModelView');
+  const legacyHeadView = requestedView === 'head';
+  const validationModel = `${
+    params.get('sageValidateModels') ??
+    params.get('sageValidationModels') ??
+    ''
+  }`.split(',')[0].trim().toLowerCase();
   const number = (name, fallback = 0) => {
     const parsed = Number(params.get(name));
     return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : fallback;
   };
   return {
-    model: `${params.get('sageModel') ?? ''}`.trim().toLowerCase(),
+    model: `${params.get('sageModel') ?? validationModel}`.trim().toLowerCase(),
     face: number('sageModelFace'),
     texture: number('sageModelTexture'),
     helmTexture: number('sageModelHelm'),
-    view: VIEW_OPTIONS.some((option) => option.id === params.get('sageModelView'))
-      ? params.get('sageModelView')
+    faceFocus: params.get('sageModelFaceFocus') === '1' || legacyHeadView,
+    view: VIEW_OPTIONS.some((option) => option.id === requestedView)
+      ? requestedView
       : 'front',
   };
 };
+
+const getSelectionKey = ({ model, face, texture, helmTexture }) =>
+  [model, face, texture, helmTexture].join(':');
 
 const readStoredReviews = () => {
   try {
@@ -93,6 +104,10 @@ export const ModelReviewWorkspace = () => {
   const runtimeRef = useRef(null);
   const previewRef = useRef(null);
   const loadTokenRef = useRef(0);
+  const framingRef = useRef(null);
+  const animationFramingRef = useRef(null);
+  const viewRef = useRef(initial.view);
+  const faceFocusRef = useRef(initial.faceFocus);
 
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [runtimeStage, setRuntimeStage] = useState('Preparing model renderer');
@@ -106,7 +121,9 @@ export const ModelReviewWorkspace = () => {
   const [texture, setTexture] = useState(initial.texture);
   const [helmTexture, setHelmTexture] = useState(initial.helmTexture);
   const [view, setView] = useState(initial.view);
+  const [faceFocus, setFaceFocus] = useState(initial.faceFocus);
   const [diagnostics, setDiagnostics] = useState(null);
+  const [loadedSelectionKey, setLoadedSelectionKey] = useState('');
   const [diagnosticsByModel, setDiagnosticsByModel] = useState({});
   const [modelStage, setModelStage] = useState('Waiting for renderer');
   const [modelError, setModelError] = useState('');
@@ -124,6 +141,12 @@ export const ModelReviewWorkspace = () => {
     [inventory, selectedModel]
   );
   const selectedVariant = selectedEntry?.variants?.[0] ?? null;
+  const selectionKey = getSelectionKey({
+    model: selectedEntry?.model ?? selectedModel,
+    face,
+    texture,
+    helmTexture,
+  });
   const selectedReview = reviews[selectedModel] ?? null;
   const maxTexture = Math.max(
     Number(selectedEntry?.appearance?.minTexture ?? 0),
@@ -172,46 +195,163 @@ export const ModelReviewWorkspace = () => {
     return () => window.clearTimeout(timer);
   }, [filteredInventory, selectedModel]);
 
-  const frameModel = useCallback((nextView = 'front') => {
+  const frameModel = useCallback((
+    nextView = 'front',
+    focusOnFace = faceFocusRef.current
+  ) => {
     const preview = previewRef.current?.preview;
-    const camera = runtimeRef.current?.camera;
-    if (!preview?.rootNode || !camera) {
+    const runtime = runtimeRef.current;
+    const camera = runtime?.camera;
+    const canvas = canvasRef.current;
+    if (!preview?.rootNode || !camera || !canvas) {
       return;
     }
-    const wholeBounds = getReviewBounds(preview.rootNode);
+    let wholeBounds = getReviewBounds(preview.rootNode);
     if (!wholeBounds) {
       return;
     }
-    const headBounds = nextView === 'head'
+    const animationFraming = animationFramingRef.current;
+    if (animationFraming?.bounds) {
+      const currentRootPosition = preview.rootNode.getAbsolutePosition?.() ??
+        preview.rootNode.position;
+      const offset = {
+        x: Number(currentRootPosition?.x ?? 0),
+        y: Number(currentRootPosition?.y ?? 0),
+        z: Number(currentRootPosition?.z ?? 0),
+      };
+      wholeBounds = {
+        minimum: {
+          x: animationFraming.bounds.minimum.x + offset.x,
+          y: animationFraming.bounds.minimum.y + offset.y,
+          z: animationFraming.bounds.minimum.z + offset.z,
+        },
+        maximum: {
+          x: animationFraming.bounds.maximum.x + offset.x,
+          y: animationFraming.bounds.maximum.y + offset.y,
+          z: animationFraming.bounds.maximum.z + offset.z,
+        },
+        width : animationFraming.bounds.width,
+        height: animationFraming.bounds.height,
+        depth : animationFraming.bounds.depth,
+      };
+    }
+    const headBounds = focusOnFace
       ? getReviewBounds(preview.rootNode, { headOnly: true })
       : null;
-    const bounds = headBounds ?? wholeBounds;
+    const bounds = focusOnFace && !headBounds
+      ? {
+        minimum: {
+          x: wholeBounds.minimum.x + wholeBounds.width * 0.25,
+          y: wholeBounds.minimum.y + wholeBounds.height * 0.68,
+          z: wholeBounds.minimum.z + wholeBounds.depth * 0.25,
+        },
+        maximum: {
+          x: wholeBounds.maximum.x - wholeBounds.width * 0.25,
+          y: wholeBounds.maximum.y,
+          z: wholeBounds.maximum.z - wholeBounds.depth * 0.25,
+        },
+        width : wholeBounds.width * 0.5,
+        height: wholeBounds.height * 0.32,
+        depth : wholeBounds.depth * 0.5,
+      }
+      : headBounds ?? wholeBounds;
     const target = new Vector3(
       (bounds.minimum.x + bounds.maximum.x) / 2,
       (bounds.minimum.y + bounds.maximum.y) / 2,
       (bounds.minimum.z + bounds.maximum.z) / 2
     );
-    if (nextView === 'head' && !headBounds) {
-      target.y = wholeBounds.minimum.y + wholeBounds.height * 0.8;
-    }
-    const span = Math.max(1, bounds.width, bounds.height, bounds.depth);
-    const distance = nextView === 'head'
-      ? Math.max(5, span * 2.1)
-      : Math.max(7, wholeBounds.height * 1.65, wholeBounds.depth * 1.8);
-    const elevation = nextView === 'head' ? 0 : wholeBounds.height * 0.05;
-    const positions = {
-      front: new Vector3(target.x - distance, target.y + elevation, target.z),
-      side : new Vector3(target.x, target.y + elevation, target.z - distance),
-      back : new Vector3(target.x + distance, target.y + elevation, target.z),
-      head : new Vector3(target.x - distance, target.y, target.z),
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const railRect = document.querySelector('.model-review-rail')?.getBoundingClientRect();
+    const inspectorRect = document.querySelector('.model-review-inspector')?.getBoundingClientRect();
+    const toolbarRect = document.querySelector('.model-review-toolbar')?.getBoundingClientRect();
+    const clamp = (value, minimum, maximum) =>
+      Math.min(maximum, Math.max(minimum, value));
+    const stageLeft = clamp(
+      (railRect?.right ?? canvasRect.left) - canvasRect.left,
+      0,
+      canvasRect.width
+    );
+    const stageRight = clamp(
+      (inspectorRect?.left ?? canvasRect.right) - canvasRect.left,
+      stageLeft + 1,
+      canvasRect.width
+    );
+    const stageTop = clamp(
+      (toolbarRect?.bottom ?? canvasRect.top) - canvasRect.top,
+      0,
+      canvasRect.height - 1
+    );
+    const stageWidth = Math.max(1, stageRight - stageLeft);
+    const stageHeight = Math.max(1, canvasRect.height - stageTop);
+    const normalizedViewport = {
+      x     : stageLeft / canvasRect.width,
+      // Babylon forwards this normalized value to WebGL, whose viewport
+      // origin is at the bottom-left. A zero Y therefore anchors the stage
+      // below the top toolbar in CSS coordinates.
+      y     : 0,
+      width : stageWidth / canvasRect.width,
+      height: stageHeight / canvasRect.height,
     };
+    camera.viewport = new Viewport(
+      normalizedViewport.x,
+      normalizedViewport.y,
+      normalizedViewport.width,
+      normalizedViewport.height
+    );
+
+    const aspectRatio = stageWidth / stageHeight;
+    const verticalFov = Number(camera.fov) || 0.8;
+    const horizontalFov = 2 * Math.atan(
+      Math.tan(verticalFov / 2) * aspectRatio
+    );
+    const horizontalSize = nextView === 'side' ? bounds.width : bounds.depth;
+    const viewDepth = nextView === 'side' ? bounds.depth : bounds.width;
+    const padding = focusOnFace ? 1.2 : 1.12;
+    const distance = Math.max(
+      1,
+      viewDepth / 2 + Math.max(
+        (bounds.height * padding / 2) / Math.tan(verticalFov / 2),
+        (horizontalSize * padding / 2) / Math.tan(horizontalFov / 2)
+      )
+    );
+    const positions = {
+      front: new Vector3(target.x - distance, target.y, target.z),
+      side : new Vector3(target.x, target.y, target.z - distance),
+      back : new Vector3(target.x + distance, target.y, target.z),
+    };
+    // ArcRotateCamera derives its angles and radius from the current target.
+    // Set that target first so switching models cannot inherit the prior model's
+    // target and end up offset or clipped.
+    camera.setTarget(target);
     camera.setPosition?.(positions[nextView] ?? positions.front);
     if (!camera.setPosition) {
       camera.position.copyFrom(positions[nextView] ?? positions.front);
     }
-    camera.setTarget(target);
-    runtimeRef.current.scene.render();
+    framingRef.current = {
+      distance,
+      stage: {
+        left  : stageLeft,
+        top   : stageTop,
+        width : stageWidth,
+        height: stageHeight,
+      },
+      target: { x: target.x, y: target.y, z: target.z },
+      viewport: normalizedViewport,
+      view: nextView,
+      faceFocus: focusOnFace,
+      usesAnimationEnvelope: !!animationFraming?.bounds,
+    };
+    if (window.__spireSageModelReview) {
+      window.__spireSageModelReview.framing = framingRef.current;
+    }
+    runtime.scene.render();
   }, []);
+
+  const reframe = useCallback(() => {
+    frameModel(viewRef.current, faceFocusRef.current);
+    return framingRef.current;
+  }, [frameModel]);
 
   const getSelectedAnimation = useCallback(() =>
     previewRef.current?.preview?.animationGroups?.find(
@@ -225,6 +365,7 @@ export const ModelReviewWorkspace = () => {
     const group = preview.animationGroups.find((candidate) => candidate.name === name);
     preview.animationGroups.forEach((candidate) => candidate.stop?.());
     if (!group) {
+      animationFramingRef.current = null;
       setAnimationPlaying(false);
       setAnimationSafety(null);
       return;
@@ -233,9 +374,13 @@ export const ModelReviewWorkspace = () => {
     const safety = isPose ? { pass: true, pose: true } : preview.validateAnimationBounds?.(group);
     setAnimationSafety(safety ?? { pass: true });
     if (safety?.pass === false) {
+      animationFramingRef.current = null;
       setAnimationPlaying(false);
       return;
     }
+    animationFramingRef.current = safety?.framingBounds
+      ? { bounds: safety.framingBounds }
+      : null;
     if (isPose && preview.nativePoseOnly) {
       preview.applyNeutralSkeletonPose?.();
     } else {
@@ -260,6 +405,35 @@ export const ModelReviewWorkspace = () => {
     setHelmTexture(Math.max(0, Number(entry?.appearance?.minHelmTexture ?? 0)));
   }, [inventory]);
 
+  const runQaStep = useCallback((command = {}) => {
+    const requestedModel = `${command.model ?? ''}`.trim().toLowerCase();
+    if (
+      requestedModel &&
+      !inventory.some((entry) => entry.model === requestedModel)
+    ) {
+      return false;
+    }
+    if (requestedModel) {
+      selectModel(requestedModel);
+    }
+    if (VIEW_OPTIONS.some((option) => option.id === command.view)) {
+      setView(command.view);
+    }
+    if (typeof command.faceFocus === 'boolean') {
+      setFaceFocus(command.faceFocus);
+    }
+    const applyVariant = (value, setter) => {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        setter(Math.trunc(parsed));
+      }
+    };
+    applyVariant(command.face, setFace);
+    applyVariant(command.texture, setTexture);
+    applyVariant(command.helmTexture, setHelmTexture);
+    return true;
+  }, [inventory, selectModel]);
+
   const chooseRelativeModel = useCallback((offset) => {
     if (!filteredInventory.length) return;
     const index = filteredInventory.findIndex((entry) => entry.model === selectedModel);
@@ -277,6 +451,7 @@ export const ModelReviewWorkspace = () => {
       'sageModelTexture',
       'sageModelHelm',
       'sageModelView',
+      'sageModelFaceFocus',
     ]) {
       url.searchParams.delete(key);
     }
@@ -285,6 +460,14 @@ export const ModelReviewWorkspace = () => {
     setModelExporter(false);
     setZoneDialogOpen(true);
   }, [setModelExporter, setZoneDialogOpen]);
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  useEffect(() => {
+    faceFocusRef.current = faceFocus;
+  }, [faceFocus]);
 
   useEffect(() => {
     let current = true;
@@ -337,7 +520,13 @@ export const ModelReviewWorkspace = () => {
         previousGlowLayer = controller.ZoneController.glowLayer;
         controller.ZoneController.glowLayer = modelController.glowLayer;
         controller.SpawnController.setupSpawnController();
-        resizeHandler = () => controller.resize();
+        resizeHandler = () => {
+          controller.resize();
+          window.requestAnimationFrame(() => frameModel(
+            viewRef.current,
+            faceFocusRef.current
+          ));
+        };
         window.addEventListener('resize', resizeHandler);
         runtimeRef.current = {
           camera: controller.CameraController.camera,
@@ -374,11 +563,12 @@ export const ModelReviewWorkspace = () => {
     };
   // Runtime ownership intentionally lasts for the workspace lifetime.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [frameModel]);
 
   useEffect(() => {
     if (!runtimeReady || !selectedEntry || !runtimeRef.current) return;
     const loadToken = ++loadTokenRef.current;
+    const loadSelectionKey = selectionKey;
     let createdPreview = null;
     let createdRoot = null;
 
@@ -386,7 +576,9 @@ export const ModelReviewWorkspace = () => {
       setModelStage(`Loading ${selectedEntry.model.toUpperCase()}`);
       setModelError('');
       setDiagnostics(null);
+      setLoadedSelectionKey('');
       setAnimationName('');
+      animationFramingRef.current = null;
       setAnimationPlaying(false);
       previewRef.current?.preview?.dispose?.();
       previewRef.current?.root?.dispose?.();
@@ -473,7 +665,13 @@ export const ModelReviewWorkspace = () => {
       setModelStage(
         `${selectedEntry.model.toUpperCase()} ready · ${createdPreview.resolvedModelAsset ?? createdPreview.loadedModelVariation ?? selectedEntry.model}`
       );
-      requestAnimationFrame(() => frameModel(view));
+      requestAnimationFrame(() => {
+        frameModel(
+          viewRef.current,
+          faceFocusRef.current
+        );
+        setLoadedSelectionKey(loadSelectionKey);
+      });
     })().catch((error) => {
       if (loadToken !== loadTokenRef.current) return;
       console.error('[SageModelReview] failed to load model', error);
@@ -492,7 +690,7 @@ export const ModelReviewWorkspace = () => {
       createdPreview?.dispose?.();
       createdRoot?.dispose?.();
     };
-  }, [face, frameModel, helmTexture, runtimeReady, selectedEntry, selectedVariant, texture]);
+  }, [face, frameModel, helmTexture, runtimeReady, selectedEntry, selectedVariant, selectionKey, texture]);
 
   useEffect(() => {
     if (!animationName || !previewRef.current?.preview) return;
@@ -501,13 +699,16 @@ export const ModelReviewWorkspace = () => {
 
   useEffect(() => {
     if (!animationName || !previewRef.current?.preview) return undefined;
-    const frameTimer = window.setTimeout(() => frameModel(view), 250);
+    const frameTimer = window.setTimeout(
+      () => frameModel(view, faceFocus),
+      250
+    );
     return () => window.clearTimeout(frameTimer);
-  }, [animationName, frameModel, view]);
+  }, [animationName, faceFocus, frameModel, view]);
 
   useEffect(() => {
-    frameModel(view);
-  }, [frameModel, view]);
+    frameModel(view, faceFocus);
+  }, [faceFocus, frameModel, view]);
 
   useEffect(() => {
     setNote(reviews[selectedModel]?.note ?? '');
@@ -521,18 +722,54 @@ export const ModelReviewWorkspace = () => {
     url.searchParams.set('sageModelTexture', String(texture));
     url.searchParams.set('sageModelHelm', String(helmTexture));
     url.searchParams.set('sageModelView', view);
+    url.searchParams.set('sageModelFaceFocus', faceFocus ? '1' : '0');
     window.history.replaceState(null, '', url.toString());
-  }, [face, helmTexture, selectedModel, texture, view]);
+  }, [face, faceFocus, helmTexture, selectedModel, texture, view]);
 
   useEffect(() => {
-    window.__spireSageModelReview = {
-      ready: runtimeReady && !!diagnostics && !modelError,
+    const ready = runtimeReady &&
+      !!diagnostics &&
+      !modelError &&
+      loadedSelectionKey === selectionKey;
+    const state = {
+      qaApiVersion: 1,
+      ready,
       model: selectedModel,
       diagnostics,
+      framing: framingRef.current,
       stage: modelStage,
       view,
+      faceFocus,
+      selection: {
+        face,
+        texture,
+        helmTexture,
+      },
     };
-  }, [diagnostics, modelError, modelStage, runtimeReady, selectedModel, view]);
+    window.__spireSageModelReview = {
+      ...state,
+      reframe,
+      runQaStep,
+    };
+    window.dispatchEvent(new CustomEvent('spire-sage-model-review-state', {
+      detail: state,
+    }));
+  }, [
+    diagnostics,
+    face,
+    faceFocus,
+    helmTexture,
+    loadedSelectionKey,
+    modelError,
+    modelStage,
+    reframe,
+    runQaStep,
+    runtimeReady,
+    selectedModel,
+    selectionKey,
+    texture,
+    view,
+  ]);
 
   useEffect(() => {
     if (!animationPlaying) return undefined;
@@ -558,6 +795,8 @@ export const ModelReviewWorkspace = () => {
         if (animationPlaying) group.pause?.();
         else group.play?.(true);
         setAnimationPlaying(!animationPlaying);
+      } else if (event.key === '4') {
+        setFaceFocus((current) => !current);
       } else {
         const cameraView = VIEW_OPTIONS.find((option) => option.key === event.key);
         if (cameraView) setView(cameraView.id);
@@ -686,6 +925,15 @@ export const ModelReviewWorkspace = () => {
               <kbd>{option.key}</kbd>
             </button>
           ))}
+          <button
+            className={faceFocus ? 'is-active' : ''}
+            onClick={() => setFaceFocus((current) => !current)}
+            aria-pressed={faceFocus}
+            title="Toggle face focus (4)"
+          >
+            Face focus
+            <kbd>4</kbd>
+          </button>
         </div>
         <div className="model-review-stage" aria-live="polite">
           <span className={modelError || runtimeError ? 'is-error' : ''} />
@@ -709,6 +957,12 @@ export const ModelReviewWorkspace = () => {
             <div><dt>Geometry</dt><dd>{diagnostics ? `${diagnostics.meshCount} meshes` : '—'}</dd></div>
             <div><dt>Materials</dt><dd>{diagnostics ? `${diagnostics.materialCount} / ${diagnostics.textureCount} textured` : '—'}</dd></div>
             <div><dt>Head risks</dt><dd>{diagnostics ? diagnostics.headOrientation.filter((item) => item.risk).length : '—'}</dd></div>
+            {diagnostics?.semanticHeadOrientation?.required && (
+              <div>
+                <dt>Head geometry</dt>
+                <dd>{diagnostics.semanticHeadOrientation.pass ? 'Upright' : 'Inverted'}</dd>
+              </div>
+            )}
             <div><dt>Skeletons</dt><dd>{diagnostics?.skeletonCount ?? '—'}</dd></div>
             <div><dt>Dynamic clips</dt><dd>{diagnostics?.animationVitality?.dynamicGroupCount ?? '—'}</dd></div>
           </dl>
@@ -787,7 +1041,7 @@ export const ModelReviewWorkspace = () => {
                 setAnimationPlaying(false);
                 setAnimationFrame(frame);
                 previewRef.current?.preview?.synchronizeSkeletonPose?.();
-                runtimeRef.current?.scene?.render?.();
+                frameModel(view, faceFocus);
               }}
             />
             <output>{Math.round(animationFrame)}</output>
@@ -824,7 +1078,8 @@ export const ModelReviewWorkspace = () => {
 
       <footer className="model-review-hints">
         <span><kbd>←</kbd><kbd>→</kbd> models</span>
-        <span><kbd>1–4</kbd> views</span>
+        <span><kbd>1–3</kbd> views</span>
+        <span><kbd>4</kbd> face focus</span>
         <span><kbd>Space</kbd> animation</span>
       </footer>
     </main>

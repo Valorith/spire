@@ -12,6 +12,70 @@ const getMaterialTexture = (material) =>
   material?._emissiveTexture ??
   null;
 
+const SEMANTIC_HEAD_ORIENTATION_POLICIES = new Map([
+  // The Iksar skeleton's separate head archive exposes stable cranium and jaw
+  // material anchors. Comparing their rendered world-space centers catches a
+  // genuinely inverted deforming head without applying a destructive rig
+  // transform to an asset that is already authored upright.
+  ['iks', {
+    // ikshe00 uses 0001 for the cranium; ikshe01 uses 0006 for its crest.
+    upperMaterials: ['ikshe0001', 'ikshe0006'],
+    lowerMaterials: ['ikshe0005'],
+    upperLabel: 'cranium',
+    lowerLabel: 'jaw',
+    minimumSeparationRatio: 0.01,
+  }],
+]);
+
+export const getSemanticHeadOrientationPolicy = (modelName) => {
+  const policy = SEMANTIC_HEAD_ORIENTATION_POLICIES.get(
+    `${modelName ?? ''}`.trim().slice(0, 3).toLowerCase()
+  );
+  return policy ? { ...policy } : null;
+};
+
+export const evaluateSemanticHeadOrientation = ({
+  policy,
+  upperCenterY,
+  lowerCenterY,
+  modelHeight,
+}) => {
+  if (!policy) {
+    return {
+      required: false,
+      measurable: false,
+      pass: true,
+    };
+  }
+
+  const normalizedHeight = Math.abs(Number(modelHeight));
+  const minimumSeparation = Number.isFinite(normalizedHeight)
+    ? Math.max(0.001, normalizedHeight * Number(policy.minimumSeparationRatio ?? 0))
+    : 0.001;
+  const hasCoordinate = (value) =>
+    value !== null &&
+    value !== undefined &&
+    value !== '' &&
+    Number.isFinite(Number(value));
+  const measurable = hasCoordinate(upperCenterY) && hasCoordinate(lowerCenterY);
+  const normalizedUpperY = measurable ? Number(upperCenterY) : null;
+  const normalizedLowerY = measurable ? Number(lowerCenterY) : null;
+  const separation = measurable
+    ? normalizedUpperY - normalizedLowerY
+    : null;
+
+  return {
+    ...policy,
+    required: true,
+    measurable,
+    pass: measurable && separation >= minimumSeparation,
+    upperCenterY: measurable ? normalizedUpperY : null,
+    lowerCenterY: measurable ? normalizedLowerY : null,
+    separation,
+    minimumSeparation,
+  };
+};
+
 export const inspectHeadTextureOrientation = (
   material,
   orientationPolicy

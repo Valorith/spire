@@ -6,6 +6,8 @@ import {
 } from '../../viewer/helpers/animationValidation';
 import {
   evaluateAppearanceVariant,
+  evaluateSemanticHeadOrientation,
+  getSemanticHeadOrientationPolicy,
   inspectHeadTextureOrientation,
   isKnownEffectOnlyCharacterModel,
 } from '../../viewer/helpers/appearanceValidation';
@@ -92,6 +94,40 @@ export const getReviewBounds = (rootNode, { headOnly = false } = {}) => {
   };
 };
 
+const getMaterialMeshCenterY = (meshes, materialNames) => {
+  const normalizedNames = new Set(
+    (Array.isArray(materialNames) ? materialNames : [materialNames])
+      .map((name) => `${name ?? ''}`.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const matchingMeshes = meshes.filter((mesh) =>
+    getMaterialSlots([mesh.material]).some(
+      (material) => normalizedNames.has(
+        `${material?.name ?? ''}`.trim().toLowerCase()
+      )
+    )
+  );
+  const minimumValues = [];
+  const maximumValues = [];
+  for (const mesh of matchingMeshes) {
+    try {
+      mesh.computeWorldMatrix?.(true);
+      mesh.refreshBoundingInfo?.(true, true);
+      const bounds = mesh.getBoundingInfo?.()?.boundingBox;
+      if (
+        Number.isFinite(Number(bounds?.minimumWorld?.y)) &&
+        Number.isFinite(Number(bounds?.maximumWorld?.y))
+      ) {
+        minimumValues.push(Number(bounds.minimumWorld.y));
+        maximumValues.push(Number(bounds.maximumWorld.y));
+      }
+    } catch (_error) {}
+  }
+  return minimumValues.length > 0
+    ? (Math.min(...minimumValues) + Math.max(...maximumValues)) / 2
+    : null;
+};
+
 const isTextureReady = (texture) => {
   if (!texture) return false;
   if (typeof texture.isReady === 'function') return texture.isReady();
@@ -119,6 +155,7 @@ const countNonFiniteBoneMatrices = (spawn) =>
 
 export const inspectModelReviewSpawn = (spawn) => {
   const meshes = getReviewMeshes(spawn?.rootNode);
+  const bounds = getReviewBounds(spawn?.rootNode);
   const materials = getMaterialSlots(meshes.map((mesh) => mesh.material));
   const ordinaryMaterials = materials.filter(
     (material) =>
@@ -181,7 +218,22 @@ export const inspectModelReviewSpawn = (spawn) => {
   const effectOnly = isKnownEffectOnlyCharacterModel(
     spawn?.resolvedModelAsset ?? spawn?.modelName
   );
-  const orientationPass = headOrientation.every((item) => !item.risk);
+  const semanticHeadPolicy = getSemanticHeadOrientationPolicy(spawn?.modelName);
+  const semanticHeadOrientation = evaluateSemanticHeadOrientation({
+    policy: semanticHeadPolicy,
+    upperCenterY: getMaterialMeshCenterY(
+      meshes,
+      semanticHeadPolicy?.upperMaterials
+    ),
+    lowerCenterY: getMaterialMeshCenterY(
+      meshes,
+      semanticHeadPolicy?.lowerMaterials
+    ),
+    modelHeight: bounds?.height,
+  });
+  const orientationPass =
+    headOrientation.every((item) => !item.risk) &&
+    semanticHeadOrientation.pass;
   const animationPass =
     effectOnly ||
     (
@@ -194,7 +246,7 @@ export const inspectModelReviewSpawn = (spawn) => {
     animationReadiness,
     animationVitality,
     animationPass,
-    bounds: getReviewBounds(spawn?.rootNode),
+    bounds,
     compactNativeArmNeutralized:
       spawn?.compactNativeArmNeutralized === true,
     effectOnly,
@@ -202,6 +254,7 @@ export const inspectModelReviewSpawn = (spawn) => {
     materialCount: materials.length,
     meshCount: meshes.length,
     orientationPass,
+    semanticHeadOrientation,
     nativePoseOnly: spawn?.nativePoseOnly === true,
     pass: appearance.invariantPass && orientationPass && animationPass,
     skeletonCount,

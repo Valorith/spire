@@ -642,12 +642,17 @@ test.describe('Sage preview UI', () => {
     await expect(page.getByRole('main', { name: 'Sage Model Review' })).toBeVisible()
     await expect(page.locator('canvas#modelReviewCanvas')).toHaveCount(1)
 
-    const waitForReady = async (model: string, view?: string) => {
+    const waitForReady = async (
+      model: string,
+      view?: string,
+      faceFocus?: boolean
+    ) => {
       await expect.poll(() => page.evaluate(() => {
         const review = (window as any).__spireSageModelReview
         return review && {
           animationPass  : review.diagnostics?.animationPass ?? false,
           appearancePass : review.diagnostics?.appearance?.invariantPass ?? false,
+          faceFocus      : review.faceFocus,
           model           : review.model,
           orientationPass: review.diagnostics?.orientationPass ?? false,
           ready           : review.ready,
@@ -660,7 +665,101 @@ test.describe('Sage preview UI', () => {
         orientationPass: true,
         ready           : true,
         ...(view ? { view } : {}),
+        ...(typeof faceFocus === 'boolean' ? { faceFocus } : {}),
       })
+    }
+
+    const expectModelFramedInVisibleStage = async (
+      usesAnimationEnvelope: boolean,
+      faceFocus = false
+    ) => {
+      await expect.poll(() => page.evaluate(() => {
+        const review = (window as any).__spireSageModelReview
+        const camera = (window as any).gameController?.CameraController?.camera
+        const canvas = document.querySelector<HTMLCanvasElement>('#modelReviewCanvas')
+        const rail = document.querySelector<HTMLElement>('.model-review-rail')
+        const inspector = document.querySelector<HTMLElement>('.model-review-inspector')
+        const toolbar = document.querySelector<HTMLElement>('.model-review-toolbar')
+        if (!review?.framing || !camera?.viewport || !canvas || !rail || !inspector || !toolbar) {
+          return null
+        }
+        const canvasRect = canvas.getBoundingClientRect()
+        const railRect = rail.getBoundingClientRect()
+        const inspectorRect = inspector.getBoundingClientRect()
+        const toolbarRect = toolbar.getBoundingClientRect()
+        const viewport = camera.viewport
+        return {
+          actual: {
+            bottom: canvasRect.height * (1 - viewport.y),
+            left: canvasRect.width * viewport.x,
+            right: canvasRect.width * (viewport.x + viewport.width),
+            top: canvasRect.height * (1 - viewport.y - viewport.height),
+          },
+          expected: {
+            bottom: canvasRect.height,
+            left: railRect.right - canvasRect.left,
+            right: inspectorRect.left - canvasRect.left,
+            top: toolbarRect.bottom - canvasRect.top,
+          },
+          framingDistance: review.framing.distance,
+          cameraDistance: camera.radius,
+          faceFocus: review.framing.faceFocus,
+          usesAnimationEnvelope: review.framing.usesAnimationEnvelope,
+        }
+      }), { timeout: 15000 }).toEqual(expect.objectContaining({
+        actual: expect.objectContaining({
+          bottom: expect.any(Number),
+          left: expect.any(Number),
+          right: expect.any(Number),
+          top: expect.any(Number),
+        }),
+        expected: expect.objectContaining({
+          bottom: expect.any(Number),
+          left: expect.any(Number),
+          right: expect.any(Number),
+          top: expect.any(Number),
+        }),
+        framingDistance: expect.any(Number),
+        cameraDistance: expect.any(Number),
+        faceFocus,
+        usesAnimationEnvelope,
+      }))
+
+      const framing = await page.evaluate(() => {
+        const review = (window as any).__spireSageModelReview
+        const camera = (window as any).gameController.CameraController.camera
+        const canvas = document.querySelector<HTMLCanvasElement>('#modelReviewCanvas')!
+        const rail = document.querySelector<HTMLElement>('.model-review-rail')!
+        const inspector = document.querySelector<HTMLElement>('.model-review-inspector')!
+        const toolbar = document.querySelector<HTMLElement>('.model-review-toolbar')!
+        const canvasRect = canvas.getBoundingClientRect()
+        const viewport = camera.viewport
+        return {
+          actual: {
+            bottom: canvasRect.height * (1 - viewport.y),
+            left: canvasRect.width * viewport.x,
+            right: canvasRect.width * (viewport.x + viewport.width),
+            top: canvasRect.height * (1 - viewport.y - viewport.height),
+          },
+          expected: {
+            bottom: canvasRect.height,
+            left: rail.getBoundingClientRect().right - canvasRect.left,
+            right: inspector.getBoundingClientRect().left - canvasRect.left,
+            top: toolbar.getBoundingClientRect().bottom - canvasRect.top,
+          },
+          framingDistance: review.framing.distance,
+          cameraDistance: camera.radius,
+          faceFocus: review.framing.faceFocus,
+          usesAnimationEnvelope: review.framing.usesAnimationEnvelope,
+        }
+      })
+      for (const edge of ['bottom', 'left', 'right', 'top'] as const) {
+        expect(framing.actual[edge]).toBeCloseTo(framing.expected[edge], 1)
+      }
+      expect(framing.framingDistance).toBeGreaterThan(0)
+      expect(framing.cameraDistance).toBeCloseTo(framing.framingDistance, 4)
+      expect(framing.faceFocus).toBe(faceFocus)
+      expect(framing.usesAnimationEnvelope).toBe(usesAnimationEnvelope)
     }
 
     const selectReviewedModel = async (query: string, buttonName: string, model: string) => {
@@ -669,7 +768,8 @@ test.describe('Sage preview UI', () => {
       await waitForReady(model)
     }
 
-    await waitForReady('hum', 'front')
+    await waitForReady('hum', 'front', false)
+    await expectModelFramedInVisibleStage(true, false)
 
     await expect(page.getByText('Resolved asset').locator('..')).toContainText('HUM')
     await expect(page.locator('.model-review-count span').first()).toContainText(/\d+ models/)
@@ -700,22 +800,38 @@ test.describe('Sage preview UI', () => {
 
     await page.screenshot({
       path    : path.join(screenshotDirectory, '01-hum-front-overview.png'),
-      fullPage: true,
+      fullPage: false,
     })
 
+    const fullModelDistance = await page.evaluate(() => (
+      (window as any).__spireSageModelReview?.framing?.distance
+    ))
+    const faceFocusButton = page.getByRole('button', { name: 'Face focus' })
+    await expect(faceFocusButton).toHaveAttribute('aria-pressed', 'false')
     await page.keyboard.press('4')
-    await waitForReady('hum', 'head')
-    expect(new URL(page.url()).searchParams.get('sageModelView')).toBe('head')
+    await waitForReady('hum', 'front', true)
+    await expectModelFramedInVisibleStage(true, true)
+    await expect(faceFocusButton).toHaveAttribute('aria-pressed', 'true')
+    expect(new URL(page.url()).searchParams.get('sageModelView')).toBe('front')
+    expect(new URL(page.url()).searchParams.get('sageModelFaceFocus')).toBe('1')
+    expect(await page.evaluate(() => (
+      (window as any).__spireSageModelReview?.framing?.distance
+    ))).toBeLessThan(fullModelDistance)
+
+    await page.locator('[title="Side view (2)"]').click()
+    await waitForReady('hum', 'side', true)
+    await page.locator('[title="Front view (1)"]').click()
+    await waitForReady('hum', 'front', true)
 
     await page.getByLabel('Face').selectOption('3')
     await expect.poll(() => new URL(page.url()).searchParams.get('sageModelFace')).toBe('3')
-    await waitForReady('hum', 'head')
+    await waitForReady('hum', 'front', true)
     await page.getByLabel('Body').selectOption('2')
     await expect.poll(() => new URL(page.url()).searchParams.get('sageModelTexture')).toBe('2')
-    await waitForReady('hum', 'head')
+    await waitForReady('hum', 'front', true)
     await page.getByLabel('Helm').selectOption('1')
     await expect.poll(() => new URL(page.url()).searchParams.get('sageModelHelm')).toBe('1')
-    await waitForReady('hum', 'head')
+    await waitForReady('hum', 'front', true)
 
     const clipOptions = await page.getByLabel('Clip').locator('option').evaluateAll((options) =>
       options.map((option) => ({
@@ -743,24 +859,30 @@ test.describe('Sage preview UI', () => {
       String(Math.round(targetFrame))
     )
 
-    const reviewNote = 'E2E: inspect face 3, body 2, helm 1 in head view'
+    const reviewNote = 'E2E: inspect face 3, body 2, helm 1 with face focus'
     await page.getByRole('textbox', { name: 'Review note' }).fill(reviewNote)
     await page.getByRole('button', { name: 'Flag issue' }).click()
     await expect(page.getByRole('button', { name: 'Flag issue' })).toHaveClass(/is-issue/)
     await expect(page.locator('.model-review-count span').nth(1)).toContainText('1 reviewed')
 
     await page.screenshot({
-      path    : path.join(screenshotDirectory, '02-hum-head-variant-flagged.png'),
-      fullPage: true,
+      path    : path.join(screenshotDirectory, '02-hum-face-focus-variant-flagged.png'),
+      fullPage: false,
     })
 
     await page.reload({ waitUntil: 'load' })
-    await waitForReady('hum', 'head')
+    await waitForReady('hum', 'front', true)
     await expect(page.getByRole('textbox', { name: 'Review note' })).toHaveValue(reviewNote)
     await expect(page.getByRole('button', { name: 'Flag issue' })).toHaveClass(/is-issue/)
     expect(new URL(page.url()).searchParams.get('sageModelFace')).toBe('3')
     expect(new URL(page.url()).searchParams.get('sageModelTexture')).toBe('2')
     expect(new URL(page.url()).searchParams.get('sageModelHelm')).toBe('1')
+    expect(new URL(page.url()).searchParams.get('sageModelFaceFocus')).toBe('1')
+
+    await faceFocusButton.click()
+    await waitForReady('hum', 'front', false)
+    await expect(faceFocusButton).toHaveAttribute('aria-pressed', 'false')
+    expect(new URL(page.url()).searchParams.get('sageModelFaceFocus')).toBe('0')
 
     await page.getByRole('button', { name: 'Issues', exact: true }).click()
     await expect(page.locator('[data-review-model="hum"]')).toHaveCount(1)
@@ -797,10 +919,11 @@ test.describe('Sage preview UI', () => {
     ))).toBe(true)
     await page.locator('[title="Rear view (3)"]').click()
     await waitForReady('qcf', 'back')
+    await expectModelFramedInVisibleStage(false, false)
 
     await page.screenshot({
       path    : path.join(screenshotDirectory, '03-qcf-rear-compact-rig.png'),
-      fullPage: true,
+      fullPage: false,
     })
 
     const settledResources = await readReviewResources()
@@ -810,6 +933,14 @@ test.describe('Sage preview UI', () => {
     }
     const repeatedResources = await readReviewResources()
     expect(repeatedResources).toEqual(settledResources)
+
+    await page.goto(
+      `${previewBaseUrl}/sage?sageEqDir=${encodeURIComponent(eqRoot)}&sageModelReview=1&sageModel=hum&sageModelView=head&sageCacheBust=model-review-legacy-head-link`,
+      { waitUntil: 'load' }
+    )
+    await waitForReady('hum', 'front', true)
+    expect(new URL(page.url()).searchParams.get('sageModelView')).toBe('front')
+    expect(new URL(page.url()).searchParams.get('sageModelFaceFocus')).toBe('1')
 
     await page.goto(
       `${previewBaseUrl}/sage?sageEqDir=${encodeURIComponent(eqRoot)}&sageModelReview=1&sageModel=not-a-model&sageCacheBust=model-review-invalid-deep-link`,
@@ -824,6 +955,80 @@ test.describe('Sage preview UI', () => {
     expect(pageErrors).toEqual([])
     expect(modelReviewErrors).toEqual([])
     expect(failedModelRequests).toEqual([])
+  })
+
+  test('lets the Sage QA harness drive model viewer checks', async ({ page }) => {
+    test.setTimeout(180000)
+    const eqRoot = process.env.SPIRE_SAGE_EQ_DIR || 'C:/EQEmuCW-Live'
+    test.skip(
+      !fs.existsSync(path.join(eqRoot, 'eqsage', 'models', 'hum.glb')),
+      'requires local Sage generated character assets'
+    )
+
+    await page.goto(
+      `${previewBaseUrl}/sage?sageEqDir=${encodeURIComponent(eqRoot)}` +
+      '&sageValidation=models' +
+      '&sageValidateModels=hum' +
+      '&sageValidationModelViews=front,face' +
+      '&sageValidationStepDelay=20' +
+      '&sageValidationPersist=0' +
+      '&sageCacheBust=model-review-qa-harness',
+      { waitUntil: 'load' }
+    )
+
+    await expect(page.getByRole('main', { name: 'Sage Model Review' })).toBeVisible()
+    await expect(page.getByText('Sage Model Validation')).toBeVisible()
+    await expect.poll(() => page.evaluate(() => {
+      const summary = (window as any).__spireSageValidationSummary
+      return summary && {
+        complete: summary.complete,
+        failureCount: summary.failureCount,
+        finished: summary.finished,
+        mode: summary.config?.mode,
+        reports: summary.reports?.map((report: any) => ({
+          all: report.pass?.all,
+          faceFocus: report.faceFocus,
+          framing: report.pass?.framing,
+          label: report.label,
+          model: report.model,
+          view: report.view,
+        })),
+      }
+    }), { timeout: 120000 }).toEqual({
+      complete: true,
+      failureCount: 0,
+      finished: true,
+      mode: 'models',
+      reports: [
+        {
+          all: true,
+          faceFocus: false,
+          framing: true,
+          label: 'front',
+          model: 'hum',
+          view: 'front',
+        },
+        {
+          all: true,
+          faceFocus: true,
+          framing: true,
+          label: 'face',
+          model: 'hum',
+          view: 'front',
+        },
+      ],
+    })
+    await expect(page.getByRole('button', { name: 'Face focus4' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(await page.evaluate(() => ({
+      qaApiVersion: (window as any).__spireSageModelReview?.qaApiVersion,
+      hasQaDriver: typeof (window as any).__spireSageModelReview?.runQaStep === 'function',
+    }))).toEqual({
+      qaApiVersion: 1,
+      hasQaDriver: true,
+    })
   })
 
   test('frames real local zone geometry instead of opening on a blank safe-point view', async ({ page }) => {

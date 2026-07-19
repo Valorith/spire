@@ -1673,7 +1673,7 @@ export class BabylonSpawn {
     }
   }
 
-  getVisualMaxDimension() {
+  getVisualBounds() {
     if (!this.rootNode) {
       return null;
     }
@@ -1693,26 +1693,41 @@ export class BabylonSpawn {
           mesh.getTotalVertices() > 0)
     );
 
-    let maximumDimension = 0;
+    const minimum = { x: Infinity, y: Infinity, z: Infinity };
+    const maximum = { x: -Infinity, y: -Infinity, z: -Infinity };
     for (const mesh of meshes) {
       try {
         mesh.computeWorldMatrix?.(true);
         mesh.refreshBoundingInfo?.(true, true);
         const box = mesh.getBoundingInfo?.()?.boundingBox;
-        const minimum = box?.minimumWorld;
-        const maximum = box?.maximumWorld;
-        if (!minimum || !maximum) {
+        const minimumWorld = box?.minimumWorld;
+        const maximumWorld = box?.maximumWorld;
+        if (!minimumWorld || !maximumWorld) {
           continue;
         }
-        maximumDimension = Math.max(
-          maximumDimension,
-          Math.abs(maximum.x - minimum.x),
-          Math.abs(maximum.y - minimum.y),
-          Math.abs(maximum.z - minimum.z)
-        );
+        for (const axis of ['x', 'y', 'z']) {
+          minimum[axis] = Math.min(minimum[axis], Number(minimumWorld[axis]));
+          maximum[axis] = Math.max(maximum[axis], Number(maximumWorld[axis]));
+        }
       } catch (_error) {}
     }
-    return maximumDimension > 0 ? maximumDimension : null;
+    if (![...Object.values(minimum), ...Object.values(maximum)].every(Number.isFinite)) {
+      return null;
+    }
+    return {
+      minimum,
+      maximum,
+      width : maximum.x - minimum.x,
+      height: maximum.y - minimum.y,
+      depth : maximum.z - minimum.z,
+    };
+  }
+
+  getVisualMaxDimension() {
+    const bounds = this.getVisualBounds();
+    return bounds
+      ? Math.max(bounds.width, bounds.height, bounds.depth)
+      : null;
   }
 
   captureAnimationTargetValues(animationGroups = this.animationGroups) {
@@ -1795,7 +1810,10 @@ export class BabylonSpawn {
         .trim();
       const path = targetedAnimation?.animation?.targetPropertyPath ?? [];
       if (
-        !PRIMARY_HEAD_BONE_PATTERN.test(targetName) ||
+        !(
+          PRIMARY_HEAD_BONE_PATTERN.test(targetName) ||
+          (this.modelName === 'iks' && /^he$/i.test(targetName))
+        ) ||
         path[path.length - 1] !== 'rotationQuaternion'
       ) {
         continue;
@@ -1841,21 +1859,57 @@ export class BabylonSpawn {
     }
     const snapshot = this.captureAnimationTargetValues();
     this.synchronizeSkeletonPose();
-    const baselineMaxDimension = this.getVisualMaxDimension();
+    const baselineBounds = this.getVisualBounds();
+    const baselineMaxDimension = baselineBounds
+      ? Math.max(baselineBounds.width, baselineBounds.height, baselineBounds.depth)
+      : null;
+    // The stopped animation's bind pose can contain detached helper nodes far
+    // outside the rendered clip. Build the camera envelope only from frames
+    // that the user can actually see.
+    let framingBounds = null;
+    const mergeFramingBounds = (bounds) => {
+      if (!bounds) {
+        return;
+      }
+      if (!framingBounds) {
+        framingBounds = JSON.parse(JSON.stringify(bounds));
+        return;
+      }
+      for (const axis of ['x', 'y', 'z']) {
+        framingBounds.minimum[axis] = Math.min(
+          framingBounds.minimum[axis],
+          bounds.minimum[axis]
+        );
+        framingBounds.maximum[axis] = Math.max(
+          framingBounds.maximum[axis],
+          bounds.maximum[axis]
+        );
+      }
+      framingBounds.width = framingBounds.maximum.x - framingBounds.minimum.x;
+      framingBounds.height = framingBounds.maximum.y - framingBounds.minimum.y;
+      framingBounds.depth = framingBounds.maximum.z - framingBounds.minimum.z;
+    };
     const from = Number(animationGroup.from ?? 0);
     const to = Number(animationGroup.to ?? from);
     const samples = [];
     let pass = true;
     try {
-      for (const fraction of [0.1, 0.37, 0.63, 0.9]) {
+      // Include the midpoint because many EQ locomotion clips reach their
+      // largest root translation there. The additional endpoint sample gives
+      // model viewers a stable envelope without tracking the camera every frame.
+      for (const fraction of [0, 0.1, 0.37, 0.5, 0.63, 0.9]) {
         const frame = Number.isFinite(from) && Number.isFinite(to)
           ? from + (to - from) * fraction
           : 0;
         this.applyAnimationGroupFrame(animationGroup, frame);
         this.synchronizeSkeletonPose();
+        const currentBounds = this.getVisualBounds();
+        mergeFramingBounds(currentBounds);
         const boundsResult = evaluateAnimatedBoundsSafety({
           baselineMaxDimension,
-          currentMaxDimension: this.getVisualMaxDimension(),
+          currentMaxDimension: currentBounds
+            ? Math.max(currentBounds.width, currentBounds.height, currentBounds.depth)
+            : null,
         });
         const headRotation = this.inspectPrimaryHeadRotationSafety(
           animationGroup,
@@ -1878,10 +1932,31 @@ export class BabylonSpawn {
       this.restoreAnimationTargetValues(snapshot);
       this.synchronizeSkeletonPose();
     }
+    this.rootNode.computeWorldMatrix?.(true);
+    const framingOrigin = this.rootNode.getAbsolutePosition?.() ??
+      this.rootNode.position ?? { x: 0, y: 0, z: 0 };
+    const relativeFramingBounds = framingBounds
+      ? {
+        minimum: {
+          x: framingBounds.minimum.x - Number(framingOrigin.x ?? 0),
+          y: framingBounds.minimum.y - Number(framingOrigin.y ?? 0),
+          z: framingBounds.minimum.z - Number(framingOrigin.z ?? 0),
+        },
+        maximum: {
+          x: framingBounds.maximum.x - Number(framingOrigin.x ?? 0),
+          y: framingBounds.maximum.y - Number(framingOrigin.y ?? 0),
+          z: framingBounds.maximum.z - Number(framingOrigin.z ?? 0),
+        },
+        width : framingBounds.width,
+        height: framingBounds.height,
+        depth : framingBounds.depth,
+      }
+      : null;
     const result = {
       pass,
       measurable: samples.some((sample) => sample.measurable),
       baselineMaxDimension,
+      framingBounds: relativeFramingBounds,
       headOrientationPass: samples.every((sample) => sample.headRotation?.pass !== false),
       samples,
     };

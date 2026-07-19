@@ -27,6 +27,7 @@ const DEFAULT_PROFILE = {
   staticTextureAudit: { enabled: true, timeoutMs: 120000 },
   visualSamples: [],
   visualValidation: {
+    surface: 'race-audit',
     // Archive generation may legitimately need the longer race-audit timeout,
     // but a cached visual sample should never be allowed to stall a campaign
     // for that entire window.
@@ -172,6 +173,9 @@ export const validateProfile = (profile) => {
   if (Number(profile.visualValidation?.timeoutMs) < 1000) {
     errors.push('visualValidation.timeoutMs must be at least 1000');
   }
+  if (!['race-audit', 'model-review'].includes(profile.visualValidation?.surface)) {
+    errors.push('visualValidation.surface must be race-audit or model-review');
+  }
   if (
     Number(profile.visualValidation?.fixedAnimationFraction) < 0 ||
     Number(profile.visualValidation?.fixedAnimationFraction) > 1
@@ -250,6 +254,9 @@ export const loadProfile = async ({ repoRoot, profile: profileName = 'smoke', ar
       merged.visualSamples,
       args.visualModels
     );
+  }
+  if (args.visualSurface !== undefined) {
+    merged.visualValidation.surface = `${args.visualSurface}`.trim().toLowerCase();
   }
 
   merged.zoneValidation.zones = normalizeZones(merged.zoneValidation.zones);

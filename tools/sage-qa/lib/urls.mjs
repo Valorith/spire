@@ -57,3 +57,43 @@ export const buildRaceAuditUrl = ({
   }
   return url.toString();
 };
+
+const resolveModelReviewView = (sample = {}) => {
+  const requested = `${sample.view ?? ''}`.trim().toLowerCase();
+  if (requested === 'face' || requested === 'head') {
+    return { view: 'front', faceFocus: true };
+  }
+  if (requested === 'rear') {
+    return { view: 'back', faceFocus: sample.faceFocus === true };
+  }
+  if (['front', 'side', 'back'].includes(requested)) {
+    return { view: requested, faceFocus: sample.faceFocus === true };
+  }
+  const heading = Number(sample.heading ?? 0);
+  if (Math.abs(heading - 180) < 0.001) {
+    return { view: 'back', faceFocus: sample.faceFocus === true };
+  }
+  if (Math.abs(heading - 90) < 0.001 || Math.abs(heading - 270) < 0.001) {
+    return { view: 'side', faceFocus: sample.faceFocus === true };
+  }
+  return { view: 'front', faceFocus: sample.faceFocus === true };
+};
+
+export const buildModelReviewUrl = ({
+  baseUrl,
+  route,
+  eqDirectory,
+  sample,
+  cacheBust,
+}) => {
+  const url = baseSageUrl({ baseUrl, route, eqDirectory, cacheBust });
+  const { view, faceFocus } = resolveModelReviewView(sample);
+  url.searchParams.set('sageModelReview', '1');
+  url.searchParams.set('sageModel', `${sample.model ?? ''}`.trim().toLowerCase());
+  url.searchParams.set('sageModelFace', `${Number(sample.face ?? 0)}`);
+  url.searchParams.set('sageModelTexture', `${Number(sample.texture ?? 0)}`);
+  url.searchParams.set('sageModelHelm', `${Number(sample.helmTexture ?? 0)}`);
+  url.searchParams.set('sageModelView', view);
+  url.searchParams.set('sageModelFaceFocus', faceFocus ? '1' : '0');
+  return url.toString();
+};

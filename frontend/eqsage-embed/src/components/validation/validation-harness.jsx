@@ -11,6 +11,8 @@ const DEFAULT_ZONE_SEQUENCE = [
   'iceclad',
   'greatdivide',
 ];
+const DEFAULT_MODEL_SEQUENCE = ['hum'];
+const DEFAULT_MODEL_VIEWS = ['front', 'side', 'back', 'face'];
 
 const parsePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
@@ -20,11 +22,55 @@ const parsePositiveInteger = (value, fallback = 1) => {
 const sanitizeReportName = (value) =>
   `${value || 'spire-validation-report'}`.replace(/[^a-z0-9_-]/gi, '-');
 
+const parseList = (value, fallback) => {
+  const values = `${value ?? ''}`
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  return values.length ? values : fallback;
+};
+
+const normalizeModelView = (value) => {
+  if (value === 'face' || value === 'head') {
+    return { label: 'face', view: 'front', faceFocus: true };
+  }
+  if (['front', 'side', 'back', 'rear'].includes(value)) {
+    return {
+      label: value === 'rear' ? 'back' : value,
+      view: value === 'rear' ? 'back' : value,
+      faceFocus: false,
+    };
+  }
+  return null;
+};
+
+const isValidFraming = (framing) => {
+  const finitePositive = (value) => Number.isFinite(value) && value > 0;
+  const viewport = framing?.viewport;
+  return finitePositive(framing?.distance) &&
+    finitePositive(framing?.stage?.width) &&
+    finitePositive(framing?.stage?.height) &&
+    Number.isFinite(framing?.target?.x) &&
+    Number.isFinite(framing?.target?.y) &&
+    Number.isFinite(framing?.target?.z) &&
+    Number.isFinite(viewport?.x) &&
+    Number.isFinite(viewport?.y) &&
+    finitePositive(viewport?.width) &&
+    finitePositive(viewport?.height) &&
+    viewport.x >= 0 &&
+    viewport.y >= 0 &&
+    viewport.x + viewport.width <= 1.001 &&
+    viewport.y + viewport.height <= 1.001;
+};
+
 const parseValidationConfig = () => {
   if (typeof window === 'undefined') {
     return {
       enabled: false,
+      mode: 'zones',
       zones: DEFAULT_ZONE_SEQUENCE,
+      models: DEFAULT_MODEL_SEQUENCE,
+      modelViews: DEFAULT_MODEL_VIEWS.map(normalizeModelView),
       cycles: 1,
       sequence: DEFAULT_ZONE_SEQUENCE.map((zone, index) => ({
         zone,
@@ -37,27 +83,67 @@ const parseValidationConfig = () => {
     };
   }
   const params = new URLSearchParams(window.location.search);
+  const requestedMode = `${params.get('sageValidation') ?? ''}`.toLowerCase();
+  const modelParam = params.get('sageValidateModels') ||
+    params.get('sageValidationModels');
+  const modelMode = !!modelParam ||
+    ['model', 'models', 'model-review'].includes(requestedMode);
   const zoneParam = params.get('sageValidateZones') || params.get('sageValidationZones');
   const zones = zoneParam
     ? zoneParam.split(',').map((zone) => zone.trim()).filter(Boolean)
     : DEFAULT_ZONE_SEQUENCE;
   const normalizedZones = zones.length ? zones : DEFAULT_ZONE_SEQUENCE;
   const cycles = parsePositiveInteger(params.get('sageValidationCycles'), 1);
-  const sequence = Array.from({ length: cycles }, (_, cycleIndex) =>
+  const zoneSequence = Array.from({ length: cycles }, (_, cycleIndex) =>
     normalizedZones.map((zone, zoneIndex) => ({
       zone,
       cycle: cycleIndex + 1,
       index: cycleIndex * normalizedZones.length + zoneIndex,
     }))
   ).flat();
+  const models = parseList(
+    modelParam || params.get('sageModel'),
+    DEFAULT_MODEL_SEQUENCE
+  );
+  const modelViews = parseList(
+    params.get('sageValidationModelViews'),
+    DEFAULT_MODEL_VIEWS
+  ).map(normalizeModelView).filter(Boolean);
+  const normalizedModelViews = modelViews.length
+    ? modelViews
+    : DEFAULT_MODEL_VIEWS.map(normalizeModelView);
+  const modelSequence = Array.from({ length: cycles }, (_, cycleIndex) =>
+    models.flatMap((model, modelIndex) =>
+      normalizedModelViews.map((modelView, viewIndex) => ({
+        ...modelView,
+        model,
+        cycle: cycleIndex + 1,
+        index:
+          cycleIndex * models.length * normalizedModelViews.length +
+          modelIndex * normalizedModelViews.length +
+          viewIndex,
+      }))
+    )
+  ).flat();
+  const sequence = modelMode ? modelSequence : zoneSequence;
   return {
-    enabled: params.has('sageValidation') || params.has('sageValidateZones'),
+    enabled: params.has('sageValidation') ||
+      params.has('sageValidateZones') ||
+      params.has('sageValidateModels') ||
+      params.has('sageValidationModels'),
+    mode: modelMode ? 'models' : 'zones',
     zones: normalizedZones,
+    models,
+    modelViews: normalizedModelViews,
     cycles,
     sequence,
     expectedReports: sequence.length,
+    stepDelay: parsePositiveInteger(params.get('sageValidationStepDelay'), 250),
     persistToEq: params.get('sageValidationPersist') !== '0',
-    reportName: sanitizeReportName(params.get('sageValidationReport')),
+    reportName: sanitizeReportName(
+      params.get('sageValidationReport') ||
+      (modelMode ? 'spire-model-validation-report' : 'spire-validation-report')
+    ),
   };
 };
 
@@ -77,6 +163,8 @@ export const SageValidationHarness = () => {
   const selectingRef = useRef(false);
   const selectedZoneRef = useRef(null);
   const startedRef = useRef(false);
+  const modelSequenceIndexRef = useRef(0);
+  const modelCommandRef = useRef('');
 
   useEffect(() => {
     selectedZoneRef.current = selectedZone?.short_name ?? null;
@@ -93,6 +181,9 @@ export const SageValidationHarness = () => {
         failureCount: failures.length,
         failures: failures.map((report) => ({
           zone: report.zone,
+          model: report.model,
+          view: report.view,
+          faceFocus: report.faceFocus,
           pass: report.pass,
           spawns: report.spawns,
           doors : report.doors,
@@ -125,12 +216,17 @@ export const SageValidationHarness = () => {
     if (!config.enabled) {
       return;
     }
-    persistReports([], 'Validation enabled; waiting for zone list');
+    persistReports(
+      [],
+      config.mode === 'models'
+        ? 'Model validation enabled; waiting for model viewer'
+        : 'Validation enabled; waiting for zone list'
+    );
   }, [config.enabled, persistReports]);
 
   const selectZone = useCallback(
     (zoneName) => {
-      if (!config.enabled || selectingRef.current) {
+      if (!config.enabled || config.mode !== 'zones' || selectingRef.current) {
         return;
       }
       const nextZone = zones.find((zone) => zone.short_name === zoneName);
@@ -176,6 +272,7 @@ export const SageValidationHarness = () => {
     },
     [
       config.enabled,
+      config.mode,
       loadGameController,
       persistReports,
       setSelectedZone,
@@ -192,7 +289,12 @@ export const SageValidationHarness = () => {
   }, [config]);
 
   useEffect(() => {
-    if (!config.enabled || !zones.length || startedRef.current) {
+    if (
+      !config.enabled ||
+      config.mode !== 'zones' ||
+      !zones.length ||
+      startedRef.current
+    ) {
       return;
     }
     startedRef.current = true;
@@ -200,10 +302,10 @@ export const SageValidationHarness = () => {
     if (firstZone && selectedZone?.short_name !== firstZone) {
       selectZone(firstZone);
     }
-  }, [config.enabled, config.sequence, selectedZone, selectZone, zones.length]);
+  }, [config.enabled, config.mode, config.sequence, selectedZone, selectZone, zones.length]);
 
   useEffect(() => {
-    if (!config.enabled) {
+    if (!config.enabled || config.mode !== 'zones') {
       return;
     }
 
@@ -275,7 +377,148 @@ export const SageValidationHarness = () => {
       window.removeEventListener('spire-sage-zone-validation-ready', onZoneReady);
       window.removeEventListener('spire-sage-zone-validation-error', onZoneError);
     };
-  }, [config.cycles, config.enabled, config.sequence, config.zones.length, persistReports, selectZone]);
+  }, [config.cycles, config.enabled, config.mode, config.sequence, config.zones.length, persistReports, selectZone]);
+
+  useEffect(() => {
+    if (!config.enabled || config.mode !== 'models') {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timer = null;
+    const schedule = (callback, delay = config.stepDelay) => {
+      timer = window.setTimeout(callback, delay);
+    };
+    const recordReport = (report) => {
+      const nextReports = [...reportsRef.current, report];
+      reportsRef.current = nextReports;
+      setReports(nextReports);
+      modelSequenceIndexRef.current += 1;
+      modelCommandRef.current = '';
+
+      const nextEntry = config.sequence[modelSequenceIndexRef.current];
+      if (!nextEntry) {
+        const completeStatus = config.cycles > 1
+          ? `Model validation complete (${nextReports.length} checks; ${config.models.length} models x ${config.cycles} cycles)`
+          : `Model validation complete (${config.models.length} models; ${nextReports.length} checks)`;
+        setStatus(completeStatus);
+        persistReports(nextReports, completeStatus);
+        return false;
+      }
+
+      const nextStatus = `Validated ${report.model} ${report.label}; loading ${nextEntry.model} ${nextEntry.label}`;
+      setStatus(nextStatus);
+      persistReports(nextReports, nextStatus);
+      return true;
+    };
+
+    const runNextStep = () => {
+      if (cancelled) {
+        return;
+      }
+      const expected = config.sequence[modelSequenceIndexRef.current];
+      if (!expected) {
+        return;
+      }
+      const review = window.__spireSageModelReview;
+      if (!review || typeof review.runQaStep !== 'function') {
+        schedule(runNextStep, 100);
+        return;
+      }
+
+      const signature = [
+        expected.index,
+        expected.model,
+        expected.view,
+        expected.faceFocus ? 'face' : 'body',
+      ].join(':');
+      if (modelCommandRef.current !== signature) {
+        modelCommandRef.current = signature;
+        const accepted = review.runQaStep({
+          model: expected.model,
+          view: expected.view,
+          faceFocus: expected.faceFocus,
+        });
+        const nextStatus = `Checking ${expected.model.toUpperCase()} ${expected.label}`;
+        setStatus(nextStatus);
+        if (accepted === false) {
+          const shouldContinue = recordReport({
+            model: expected.model,
+            view: expected.view,
+            label: expected.label,
+            faceFocus: expected.faceFocus,
+            loadError: { message: 'Model is not present in the Sage model inventory' },
+            pass: {
+              appearance: false,
+              animation: false,
+              orientation: false,
+              framing: false,
+              all: false,
+            },
+            validationSequence: expected,
+            timestamp: new Date().toISOString(),
+          });
+          if (shouldContinue) {
+            schedule(runNextStep);
+          }
+          return;
+        }
+        schedule(runNextStep);
+        return;
+      }
+
+      const matchesExpectedState = review.ready === true &&
+        review.model === expected.model &&
+        review.view === expected.view &&
+        review.faceFocus === expected.faceFocus &&
+        review.framing?.view === expected.view &&
+        review.framing?.faceFocus === expected.faceFocus;
+      if (!matchesExpectedState) {
+        schedule(runNextStep, 100);
+        return;
+      }
+
+      const diagnostics = review.diagnostics ?? {};
+      const pass = {
+        appearance: diagnostics.appearance?.invariantPass === true,
+        animation: diagnostics.animationPass === true,
+        orientation: diagnostics.orientationPass === true,
+        framing: isValidFraming(review.framing),
+      };
+      pass.all = Object.values(pass).every(Boolean);
+      const shouldContinue = recordReport({
+        model: expected.model,
+        view: expected.view,
+        label: expected.label,
+        faceFocus: expected.faceFocus,
+        diagnostics,
+        framing: review.framing,
+        selection: review.selection,
+        pass,
+        validationSequence: expected,
+        timestamp: new Date().toISOString(),
+      });
+      if (shouldContinue) {
+        schedule(runNextStep);
+      }
+    };
+
+    schedule(runNextStep, 50);
+    return () => {
+      cancelled = true;
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [
+    config.cycles,
+    config.enabled,
+    config.mode,
+    config.models.length,
+    config.sequence,
+    config.stepDelay,
+    persistReports,
+  ]);
 
   if (!config.enabled) {
     return null;
@@ -299,12 +542,24 @@ export const SageValidationHarness = () => {
       }}
     >
       <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
-        Sage Validation
+        {config.mode === 'models' ? 'Sage Model Validation' : 'Sage Validation'}
       </Typography>
       <Typography sx={{ fontSize: 12, marginBottom: 0.5 }}>
         {status}
       </Typography>
-      {reports.slice(-6).map((report) => (
+      {config.mode === 'models' && reports.slice(-6).map((report) => (
+        <Typography
+          key={`${report.validationSequence?.index ?? report.timestamp}-${report.model}-${report.label}`}
+          sx={{ fontSize: 11, lineHeight: 1.35 }}
+        >
+          {report.pass?.all ? 'PASS' : 'FAIL'} {report.model?.toUpperCase()} {report.label}:{' '}
+          orient {report.pass?.orientation ? 'ok' : 'fail'}, appearance{' '}
+          {report.pass?.appearance ? 'ok' : 'fail'}, animation{' '}
+          {report.pass?.animation ? 'ok' : 'fail'}, framing{' '}
+          {report.pass?.framing ? 'ok' : 'fail'}
+        </Typography>
+      ))}
+      {config.mode === 'zones' && reports.slice(-6).map((report) => (
         <Typography
           key={`${report.validationSequence?.index ?? report.timestamp}-${report.zone}`}
           sx={{ fontSize: 11, lineHeight: 1.35 }}

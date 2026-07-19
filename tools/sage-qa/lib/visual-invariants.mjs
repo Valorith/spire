@@ -69,6 +69,12 @@ export const visualBaselineKey = (sample = {}) => {
   if (Object.hasOwn(sample, 'heading')) {
     parts.push(`heading=${Number(sample.heading)}`);
   }
+  if (Object.hasOwn(sample, 'view')) {
+    parts.push(`view=${`${sample.view}`.trim().toLowerCase()}`);
+  }
+  if (sample.faceFocus === true) {
+    parts.push('face-focus=1');
+  }
   return parts.join('|');
 };
 
@@ -161,6 +167,12 @@ export const evaluatePreviewEvidence = (
   if (count(evidence?.fallbackTextureCount) > 0) violations.push('texture-fallback');
   if (count(evidence?.headOrientationRiskCount) > 0) {
     violations.push('head-texture-orientation');
+  }
+  if (
+    evidence?.semanticHeadOrientation?.required === true &&
+    evidence.semanticHeadOrientation.pass !== true
+  ) {
+    violations.push('head-geometry-inverted');
   }
   if (
     evidence?.bodyVariantFallback === true &&

@@ -7,9 +7,17 @@ import { debugSageLog, markStage } from '../../debug-stage';
 const MainContext = React.createContext({});
 let gameControllerImportPromise = null;
 let babylonRuntimePromise = null;
-const modelReviewRequested = () =>
-  typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).has('sageModelReview');
+const modelReviewRequested = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const validationMode = `${params.get('sageValidation') ?? ''}`.toLowerCase();
+  return params.has('sageModelReview') ||
+    params.has('sageValidateModels') ||
+    params.has('sageValidationModels') ||
+    ['model', 'models', 'model-review'].includes(validationMode);
+};
 
 /**
  * @typedef Spire

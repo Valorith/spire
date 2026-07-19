@@ -1,6 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { buildRaceAuditUrl, buildZoneValidationUrl } from './urls.mjs';
+import {
+  buildModelReviewUrl,
+  buildRaceAuditUrl,
+  buildZoneValidationUrl,
+} from './urls.mjs';
 import {
   compareApprovedVisualBaseline,
   comparePreviewEvidence,
@@ -354,7 +358,17 @@ const stabilizePreview = (page, fixedAnimationFraction, requestedModel) => page.
     const previewBounds = boundsForMeshes(renderedMeshes);
     let cameraFraming = null;
     const camera = scene.activeCamera;
-    if (camera && previewBounds) {
+    const modelReview = window.__spireSageModelReview;
+    if (
+      camera &&
+      previewBounds &&
+      modelReview?.ready === true &&
+      typeof modelReview.reframe === 'function'
+    ) {
+      cameraFraming = modelReview.reframe();
+      scene.render?.();
+      scene.render?.();
+    } else if (camera && previewBounds) {
       const params = new URLSearchParams(window.location.search);
       const close = params.has('sageRaceFacePreviewClose');
       const requestedDistance = Number(params.get('sageRaceFacePreviewDistance') ?? 4.5);
@@ -411,6 +425,7 @@ const stabilizePreview = (page, fixedAnimationFraction, requestedModel) => page.
       fraction,
       motion,
       cameraFraming,
+      surface: modelReview?.ready === true ? 'model-review' : 'race-audit',
     };
   },
   {
@@ -1244,11 +1259,17 @@ export const runVisualSamples = async ({
   }
   const approvedBaselines = approvedBaselineDocument?.samples ?? {};
   const results = [];
+  const visualSurface = profile.visualValidation?.surface ?? 'race-audit';
   const repetitions = Math.max(2, Math.trunc(Number(
     profile.visualValidation?.repetitions ?? 2
   )));
   for (let index = 0; index < profile.visualSamples.length; index += 1) {
     const sample = profile.visualSamples[index];
+    const orientationSuffix = Object.hasOwn(sample, 'view')
+      ? `-view-${`${sample.view}`.trim().toLowerCase()}${sample.faceFocus === true ? '-face-focus' : ''}`
+      : Object.hasOwn(sample, 'heading')
+        ? `-heading-${sample.heading}`
+        : '';
     await beforeSample?.({ index, count: profile.visualSamples.length, sample });
     const observations = [];
     const observationAnalyses = [];
@@ -1265,23 +1286,90 @@ export const runVisualSamples = async ({
         const page = await context.newPage();
         attachTelemetry(page, telemetry, scope);
         try {
-          const url = buildRaceAuditUrl({
-            baseUrl,
-            route: profile.route,
-            eqDirectory,
-            bootstrapZone: profile.raceAudit.bootstrapZone ?? 'blackburrow',
-            models: [sample.model],
-            preview: sample,
-            cacheBust: `${runId}-visual-${index + 1}-repeat-${repetition + 1}`,
-          });
+          const cacheBust = `${runId}-visual-${index + 1}-repeat-${repetition + 1}`;
+          const url = visualSurface === 'model-review'
+            ? buildModelReviewUrl({
+              baseUrl,
+              route: profile.route,
+              eqDirectory,
+              sample,
+              cacheBust,
+            })
+            : buildRaceAuditUrl({
+              baseUrl,
+              route: profile.route,
+              eqDirectory,
+              bootstrapZone: profile.raceAudit.bootstrapZone ?? 'blackburrow',
+              models: [sample.model],
+              preview: sample,
+              cacheBust,
+            });
           firstUrl ??= url;
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-          await page.waitForFunction(
-            () => window.__spireSageRaceFaceAudit?.complete === true,
-            null,
-            { timeout: profile.visualValidation?.timeoutMs ?? 120000 }
-          );
-          const audit = await page.evaluate(() => window.__spireSageRaceFaceAudit ?? null);
+          if (visualSurface === 'model-review') {
+            const reviewUrl = new URL(url);
+            await page.waitForFunction(
+              ({ model, view, faceFocus, face, texture, helmTexture }) => {
+                const review = window.__spireSageModelReview;
+                return review?.ready === true &&
+                  review.model === model &&
+                  review.view === view &&
+                  review.faceFocus === faceFocus &&
+                  Number(review.selection?.face) === face &&
+                  Number(review.selection?.texture) === texture &&
+                  Number(review.selection?.helmTexture) === helmTexture;
+              },
+              {
+                model: `${sample.model}`.trim().toLowerCase(),
+                view: reviewUrl.searchParams.get('sageModelView'),
+                faceFocus: reviewUrl.searchParams.get('sageModelFaceFocus') === '1',
+                face: Number(sample.face ?? 0),
+                texture: Number(sample.texture ?? 0),
+                helmTexture: Number(sample.helmTexture ?? 0),
+              },
+              { timeout: profile.visualValidation?.timeoutMs ?? 120000 }
+            );
+          } else {
+            await page.waitForFunction(
+              () => window.__spireSageRaceFaceAudit?.complete === true,
+              null,
+              { timeout: profile.visualValidation?.timeoutMs ?? 120000 }
+            );
+          }
+          const audit = visualSurface === 'model-review'
+            ? await page.evaluate(() => {
+              const review = window.__spireSageModelReview;
+              const diagnostics = review?.diagnostics ?? null;
+              const pass = review?.ready === true && diagnostics?.pass === true;
+              return {
+                complete: review?.ready === true,
+                failureCount: pass ? 0 : 1,
+                results: [{
+                  bounds: diagnostics?.bounds ?? null,
+                  fallbackTextureCount: Number(
+                    diagnostics?.appearance?.fallbackTextureCount ?? 0
+                  ),
+                  faceVariantDeterminism: { pass: true },
+                  semanticHeadOrientation:
+                    diagnostics?.semanticHeadOrientation ?? null,
+                  status: pass ? 'pass' : 'fail',
+                  verticallyFlippedHeadTextureCount: Number(
+                    Array.isArray(diagnostics?.headOrientation)
+                      ? diagnostics.headOrientation.filter((item) => item.risk).length
+                      : 0
+                  ),
+                }],
+                viewer: {
+                  faceFocus: review?.faceFocus ?? false,
+                  framing: review?.framing ?? null,
+                  model: review?.model ?? null,
+                  qaApiVersion: review?.qaApiVersion ?? null,
+                  selection: review?.selection ?? null,
+                  view: review?.view ?? null,
+                },
+              };
+            })
+            : await page.evaluate(() => window.__spireSageRaceFaceAudit ?? null);
           firstAudit ??= audit;
           const auditResult = audit?.results?.[0] ?? null;
           const stabilization = await stabilizePreview(
@@ -1297,6 +1385,8 @@ export const runVisualSamples = async ({
             headOrientationRiskCount: Number(
               auditResult?.verticallyFlippedHeadTextureCount ?? 0
             ),
+            semanticHeadOrientation:
+              auditResult?.semanticHeadOrientation ?? null,
             animationMotion: stabilization?.motion ?? null,
             stabilization,
           };
@@ -1325,10 +1415,7 @@ export const runVisualSamples = async ({
             Number(audit?.failureCount ?? 0) === 0 &&
             auditResult?.faceVariantDeterminism?.pass !== false
           );
-          const headingSuffix = Object.hasOwn(sample, 'heading')
-            ? `-heading-${sample.heading}`
-            : '';
-          const baseName = `${String(index + 1).padStart(2, '0')}-${sample.model}-face-${sample.face ?? 0}-texture-${sample.texture ?? 0}${headingSuffix}`;
+          const baseName = `${String(index + 1).padStart(2, '0')}-${sample.model}-face-${sample.face ?? 0}-texture-${sample.texture ?? 0}${orientationSuffix}`;
           const fileName = repetition === 0
             ? `${baseName}.jpg`
             : `${baseName}-repeat-${repetition + 1}.jpg`;
@@ -1356,12 +1443,10 @@ export const runVisualSamples = async ({
         observationAnalyses.every((analysis) => analysis.pass) &&
         approvedBaselineAnalyses.every((analysis) => analysis.pass) &&
         repeatability.pass;
-      const headingSuffix = Object.hasOwn(sample, 'heading')
-        ? `-heading-${sample.heading}`
-        : '';
-      const fileName = `${String(index + 1).padStart(2, '0')}-${sample.model}-face-${sample.face ?? 0}-texture-${sample.texture ?? 0}${headingSuffix}.jpg`;
+      const fileName = `${String(index + 1).padStart(2, '0')}-${sample.model}-face-${sample.face ?? 0}-texture-${sample.texture ?? 0}${orientationSuffix}.jpg`;
       const result = {
         ...sample,
+        surface: visualSurface,
         pass,
         repetitions,
         status: firstAudit?.results?.[0]?.status ?? 'unknown',

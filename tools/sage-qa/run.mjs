@@ -30,7 +30,7 @@ const repoRoot = path.resolve(scriptDirectory, '..', '..');
 const HELP = `Sage QA
 
 Usage:
-  npm run qa:sage -- --profile <smoke|matrix|soak|full> [options]
+  npm run qa:sage -- --profile <smoke|model-viewer|matrix|soak|full> [options]
 
 Options:
   -p, --profile <name|path>      Validation profile (default: smoke)
@@ -42,7 +42,8 @@ Options:
       --zones <csv>             Validate only these zones
       --batch-size <number>     Override race-audit batch size
       --race-models <csv>       Audit only these model codes
-      --visual-models <csv>    Run only matching visual samples from the profile
+      --visual-models <csv>     Run only matching visual samples from the profile
+      --visual-surface <name>   Use race-audit or model-review for visual QA
       --no-race-audit           Skip browser race audit
       --no-zone-validation      Skip zone validation
       --no-static-texture-audit Skip static texture audit
