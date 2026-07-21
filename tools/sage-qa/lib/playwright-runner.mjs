@@ -947,7 +947,15 @@ const collectPreviewEvidence = (page, requestedModel) => page.evaluate(
 
 export const getBrowserLaunchOptions = (profile) => ({
   headless: !profile.headed,
-  args: ['--disable-dev-shm-usage', '--enable-precise-memory-info'],
+  args: [
+    '--disable-dev-shm-usage',
+    '--enable-precise-memory-info',
+    // Current Chromium requires explicit opt-in before its bundled SwiftShader
+    // implementation may provide WebGL to a headless page. Without this flag,
+    // model-review campaigns wait for readiness until their timeout while the
+    // actual viewer has already failed with "WebGL not supported".
+    '--enable-unsafe-swiftshader',
+  ],
 });
 
 export const createTelemetry = () => ({
@@ -1340,7 +1348,9 @@ export const runVisualSamples = async ({
             ? await page.evaluate(() => {
               const review = window.__spireSageModelReview;
               const diagnostics = review?.diagnostics ?? null;
-              const pass = review?.ready === true && diagnostics?.pass === true;
+              const pass = review?.ready === true &&
+                diagnostics?.pass === true &&
+                review?.animationSafety?.pass !== false;
               return {
                 complete: review?.ready === true,
                 failureCount: pass ? 0 : 1,
@@ -1364,6 +1374,9 @@ export const runVisualSamples = async ({
                   framing: review?.framing ?? null,
                   model: review?.model ?? null,
                   qaApiVersion: review?.qaApiVersion ?? null,
+                  automatedReviewSuggestion:
+                    review?.automatedReviewSuggestion ?? null,
+                  animationSafety: review?.animationSafety ?? null,
                   selection: review?.selection ?? null,
                   view: review?.view ?? null,
                 },
@@ -1372,6 +1385,13 @@ export const runVisualSamples = async ({
             : await page.evaluate(() => window.__spireSageRaceFaceAudit ?? null);
           firstAudit ??= audit;
           const auditResult = audit?.results?.[0] ?? null;
+          const expectedAutomatedResponseConfigured =
+            Object.hasOwn(sample, 'expectedAutomatedResponse');
+          const actualAutomatedResponse =
+            audit?.viewer?.automatedReviewSuggestion?.response ?? null;
+          const automatedResponsePass =
+            !expectedAutomatedResponseConfigured ||
+            actualAutomatedResponse === sample.expectedAutomatedResponse;
           const stabilization = await stabilizePreview(
             page,
             profile.visualValidation?.fixedAnimationFraction,
@@ -1413,7 +1433,8 @@ export const runVisualSamples = async ({
           auditPasses.push(
             audit?.complete === true &&
             Number(audit?.failureCount ?? 0) === 0 &&
-            auditResult?.faceVariantDeterminism?.pass !== false
+            auditResult?.faceVariantDeterminism?.pass !== false &&
+            automatedResponsePass
           );
           const baseName = `${String(index + 1).padStart(2, '0')}-${sample.model}-face-${sample.face ?? 0}-texture-${sample.texture ?? 0}${orientationSuffix}`;
           const fileName = repetition === 0

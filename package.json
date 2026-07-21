@@ -15,6 +15,7 @@
     "qa:sage:compact": "node --expose-gc tools/sage-qa/run.mjs --profile compact-rigs",
     "qa:sage:models": "node --expose-gc tools/sage-qa/run.mjs --profile model-regression",
     "qa:sage:viewer": "node --expose-gc tools/sage-qa/run.mjs --profile model-viewer",
+    "qa:sage:review-feedback": "node --expose-gc tools/sage-qa/run.mjs --profile review-feedback",
     "qa:sage:matrix": "node --expose-gc tools/sage-qa/run.mjs --profile matrix",
     "qa:sage:soak": "node --expose-gc tools/sage-qa/run.mjs --profile soak",
     "qa:sage:full": "node --expose-gc tools/sage-qa/run.mjs --profile full",

@@ -467,12 +467,17 @@ export const SageValidationHarness = () => {
         return;
       }
 
+      const loadFailed = review.ready === true &&
+        review.model === expected.model &&
+        review.diagnostics?.loadPass === false;
       const matchesExpectedState = review.ready === true &&
         review.model === expected.model &&
         review.view === expected.view &&
         review.faceFocus === expected.faceFocus &&
-        review.framing?.view === expected.view &&
-        review.framing?.faceFocus === expected.faceFocus;
+        (loadFailed || (
+          review.framing?.view === expected.view &&
+          review.framing?.faceFocus === expected.faceFocus
+        ));
       if (!matchesExpectedState) {
         schedule(runNextStep, 100);
         return;
@@ -480,10 +485,13 @@ export const SageValidationHarness = () => {
 
       const diagnostics = review.diagnostics ?? {};
       const pass = {
+        load: diagnostics.loadPass === true,
         appearance: diagnostics.appearance?.invariantPass === true,
-        animation: diagnostics.animationPass === true,
+        animation:
+          diagnostics.animationPass === true &&
+          review.animationSafety?.pass !== false,
         orientation: diagnostics.orientationPass === true,
-        framing: isValidFraming(review.framing),
+        framing: diagnostics.loadPass === true && isValidFraming(review.framing),
       };
       pass.all = Object.values(pass).every(Boolean);
       const shouldContinue = recordReport({

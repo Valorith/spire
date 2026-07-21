@@ -102,6 +102,7 @@
 .model-review-search input,
 .model-review-field select,
 .model-review-variant-grid select,
+.model-review-review-response select,
 .model-review-review-section textarea {
   width: 100%;
   box-sizing: border-box;
@@ -121,6 +122,7 @@
 .model-review-search input:focus,
 .model-review-field select:focus,
 .model-review-variant-grid select:focus,
+.model-review-review-response select:focus,
 .model-review-review-section textarea:focus {
   border-color: rgba(215, 195, 127, 0.65);
   box-shadow: 0 0 0 2px rgba(215, 195, 127, 0.08);
@@ -452,6 +454,31 @@
 .model-review-playback input { accent-color: var(--review-gold); }
 .model-review-playback output { color: #7c8791; font-family: monospace; font-size: 10px; text-align: right; }
 
+.model-review-review-response,
+.model-review-review-details {
+  display: block;
+  color: #7f8b96;
+  font-size: 10px;
+}
+
+.model-review-review-response > span,
+.model-review-review-details > span {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.model-review-review-response select {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.model-review-review-details {
+  margin-top: 10px;
+}
+
 .model-review-review-section textarea {
   min-height: 76px;
   resize: vertical;
@@ -467,15 +494,65 @@
   margin-top: 9px;
 }
 
+.model-review-qa-suggestion {
+  margin-top: 9px;
+  padding: 7px 8px;
+  border-left: 2px solid rgba(112, 184, 138, 0.72);
+  background: rgba(70, 142, 96, 0.08);
+  color: #91b99c;
+  font-size: 10px;
+}
+
+.model-review-qa-suggestion.is-issue {
+  border-left-color: rgba(211, 107, 94, 0.86);
+  background: rgba(165, 66, 55, 0.1);
+  color: #dba39b;
+}
+
 .model-review-review-actions button {
   min-height: 32px;
-  border-color: var(--review-line);
   font-size: 11px;
 }
 
-.model-review-review-actions button:hover { background: rgba(255, 255, 255, 0.04); }
-.model-review-review-actions button.is-pass { border-color: rgba(112, 184, 138, 0.55); color: #9dc9aa; background: rgba(112, 184, 138, 0.08); }
-.model-review-review-actions button.is-issue { border-color: rgba(211, 107, 94, 0.58); color: #df9a91; background: rgba(211, 107, 94, 0.08); }
+.model-review-review-actions .model-review-pass-action {
+  border-color: rgba(112, 184, 138, 0.5);
+  color: #add5b8;
+  background: rgba(70, 142, 96, 0.15);
+}
+
+.model-review-review-actions .model-review-pass-action:hover {
+  border-color: rgba(132, 207, 159, 0.74);
+  background: rgba(70, 142, 96, 0.25);
+}
+
+.model-review-review-actions .model-review-issue-action {
+  border-color: rgba(211, 107, 94, 0.54);
+  color: #e2a29a;
+  background: rgba(165, 66, 55, 0.16);
+}
+
+.model-review-review-actions .model-review-issue-action:hover {
+  border-color: rgba(226, 126, 114, 0.76);
+  background: rgba(165, 66, 55, 0.27);
+}
+
+.model-review-review-actions button:disabled,
+.model-review-review-actions button:disabled:hover {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.model-review-review-actions button.is-pass {
+  border-color: rgba(132, 207, 159, 0.9);
+  background: rgba(70, 142, 96, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(132, 207, 159, 0.12);
+}
+
+.model-review-review-actions button.is-issue {
+  border-color: rgba(226, 126, 114, 0.9);
+  background: rgba(165, 66, 55, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(226, 126, 114, 0.12);
+}
 
 .model-review-hints {
   right: calc(var(--review-inspector) + 16px);

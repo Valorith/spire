@@ -1,10 +1,10 @@
 export const PREVIEW_MODEL_ALIASES = {
-  b01: 'boat',
-  b02: 'boat',
-  b03: 'boat',
+  b01: 'launch',
+  b02: 'launch',
+  b03: 'launch',
   bon: 'lskmesh',
   box: 'box01',
-  brc: 'brcdefault',
+  brc: 'gnm',
   bse: 'ghu',
   cro: 'croc',
   cwb: 'cwbclockwork',
@@ -49,7 +49,30 @@ export const PREVIEW_MODEL_ALIASES = {
 };
 
 export const PREVIEW_ALIAS_FIRST_MODELS = new Set([
+  'abh',
+  'akf',
+  'ala',
+  'alg',
+  'all',
+  'alr',
+  'arm',
+  'avi',
+  'b01',
+  'b02',
+  'b03',
+  'bac',
+  'bar',
+  'bea',
+  'ber',
+  'bff',
+  'bfr',
+  'bgf',
+  'bgg',
+  'bgm',
+  'boat',
+  'brc',
   'brf',
+  'bri',
   'frf',
   'shf',
   'pre',
@@ -61,13 +84,32 @@ export const PREVIEW_ALIAS_FIRST_MODELS = new Set([
 // client. Keep those spawns visible with a full, semantically close asset and
 // report the substitution distinctly in the audit.
 export const PREVIEW_CLIENT_FALLBACKS = {
-  // These female archive meshes are structurally unusable in this client:
-  // BRF binds its tiny head geometry to leg bones, while FRF has an open,
-  // back-face-culled head, and SHF collapses around its bind pose unless it is
-  // animated by an incompatible skeleton (which deforms the whole body).
-  // Prefer the complete same-race model instead of rendering a headless,
-  // hollow, or collapsed NPC.
-  brf: 'brm',
+  // Human review found several valid race definitions whose exact art is
+  // absent or structurally incomplete in commonly shipped client archives.
+  // Keep the review/zone surfaces useful with a visible semantic substitute;
+  // the resolved-asset evidence still reports every substitution.
+  abh: 'ghu',
+  akf: 'ahf',
+  ala: 'hum',
+  alg: 'ghu',
+  all: 'croc',
+  alr: 'croc',
+  arm: 'rat',
+  avi: 'avk',
+  bac: 'fis',
+  bar: 'pbr',
+  bea: 'pbr',
+  ber: 'btx',
+  bff: 'huf',
+  bfr: 'hum',
+  bgf: 'huf',
+  bgg: 'gob',
+  bgm: 'hum',
+  boat: 'launch',
+  brf: 'bnm',
+  bri: 'hum',
+  // FRF has an open, back-face-culled head, while SHF collapses around its
+  // bind pose unless it is animated by an incompatible skeleton.
   cla: 'obj_sc_shella',
   dia: 'trn',
   dlk: 'drk',

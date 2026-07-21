@@ -626,6 +626,14 @@ export class BabylonSpawn {
   }
 
   async getSecondaryHeadContainer(variation) {
+    const requestedModel = `${this.modelName ?? ''}`.slice(0, 3).toLowerCase();
+    const resolvedModel = `${this.resolvedModelAsset ?? ''}`.slice(0, 3).toLowerCase();
+    if (resolvedModel && requestedModel && resolvedModel !== requestedModel) {
+      // A full-model fallback is already complete. Attaching the requested
+      // model's separate head to a different skeleton reintroduces the broken
+      // or floating geometry that the fallback was selected to replace.
+      return null;
+    }
     const secondaryModelName = `${this.modelName}he${variation}`;
     const isKnownSecondaryHeadModel = this.shouldAttachSecondaryHead(this.modelName);
     if (!isKnownSecondaryHeadModel) {

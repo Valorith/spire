@@ -11,8 +11,12 @@ import {
   inspectHeadTextureOrientation,
   isKnownEffectOnlyCharacterModel,
 } from '../../viewer/helpers/appearanceValidation';
+import raceAppearancePolicies from '../../viewer/common/raceAppearancePolicies.json';
 
 const HEAD_MATERIAL_PATTERN = /^[a-z0-9]{3}he(?:\d{2}|sk)\d{2}$/i;
+const REQUIRED_HEAD_MODELS = new Set(
+  raceAppearancePolicies.requiredHeadModels ?? []
+);
 
 const getTexture = (material) =>
   material?.albedoTexture ??
@@ -167,6 +171,13 @@ export const inspectModelReviewSpawn = (spawn) => {
   const headMaterials = materials.filter((material) =>
     HEAD_MATERIAL_PATTERN.test(`${material?.name ?? ''}`)
   );
+  const headTextureSignatures = headMaterials
+    .map((material) => {
+      const texture = getTexture(material);
+      return `${material?.name ?? ''}:${texture?.name ?? texture?.url ?? ''}`;
+    })
+    .filter(Boolean)
+    .sort();
   const headOrientation = headMaterials.map((material) =>
     inspectHeadTextureOrientation(
       material,
@@ -174,6 +185,9 @@ export const inspectModelReviewSpawn = (spawn) => {
     )
   );
   const nonFiniteBoneMatrixCount = countNonFiniteBoneMatrices(spawn);
+  const resolvedModel = `${
+    spawn?.resolvedModelAsset ?? spawn?.loadedModelVariation ?? spawn?.modelName ?? ''
+  }`.trim().slice(0, 3).toLowerCase();
   const appearance = evaluateAppearanceVariant({
     renderPass: meshes.length > 0,
     materialSlotCount: materials.length,
@@ -198,7 +212,11 @@ export const inspectModelReviewSpawn = (spawn) => {
       return Number.isFinite(width) && Number.isFinite(height) && width <= 1 && height <= 1;
     }).length,
     headOrientationRiskCount: headOrientation.filter((item) => item.risk).length,
+    headMaterials: headMaterials.map((material) => material?.name).filter(Boolean).sort(),
+    headTextureSignatures,
     nonFiniteBoneMatrixCount,
+  }, {
+    requireHeadTexture: REQUIRED_HEAD_MODELS.has(resolvedModel),
   });
   const animationVitality = inspectAnimationSetVitality(spawn?.animationGroups ?? []);
   const skeletonCount = spawn?.instanceContainer?.skeletons?.length ??
@@ -240,6 +258,14 @@ export const inspectModelReviewSpawn = (spawn) => {
       animationReadiness.pass &&
       Number(spawn?.animationRetargeting?.unresolvedTargetCount ?? 0) === 0
     );
+  const requestedModel = `${spawn?.modelName ?? ''}`.trim().toLowerCase();
+  const resolutionKind =
+    resolvedModel && resolvedModel !== requestedModel.slice(0, 3)
+      ? 'fallback'
+      : 'exact';
+  const incompatibleFallbackHeadAttached =
+    resolutionKind === 'fallback' &&
+    spawn?.hasAttachedSecondaryHead === true;
 
   return {
     appearance,
@@ -250,14 +276,118 @@ export const inspectModelReviewSpawn = (spawn) => {
     compactNativeArmNeutralized:
       spawn?.compactNativeArmNeutralized === true,
     effectOnly,
+    loadPass: true,
     headOrientation,
     materialCount: materials.length,
     meshCount: meshes.length,
     orientationPass,
     semanticHeadOrientation,
     nativePoseOnly: spawn?.nativePoseOnly === true,
-    pass: appearance.invariantPass && orientationPass && animationPass,
+    resolvedModel,
+    requestedModel,
+    resolutionKind,
+    animationRetargeting: spawn?.animationRetargeting ?? null,
+    secondaryHead: {
+      attached: spawn?.hasAttachedSecondaryHead === true,
+      remapFailureCount: Number(spawn?.secondaryHeadBoneRemapFailureCount ?? 0),
+      remapFailures: spawn?.secondaryHeadBoneRemapFailures ?? [],
+      required: REQUIRED_HEAD_MODELS.has(resolvedModel),
+      incompatibleWithFallback: incompatibleFallbackHeadAttached,
+    },
+    pass:
+      appearance.invariantPass &&
+      orientationPass &&
+      animationPass &&
+      !incompatibleFallbackHeadAttached,
     skeletonCount,
     textureCount: textures.length,
   };
+};
+
+export const createModelLoadFailureDiagnostics = (error) => ({
+  appearance: evaluateAppearanceVariant({
+    renderPass: false,
+    materialSlotCount: 0,
+    effectOnlyMaterialCount: 0,
+    texturedSlotCount: 0,
+    pendingTextureCount: 0,
+    suspiciousTinyTextureCount: 0,
+    headOrientationRiskCount: 0,
+    nonFiniteBoneMatrixCount: 0,
+  }),
+  animationPass: false,
+  animationReadiness: {
+    pass: false,
+    violations: ['model-load-failed'],
+  },
+  animationVitality: {
+    playableGroupCount: 0,
+    dynamicGroupCount: 0,
+    visuallyPosedGroupCount: 0,
+  },
+  bounds: null,
+  effectOnly: false,
+  error: error?.message ?? String(error),
+  headOrientation: [],
+  loadPass: false,
+  materialCount: 0,
+  meshCount: 0,
+  orientationPass: false,
+  pass: false,
+  semanticHeadOrientation: {
+    required: false,
+    measurable: false,
+    pass: true,
+  },
+  skeletonCount: 0,
+  textureCount: 0,
+});
+
+export const getAutomatedReviewSuggestion = (
+  diagnostics,
+  animationSafety = null
+) => {
+  if (!diagnostics) return null;
+  const appearanceViolations = diagnostics.appearance?.invariantViolations ?? [];
+  const animationViolations = diagnostics.animationReadiness?.violations ?? [];
+  if (
+    diagnostics.loadPass === false ||
+    appearanceViolations.includes('render-failed') ||
+    Number(diagnostics.meshCount ?? 0) === 0
+  ) {
+    return { response: 'nothing-visible', reasons: ['model-load-or-render-failed'] };
+  }
+  if (appearanceViolations.includes('missing-head-texture')) {
+    return { response: 'head-missing', reasons: ['missing-required-head'] };
+  }
+  if (diagnostics.secondaryHead?.incompatibleWithFallback === true) {
+    return {
+      response: 'model-distorted',
+      reasons: ['incompatible-fallback-head-attached'],
+    };
+  }
+  if (diagnostics.orientationPass === false) {
+    return { response: 'head-mesh-upside-down', reasons: ['head-orientation-failed'] };
+  }
+  if (
+    animationSafety?.pass === false ||
+    Number(diagnostics.animationRetargeting?.unresolvedTargetCount ?? 0) > 0
+  ) {
+    return { response: 'improper-animation', reasons: ['unsafe-or-unresolved-animation'] };
+  }
+  if (animationViolations.includes('missing-playable-animation')) {
+    return { response: 'no-animation', reasons: ['missing-playable-animation'] };
+  }
+  if (animationViolations.includes('animation-matches-bind-pose')) {
+    return { response: 't-pose', reasons: ['animation-matches-bind-pose'] };
+  }
+  if (
+    appearanceViolations.includes('invalid-bone-matrix') ||
+    diagnostics.appearance?.invariantPass === false
+  ) {
+    return { response: 'model-distorted', reasons: appearanceViolations };
+  }
+  return diagnostics.pass === false
+    ? { response: 'other', reasons: ['automatic-qa-failed'] }
+    : null;
 };

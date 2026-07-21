@@ -12,6 +12,7 @@ npm run qa:sage:compact -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:compact -- --eq-dir C:\EQEmuCW-Live --visual-models clf --no-zone-validation --no-race-audit --no-static-texture-audit
 npm run qa:sage:full -- --eq-dir C:\EQEmuCW-Live --race-models hum,huf,ogm --no-zone-validation --no-static-texture-audit
 npm run qa:sage:models -- --eq-dir C:\EQEmuCW-Live
+npm run qa:sage:review-feedback -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:viewer -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:matrix -- --eq-dir C:\EQEmuCW-Live
 npm run qa:sage:soak -- --eq-dir C:\EQEmuCW-Live
@@ -33,6 +34,7 @@ When a memory guard or outer process interrupts a long race inventory, resume th
 - `compact-rigs`: focused Ak'Anon/Qeynos/Great Divide gate for compact skeletons, secondary heads, and collapsed classic parent-bone chains.
 - `model-regression`: focused cross-rig animation, skin, head, and runtime-pose coverage with repeated front/rear evidence for every audited model plus targeted body variants.
 - `model-viewer`: focused, repeated QA against the production Model Review workspace, including whole-model and face-focus evidence.
+- `review-feedback`: replays all models with historical reviewer issues, verifies the production viewer now passes its structural, appearance, orientation, and animation diagnostics, and requires no automated issue classification.
 - `matrix`: twelve classic and expansion zones, twenty high-risk race models, and five visual samples.
 - `soak`: three zones over three cycles with post-warmup resource plateau checks.
 - `full`: every available mapped race model, three complete zone cycles, and stricter memory headroom.

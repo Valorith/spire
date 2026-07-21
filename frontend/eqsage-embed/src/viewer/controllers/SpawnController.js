@@ -946,6 +946,9 @@ class SpawnController extends GameControllerChild {
         ? 'missing-playable-animation'
         : 'missing-native-pose-policy';
     }
+    if (!policyExtras) {
+      return 'missing-character-model-cache-metadata';
+    }
     if (
       policyExtras &&
       policyExtras.spireCharacterModelCacheVersion !==
@@ -1388,6 +1391,26 @@ class SpawnController extends GameControllerChild {
           ? PREVIEW_OBJECT_MODEL_ALIASES[modelName]
           : null;
       this.assetContainers[key] = (async () => {
+        if (previewAliasFirst) {
+          const generatedAliasContainer = await this.getFirstAssetContainer(
+            'models',
+            [`${previewAlias}.glb`],
+            previewAlias,
+            {
+              generateIfMissing: true,
+              optional: false,
+            }
+          );
+          if (generatedAliasContainer) {
+            this.resolvedModelAssets[modelName] = previewAlias;
+            this.assetFallbacks[modelName] = `${previewAlias}.glb`;
+            await this.addPreviewAnimationDonor(
+              modelName,
+              generatedAliasContainer
+            );
+            return generatedAliasContainer;
+          }
+        }
         const modelContainer = await this.getFirstAssetContainer(
           'models',
           files,

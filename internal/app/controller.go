@@ -69,6 +69,7 @@ func (d *Controller) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodGet, "app/env", d.env, nil),
 		routes.RegisterRoute(http.MethodPost, "app/update", d.update, nil),
 		routes.RegisterRoute(http.MethodPost, "app/sync", d.sync, nil),
+		routes.RegisterRoute(http.MethodPost, "app/sage-fs/select-directory", d.sageFsSelectDirectory, nil),
 		routes.RegisterRoute(http.MethodPost, "app/sage-fs/validate", d.sageFsValidate, nil),
 		routes.RegisterRoute(http.MethodGet, "app/sage-fs/readdir", d.sageFsReadDir, nil),
 		routes.RegisterRoute(http.MethodGet, "app/sage-fs/read-file", d.sageFsReadFile, nil),
@@ -283,6 +284,41 @@ func setSageFsRetryHeader(c echo.Context, retries int) {
 	if retries > 0 {
 		c.Response().Header().Set("X-Sage-Fs-Retries", fmt.Sprintf("%d", retries))
 	}
+}
+
+func (d *Controller) sageFsSelectDirectory(c echo.Context) error {
+	return d.sageFsSelectDirectoryWithPicker(c, pickSageFsDirectory)
+}
+
+func (d *Controller) sageFsSelectDirectoryWithPicker(
+	c echo.Context,
+	picker func() (string, error),
+) error {
+	if err := d.requireLocalSageFsRequest(c); err != nil {
+		return err
+	}
+
+	root, err := picker()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{
+			"error": fmt.Sprintf("Unable to open the directory selector: %v", err),
+		})
+	}
+	if strings.TrimSpace(root) == "" {
+		return c.NoContent(http.StatusNoContent)
+	}
+
+	root, err = normalizeSageFsRoot(root)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	if !isEverQuestClientDirectory(root) {
+		return c.JSON(http.StatusBadRequest, echo.Map{
+			"error": "Selected directory does not look like an EverQuest client directory",
+		})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"root": filepath.ToSlash(root)})
 }
 
 func (d *Controller) sageFsValidate(c echo.Context) error {

@@ -1,12 +1,13 @@
 import { Accessor, Document, WebIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, KHRMaterialsSpecular } from '@gltf-transform/extensions';
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, quat, vec3 } from 'gl-matrix';
 import {
   appendObjectMetadata,
   getEQFileExists,
   writeEQFile,
 } from '../../util/fileHandler';
+import { PREVIEW_CHARACTER_MODEL_CACHE_VERSION } from '../../model/constants';
 import { EQGAnimationWriter } from './eqg-animation';
 
 const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
@@ -59,7 +60,7 @@ export async function writeModels(modelFile, mod, destination = 'objects') {
   }
   if (
     (await getEQFileExists(destination, diskFileName)) &&
-    !this.options?.forceWrote &&
+    !this.options?.forceWrite &&
     !modelFile.includes('et_drbanner') &&
     !modelFile.includes('dest') &&
     !modelFile.includes('ggy') &&
@@ -77,6 +78,7 @@ export async function writeModels(modelFile, mod, destination = 'objects') {
   const node = document.createNode(objectName).setTranslation([0, 0, 0]).setMatrix(flipMatrix);
   const skeletonNodes = [];
   const boneIndices = [];
+  const boneBindWorldMatrices = [];
 
   if (mod.bones.length) {
     for (const bone of mod.bones) {
@@ -89,22 +91,58 @@ export async function writeModels(modelFile, mod, destination = 'objects') {
       }
     }
     let idx = 0;
-    function recurse(i) {
+    function recurse(i, parentBindMatrix = null) {
       const bone = mod.bones[i];
-      const node = document.createNode(bone.name);
+      const translation = vec3.fromValues(bone.x, bone.z, bone.y);
+      const rotation = quat.normalize(
+        quat.create(),
+        quat.fromValues(bone.rotX, bone.rotZ, bone.rotY, bone.rotW)
+      );
+      const scale = vec3.fromValues(
+        Number.isFinite(bone.scaleX) && Math.abs(bone.scaleX) > 0.000001
+          ? bone.scaleX
+          : 1,
+        Number.isFinite(bone.scaleZ) && Math.abs(bone.scaleZ) > 0.000001
+          ? bone.scaleZ
+          : 1,
+        Number.isFinite(bone.scaleY) && Math.abs(bone.scaleY) > 0.000001
+          ? bone.scaleY
+          : 1
+      );
+      const localBindMatrix = mat4.fromRotationTranslationScale(
+        mat4.create(),
+        rotation,
+        translation,
+        scale
+      );
+      const worldBindMatrix = parentBindMatrix
+        ? mat4.multiply(mat4.create(), parentBindMatrix, localBindMatrix)
+        : localBindMatrix;
+      const node = document
+        .createNode(bone.name)
+        .setTranslation(translation)
+        .setRotation(rotation)
+        .setScale(scale);
 
       skeletonNodes.push(node);
       boneIndices[i] = idx;
+      boneBindWorldMatrices[i] = worldBindMatrix;
       idx++;
       for (const child of bone.children) {
         mod.bones[child].parent = bone;
-        const [_b, n] = recurse(child);
+        const [_b, n] = recurse(child, worldBindMatrix);
         node.addChild(n);
       }
       return [bone, node];
     }
     recurse(0);
   }
+
+  node.setExtras({
+    spireCharacterModelCacheVersion: PREVIEW_CHARACTER_MODEL_CACHE_VERSION,
+    spireEqgSkinningVersion: 1,
+    spireNativePoseOnly: false,
+  });
 
   scene.addChild(node);
   const materials = {};
@@ -377,6 +415,23 @@ export async function writeModels(modelFile, mod, destination = 'objects') {
     const dummyJoint = document.createNode('DUMMY_PLACEHOLDER');
     skin.addJoint(dummyJoint);
     node.addChild(dummyJoint);
+    const inverseBindMatrices = [];
+    for (let jointIndex = 0; jointIndex < skeletonNodes.length; jointIndex++) {
+      const sourceBoneIndex = boneIndices.indexOf(jointIndex);
+      const worldBindMatrix = boneBindWorldMatrices[sourceBoneIndex];
+      const inverseBindMatrix = worldBindMatrix
+        ? mat4.invert(mat4.create(), worldBindMatrix)
+        : null;
+      inverseBindMatrices.push(...(inverseBindMatrix ?? mat4.create()));
+    }
+    inverseBindMatrices.push(...mat4.create());
+    skin.setInverseBindMatrices(
+      document
+        .createAccessor('inverse-bind-matrices')
+        .setType(Accessor.Type.MAT4)
+        .setArray(new Float32Array(inverseBindMatrices))
+        .setBuffer(buffer)
+    );
   } else {
     node.setMesh(gltfMesh);
   }

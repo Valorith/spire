@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "name": "review-feedback",
+  "description": "Replays every model with historical Model Review feedback and requires the fixed viewer to render without an automated issue classification.",
+  "zoneValidation": {
+    "enabled": false,
+    "zones": ["blackburrow"],
+    "cycles": 1
+  },
+  "raceAudit": {
+    "enabled": false,
+    "forceRefresh": false,
+    "bootstrapZone": "blackburrow",
+    "batchSize": 1,
+    "modelSelection": {
+      "mode": "explicit",
+      "models": []
+    }
+  },
+  "staticTextureAudit": {
+    "enabled": false
+  },
+  "visualSamples": [
+    { "model": "abh", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "akf", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "ala", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "alg", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "alr", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "arm", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "b01", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "b02", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "b03", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "bac", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "bar", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "ber", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "bff", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "bfr", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "bgf", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "bgg", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "boat", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "brc", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+    { "model": "bri", "view": "front", "historicalIssue": "nothing-visible", "expectedAutomatedResponse": null },
+
+    { "model": "ahf", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "ahm", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "aie", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "amy", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "ans", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "apx", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "aro", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "asm", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "avk", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "axa", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bal", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bas", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bat", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bdr", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bel", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bfc", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "blv", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bnf", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bnm", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bnr", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bny", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+    { "model": "bre", "view": "front", "historicalIssue": "model-distorted", "expectedAutomatedResponse": null },
+
+    { "model": "all", "view": "face", "faceFocus": true, "historicalIssue": "head-missing", "expectedAutomatedResponse": null },
+    { "model": "avi", "view": "face", "faceFocus": true, "historicalIssue": "head-missing", "expectedAutomatedResponse": null },
+    { "model": "bea", "view": "face", "faceFocus": true, "historicalIssue": "head-missing", "expectedAutomatedResponse": null },
+    { "model": "bgm", "view": "face", "faceFocus": true, "historicalIssue": "head-missing", "expectedAutomatedResponse": null },
+    { "model": "brf", "view": "face", "faceFocus": true, "historicalIssue": "head-missing", "expectedAutomatedResponse": null },
+
+    { "model": "b05", "view": "front", "historicalIssue": "improper-animation", "expectedAutomatedResponse": null },
+    { "model": "b09", "view": "front", "historicalIssue": "improper-animation", "expectedAutomatedResponse": null }
+  ],
+  "visualValidation": {
+    "surface": "model-review",
+    "timeoutMs": 180000,
+    "repetitions": 2,
+    "maximumWhitePixelRatio": 0.18,
+    "requireApprovedBaseline": false
+  },
+  "artifacts": {
+    "screenshotMode": "always",
+    "traceMode": "failures",
+    "keepRuns": 6,
+    "maxTotalMB": 2048
+  }
+}

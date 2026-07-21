@@ -89,6 +89,17 @@ const DEFAULT_PROFILE = {
 };
 
 const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const MODEL_REVIEW_RESPONSES = new Set([
+  null,
+  'nothing-visible',
+  'model-distorted',
+  'head-missing',
+  'improper-animation',
+  'no-animation',
+  't-pose',
+  'head-mesh-upside-down',
+  'other',
+]);
 
 export const deepMerge = (base, override) => {
   if (!isObject(base) || !isObject(override)) return override ?? base;
@@ -175,6 +186,16 @@ export const validateProfile = (profile) => {
   }
   if (!['race-audit', 'model-review'].includes(profile.visualValidation?.surface)) {
     errors.push('visualValidation.surface must be race-audit or model-review');
+  }
+  for (const [index, sample] of (profile.visualSamples ?? []).entries()) {
+    if (
+      Object.hasOwn(sample, 'expectedAutomatedResponse') &&
+      !MODEL_REVIEW_RESPONSES.has(sample.expectedAutomatedResponse)
+    ) {
+      errors.push(
+        `visualSamples[${index}].expectedAutomatedResponse is invalid`
+      );
+    }
   }
   if (
     Number(profile.visualValidation?.fixedAnimationFraction) < 0 ||

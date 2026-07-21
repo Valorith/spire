@@ -753,7 +753,7 @@ export const PREVIEW_ZONE_OBJECT_CACHE_VERSION = 4;
 // Keep preview character cache markers in one dependency-free module. Both the
 // archive writer and the zone loader must agree or a cache can be marked ready
 // while still containing model/texture output from an older exporter.
-export const PREVIEW_CHARACTER_CACHE_VERSION = 33;
+export const PREVIEW_CHARACTER_CACHE_VERSION = 34;
 // Embedded in each classic character GLB so model-policy changes can be
 // invalidated independently of the much larger global/zone cache.
-export const PREVIEW_CHARACTER_MODEL_CACHE_VERSION = 1;
+export const PREVIEW_CHARACTER_MODEL_CACHE_VERSION = 2;

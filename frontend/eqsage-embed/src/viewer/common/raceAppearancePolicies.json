@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "classicFaceModels": [
     "baf",
     "bam",
@@ -27,5 +27,12 @@
     "ogm",
     "trf",
     "trm"
+  ],
+  "requiredHeadModels": [
+    "all",
+    "avi",
+    "bea",
+    "bgm",
+    "brf"
   ]
 }

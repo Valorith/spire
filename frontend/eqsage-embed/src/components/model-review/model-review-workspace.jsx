@@ -17,6 +17,12 @@ import { BabylonSpawn } from '../../viewer/models/BabylonSpawn';
 import { useMainContext } from '../main/context';
 import { buildModelReviewInventory } from './model-review-data';
 import {
+  FIXED_MODEL_REVIEW_RESET_ID,
+  removeFixedModelReviews,
+} from './model-review-storage';
+import {
+  createModelLoadFailureDiagnostics,
+  getAutomatedReviewSuggestion,
   getReviewBounds,
   inspectModelReviewSpawn,
 } from './model-review-validation';
@@ -24,10 +30,21 @@ import {
 import './model-review-workspace.scss';
 
 const REVIEW_STORAGE_KEY = 'spire-sage-model-review-flags-v1';
+const REVIEW_RESET_STORAGE_KEY = 'spire-sage-model-review-reset-v1';
+const REVIEW_RESPONSE_OPTIONS = [
+  { value: 'nothing-visible', label: 'Nothing visible', shortcut: '1' },
+  { value: 'model-distorted', label: 'Model appears distorted', shortcut: '2' },
+  { value: 'head-missing', label: 'Head is missing', shortcut: '3' },
+  { value: 'improper-animation', label: 'Improper animation', shortcut: '4' },
+  { value: 'no-animation', label: 'No animation', shortcut: '5' },
+  { value: 't-pose', label: 'T-pose', shortcut: '6' },
+  { value: 'head-mesh-upside-down', label: 'Head mesh upside down', shortcut: '7' },
+  { value: 'other', label: 'Other (Type below)', shortcut: '8' },
+];
 const VIEW_OPTIONS = [
-  { id: 'front', label: 'Front', key: '1' },
-  { id: 'side', label: 'Side', key: '2' },
-  { id: 'back', label: 'Rear', key: '3' },
+  { id: 'front', label: 'Front', shortcut: 'F' },
+  { id: 'side', label: 'Side', shortcut: 'S' },
+  { id: 'back', label: 'Rear', shortcut: 'R' },
 ];
 
 const getInitialParams = () => {
@@ -60,8 +77,27 @@ const getSelectionKey = ({ model, face, texture, helmTexture }) =>
 
 const readStoredReviews = () => {
   try {
-    const value = JSON.parse(localStorage.getItem(REVIEW_STORAGE_KEY) ?? '{}');
-    return value && typeof value === 'object' ? value : {};
+    let value = JSON.parse(localStorage.getItem(REVIEW_STORAGE_KEY) ?? '{}');
+    if (!value || typeof value !== 'object') return {};
+    if (localStorage.getItem(REVIEW_RESET_STORAGE_KEY) !== FIXED_MODEL_REVIEW_RESET_ID) {
+      value = removeFixedModelReviews(value);
+      localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(value));
+      localStorage.setItem(REVIEW_RESET_STORAGE_KEY, FIXED_MODEL_REVIEW_RESET_ID);
+    }
+    return Object.fromEntries(Object.entries(value).map(([model, review]) => {
+      if (review?.status !== 'issue' || review?.response) return [model, review];
+      const note = `${review?.note ?? ''}`.toLowerCase();
+      const response = /nothing visible/.test(note)
+        ? 'nothing-visible'
+        : /head (?:is )?missing|missing (?:its |the )?head/.test(note)
+          ? 'head-missing'
+          : /malformed|distort/.test(note)
+            ? 'model-distorted'
+            : /animat/.test(note)
+              ? 'improper-animation'
+              : 'other';
+      return [model, { ...review, response }];
+    }));
   } catch (_error) {
     return {};
   }
@@ -132,6 +168,9 @@ export const ModelReviewWorkspace = () => {
   const [animationFrame, setAnimationFrame] = useState(0);
   const [animationSafety, setAnimationSafety] = useState(null);
   const [reviews, setReviews] = useState(readStoredReviews);
+  const [reviewResponse, setReviewResponse] = useState(
+    readStoredReviews()[inventory[initialIndex]?.model]?.response ?? ''
+  );
   const [note, setNote] = useState(
     readStoredReviews()[inventory[initialIndex]?.model]?.note ?? ''
   );
@@ -577,6 +616,7 @@ export const ModelReviewWorkspace = () => {
       setModelError('');
       setDiagnostics(null);
       setLoadedSelectionKey('');
+      framingRef.current = null;
       setAnimationName('');
       animationFramingRef.current = null;
       setAnimationPlaying(false);
@@ -679,9 +719,12 @@ export const ModelReviewWorkspace = () => {
       createdRoot?.dispose?.();
       setModelError(error?.message ?? String(error));
       setModelStage(`${selectedEntry.model.toUpperCase()} failed`);
+      const failureDiagnostics = createModelLoadFailureDiagnostics(error);
+      setDiagnostics(failureDiagnostics);
+      setLoadedSelectionKey(loadSelectionKey);
       setDiagnosticsByModel((current) => ({
         ...current,
-        [selectedEntry.model]: { pass: false, error: error?.message ?? String(error) },
+        [selectedEntry.model]: failureDiagnostics,
       }));
     });
 
@@ -711,7 +754,9 @@ export const ModelReviewWorkspace = () => {
   }, [faceFocus, frameModel, view]);
 
   useEffect(() => {
-    setNote(reviews[selectedModel]?.note ?? '');
+    const storedReview = reviews[selectedModel];
+    setReviewResponse(storedReview?.response ?? '');
+    setNote(storedReview?.note ?? '');
   }, [reviews, selectedModel]);
 
   useEffect(() => {
@@ -726,16 +771,32 @@ export const ModelReviewWorkspace = () => {
     window.history.replaceState(null, '', url.toString());
   }, [face, faceFocus, helmTexture, selectedModel, texture, view]);
 
+  const qaDiagnostics = useMemo(
+    () => diagnostics ?? (
+      runtimeError
+        ? createModelLoadFailureDiagnostics(new Error(runtimeError))
+        : null
+    ),
+    [diagnostics, runtimeError]
+  );
+  const automatedReviewSuggestion = useMemo(
+    () => getAutomatedReviewSuggestion(qaDiagnostics, animationSafety),
+    [animationSafety, qaDiagnostics]
+  );
+
   useEffect(() => {
-    const ready = runtimeReady &&
-      !!diagnostics &&
-      !modelError &&
-      loadedSelectionKey === selectionKey;
+    const ready = !!runtimeError || (
+      runtimeReady &&
+      !!qaDiagnostics &&
+      loadedSelectionKey === selectionKey
+    );
     const state = {
-      qaApiVersion: 1,
+      qaApiVersion: 2,
       ready,
       model: selectedModel,
-      diagnostics,
+      diagnostics: qaDiagnostics,
+      animationSafety,
+      automatedReviewSuggestion,
       framing: framingRef.current,
       stage: modelStage,
       view,
@@ -755,7 +816,9 @@ export const ModelReviewWorkspace = () => {
       detail: state,
     }));
   }, [
-    diagnostics,
+    automatedReviewSuggestion,
+    qaDiagnostics,
+    animationSafety,
     face,
     faceFocus,
     helmTexture,
@@ -765,6 +828,7 @@ export const ModelReviewWorkspace = () => {
     reframe,
     runQaStep,
     runtimeReady,
+    runtimeError,
     selectedModel,
     selectionKey,
     texture,
@@ -779,39 +843,23 @@ export const ModelReviewWorkspace = () => {
     return () => window.clearInterval(timer);
   }, [animationPlaying, getSelectedAnimation]);
 
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (isTypingTarget(event.target)) return;
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        chooseRelativeModel(-1);
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        chooseRelativeModel(1);
-      } else if (event.key === ' ') {
-        event.preventDefault();
-        const group = getSelectedAnimation();
-        if (!group || animationSafety?.pass === false) return;
-        if (animationPlaying) group.pause?.();
-        else group.play?.(true);
-        setAnimationPlaying(!animationPlaying);
-      } else if (event.key === '4') {
-        setFaceFocus((current) => !current);
-      } else {
-        const cameraView = VIEW_OPTIONS.find((option) => option.key === event.key);
-        if (cameraView) setView(cameraView.id);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [animationPlaying, animationSafety?.pass, chooseRelativeModel, getSelectedAnimation]);
+  const canSaveIssueReview = !!reviewResponse &&
+    (reviewResponse !== 'other' || !!note.trim());
 
-  const saveReview = (status) => {
+  const saveReview = useCallback((status) => {
+    if (status === 'issue' && !canSaveIssueReview) return;
+    const savedResponse = status === 'issue' ? reviewResponse : '';
     const next = {
       ...reviews,
       [selectedModel]: {
         status,
+        response: savedResponse,
         note: note.trim(),
+        qa: {
+          pass: qaDiagnostics?.pass === true && animationSafety?.pass !== false,
+          suggestedResponse: automatedReviewSuggestion?.response ?? null,
+          reasons: automatedReviewSuggestion?.reasons ?? [],
+        },
         updatedAt: new Date().toISOString(),
         face,
         texture,
@@ -820,7 +868,75 @@ export const ModelReviewWorkspace = () => {
     };
     setReviews(next);
     localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(next));
-  };
+    if (status === 'pass') setReviewResponse('');
+    chooseRelativeModel(1);
+  }, [
+    canSaveIssueReview,
+    chooseRelativeModel,
+    face,
+    helmTexture,
+    note,
+    qaDiagnostics,
+    animationSafety,
+    automatedReviewSuggestion,
+    reviewResponse,
+    reviews,
+    selectedModel,
+    texture,
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const isReviewResponseSelect = event.target instanceof HTMLSelectElement &&
+        event.target.getAttribute('aria-label') === 'Review response';
+      if (isTypingTarget(event.target) && !(event.key === 'Enter' && isReviewResponseSelect)) return;
+      if (
+        event.key === 'Enter' &&
+        (event.target instanceof HTMLButtonElement || event.target instanceof HTMLAnchorElement)
+      ) return;
+      const pressedKey = event.key.toUpperCase();
+      const response = REVIEW_RESPONSE_OPTIONS.find(
+        (option) => option.shortcut === event.key
+      );
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        chooseRelativeModel(-1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        chooseRelativeModel(1);
+      } else if (response) {
+        event.preventDefault();
+        setReviewResponse(response.value);
+      } else if (event.key === 'Enter') {
+        if (!canSaveIssueReview) return;
+        event.preventDefault();
+        saveReview('issue');
+      } else if (event.key === ' ') {
+        event.preventDefault();
+        const group = getSelectedAnimation();
+        if (!group || animationSafety?.pass === false) return;
+        if (animationPlaying) group.pause?.();
+        else group.play?.(true);
+        setAnimationPlaying(!animationPlaying);
+      } else if (pressedKey === 'C') {
+        setFaceFocus((current) => !current);
+      } else {
+        const cameraView = VIEW_OPTIONS.find(
+          (option) => option.shortcut === pressedKey
+        );
+        if (cameraView) setView(cameraView.id);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    animationPlaying,
+    animationSafety?.pass,
+    canSaveIssueReview,
+    chooseRelativeModel,
+    getSelectedAnimation,
+    saveReview,
+  ]);
 
   const copyReviewLink = async () => {
     await navigator.clipboard?.writeText?.(window.location.href);
@@ -831,6 +947,11 @@ export const ModelReviewWorkspace = () => {
   const animationFrom = Number(selectedAnimation?.from ?? 0);
   const animationTo = Math.max(animationFrom, Number(selectedAnimation?.to ?? animationFrom));
   const selectedIndex = filteredInventory.findIndex((entry) => entry.model === selectedModel);
+  const animationEvidencePass = diagnostics?.animationPass === true &&
+    animationSafety?.pass !== false;
+  const automatedResponseLabel = REVIEW_RESPONSE_OPTIONS.find(
+    (option) => option.value === automatedReviewSuggestion?.response
+  )?.label;
 
   return (
     <main className="model-review-workspace" aria-label="Sage Model Review">
@@ -919,20 +1040,20 @@ export const ModelReviewWorkspace = () => {
               key={option.id}
               className={view === option.id ? 'is-active' : ''}
               onClick={() => setView(option.id)}
-              title={`${option.label} view (${option.key})`}
+              title={`${option.label} view (${option.shortcut})`}
             >
               {option.label}
-              <kbd>{option.key}</kbd>
+              <kbd>{option.shortcut}</kbd>
             </button>
           ))}
           <button
             className={faceFocus ? 'is-active' : ''}
             onClick={() => setFaceFocus((current) => !current)}
             aria-pressed={faceFocus}
-            title="Toggle face focus (4)"
+            title="Toggle face focus (C)"
           >
             Face focus
-            <kbd>4</kbd>
+            <kbd>C</kbd>
           </button>
         </div>
         <div className="model-review-stage" aria-live="polite">
@@ -950,7 +1071,7 @@ export const ModelReviewWorkspace = () => {
           <div className="model-review-badges">
             <StatusBadge label="Orientation" pass={diagnostics?.orientationPass} neutral={!diagnostics} />
             <StatusBadge label="Appearance" pass={diagnostics?.appearance?.invariantPass} neutral={!diagnostics} />
-            <StatusBadge label="Animation" pass={diagnostics?.animationPass} neutral={!diagnostics} />
+            <StatusBadge label="Animation" pass={animationEvidencePass} neutral={!diagnostics} />
           </div>
           <dl className="model-review-facts">
             <div><dt>Resolved asset</dt><dd>{previewRef.current?.preview?.resolvedModelAsset?.toUpperCase?.() ?? '—'}</dd></div>
@@ -1052,23 +1173,57 @@ export const ModelReviewWorkspace = () => {
         </section>
 
         <section className="model-review-review-section">
-          <div className="model-review-section-heading"><span>Review note</span></div>
-          <textarea
-            aria-label="Review note"
-            placeholder="What looks wrong, and in which view or animation?"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-          />
+          <div className="model-review-section-heading"><span>Review</span></div>
+          <label className="model-review-review-response">
+            <span>Standard response</span>
+            <select
+              aria-label="Review response"
+              value={reviewResponse}
+              onChange={(event) => setReviewResponse(event.target.value)}
+            >
+              <option value="">Select a response…</option>
+              {REVIEW_RESPONSE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.shortcut} — {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="model-review-review-details">
+            <span>
+              {reviewResponse === 'other'
+                ? 'Other issue details'
+                : 'Additional details (optional)'}
+            </span>
+            <textarea
+              aria-label={reviewResponse === 'other' ? 'Other review details' : 'Additional review details'}
+              placeholder={reviewResponse === 'other'
+                ? 'Describe what is visible in the model viewer.'
+                : 'Add the affected view, animation, or texture.'}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          <div className={`model-review-qa-suggestion${automatedReviewSuggestion ? ' is-issue' : ''}`}>
+            Automated QA: {automatedResponseLabel ?? 'No issue detected'}
+          </div>
           <div className="model-review-review-actions">
             <button
-              className={selectedReview?.status === 'pass' ? 'is-pass' : ''}
+              className={`model-review-pass-action${selectedReview?.status === 'pass' ? ' is-pass' : ''}`}
               onClick={() => saveReview('pass')}
             >
               Looks good
             </button>
             <button
-              className={selectedReview?.status === 'issue' ? 'is-issue' : ''}
+              className={`model-review-issue-action${selectedReview?.status === 'issue' ? ' is-issue' : ''}`}
+              disabled={!canSaveIssueReview}
+              aria-keyshortcuts="Enter"
               onClick={() => saveReview('issue')}
+              title={!reviewResponse
+                ? 'Select a standard response first'
+                : reviewResponse === 'other' && !note.trim()
+                  ? 'Describe the issue below'
+                  : 'Flag issue (Enter)'}
             >
               Flag issue
             </button>
@@ -1078,8 +1233,10 @@ export const ModelReviewWorkspace = () => {
 
       <footer className="model-review-hints">
         <span><kbd>←</kbd><kbd>→</kbd> models</span>
-        <span><kbd>1–3</kbd> views</span>
-        <span><kbd>4</kbd> face focus</span>
+        <span><kbd>1–8</kbd> response</span>
+        <span><kbd>F</kbd><kbd>S</kbd><kbd>R</kbd> views</span>
+        <span><kbd>C</kbd> face focus</span>
+        <span><kbd>Enter</kbd> flag issue</span>
         <span><kbd>Space</kbd> animation</span>
       </footer>
     </main>

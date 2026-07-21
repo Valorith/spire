@@ -211,84 +211,6 @@ const showSageNotice = (message: string) => new Promise<void>((resolve) => {
   closeButton.focus()
 })
 
-const requestSageDirectoryPath = (defaultRoot: string) =>
-  new Promise<string | null>((resolve) => {
-    const { dialog, overlay } = createSageDialog('Select EverQuest Directory')
-    const form = document.createElement('form')
-    const label = document.createElement('label')
-    label.htmlFor = 'spire-sage-directory-path'
-    label.textContent = 'Enter the full path to your EverQuest directory:'
-    Object.assign(label.style, {
-      display: 'block',
-      fontSize: '14px',
-      marginBottom: '8px',
-    })
-
-    const input = document.createElement('input')
-    input.id = 'spire-sage-directory-path'
-    input.name = 'eq-directory'
-    input.value = defaultRoot
-    input.autocomplete = 'off'
-    input.spellcheck = false
-    Object.assign(input.style, {
-      background: '#07101a',
-      border: '1px solid #718398',
-      borderRadius: '3px',
-      boxSizing: 'border-box',
-      color: '#fff',
-      fontSize: '15px',
-      marginBottom: '18px',
-      padding: '10px',
-      width: '100%',
-    })
-
-    const actions = document.createElement('div')
-    Object.assign(actions.style, {
-      display: 'flex',
-      gap: '10px',
-      justifyContent: 'flex-end',
-    })
-    const cancelButton = document.createElement('button')
-    cancelButton.type = 'button'
-    cancelButton.textContent = 'Cancel'
-    styleSageDialogButton(cancelButton)
-    const submitButton = document.createElement('button')
-    submitButton.type = 'submit'
-    submitButton.textContent = 'Use Directory'
-    styleSageDialogButton(submitButton, true)
-
-    const finish = (value: string | null) => {
-      document.removeEventListener('keydown', onKeyDown)
-      overlay.remove()
-      resolve(value)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        finish(null)
-      }
-    }
-
-    cancelButton.addEventListener('click', () => finish(null), { once: true })
-    form.addEventListener('submit', (event) => {
-      event.preventDefault()
-      const value = input.value.trim()
-      if (value) {
-        finish(value)
-      } else {
-        input.focus()
-      }
-    })
-    document.addEventListener('keydown', onKeyDown)
-
-    actions.append(cancelButton, submitButton)
-    form.append(label, input, actions)
-    dialog.appendChild(form)
-    window.requestAnimationFrame(() => {
-      input.focus()
-      input.select()
-    })
-  })
-
 const getSageEqDirCandidates = () => {
   const params = new URLSearchParams(window.location.search)
   return uniqueTruthy([
@@ -638,21 +560,34 @@ const installSpireSageFileBridge = async () => {
   ;(window as any).electronAPI = {
     async hasStandalone() { return true },
     async selectDirectory() {
-      const defaultRoot = activeRoot || localStorage.getItem('eqdir') || defaultEqDirCandidates[0]
-      const defaultResult = await validateSageFsRoot(defaultRoot)
-      if (defaultResult.root) {
-        activeRoot = defaultResult.root
-        localStorage.setItem('eqdir', activeRoot)
-        return activeRoot
-      }
-      if (!defaultResult.bridgeAvailable) {
+      let response: Response
+      try {
+        response = await fetch(`${getSageFsApiBase()}/select-directory`, {
+          method: 'POST',
+        })
+      } catch (_error) {
         await showSageNotice(
           'The local Spire filesystem bridge is unavailable. Start or restart the local Spire backend, then try again.'
         )
         return ''
       }
-      const candidate = await requestSageDirectoryPath(defaultRoot)
-      return (await selectRootFromPath(candidate)) || ''
+      if (response.status === 204) {
+        return ''
+      }
+      if (!response.ok) {
+        let detail = `The directory selector failed (${response.status}).`
+        try {
+          const payload = await response.json()
+          detail = String(payload?.error || detail)
+        } catch (_error) {
+          // Keep the status-only message when the response is not JSON.
+        }
+        await showSageNotice(detail)
+        return ''
+      }
+      const payload = await response.json()
+      const selectedRoot = typeof payload?.root === 'string' ? payload.root : ''
+      return (await selectRootFromPath(selectedRoot)) || ''
     },
     getPath(file: { path?: string }) { return file?.path || activeRoot || '' },
     onMessage() {},

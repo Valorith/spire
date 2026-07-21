@@ -66,6 +66,10 @@ import {
   evaluateNameplatePlacement,
 } from '../../../frontend/eqsage-embed/src/viewer/helpers/nameplateValidation.js';
 import {
+  FIXED_MODEL_REVIEW_CODES,
+  removeFixedModelReviews,
+} from '../../../frontend/eqsage-embed/src/components/model-review/model-review-storage.js';
+import {
   getCharacterArchiveBaseModelName,
   getCharacterBodyModelVariation,
   getCharacterSourceFamilyStem,
@@ -210,6 +214,48 @@ test('visual sample filtering supports focused, case-insensitive reruns', () => 
     filterVisualSamples(samples, 'CLF,qcf'),
     [{ model: 'qcf' }, { model: 'clf' }]
   );
+});
+
+test('review feedback profile preserves the complete historical issue corpus', async () => {
+  const profile = await loadProfile({
+    repoRoot: process.cwd(),
+    profile: 'review-feedback',
+    args: {},
+  });
+  const issueCounts = profile.visualSamples.reduce((counts, sample) => ({
+    ...counts,
+    [sample.historicalIssue]: (counts[sample.historicalIssue] ?? 0) + 1,
+  }), {});
+
+  assert.equal(profile.visualValidation.surface, 'model-review');
+  assert.equal(profile.visualSamples.length, 48);
+  assert.deepEqual(issueCounts, {
+    'nothing-visible': 19,
+    'model-distorted': 22,
+    'head-missing': 5,
+    'improper-animation': 2,
+  });
+  assert.ok(
+    profile.visualSamples.every((sample) =>
+      Object.hasOwn(sample, 'expectedAutomatedResponse') &&
+      sample.expectedAutomatedResponse === null
+    )
+  );
+  assert.deepEqual(
+    [...FIXED_MODEL_REVIEW_CODES].sort(),
+    profile.visualSamples.map((sample) => sample.model).sort()
+  );
+});
+
+test('fixed model review reset preserves unrelated review history', () => {
+  const preserved = { status: 'pass', updatedAt: 'preserve-me' };
+  const reviews = Object.fromEntries([
+    ...FIXED_MODEL_REVIEW_CODES.map((model) => [model, { status: 'issue' }]),
+    ['brl', preserved],
+  ]);
+
+  assert.deepEqual(removeFixedModelReviews(reviews), { brl: preserved });
+  assert.deepEqual(removeFixedModelReviews(null), {});
 });
 
 test('model regression gives every audited race deterministic front and rear visual coverage', async () => {
@@ -1586,4 +1632,5 @@ test('browser launch enables precise heap measurements without changing headed b
   const options = getBrowserLaunchOptions({ headed: true });
   assert.equal(options.headless, false);
   assert.ok(options.args.includes('--enable-precise-memory-info'));
+  assert.ok(options.args.includes('--enable-unsafe-swiftshader'));
 });
