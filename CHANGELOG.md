@@ -1,4 +1,4 @@
-## [Unreleased] 7/25/2026
+## [5.1.0] 7/25/2026
 
 * New Faction Editor implimented.
 
