@@ -169,6 +169,11 @@ const router = new Router({
           meta: {title: "Loot Edit"},
         },
         {
+          path: ROUTE.FACTIONS,
+          component: () => import('./views/factions/FactionEditor.vue'),
+          meta: {title: "Faction Editor"},
+        },
+        {
           path: ROUTE.ZONES,
           component: () => import('./views/zone/Zones.vue'),
           meta: {title: "Zones"},

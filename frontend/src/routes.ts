@@ -33,6 +33,7 @@ export const ROUTE = {
   ITEMS_EVOLVING: "/items/evolving",
   SPIRE_INITIALIZE: "/initialize",
   LOOT: "/loot",
+  FACTIONS: "/factions",
   LOGIN: "/login",
   LOGOUT: "/logout",
   HOME: "/",

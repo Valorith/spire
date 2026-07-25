@@ -131,13 +131,6 @@
                 <i class="ra ra-zebra-shield mr-1"></i> Tasks
               </router-link>
             </li>
-            <li class="nav-item">
-              <router-link class="nav-link " to="/tradeskills">
-                <i class="ra ra-anvil mr-1"></i> Tradeskills
-                <b-badge class="ml-3" variant="primary">NEW!</b-badge>
-                <b-badge class="ml-3" variant="primary">ALPHA</b-badge>
-              </router-link>
-            </li>
             <nav-section-component :config="viewerNav"/>
 
             <li class="nav-item">
@@ -336,7 +329,7 @@ export default {
       itemNav: {
         label: "Items",
         labelIcon: "ra ra-relic-blade mr-1",
-        routePrefixMatches: ["/items", "/item/"],
+        routePrefixMatches: ["/items", "/item/", "/tradeskills"],
         navs: [
           {
             title: "Items",
@@ -352,12 +345,20 @@ export default {
             isAlpha: true,
             routes: ['/items/evolving']
           },
+          {
+            title: "Tradeskills",
+            to: ROUTE.TRADESKILLS,
+            icon: "ra ra-anvil mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['/tradeskills']
+          },
         ]
       },
       npcNav: {
         label: "NPCs",
         labelIcon: "ra ra-dragon mr-1",
-        routePrefixMatches: ["npc", "merchant", "loot", "spawn"],
+        routePrefixMatches: ["npc", "merchant", "loot", "spawn", "faction"],
         navs: [
           {
             title: "NPC Editor",
@@ -401,6 +402,14 @@ export default {
             isNew: true,
             isAlpha: true,
             routes: ['loot']
+          },
+          {
+            title: "Factions",
+            to: ROUTE.FACTIONS,
+            icon: "ra ra-double-team mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['factions']
           },
         ]
       },

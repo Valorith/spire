@@ -1,3 +1,7 @@
+## [Unreleased] 7/25/2026
+
+* New Faction Editor implimented.
+
 ## [5.0.4] 7/13/2026
 
 * Disable Quest API Explorer configuration in hosted mode.

@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@exuanbo/file-icons-js": "^3.3.0",
+    "@sentry/tracing": "^7.120.4",
+    "@sentry/vue": "^7.120.4",
     "@types/jquery": "^3.5.9",
     "@types/leaflet": "^1.7.9",
     "ansi-to-html": "^0.7.2",
@@ -47,22 +49,27 @@
     "vue2-ace-editor": "^0.0.15",
     "vue2-dropzone": "^3.6.0",
     "vue2-leaflet": "^2.7.1",
-    "vuex": "^3.6.2",
-    "@sentry/tracing": "^7.120.4",
-    "@sentry/vue": "^7.120.4"
+    "vuex": "^3.6.2"
   },
   "devDependencies": {
     "@babel/plugin-proposal-optional-chaining": "^7.21.0",
+    "@typescript-eslint/eslint-plugin": "5.62.0",
+    "@typescript-eslint/parser": "5.62.0",
     "@vue/cli-plugin-babel": "^3.6.0",
+    "@vue/cli-plugin-eslint": "3.12.1",
     "@vue/cli-plugin-typescript": "^3.6.0",
     "@vue/cli-service": "^3.6.0",
-    "@vue/eslint-config-typescript": "^4.0.0",
+    "@vue/eslint-config-standard": "6.1.0",
+    "@vue/eslint-config-typescript": "8.0.0",
     "babel-eslint": "^10.0.1",
-    "eslint": "^5.16.0",
-    "eslint-plugin-vue": "^5.0.0",
+    "cross-env": "^7.0.3",
+    "eslint": "7.32.0",
+    "eslint-plugin-import": "2.32.0",
+    "eslint-plugin-node": "11.1.0",
+    "eslint-plugin-promise": "5.2.0",
+    "eslint-plugin-vue": "7.20.0",
     "sass": "^1.44.0",
     "sass-loader": "^7.1.0",
-    "cross-env": "^7.0.3",
     "typescript": "^4.4.4",
     "vue-template-compiler": "^2.6.14",
     "webpack-cli": "^4.9.2"
@@ -85,8 +92,7 @@
         {
           "baseIndent": 1
         }
-      ],
-      "ignoreEOLComments": true
+      ]
     },
     "parserOptions": {
       "parser": "@typescript-eslint/parser"

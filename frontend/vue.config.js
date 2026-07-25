@@ -3,6 +3,9 @@ const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPl
 
 
 module.exports = {
+  // Keep ESLint as an explicit developer check. This legacy Vue CLI 3 app has
+  // existing lint debt that should not unexpectedly block serve/build.
+  lintOnSave: false,
   devServer: {
     host: "0.0.0.0",
     disableHostCheck: true,
