@@ -172,7 +172,8 @@ async function installMercenaryMocks(page: Page, state: MercenaryState) {
     if (request.method() === 'PATCH') {
       state.buffUpdatePayload = request.postDataJSON();
       const selected = state.buffs.find(record => Number(record.merc_buff_id) === buffID);
-      Object.assign(selected || {}, state.buffUpdatePayload);
+      if (!selected) throw new Error(`Missing mocked buff ${buffID}`);
+      Object.assign(selected, state.buffUpdatePayload);
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -224,7 +225,7 @@ async function installMercenaryMocks(page: Page, state: MercenaryState) {
     state.buffs.push(
       ...state.buffs
         .filter(record => Number(record.merc_id) === sourceID)
-        .map(record => ({ ...record, merc_buff_id: 950100 + state.buffs.length, merc_id: 940002 }))
+        .map((record, index) => ({ ...record, merc_buff_id: 950100 + state.buffs.length + index, merc_id: 940002 }))
     );
     return route.fulfill({
       status: 201,
@@ -255,7 +256,8 @@ async function installMercenaryMocks(page: Page, state: MercenaryState) {
     if (request.method() === 'PATCH') {
       state.updatePayload = request.postDataJSON();
       const selected = state.mercenaries.find(record => Number(record.merc_id) === id);
-      Object.assign(selected || {}, state.updatePayload);
+      if (!selected) throw new Error(`Missing mocked mercenary ${id}`);
+      Object.assign(selected, state.updatePayload);
       if (selected && Number(selected.owner_character_id) === alternateOwner.id) {
         Object.assign(selected, {
           owner_name: alternateOwner.name,
@@ -344,7 +346,7 @@ test.describe('Mercenary Editor', () => {
     await page.getByRole('button', { name: /TorrenVale/ }).click();
     await expect(page.locator('.owner-facts')).toContainText('930002');
     await page.getByTestId('mercenary-save').click();
-    expect(state.updatePayload).toMatchObject({
+    await expect.poll(() => state.updatePayload).toMatchObject({
       owner_character_id: 930002,
       stance_id: 2,
       merc_size: 5,
@@ -375,6 +377,7 @@ test.describe('Mercenary Editor', () => {
     await page.goto('/mercenaries?mercenary=940001');
 
     await expect(page.locator('#mercenary-size')).toHaveValue('0');
+    await expect(page.locator('#mercenary-save-reason')).toHaveText('Size must be greater than zero before saving.');
 
     await page.getByTestId('mercenary-new').click();
     await page.locator('#mercenary-name').fill('New Mercenary');
@@ -545,7 +548,7 @@ test.describe('Mercenary Editor', () => {
     await expect(permanentDelete).toBeEnabled();
     await permanentDelete.click();
 
-    expect(state.deletePayload).toEqual({
+    await expect.poll(() => state.deletePayload).toEqual({
       confirmation: 'Alden Ward Copy',
       reason: 'Duplicate created during editor QA',
     });
@@ -571,7 +574,7 @@ test.describe('Mercenary Editor', () => {
     await buffDialog.locator('#mercenary-buff-ticks').fill('96');
     await buffDialog.getByRole('button', { name: 'Save buff' }).click();
 
-    expect(state.buffCreatePayload).toMatchObject({
+    await expect.poll(() => state.buffCreatePayload).toMatchObject({
       spell_id: 10,
       caster_level: 65,
       duration_formula: 3,
@@ -583,12 +586,12 @@ test.describe('Mercenary Editor', () => {
     const editDialog = page.getByRole('dialog', { name: 'Edit mercenary buff' });
     await editDialog.locator('#mercenary-buff-ticks').fill('48');
     await editDialog.getByRole('button', { name: 'Save buff' }).click();
-    expect(state.buffUpdatePayload).toMatchObject({ tics_remaining: 48 });
+    await expect.poll(() => state.buffUpdatePayload).toMatchObject({ tics_remaining: 48 });
 
     await page.getByRole('button', { name: /Augmentation/ }).click();
     page.once('dialog', dialog => dialog.accept());
     await page.getByRole('dialog', { name: 'Edit mercenary buff' }).getByRole('button', { name: 'Remove buff' }).click();
-    expect(state.deletedBuffs).toEqual([950002]);
+    await expect.poll(() => state.deletedBuffs).toEqual([950002]);
     await expect(page.getByText('No active buffs', { exact: true })).toBeVisible();
   });
 });

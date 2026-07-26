@@ -21,6 +21,7 @@ import (
 
 const (
 	mercenaryEditorDefaultPageSize = 30
+	mercenaryEditorMaxPage         = 100000
 	mercenaryEditorMaxPageSize     = 100
 	mercenaryEditorSearchLimit     = 20
 	mercenaryDeleteReasonMinLength = 8
@@ -323,7 +324,7 @@ func (m *MercenaryEditorController) createMercenary(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mercenaryMutationError(c, err)
 	}
 	return c.JSON(http.StatusCreated, detail)
@@ -371,7 +372,7 @@ func (m *MercenaryEditorController) updateMercenary(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mercenaryMutationError(c, err)
 	}
 	return c.JSON(http.StatusOK, detail)
@@ -433,7 +434,7 @@ func (m *MercenaryEditorController) copyMercenary(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mercenaryMutationError(c, err)
 	}
 	return c.JSON(http.StatusCreated, detail)
@@ -477,7 +478,7 @@ func (m *MercenaryEditorController) deleteMercenary(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mercenaryMutationError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -519,7 +520,7 @@ func (m *MercenaryEditorController) createBuff(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mercenaryMutationError(c, err)
 	}
 	buff, err := loadMercenaryBuff(db, mercID, buffID)
@@ -566,7 +567,7 @@ func (m *MercenaryEditorController) updateBuff(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mercenaryMutationError(c, err)
 	}
 	buff, err := loadMercenaryBuff(db, mercID, buffID)
@@ -602,7 +603,7 @@ func (m *MercenaryEditorController) deleteBuff(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mercenaryMutationError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -688,10 +689,15 @@ func (m *MercenaryEditorController) listAudit(c echo.Context) error {
 		Joins("LEFT JOIN spire_users users ON users.id = logs.user_id").
 		Where("logs.server_database_connection_id = ?", connectionID).
 		Where("logs.event_name LIKE 'MERCENARY_%'").
-		Where("JSON_VALID(logs.data) = 1").
 		Where(`
-			CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.merc_id')) AS UNSIGNED) = ?
-			OR CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.source_merc_id')) AS UNSIGNED) = ?
+			CAST(JSON_UNQUOTE(JSON_EXTRACT(
+				CASE WHEN JSON_VALID(logs.data) THEN logs.data ELSE '{}' END,
+				'$.merc_id'
+			)) AS UNSIGNED) = ?
+			OR CAST(JSON_UNQUOTE(JSON_EXTRACT(
+				CASE WHEN JSON_VALID(logs.data) THEN logs.data ELSE '{}' END,
+				'$.source_merc_id'
+			)) AS UNSIGNED) = ?
 		`, id, id)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -797,14 +803,18 @@ func loadMercenaryBuff(db *gorm.DB, mercID, buffID uint) (mercenaryBuffRecord, e
 }
 
 func lockMercenaryBuff(db *gorm.DB, mercID, buffID uint) (mercenaryBuffRecord, error) {
-	var buff mercenaryBuffRecord
-	err := db.Table("merc_buffs b").
+	var locked struct {
+		MercBuffID uint `gorm:"column:MercBuffId"`
+	}
+	err := db.Table("merc_buffs").
 		Clauses(clause.Locking{Strength: "UPDATE"}).
-		Joins("LEFT JOIN spells_new spells ON spells.id = b.SpellId").
-		Select(mercenaryBuffSelect()).
-		Where("b.MercBuffId = ? AND b.MercId = ?", buffID, mercID).
-		Take(&buff).Error
-	return buff, err
+		Select("MercBuffId").
+		Where("MercBuffId = ? AND MercId = ?", buffID, mercID).
+		Take(&locked).Error
+	if err != nil {
+		return mercenaryBuffRecord{}, err
+	}
+	return loadMercenaryBuff(db, mercID, buffID)
 }
 
 func mercenaryRecordSelect() string {
@@ -1054,6 +1064,9 @@ func mercenaryPagination(c echo.Context) (int, int) {
 	if parsed, err := strconv.Atoi(c.QueryParam("page")); err == nil && parsed > 0 {
 		page = parsed
 	}
+	if page > mercenaryEditorMaxPage {
+		page = mercenaryEditorMaxPage
+	}
 	if parsed, err := strconv.Atoi(c.QueryParam("limit")); err == nil && parsed > 0 {
 		limit = parsed
 	}
@@ -1098,7 +1111,8 @@ func mercenaryMutationError(c echo.Context, err error) error {
 }
 
 func mercenaryDatabaseError(c echo.Context, err error) error {
-	return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("Mercenary editor database error: %v", err)})
+	c.Logger().Errorf("mercenary editor database error: %v", err)
+	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Mercenary editor database error"})
 }
 
 func (m *MercenaryEditorController) writeAudit(
@@ -1120,9 +1134,11 @@ func (m *MercenaryEditorController) writeAudit(
 	return id, nil
 }
 
-func (m *MercenaryEditorController) discardAudit(id uint) {
+func (m *MercenaryEditorController) discardAudit(c echo.Context, id uint) {
 	if id == 0 || m.db.GetSpireDb() == nil {
 		return
 	}
-	_ = m.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error
+	if err := m.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error; err != nil {
+		c.Logger().Errorf("could not discard mercenary audit event %d: %v", id, err)
+	}
 }

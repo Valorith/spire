@@ -28,6 +28,7 @@
               <input
                 id="mercenary-directory-search"
                 v-model.trim="search"
+                aria-label="Search mercenaries"
                 class="form-control form-control-sm"
                 placeholder="Search mercenary, owner, or ID…"
                 @input="queueDirectorySearch"
@@ -214,11 +215,19 @@
                   size="sm"
                   variant="outline-warning"
                   data-testid="mercenary-save"
+                  :aria-describedby="saveDisabledReason ? 'mercenary-save-reason' : null"
                   :disabled="!canSave"
                   @click="saveMercenary"
                 >
                   <i :class="saving ? 'fa fa-spinner fa-spin mr-1' : 'fa fa-save mr-1'"></i>Save
                 </b-button>
+                <span
+                  v-if="saveDisabledReason"
+                  id="mercenary-save-reason"
+                  class="mercenary-save-reason"
+                >
+                  {{ saveDisabledReason }}
+                </span>
               </div>
             </div>
           </eq-window>
@@ -228,8 +237,10 @@
               <button
                 v-for="tab in tabs"
                 :key="tab"
+                :id="'mercenary-tab-' + tabSlug(tab)"
                 type="button"
                 role="tab"
+                :aria-controls="'mercenary-panel-' + tabSlug(tab)"
                 :aria-selected="selectedTab === tab ? 'true' : 'false'"
                 :class="{ active: selectedTab === tab }"
                 @click="selectTab(tab)"
@@ -239,7 +250,13 @@
               </button>
             </div>
 
-            <section v-if="selectedTab === 'Overview'" class="spire-editor-panel">
+            <section
+              v-if="selectedTab === 'Overview'"
+              id="mercenary-panel-overview"
+              class="spire-editor-panel"
+              role="tabpanel"
+              aria-labelledby="mercenary-tab-overview"
+            >
               <div class="spire-editor-section-heading">
                 <div>
                   <div class="spire-editor-kicker">Identity</div>
@@ -337,7 +354,13 @@
               </div>
             </section>
 
-            <section v-if="selectedTab === 'Owner & State'" class="spire-editor-panel">
+            <section
+              v-if="selectedTab === 'Owner & State'"
+              id="mercenary-panel-owner-state"
+              class="spire-editor-panel"
+              role="tabpanel"
+              aria-labelledby="mercenary-tab-owner-state"
+            >
               <div class="spire-editor-section-heading">
                 <div>
                   <div class="spire-editor-kicker">Ownership</div>
@@ -444,7 +467,13 @@
               </div>
             </section>
 
-            <section v-if="selectedTab === 'Appearance'" class="spire-editor-panel">
+            <section
+              v-if="selectedTab === 'Appearance'"
+              id="mercenary-panel-appearance"
+              class="spire-editor-panel"
+              role="tabpanel"
+              aria-labelledby="mercenary-tab-appearance"
+            >
               <div class="spire-editor-section-heading">
                 <div>
                   <div class="spire-editor-kicker">Client appearance</div>
@@ -481,7 +510,13 @@
               </div>
             </section>
 
-            <section v-if="selectedTab === 'Buffs'" class="spire-editor-panel">
+            <section
+              v-if="selectedTab === 'Buffs'"
+              id="mercenary-panel-buffs"
+              class="spire-editor-panel"
+              role="tabpanel"
+              aria-labelledby="mercenary-tab-buffs"
+            >
               <div class="spire-editor-section-heading">
                 <div>
                   <div class="spire-editor-kicker">Active effects</div>
@@ -536,7 +571,13 @@
               </div>
             </section>
 
-            <section v-if="selectedTab === 'Audit Trail'" class="spire-editor-panel">
+            <section
+              v-if="selectedTab === 'Audit Trail'"
+              id="mercenary-panel-audit-trail"
+              class="spire-editor-panel"
+              role="tabpanel"
+              aria-labelledby="mercenary-tab-audit-trail"
+            >
               <div class="spire-editor-section-heading">
                 <div>
                   <div class="spire-editor-kicker">Traceability</div>
@@ -844,6 +885,7 @@
         search: '',
         searchTimer: null,
         loadingDirectory: false,
+        directoryRequestToken: 0,
         loadingDetail: false,
         detailRequestToken: 0,
         directoryError: '',
@@ -857,11 +899,13 @@
         operationBusy: false,
         ownerSearch: '',
         ownerSearchTimer: null,
+        ownerRequestToken: 0,
         ownerResults: [],
         searchingOwners: false,
         ownerSearchComplete: false,
         spellSearch: '',
         spellSearchTimer: null,
+        spellRequestToken: 0,
         spellResults: [],
         searchingSpells: false,
         spellSearchComplete: false,
@@ -925,6 +969,15 @@
             Number(this.editModel.merc_size) > 0 &&
             (this.isCreating || this.hasUnsavedChanges)
         )
+      },
+      saveDisabledReason () {
+        if (!this.editModel) return ''
+        if (this.saving) return 'Save in progress…'
+        if (!String(this.editModel.name || '').trim()) return 'Enter a mercenary name before saving.'
+        if (Number(this.editModel.owner_character_id) <= 0) return 'Select an owner character before saving.'
+        if (Number(this.editModel.merc_size) <= 0) return 'Size must be greater than zero before saving.'
+        if (!this.isCreating && !this.hasUnsavedChanges) return 'No changes to save.'
+        return ''
       },
       stanceOptionsForRecord () {
         const current = Number(this.editModel ? this.editModel.stance_id : 0)
@@ -1004,7 +1057,10 @@
       })
     },
     beforeDestroy () {
+      this.directoryRequestToken++
       this.detailRequestToken++
+      this.ownerRequestToken++
+      this.spellRequestToken++
       clearTimeout(this.searchTimer)
       clearTimeout(this.ownerSearchTimer)
       clearTimeout(this.spellSearchTimer)
@@ -1025,6 +1081,9 @@
     methods: {
       number (value) {
         return Number(value || 0).toLocaleString()
+      },
+      tabSlug (tab) {
+        return String(tab).toLowerCase().replace(/\W+/g, '-')
       },
       ownerLabel (record) {
         return record.owner_name || `Character #${record.owner_character_id}`
@@ -1066,10 +1125,13 @@
       },
       queueDirectorySearch () {
         clearTimeout(this.searchTimer)
+        this.directoryRequestToken++
+        this.loadingDirectory = false
         this.currentPage = 1
         this.searchTimer = setTimeout(() => this.loadDirectory(), 250)
       },
       async loadDirectory () {
+        const requestToken = ++this.directoryRequestToken
         this.loadingDirectory = true
         this.directoryError = ''
         try {
@@ -1081,6 +1143,7 @@
               limit: this.pageSize
             }
           })
+          if (requestToken !== this.directoryRequestToken) return
           this.records = Array.isArray(response.data.data) ? response.data.data : []
           this.totalRecords = Number(response.data.total || 0)
           if (this.currentPage > this.totalPages) {
@@ -1088,11 +1151,12 @@
             return this.loadDirectory()
           }
         } catch (error) {
+          if (requestToken !== this.directoryRequestToken) return
           this.records = []
           this.totalRecords = 0
           this.directoryError = this.errorMessage(error, 'Unable to load mercenaries')
         } finally {
-          this.loadingDirectory = false
+          if (requestToken === this.directoryRequestToken) this.loadingDirectory = false
         }
       },
       async selectMercenary (id) {
@@ -1232,6 +1296,8 @@
       },
       queueOwnerSearch () {
         clearTimeout(this.ownerSearchTimer)
+        this.ownerRequestToken++
+        this.searchingOwners = false
         this.ownerSearchComplete = false
         if (!this.ownerSearch) {
           this.ownerResults = []
@@ -1240,19 +1306,26 @@
         this.ownerSearchTimer = setTimeout(() => this.searchOwners(), 250)
       },
       async searchOwners () {
+        const requestToken = ++this.ownerRequestToken
         this.searchingOwners = true
         try {
           const response = await SpireApi.v1().get('/mercenary-editor/references/characters', { params: { search: this.ownerSearch } })
+          if (requestToken !== this.ownerRequestToken) return
           this.ownerResults = Array.isArray(response.data.data) ? response.data.data : []
         } catch (error) {
+          if (requestToken !== this.ownerRequestToken) return
           this.ownerResults = []
           this.showNotification(this.errorMessage(error, 'Unable to search characters'), 'error')
         } finally {
-          this.searchingOwners = false
-          this.ownerSearchComplete = true
+          if (requestToken === this.ownerRequestToken) {
+            this.searchingOwners = false
+            this.ownerSearchComplete = true
+          }
         }
       },
       selectOwner (owner) {
+        this.ownerRequestToken++
+        this.searchingOwners = false
         this.selectedOwner = clone(owner)
         this.editModel.owner_character_id = Number(owner.id)
         this.ownerSearch = ''
@@ -1293,6 +1366,7 @@
       },
       resetBuffModal () {
         clearTimeout(this.spellSearchTimer)
+        this.spellRequestToken++
         this.buffDraft = clone(EMPTY_BUFF)
         this.spellSearch = ''
         this.spellResults = []
@@ -1301,6 +1375,8 @@
       },
       queueSpellSearch () {
         clearTimeout(this.spellSearchTimer)
+        this.spellRequestToken++
+        this.searchingSpells = false
         this.spellSearchComplete = false
         if (!this.spellSearch) {
           this.spellResults = []
@@ -1309,19 +1385,26 @@
         this.spellSearchTimer = setTimeout(() => this.searchSpells(), 250)
       },
       async searchSpells () {
+        const requestToken = ++this.spellRequestToken
         this.searchingSpells = true
         try {
           const response = await SpireApi.v1().get('/mercenary-editor/references/spells', { params: { search: this.spellSearch } })
+          if (requestToken !== this.spellRequestToken) return
           this.spellResults = Array.isArray(response.data.data) ? response.data.data : []
         } catch (error) {
+          if (requestToken !== this.spellRequestToken) return
           this.spellResults = []
           this.showNotification(this.errorMessage(error, 'Unable to search spells'), 'error')
         } finally {
-          this.searchingSpells = false
-          this.spellSearchComplete = true
+          if (requestToken === this.spellRequestToken) {
+            this.searchingSpells = false
+            this.spellSearchComplete = true
+          }
         }
       },
       selectSpell (spell) {
+        this.spellRequestToken++
+        this.searchingSpells = false
         this.buffDraft.spell_id = Number(spell.id)
         this.buffDraft.spell_name = spell.name
         this.buffDraft.spell_icon = Number(spell.icon)
@@ -1339,9 +1422,10 @@
       },
       async saveBuff () {
         if (!this.canSaveBuff) return
+        const isExisting = Boolean(this.buffDraft.merc_buff_id)
         this.operationBusy = true
         try {
-          const response = this.buffDraft.merc_buff_id
+          const response = isExisting
             ? await SpireApi.v1().patch(`/mercenary-editor/mercenary/${this.selectedID}/buff/${this.buffDraft.merc_buff_id}`, this.buffPayload())
             : await SpireApi.v1().put(`/mercenary-editor/mercenary/${this.selectedID}/buff`, this.buffPayload())
           const buff = response.data
@@ -1351,7 +1435,7 @@
           this.$refs.buffModal.hide()
           await this.loadDirectory()
           this.auditEntries = []
-          this.showNotification(this.buffDraft.merc_buff_id ? 'Mercenary buff saved' : 'Mercenary buff added')
+          this.showNotification(isExisting ? 'Mercenary buff saved' : 'Mercenary buff added')
         } catch (error) {
           this.showNotification(this.errorMessage(error, 'Unable to save mercenary buff'), 'error')
         } finally {
@@ -1381,7 +1465,7 @@
         return 'fa fa-pencil'
       },
       auditLabel (eventName) {
-        return String(eventName || '').replace('MERCENARY_', '').replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase())
+        return String(eventName || '').replace('MERCENARY_', '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase())
       },
       errorMessage (error, fallback) {
         return error && error.response && error.response.data && error.response.data.error
@@ -1738,25 +1822,11 @@
     color: #e38a83;
   }
 
-  ::v-deep .mercenary-editor-modal .modal-content {
-    background: #07111a;
-    border: 1px solid rgba(210, 170, 69, 0.58);
-    border-radius: 0;
-    color: #dce0e3;
-  }
-
-  ::v-deep .mercenary-editor-modal .modal-header {
-    background: rgba(0, 0, 0, 0.35);
-    border-bottom-color: rgba(210, 170, 69, 0.3);
-  }
-
-  ::v-deep .mercenary-editor-modal .modal-title {
-    color: #e5cc82;
-    font-family: Georgia, "Times New Roman", serif;
-  }
-
-  ::v-deep .mercenary-editor-modal .modal-body {
-    padding: 14px;
+  .mercenary-save-reason {
+    color: #d7bd72;
+    font-size: 8px;
+    max-width: 150px;
+    text-align: right;
   }
 
   .mercenary-lookup-results--modal {
@@ -1857,5 +1927,28 @@
     .modal-actions > span {
       display: none;
     }
+  }
+</style>
+
+<style>
+  .mercenary-editor-modal .modal-content {
+    background: #07111a;
+    border: 1px solid rgba(210, 170, 69, 0.58);
+    border-radius: 0;
+    color: #dce0e3;
+  }
+
+  .mercenary-editor-modal .modal-header {
+    background: rgba(0, 0, 0, 0.35);
+    border-bottom-color: rgba(210, 170, 69, 0.3);
+  }
+
+  .mercenary-editor-modal .modal-title {
+    color: #e5cc82;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+
+  .mercenary-editor-modal .modal-body {
+    padding: 14px;
   }
 </style>

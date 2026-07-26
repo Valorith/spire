@@ -1,8 +1,11 @@
 package controllers
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labstack/echo/v4"
 )
 
 func TestValidateMercenaryInput(t *testing.T) {
@@ -75,7 +78,27 @@ func TestValidateMercenaryBuffInput(t *testing.T) {
 }
 
 func TestMercenaryPaginationBounds(t *testing.T) {
-	if mercenaryEditorDefaultPageSize <= 0 || mercenaryEditorMaxPageSize < mercenaryEditorDefaultPageSize {
-		t.Fatal("mercenary pagination constants are inconsistent")
+	tests := []struct {
+		name      string
+		query     string
+		wantPage  int
+		wantLimit int
+	}{
+		{name: "defaults", wantPage: 1, wantLimit: mercenaryEditorDefaultPageSize},
+		{name: "valid values", query: "?page=3&limit=50", wantPage: 3, wantLimit: 50},
+		{name: "limit clamp", query: "?page=2&limit=999", wantPage: 2, wantLimit: mercenaryEditorMaxPageSize},
+		{name: "page clamp", query: "?page=100001", wantPage: mercenaryEditorMaxPage, wantLimit: mercenaryEditorDefaultPageSize},
+		{name: "non-positive fallback", query: "?page=0&limit=-1", wantPage: 1, wantLimit: mercenaryEditorDefaultPageSize},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			e := echo.New()
+			request := httptest.NewRequest("GET", "/mercenary-editor/mercenaries"+test.query, nil)
+			context := e.NewContext(request, httptest.NewRecorder())
+			page, limit := mercenaryPagination(context)
+			if page != test.wantPage || limit != test.wantLimit {
+				t.Fatalf("expected page %d and limit %d, got page %d and limit %d", test.wantPage, test.wantLimit, page, limit)
+			}
+		})
 	}
 }
