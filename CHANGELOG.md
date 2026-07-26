@@ -1,3 +1,7 @@
+## [Unreleased] 7/26/2026
+
+* Fix for eq progress bar control appearance issues with some resolutions.
+
 ## [5.4.0] 7/26/2026
 
 * Added an Aura Editor.
