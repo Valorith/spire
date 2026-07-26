@@ -185,12 +185,14 @@ test.describe('Title Editor', () => {
     await page.goto('/titles?title=93');
 
     await expect(page.getByTestId('title-inspector')).toBeVisible();
-    await expect(page.getByTestId('title-live-preview')).toContainText('Windcaller Aurelia');
+    await expect(page.locator('#title-preview-name')).toHaveCount(0);
+    await expect(page.getByTestId('title-preview-character')).toHaveText('Farren');
+    await expect(page.getByTestId('title-live-preview')).toContainText('Windcaller Farren');
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/titles"]')).toHaveCount(1);
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/titles"]')).toBeVisible();
 
     await page.locator('#title-prefix').fill('Stormcaller');
-    await expect(page.getByTestId('title-live-preview')).toContainText('Stormcaller Aurelia');
+    await expect(page.getByTestId('title-live-preview')).toContainText('Stormcaller Farren');
     await page.getByRole('tab', { name: 'Eligibility', exact: true }).click();
     await page.locator('#title-class').selectOption('8');
     await page.locator('#title-skill').selectOption('55');

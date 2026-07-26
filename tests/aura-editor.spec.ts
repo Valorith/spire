@@ -62,6 +62,19 @@ async function installAuraMocks(page: Page, state: AuraMockState) {
     })
   );
 
+  await page.route('**/api/v1/static-map/spell-icons-map.json', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        contents: [
+          { name: 'icons/42.png' },
+          { name: 'icons/161.png' },
+        ],
+      }]),
+    })
+  );
+
   await page.route('**/api/v1/npc_types/bulk', route =>
     route.fulfill({
       status: 200,
@@ -130,9 +143,33 @@ test.describe('Aura Editor', () => {
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/auras"]')).toBeVisible();
     await page.getByRole('tab', { name: 'Behavior', exact: true }).click();
     const inspector = page.getByTestId('aura-inspector');
-    await expect(inspector.getByLabel('Aura type')).toHaveValue('1');
+    await expect(inspector.getByLabel('Aura type', { exact: true })).toHaveValue('1');
     await expect(inspector.getByLabel('Who sees the aura entity')).toHaveValue('0');
     await expect(inspector.getByLabel('Movement')).toHaveValue('0');
+
+    const auraTypeGroup = page.getByTestId('aura-type-group');
+    await expect(auraTypeGroup.getByTestId('aura-type-option-1')).toHaveAttribute('aria-checked', 'true');
+    await auraTypeGroup.getByTestId('aura-type-option-4').click();
+    await expect(inspector.getByLabel('Aura type', { exact: true })).toHaveValue('4');
+    await expect(auraTypeGroup.getByTestId('aura-type-option-4')).toHaveAttribute('aria-checked', 'true');
+    await expect(inspector.getByLabel('Who sees the aura entity')).toHaveValue('0');
+    await expect(inspector.getByLabel('Movement')).toHaveValue('0');
+    await expect(page.getByText('Visibility and movement are stored independently from Aura Type.')).toBeVisible();
+
+    await page.setViewportSize({ width: 620, height: 900 });
+    const [typeGroupBox, firstTypeBox, lastTypeBox, spawnBox, movementBox] = await Promise.all([
+      auraTypeGroup.boundingBox(),
+      auraTypeGroup.getByTestId('aura-type-option-0').boundingBox(),
+      auraTypeGroup.getByTestId('aura-type-option-6').boundingBox(),
+      inspector.getByLabel('Who sees the aura entity').boundingBox(),
+      inspector.getByLabel('Movement').boundingBox(),
+    ]);
+    if (!typeGroupBox || !firstTypeBox || !lastTypeBox || !spawnBox || !movementBox) {
+      throw new Error('Compact Behavior geometry is unavailable');
+    }
+    expect(firstTypeBox.x).toBeGreaterThanOrEqual(typeGroupBox.x);
+    expect(lastTypeBox.x + lastTypeBox.width).toBeLessThanOrEqual(typeGroupBox.x + typeGroupBox.width + 1);
+    expect(movementBox.y).toBeGreaterThan(spawnBox.y + spawnBox.height);
 
     await page.getByRole('tab', { name: 'Linked Content', exact: true }).click();
     await expect(page.getByRole('heading', { name: "Champion's Aura Effect", exact: true })).toBeVisible();
@@ -199,25 +236,80 @@ test.describe('Aura Editor', () => {
     await expect(runtimeSummary.getByTestId('aura-cast-time-simulator')).toHaveCount(0);
     await expect(simulator).toHaveAttribute('data-time-ms', '0');
     await expect(simulator).toHaveCSS('opacity', '0.5');
-    await expect(page.getByText('Legacy -1', { exact: true })).toBeVisible();
+    await expect(castTimeField.getByText('Cast-time simulator', { exact: true })).toHaveCount(0);
+    await expect(castTimeField.getByText(/Stored in whole seconds/)).toHaveCount(0);
+    await expect(simulator).toHaveClass(/ml-3/);
+    await expect(simulator).toHaveCSS('margin-top', '5px');
 
     const [numericBox, simulatorBox] = await Promise.all([
       numeric.boundingBox(),
       simulator.boundingBox(),
     ]);
     if (!numericBox || !simulatorBox) throw new Error('Aura cast-time geometry is unavailable');
-    expect(simulatorBox.y).toBeGreaterThanOrEqual(numericBox.y + numericBox.height + 5);
+    expect(simulatorBox.y).toBeGreaterThanOrEqual(numericBox.y + numericBox.height + 4);
 
     await numeric.fill('12');
     await expect(simulator).toHaveAttribute('data-time-ms', '12000');
     await expect(simulator).toHaveCSS('opacity', '1');
-    await expect(page.getByText('12 sec timer', { exact: true })).toBeVisible();
     await expect(simulator.locator('.eq-progress-bar')).toBeVisible();
     await expect(page.getByTestId('aura-save')).toBeEnabled();
 
     await numeric.fill('-1');
     await expect(simulator).toHaveAttribute('data-time-ms', '0');
     await expect(page.getByTestId('aura-save')).toBeDisabled();
+  });
+
+  test('keeps linked spell behavior inside its column at desktop and compact widths', async ({ page }) => {
+    const state: AuraMockState = { auras: [{ ...aura }], deleteRequests: 0 };
+    await installAuraMocks(page, state);
+
+    for (const viewport of [
+      { width: 1280, height: 900 },
+      { width: 620, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto('/auras?tab=Linked+Content&aura=100');
+
+      const card = page.getByTestId('aura-spell-behavior');
+      const column = card.locator('..');
+      await expect(card).toBeVisible();
+
+      const [cardBox, columnBox] = await Promise.all([
+        card.boundingBox(),
+        column.boundingBox(),
+      ]);
+      if (!cardBox || !columnBox) throw new Error('Linked Content geometry is unavailable');
+      expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(columnBox.y + columnBox.height + 1);
+      await expect(card).toHaveCSS('min-height', '0px');
+    }
+  });
+
+  test('selects explicit Aura icons while preserving legacy and linked-spell values', async ({ page }) => {
+    const state: AuraMockState = {
+      auras: [{ ...aura, icon: 999 }],
+      deleteRequests: 0,
+    };
+    await installAuraMocks(page, state);
+    await page.goto('/auras?aura=100');
+
+    const iconValue = page.locator('#aura-icon');
+    const picker = page.getByTestId('aura-icon-picker');
+    await expect(iconValue).toHaveValue('999');
+    await expect(picker).toContainText('Aura icon #999');
+    await expect(picker).toContainText('Preserves explicit client aura icon #999.');
+
+    await picker.getByRole('button', { name: 'Choose icon', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Choose aura icon' })).toBeVisible();
+    await expect(iconValue).toHaveValue('999');
+    await page.getByRole('option', { name: 'Select spell icon 42' }).click();
+
+    await expect(iconValue).toHaveValue('42');
+    await expect(picker).toContainText('Aura icon #42');
+    await picker.getByRole('button', { name: 'Use linked spell icon', exact: true }).click();
+    await expect(iconValue).toHaveValue('-1');
+    await expect(picker).toContainText('Linked spell icon');
+    await expect(picker).toContainText('Inherits icon #161 from the linked effect spell.');
+    await expect(page.getByTestId('aura-icon-preview').locator('.spell-161-40')).toBeVisible();
   });
 
   test('guards copy and delete while persisting complete Aura records', async ({ page }) => {

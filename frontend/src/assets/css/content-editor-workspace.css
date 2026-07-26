@@ -528,6 +528,10 @@
   border-color: rgba(210, 170, 69, 0.3);
 }
 
+.spire-editor-context-card--fit {
+  min-height: 0;
+}
+
 .spire-editor-context-label {
   color: #d0ad4a;
   font-size: 8px;
@@ -657,24 +661,98 @@
   padding: 10px;
 }
 
-.aura-cast-time-simulator__bar {
-  margin: 8px 4px 0;
-}
-
-.aura-cast-time-simulator__caption {
+.aura-icon-picker {
   align-items: center;
-  color: #8e99a3;
+  background: rgba(3, 8, 12, 0.54);
+  border: 1px solid rgba(178, 191, 204, 0.16);
   display: flex;
-  font-size: 8px;
-  justify-content: space-between;
-  margin: 6px 4px 0;
-  text-transform: uppercase;
+  gap: 10px;
+  min-height: 58px;
+  padding: 7px;
 }
 
-.aura-cast-time-simulator__caption strong {
-  color: #e2c662;
-  font-size: 9px;
-  letter-spacing: 0.04em;
+.aura-icon-picker__preview {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(210, 170, 69, 0.36);
+  color: #d2aa45;
+  display: flex;
+  flex: 0 0 46px;
+  height: 46px;
+  justify-content: center;
+  padding: 2px;
+  width: 46px;
+}
+
+.aura-icon-picker__preview:focus-visible {
+  outline: 2px solid #d2aa45;
+  outline-offset: 2px;
+}
+
+.aura-icon-picker__body {
+  min-width: 0;
+}
+
+.aura-icon-picker__body strong,
+.aura-icon-picker__body small {
+  display: block;
+}
+
+.aura-icon-picker__body strong {
+  color: #d9dde0;
+  font-size: 10px;
+}
+
+.aura-icon-picker__body small {
+  color: #78838c;
+  font-size: 8px;
+  margin-top: 2px;
+}
+
+.aura-icon-picker__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.aura-icon-modal__toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.aura-icon-modal__toolbar span {
+  color: #89939d;
+  font-size: 10px;
+}
+
+.aura-behavior-type-group {
+  background: rgba(3, 8, 12, 0.38);
+  border: 1px solid rgba(178, 191, 204, 0.14);
+  padding: 11px;
+}
+
+.aura-behavior-type-options {
+  margin-top: 9px;
+}
+
+.aura-behavior-type-options .spire-editor-context-card {
+  cursor: pointer;
+}
+
+.aura-behavior-independent-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 13px 0 7px;
+}
+
+.aura-behavior-independent-heading small {
+  color: #78838c;
+  font-size: 8px;
 }
 
 .spire-editor-effect-list {

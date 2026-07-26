@@ -3,14 +3,20 @@
     v-if="icons"
     class="align-content-center"
     id="spell-icon-view-port"
-    style="height: 90vh; overflow-y: scroll"
+    role="listbox"
+    aria-label="Spell icons"
+    :style="{ height: compact ? '320px' : '90vh', overflowY: 'auto' }"
   >
-    <div
+    <button
+      type="button"
       @click="selectIcon(icon)"
       v-for="icon in icons"
       :key="icon"
-      :class="'d-inline-block '"
+      class="d-inline-block spell-icon-selector__option"
       :id="'spell-icon-' + icon"
+      role="option"
+      :aria-label="'Select spell icon ' + icon"
+      :aria-selected="parseInt(icon) === parseInt(selectedIcon) ? 'true' : 'false'"
       style="margin: 2px"
     >
       <span
@@ -18,7 +24,7 @@
         :class="'spell-' + icon + '-40 ' + classIsPulsating(icon)"
         :title="icon"
       />
-    </div>
+    </button>
   </div>
 </template>
 
@@ -38,6 +44,10 @@ export default {
       type: Number,
       default: 0,
       required: true
+    },
+    compact: {
+      type: Boolean,
+      default: false
     },
   },
   async created() {
@@ -71,5 +81,18 @@ export default {
 </script>
 
 <style scoped>
+.spell-icon-selector__option {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  line-height: 0;
+  padding: 0;
+}
 
+.spell-icon-selector__option:focus-visible {
+  outline: 2px solid #d2aa45;
+  outline-offset: 1px;
+}
 </style>

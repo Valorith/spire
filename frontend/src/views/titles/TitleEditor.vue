@@ -260,17 +260,6 @@
                     <span class="spire-editor-field-help">Stable primary identifier. Existing IDs cannot be changed.</span>
                   </div>
                   <div class="spire-editor-field">
-                    <label for="title-preview-name">Preview character</label>
-                    <input
-                      id="title-preview-name"
-                      v-model.trim="previewCharacter"
-                      class="form-control form-control-sm"
-                      maxlength="64"
-                      placeholder="Aurelia"
-                    >
-                    <span class="spire-editor-field-help">Preview-only name; it is never saved to the title record.</span>
-                  </div>
-                  <div class="spire-editor-field">
                     <label for="title-prefix">Prefix</label>
                     <input
                       id="title-prefix"
@@ -299,7 +288,7 @@
                   <div class="title-live-preview__name">{{ composedTitle }}</div>
                   <div class="title-live-preview__meta">
                     <span v-if="editModel.prefix"><i class="fa fa-long-arrow-left"></i> prefix</span>
-                    <span>{{ previewCharacter || 'Aurelia' }}</span>
+                    <span data-testid="title-preview-character">{{ previewCharacterName }}</span>
                     <span v-if="editModel.suffix">suffix <i class="fa fa-long-arrow-right"></i></span>
                   </div>
                   <p v-if="!editModel.prefix && !editModel.suffix">
@@ -833,6 +822,11 @@
     return result
   }
 
+  const TITLE_PREVIEW_NAMES = [
+    'Aurelia', 'Brenna', 'Caelen', 'Darian',
+    'Elowen', 'Farren', 'Galen', 'Lyra'
+  ]
+
   export default {
     name: 'TitleEditor',
     components: { ContentArea, EqWindow },
@@ -865,7 +859,6 @@
           { value: 'linked', label: 'Linked' },
           { value: 'special', label: 'Special' }
         ],
-        previewCharacter: 'Aurelia',
         itemSearch: '',
         itemResults: [],
         searchingItems: false,
@@ -990,10 +983,14 @@
       composedTitle () {
         const parts = [
           String(this.editModel ? this.editModel.prefix : '').trim(),
-          String(this.previewCharacter || 'Aurelia').trim(),
+          this.previewCharacterName,
           String(this.editModel ? this.editModel.suffix : '').trim()
         ].filter(Boolean)
         return parts.join(' ')
+      },
+      previewCharacterName () {
+        const titleId = Math.abs(Number(this.editModel && this.editModel.id) || 0)
+        return TITLE_PREVIEW_NAMES[titleId % TITLE_PREVIEW_NAMES.length]
       },
       eligibilitySummary () {
         const count = this.eligibilityCount(this.editModel)
@@ -1306,7 +1303,6 @@
         this.editModel.char_id = Number(normalized.id)
         this.selectedCharacter = clone(normalized)
         this.characterMap = { ...this.characterMap, [Number(normalized.id)]: clone(normalized) }
-        this.previewCharacter = normalized.name || this.previewCharacter
         this.characterSearch = ''
         this.characterResults = []
       },
