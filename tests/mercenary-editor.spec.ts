@@ -9,6 +9,8 @@ type MercenaryState = {
   deletePayload?: Record<string, unknown>;
   buffCreatePayload?: Record<string, unknown>;
   buffUpdatePayload?: Record<string, unknown>;
+  detailDelays?: Record<number, number>;
+  detailFailures?: number[];
   deletedBuffs: number[];
 };
 
@@ -235,6 +237,15 @@ async function installMercenaryMocks(page: Page, state: MercenaryState) {
     const request = route.request();
     const id = Number(new URL(request.url()).pathname.split('/').pop());
     if (request.method() === 'GET') {
+      const delay = state.detailDelays?.[id] || 0;
+      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+      if (state.detailFailures?.includes(id)) {
+        return route.fulfill({
+          status: 404,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Mercenary not found' }),
+        });
+      }
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -421,6 +432,64 @@ test.describe('Mercenary Editor', () => {
     await acceptedNavigation;
 
     await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Bryn Ward');
+
+    await page.locator('#mercenary-name').fill('Unsaved Bryn');
+    const clearDialogPromise = page.waitForEvent('dialog');
+    const clearedNavigation = page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+    const clearDialog = await clearDialogPromise;
+    expect(clearDialog.message()).toBe('Discard unsaved mercenary changes?');
+    await clearDialog.accept();
+    await clearedNavigation;
+
+    await expect(page.getByTestId('mercenary-inspector')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/mercenaries$/);
+  });
+
+  test('keeps route-driven detail loads ordered and clears stale detail after a failure', async ({ page }) => {
+    const secondMercenary = {
+      ...mercenary,
+      merc_id: 940002,
+      slot: 1,
+      name: 'Bryn Ward',
+    };
+    const thirdMercenary = {
+      ...mercenary,
+      merc_id: 940003,
+      slot: 2,
+      name: 'Caro Ward',
+    };
+    const state: MercenaryState = {
+      mercenaries: [{ ...mercenary }, secondMercenary, thirdMercenary],
+      buffs: [],
+      audit: [],
+      detailDelays: { 940002: 150 },
+      detailFailures: [949999],
+      deletedBuffs: [],
+    };
+    await installMercenaryMocks(page, state);
+    await page.goto('/mercenaries?mercenary=940001');
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?mercenary=940002');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+      window.history.pushState({}, '', '/mercenaries?mercenary=940003');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Caro Ward');
+    await page.waitForTimeout(200);
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Caro Ward');
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?mercenary=949999');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+
+    await expect(page.locator('.spire-editor-notification')).toHaveText(/Mercenary not found/);
+    await expect(page.getByTestId('mercenary-inspector')).toHaveCount(0);
   });
 
   test('loads audit data for route-driven and initial audit tabs', async ({ page }) => {

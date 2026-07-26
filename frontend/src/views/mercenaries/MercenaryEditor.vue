@@ -845,6 +845,7 @@
         searchTimer: null,
         loadingDirectory: false,
         loadingDetail: false,
+        detailRequestToken: 0,
         directoryError: '',
         selectedID: null,
         detail: null,
@@ -982,6 +983,11 @@
       '$route.query.mercenary' (value) {
         const id = Number(value || 0)
         if (id && id !== Number(this.selectedID)) this.loadDetail(id)
+        else if (!id && this.selectedID && !this.isCreating) {
+          this.detailRequestToken++
+          this.loadingDetail = false
+          this.clearDetail()
+        }
       },
       '$route.query.tab' (value) {
         if (TABS.includes(value) && value !== this.selectedTab) {
@@ -998,6 +1004,7 @@
       })
     },
     beforeDestroy () {
+      this.detailRequestToken++
       clearTimeout(this.searchTimer)
       clearTimeout(this.ownerSearchTimer)
       clearTimeout(this.spellSearchTimer)
@@ -1009,7 +1016,7 @@
     },
     beforeRouteUpdate (to, from, next) {
       const nextID = Number(to.query.mercenary || 0)
-      const changesMercenary = nextID && nextID !== Number(this.selectedID)
+      const changesMercenary = nextID !== Number(this.selectedID || 0)
       if (changesMercenary && this.hasUnsavedChanges && !window.confirm('Discard unsaved mercenary changes?')) {
         return next(false)
       }
@@ -1090,18 +1097,23 @@
       },
       async selectMercenary (id) {
         if (this.hasUnsavedChanges && !window.confirm('Discard unsaved mercenary changes?')) return
-        await this.loadDetail(id)
-        this.updateRoute()
+        if (await this.loadDetail(id)) this.updateRoute()
       },
       async loadDetail (id) {
+        const requestToken = ++this.detailRequestToken
         this.loadingDetail = true
         try {
           const response = await SpireApi.v1().get(`/mercenary-editor/mercenary/${id}`)
+          if (requestToken !== this.detailRequestToken) return false
           this.applyDetail(response.data)
+          return true
         } catch (error) {
+          if (requestToken !== this.detailRequestToken) return false
+          this.clearDetail()
           this.showNotification(this.errorMessage(error, 'Unable to load mercenary'), 'error')
+          return false
         } finally {
-          this.loadingDetail = false
+          if (requestToken === this.detailRequestToken) this.loadingDetail = false
         }
       },
       applyDetail (detail) {
@@ -1124,8 +1136,20 @@
         this.auditError = ''
         if (this.selectedTab === 'Audit Trail') this.loadAudit()
       },
+      clearDetail () {
+        this.selectedID = null
+        this.detail = null
+        this.editModel = null
+        this.originalModel = null
+        this.selectedOwner = null
+        this.isCreating = false
+        this.auditEntries = []
+        this.auditError = ''
+      },
       createDraft () {
         if (this.hasUnsavedChanges && !window.confirm('Discard unsaved mercenary changes?')) return
+        this.detailRequestToken++
+        this.loadingDetail = false
         this.selectedID = null
         this.detail = { mercenary: {}, buffs: [] }
         this.editModel = emptyMercenary()

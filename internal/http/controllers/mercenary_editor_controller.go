@@ -243,8 +243,7 @@ func (m *MercenaryEditorController) listMercenaries(c echo.Context) error {
 	state := strings.ToLower(strings.TrimSpace(c.QueryParam("state")))
 
 	query := db.Table("mercs m").
-		Joins("LEFT JOIN character_data owner ON owner.id = m.OwnerCharacterID").
-		Where("owner.deleted_at IS NULL OR owner.id IS NULL")
+		Joins("LEFT JOIN character_data owner ON owner.id = m.OwnerCharacterID")
 	if search != "" {
 		like := "%" + search + "%"
 		query = query.Where("m.Name LIKE ? OR owner.name LIKE ? OR CAST(m.MercID AS CHAR) = ? OR CAST(m.OwnerCharacterID AS CHAR) = ?", like, like, search, search)
@@ -298,6 +297,7 @@ func (m *MercenaryEditorController) createMercenary(c echo.Context) error {
 	db := m.eqemuDB(c)
 	var createdID uint
 	var auditID uint
+	var detail mercenaryEditorDetail
 	err := db.Transaction(func(tx *gorm.DB) error {
 		if err := ensureMercenaryOwner(tx, request.OwnerCharacterID); err != nil {
 			return err
@@ -312,7 +312,11 @@ func (m *MercenaryEditorController) createMercenary(c echo.Context) error {
 		if err := tx.Raw("SELECT LAST_INSERT_ID()").Scan(&createdID).Error; err != nil {
 			return err
 		}
-		var err error
+		createdDetail, err := loadMercenaryDetail(tx, createdID)
+		if err != nil {
+			return err
+		}
+		detail = createdDetail
 		auditID, err = m.writeAudit(c, mercenaryEventCreate, mercenaryAuditPayload{
 			Action: "create", MercID: createdID, OwnerID: request.OwnerCharacterID, Name: request.Name, After: request,
 		})
@@ -321,10 +325,6 @@ func (m *MercenaryEditorController) createMercenary(c echo.Context) error {
 	if err != nil {
 		m.discardAudit(auditID)
 		return mercenaryMutationError(c, err)
-	}
-	detail, err := loadMercenaryDetail(db, createdID)
-	if err != nil {
-		return mercenaryLoadError(c, err)
 	}
 	return c.JSON(http.StatusCreated, detail)
 }
@@ -345,6 +345,7 @@ func (m *MercenaryEditorController) updateMercenary(c echo.Context) error {
 
 	db := m.eqemuDB(c)
 	var auditID uint
+	var detail mercenaryEditorDetail
 	err = db.Transaction(func(tx *gorm.DB) error {
 		current, err := lockMercenary(tx, id)
 		if err != nil {
@@ -359,6 +360,10 @@ func (m *MercenaryEditorController) updateMercenary(c echo.Context) error {
 		if err := tx.Table("mercs").Where("MercID = ?", id).Updates(mercenaryColumns(*request)).Error; err != nil {
 			return err
 		}
+		detail, err = loadMercenaryDetail(tx, id)
+		if err != nil {
+			return err
+		}
 		auditID, err = m.writeAudit(c, mercenaryEventUpdate, mercenaryAuditPayload{
 			Action: "update", MercID: id, OwnerID: request.OwnerCharacterID, Name: request.Name,
 			Before: current, After: request,
@@ -368,10 +373,6 @@ func (m *MercenaryEditorController) updateMercenary(c echo.Context) error {
 	if err != nil {
 		m.discardAudit(auditID)
 		return mercenaryMutationError(c, err)
-	}
-	detail, err := loadMercenaryDetail(db, id)
-	if err != nil {
-		return mercenaryLoadError(c, err)
 	}
 	return c.JSON(http.StatusOK, detail)
 }
@@ -384,9 +385,13 @@ func (m *MercenaryEditorController) copyMercenary(c echo.Context) error {
 	db := m.eqemuDB(c)
 	var createdID uint
 	var auditID uint
+	var detail mercenaryEditorDetail
 	err = db.Transaction(func(tx *gorm.DB) error {
 		source, err := lockMercenary(tx, id)
 		if err != nil {
+			return err
+		}
+		if err := ensureMercenaryOwner(tx, source.OwnerCharacterID); err != nil {
 			return err
 		}
 		slot, err := nextMercenarySlot(tx, source.OwnerCharacterID)
@@ -417,6 +422,10 @@ func (m *MercenaryEditorController) copyMercenary(c echo.Context) error {
 		`, createdID, id).Error; err != nil {
 			return err
 		}
+		detail, err = loadMercenaryDetail(tx, createdID)
+		if err != nil {
+			return err
+		}
 		auditID, err = m.writeAudit(c, mercenaryEventCopy, mercenaryAuditPayload{
 			Action: "copy", MercID: createdID, SourceMercID: id,
 			OwnerID: source.OwnerCharacterID, Name: copyInput.Name,
@@ -426,10 +435,6 @@ func (m *MercenaryEditorController) copyMercenary(c echo.Context) error {
 	if err != nil {
 		m.discardAudit(auditID)
 		return mercenaryMutationError(c, err)
-	}
-	detail, err := loadMercenaryDetail(db, createdID)
-	if err != nil {
-		return mercenaryLoadError(c, err)
 	}
 	return c.JSON(http.StatusCreated, detail)
 }
@@ -971,12 +976,19 @@ func validateMercenaryBuffInput(input mercenaryBuffInput) error {
 }
 
 func ensureMercenaryOwner(db *gorm.DB, ownerID uint) error {
-	var count int64
-	if err := db.Table("character_data").Where("id = ? AND deleted_at IS NULL", ownerID).Count(&count).Error; err != nil {
-		return err
+	var owner struct {
+		ID uint `gorm:"column:id"`
 	}
-	if count == 0 {
+	err := db.Table("character_data").
+		Select("id").
+		Where("id = ? AND deleted_at IS NULL", ownerID).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Take(&owner).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return mercenaryConflictError{"The selected owner character no longer exists"}
+	}
+	if err != nil {
+		return err
 	}
 	return nil
 }
