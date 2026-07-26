@@ -141,6 +141,18 @@ test.describe('Aura Editor', () => {
     await expect(page.getByTestId('aura-inspector').locator('h2')).toHaveText('Aura Test');
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/auras"]')).toHaveCount(1);
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/auras"]')).toBeVisible();
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/auras?tab=Safety&aura=100');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByRole('tab', { name: 'Safety', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/auras?tab=Overview&aura=100');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toHaveAttribute('aria-selected', 'true');
+
     await page.getByRole('tab', { name: 'Behavior', exact: true }).click();
     const inspector = page.getByTestId('aura-inspector');
     await expect(inspector.getByLabel('Aura type', { exact: true })).toHaveValue('1');
@@ -177,6 +189,11 @@ test.describe('Aura Editor', () => {
     const effectList = page.locator('.spire-editor-effect-list');
     await expect(effectList.getByText('Increase AC', { exact: true })).toBeVisible();
     await expect(effectList.getByText('10', { exact: true })).toBeVisible();
+
+    await page.locator('#aura-spell-search').fill('DefinitelyMissingSpell');
+    await expect(page.getByText('No matching spells found.', { exact: true })).toBeVisible();
+    await page.locator('#aura-npc-search').fill('DefinitelyMissingNpc');
+    await expect(page.getByText('No matching NPC templates found.', { exact: true })).toBeVisible();
   });
 
   test('reuses the Spell Editor range visualizer with synchronized exact units', async ({ page }) => {
@@ -353,6 +370,13 @@ test.describe('Aura Editor', () => {
     await installAuraMocks(page, state);
     await page.goto('/auras?aura=100');
 
+    await page.locator('#aura-name').fill('Unsaved_Aura');
+    await expect(page.getByTestId('aura-copy')).toBeDisabled();
+    await expect(page.getByTestId('aura-delete')).toBeDisabled();
+    await page.getByTestId('aura-reset').click();
+    await expect(page.getByTestId('aura-copy')).toBeEnabled();
+    await expect(page.getByTestId('aura-delete')).toBeEnabled();
+
     await page.getByTestId('aura-copy').click();
     await expect(page.getByText('Create a new draft from aura #100 (Aura Test)?')).toBeVisible();
     await page.getByRole('button', { name: 'Create copy', exact: true }).click();
@@ -380,5 +404,29 @@ test.describe('Aura Editor', () => {
     await page.getByRole('button', { name: 'Delete aura', exact: true }).click();
     await expect(page.getByTestId('aura-inspector').locator('h2')).toHaveText('Aura Test');
     expect(state.deleteRequests).toBe(1);
+  });
+
+  test('keeps initial load failures visible and supports a real retry', async ({ page }) => {
+    const state: AuraMockState = { auras: [{ ...aura }], deleteRequests: 0 };
+    await installAuraMocks(page, state);
+    let attempts = 0;
+    await page.route('**/api/v1/auras?**', async route => {
+      attempts += 1;
+      if (attempts === 1) {
+        return route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Aura service is temporarily unavailable' }),
+        });
+      }
+      return route.fallback();
+    });
+
+    await page.goto('/auras?aura=100');
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('Aura service is temporarily unavailable');
+    await alert.getByRole('button', { name: /Retry/ }).click();
+    await expect(page.getByTestId('aura-inspector')).toBeVisible();
+    await expect(page.getByTestId('aura-inspector').locator('h2')).toHaveText('Aura Test');
   });
 });

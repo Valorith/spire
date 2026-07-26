@@ -307,6 +307,18 @@
   width: 48px;
 }
 
+.spire-editor-directory-state--error > i,
+.spire-editor-empty--error .spire-editor-empty__sigil {
+  border-color: rgba(209, 71, 71, 0.45);
+  color: #e36d6d;
+}
+
+.spire-editor-empty--error p {
+  color: #aeb6bd;
+  margin: 0;
+  max-width: 430px;
+}
+
 .spire-editor-empty h3 {
   color: #dcc789;
   font-family: Georgia, "Times New Roman", serif;

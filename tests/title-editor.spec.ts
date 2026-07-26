@@ -191,6 +191,17 @@ test.describe('Title Editor', () => {
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/titles"]')).toHaveCount(1);
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/titles"]')).toBeVisible();
 
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/titles?tab=Eligibility&title=93');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByRole('tab', { name: 'Eligibility', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/titles?tab=Overview&title=93');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toHaveAttribute('aria-selected', 'true');
+
     await page.locator('#title-prefix').fill('Stormcaller');
     await expect(page.getByTestId('title-live-preview')).toContainText('Stormcaller Farren');
     await page.getByRole('tab', { name: 'Eligibility', exact: true }).click();
@@ -333,5 +344,88 @@ test.describe('Title Editor', () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
     await expect(page.locator('#title-item-search')).toBeVisible();
+  });
+
+  test('offers human-readable existing title sets with a direct legacy escape hatch', async ({ page }) => {
+    const setTitle = { ...title, id: 120, item_id: -1, prefix: 'Set Keeper', title_set: 77 };
+    const setSibling = { ...title, id: 121, item_id: -1, prefix: 'Set Warden', title_set: 77 };
+    const state: TitleMockState = {
+      titles: [{ ...title }, setTitle, setSibling],
+      assignments: [{ id: 900, char_id: 42, title_set: 77 }],
+      deletedTitles: [],
+      deletedAssignments: [],
+    };
+    await installTitleMocks(page, state);
+    await page.goto('/titles?title=93&tab=Unlock%20Sources');
+
+    const existingSet = page.locator('#title-set-existing');
+    await expect(existingSet).toContainText('Set #77 — Set Keeper · 2 titles · 1 grant');
+    await existingSet.selectOption('77');
+    await expect(page.locator('#title-set')).toHaveValue('77');
+    await expect(page.getByText('3 titles in this set', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('title-copy')).toBeDisabled();
+    await expect(page.getByTestId('title-delete')).toBeDisabled();
+
+    await page.locator('#title-set').fill('991');
+    await expect(existingSet).toHaveValue('');
+    await expect(page.getByText('1 title in this set', { exact: true })).toBeVisible();
+    await page.locator('#title-set').fill('0');
+    await expect(page.getByText('No title-set grant required', { exact: true })).toBeVisible();
+  });
+
+  test('keeps initial load failures visible and supports a real retry', async ({ page }) => {
+    const state: TitleMockState = {
+      titles: [{ ...title }],
+      assignments: [],
+      deletedTitles: [],
+      deletedAssignments: [],
+    };
+    await installTitleMocks(page, state);
+    let attempts = 0;
+    await page.route('**/api/v1/titles?**', async route => {
+      attempts += 1;
+      if (attempts === 1) {
+        return route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Title service is temporarily unavailable' }),
+        });
+      }
+      return route.fallback();
+    });
+
+    await page.goto('/titles?title=93');
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('Title service is temporarily unavailable');
+    await alert.getByRole('button', { name: /Retry/ }).click();
+    await expect(page.getByTestId('title-inspector')).toBeVisible();
+    await expect(page.getByTestId('title-inspector').locator('h2')).toHaveText('Windcaller');
+  });
+
+  test('shows explicit empty states for every smart lookup', async ({ page }) => {
+    const setTitle = { ...title, id: 120, item_id: -1, prefix: 'Set Keeper', title_set: 77 };
+    const state: TitleMockState = {
+      titles: [setTitle],
+      assignments: [],
+      deletedTitles: [],
+      deletedAssignments: [],
+    };
+    await installTitleMocks(page, state);
+    await page.route('**/api/v1/items?**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    );
+    await page.route('**/api/v1/character_data?**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    );
+    await page.goto('/titles?title=120&tab=Unlock%20Sources');
+
+    await page.locator('#title-item-search').fill('DefinitelyMissingItem');
+    await expect(page.getByText('No matching items found.', { exact: true })).toBeVisible();
+    await page.locator('#title-character-search').fill('DefinitelyMissingCharacter');
+    await expect(page.getByText('No matching characters found.', { exact: true })).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
+    await page.locator('#title-assignment-character-search').fill('DefinitelyMissingCharacter');
+    await expect(page.getByText('No matching characters found.', { exact: true })).toBeVisible();
   });
 });

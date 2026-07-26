@@ -95,7 +95,14 @@
               <span class="spire-editor-directory-aside">#{{ record.id }}</span>
             </button>
 
-            <div v-if="loading && !titles.length" class="spire-editor-directory-state">
+            <div v-if="loadError" class="spire-editor-directory-state spire-editor-directory-state--error">
+              <i class="fa fa-exclamation-triangle"></i>
+              <span>{{ loadError }}</span>
+              <button class="btn btn-sm btn-outline-warning" type="button" @click="loadTitles">
+                Retry
+              </button>
+            </div>
+            <div v-else-if="loading && !titles.length" class="spire-editor-directory-state">
               <i class="fa fa-spinner fa-spin"></i>
               <span>Loading real title data…</span>
             </div>
@@ -135,7 +142,18 @@
       </aside>
 
       <main class="spire-editor-inspector">
-        <eq-window v-if="!editModel && !loading" title="Title Workspace">
+        <eq-window v-if="!editModel && loadError" title="Title Workspace">
+          <div class="spire-editor-empty spire-editor-empty--error" role="alert">
+            <div class="spire-editor-empty__sigil"><i class="fa fa-exclamation-triangle"></i></div>
+            <h3>Title data could not be loaded</h3>
+            <p>{{ loadError }}</p>
+            <b-button size="sm" variant="outline-warning" @click="loadTitles">
+              <i class="fa fa-refresh mr-1"></i>Retry
+            </b-button>
+          </div>
+        </eq-window>
+
+        <eq-window v-else-if="!editModel && !loading" title="Title Workspace">
           <div class="spire-editor-empty">
             <div class="spire-editor-empty__sigil"><i class="ra ra-crown"></i></div>
             <h3>Select a player title</h3>
@@ -368,7 +386,7 @@
                       Legacy status ({{ editModel.status }})
                     </option>
                   </select>
-                  <span class="spire-editor-field-help">Known values are derived from the live title data; unknown legacy values remain selectable.</span>
+                  <span class="spire-editor-field-help">Known EQEmu account access levels are named; unknown legacy values remain selectable.</span>
                 </div>
               </div>
 
@@ -514,7 +532,7 @@
                         @input="queueItemSearch"
                       >
                     </div>
-                    <div v-if="searchingItems || itemResults.length" class="spire-editor-selector-results">
+                    <div v-if="searchingItems || itemResults.length || itemSearchComplete" class="spire-editor-selector-results">
                       <div v-if="searchingItems" class="title-selector-state"><i class="fa fa-spinner fa-spin"></i> Searching items…</div>
                       <button v-for="item in itemResults" :key="'item-' + item.id" type="button" @click="selectItem(item)">
                         <span v-if="item.icon" :class="'item-' + item.icon + '-sm'"></span>
@@ -522,6 +540,7 @@
                         <span>{{ item.name }}</span>
                         <small>#{{ item.id }}</small>
                       </button>
+                      <div v-if="itemSearchComplete && !itemResults.length" class="title-selector-state">No matching items found.</div>
                     </div>
                   </div>
                 </div>
@@ -570,13 +589,14 @@
                         @input="queueCharacterSearch"
                       >
                     </div>
-                    <div v-if="searchingCharacters || characterResults.length" class="spire-editor-selector-results">
+                    <div v-if="searchingCharacters || characterResults.length || characterSearchComplete" class="spire-editor-selector-results">
                       <div v-if="searchingCharacters" class="title-selector-state"><i class="fa fa-spinner fa-spin"></i> Searching characters…</div>
                       <button v-for="character in characterResults" :key="'character-' + character.id" type="button" @click="selectCharacter(character)">
                         <i class="ra ra-player"></i>
                         <span>{{ character.name }}</span>
                         <small>#{{ character.id }} · L{{ character.level || 0 }} {{ className(character.class) }}</small>
                       </button>
+                      <div v-if="characterSearchComplete && !characterResults.length" class="title-selector-state">No matching characters found.</div>
                     </div>
                   </div>
                 </div>
@@ -592,9 +612,28 @@
                     Clear
                   </button>
                 </div>
-                <div class="spire-editor-grid spire-editor-grid--two">
+                <div class="spire-editor-grid spire-editor-grid--three">
                   <div class="spire-editor-field">
-                    <label for="title-set">Title set</label>
+                    <label for="title-set-existing">Existing title set</label>
+                    <select
+                      id="title-set-existing"
+                      class="form-control form-control-sm"
+                      :value="knownTitleSetValue"
+                      @change="selectExistingTitleSet($event.target.value)"
+                    >
+                      <option value="">Choose an existing set…</option>
+                      <option
+                        v-for="option in titleSetOptions"
+                        :key="'title-set-' + option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <span class="spire-editor-field-help">Uses the title and grant records already present in this database.</span>
+                  </div>
+                  <div class="spire-editor-field">
+                    <label for="title-set">New or legacy set ID</label>
                     <input
                       id="title-set"
                       v-model.number="editModel.title_set"
@@ -602,7 +641,7 @@
                       type="number"
                       min="0"
                     >
-                    <span class="spire-editor-field-help">Zero means no set gate. Positive values link to <code>player_titlesets.title_set</code>.</span>
+                    <span class="spire-editor-field-help">Direct entry preserves unknown legacy values and creates new set keys. Zero means no set gate.</span>
                   </div>
                   <div class="spire-editor-context-card spire-editor-context-card--gold">
                     <div class="spire-editor-context-label">Set impact</div>
@@ -669,7 +708,7 @@
                         @input="queueAssignmentSearch"
                       >
                     </div>
-                    <div v-if="searchingAssignments || assignmentResults.length" class="spire-editor-selector-results">
+                    <div v-if="searchingAssignments || assignmentResults.length || assignmentSearchComplete" class="spire-editor-selector-results">
                       <div v-if="searchingAssignments" class="title-selector-state"><i class="fa fa-spinner fa-spin"></i> Searching characters…</div>
                       <button
                         v-for="character in assignmentResults"
@@ -682,6 +721,7 @@
                         <span>{{ character.name }}</span>
                         <small>{{ isCharacterAssigned(character.id) ? 'Already assigned' : '#' + character.id }}</small>
                       </button>
+                      <div v-if="assignmentSearchComplete && !assignmentResults.length" class="title-selector-state">No matching characters found.</div>
                     </div>
                   </div>
                   <span v-else class="title-assignment-save-hint">Save this title-set value before editing grants.</span>
@@ -839,6 +879,7 @@
         itemMap: {},
         characterMap: {},
         loading: false,
+        loadError: '',
         saving: false,
         selectedId: null,
         editModel: null,
@@ -862,14 +903,17 @@
         itemSearch: '',
         itemResults: [],
         searchingItems: false,
+        itemSearchComplete: false,
         itemSearchTimer: null,
         characterSearch: '',
         characterResults: [],
         searchingCharacters: false,
+        characterSearchComplete: false,
         characterSearchTimer: null,
         assignmentSearch: '',
         assignmentResults: [],
         searchingAssignments: false,
+        assignmentSearchComplete: false,
         assignmentSearchTimer: null,
         assigningCharacter: false,
         notification: { message: '', type: 'success', timer: null }
@@ -896,6 +940,29 @@
       },
       statusOptions () {
         return STATUS_OPTIONS
+      },
+      titleSetOptions () {
+        const sets = {}
+        this.titles.forEach(record => {
+          const value = Number(record.title_set)
+          if (value <= 0) return
+          if (!sets[value]) sets[value] = []
+          sets[value].push(record)
+        })
+        return Object.keys(sets).map(value => {
+          const numericValue = Number(value)
+          const records = sets[value]
+          const grantCount = this.assignments.filter(record => Number(record.title_set) === numericValue).length
+          const sample = this.titleName(records[0])
+          return {
+            value: numericValue,
+            label: `Set #${numericValue} — ${sample} · ${records.length} ${records.length === 1 ? 'title' : 'titles'} · ${grantCount} ${grantCount === 1 ? 'grant' : 'grants'}`
+          }
+        }).sort((a, b) => a.value - b.value)
+      },
+      knownTitleSetValue () {
+        const current = Number(this.editModel && this.editModel.title_set)
+        return this.titleSetOptions.some(option => option.value === current) ? current : ''
       },
       filteredTitles () {
         const needle = this.search.toLowerCase()
@@ -1032,6 +1099,9 @@
       '$route.query.title' (value) {
         const id = Number(value)
         if (id && id !== Number(this.selectedId)) this.selectTitle(id, false)
+      },
+      '$route.query.tab' (value) {
+        if (this.tabs.includes(value) && value !== this.selectedTab) this.selectedTab = value
       }
     },
     async created () {
@@ -1054,6 +1124,7 @@
     methods: {
       async loadTitles () {
         this.loading = true
+        this.loadError = ''
         try {
           const builder = new SpireQueryBuilder()
           builder.limit(1000).orderBy(['id']).orderDirection('asc')
@@ -1071,7 +1142,8 @@
             : (this.titles[0] && Number(this.titles[0].id))
           if (desired) await this.selectTitle(desired, false)
         } catch (error) {
-          this.showNotification(this.errorMessage(error, 'Unable to load titles'), 'error')
+          this.loadError = this.errorMessage(error, 'Unable to load titles')
+          this.showNotification(this.loadError, 'error')
         } finally {
           this.loading = false
         }
@@ -1232,8 +1304,11 @@
         window.clearTimeout(this.itemSearchTimer)
         if (this.itemSearch.length < 2) {
           this.itemResults = []
+          this.itemSearchComplete = false
           return
         }
+        this.itemResults = []
+        this.itemSearchComplete = false
         this.itemSearchTimer = window.setTimeout(this.searchItems, 260)
       },
       async searchItems () {
@@ -1245,7 +1320,9 @@
           builder.limit(20).orderBy(['name']).orderDirection('asc')
           const response = await (new ItemApi(...SpireApi.cfg())).listItems(builder.get())
           this.itemResults = response.data || []
+          this.itemSearchComplete = true
         } catch (error) {
+          this.itemSearchComplete = false
           this.showNotification(this.errorMessage(error, 'Unable to search items'), 'error')
         } finally {
           this.searchingItems = false
@@ -1257,6 +1334,7 @@
         this.itemMap = { ...this.itemMap, [Number(item.id)]: clone(item) }
         this.itemSearch = ''
         this.itemResults = []
+        this.itemSearchComplete = false
       },
       clearItem () {
         this.editModel.item_id = -1
@@ -1266,16 +1344,22 @@
         window.clearTimeout(this.characterSearchTimer)
         if (this.characterSearch.length < 2) {
           this.characterResults = []
+          this.characterSearchComplete = false
           return
         }
+        this.characterResults = []
+        this.characterSearchComplete = false
         this.characterSearchTimer = window.setTimeout(() => this.searchCharacters('source'), 260)
       },
       queueAssignmentSearch () {
         window.clearTimeout(this.assignmentSearchTimer)
         if (this.assignmentSearch.length < 2) {
           this.assignmentResults = []
+          this.assignmentSearchComplete = false
           return
         }
+        this.assignmentResults = []
+        this.assignmentSearchComplete = false
         this.assignmentSearchTimer = window.setTimeout(() => this.searchCharacters('assignment'), 260)
       },
       async searchCharacters (mode) {
@@ -1289,9 +1373,16 @@
           builder.limit(20).orderBy(['name']).orderDirection('asc')
           const response = await (new CharacterDatumApi(...SpireApi.cfg())).listCharacterData(builder.get())
           const records = (response.data || []).map(this.normalizeCharacter)
-          if (mode === 'assignment') this.assignmentResults = records
-          else this.characterResults = records
+          if (mode === 'assignment') {
+            this.assignmentResults = records
+            this.assignmentSearchComplete = true
+          } else {
+            this.characterResults = records
+            this.characterSearchComplete = true
+          }
         } catch (error) {
+          if (mode === 'assignment') this.assignmentSearchComplete = false
+          else this.characterSearchComplete = false
           this.showNotification(this.errorMessage(error, 'Unable to search characters'), 'error')
         } finally {
           if (mode === 'assignment') this.searchingAssignments = false
@@ -1305,10 +1396,15 @@
         this.characterMap = { ...this.characterMap, [Number(normalized.id)]: clone(normalized) }
         this.characterSearch = ''
         this.characterResults = []
+        this.characterSearchComplete = false
       },
       clearCharacter () {
         this.editModel.char_id = -1
         this.selectedCharacter = null
+      },
+      selectExistingTitleSet (value) {
+        if (value === '') return
+        this.editModel.title_set = Number(value)
       },
       async addAssignment (character) {
         if (this.assigningCharacter || this.isCharacterAssigned(character.id)) return
@@ -1324,6 +1420,7 @@
           this.characterMap = { ...this.characterMap, [Number(normalized.id)]: clone(normalized) }
           this.assignmentSearch = ''
           this.assignmentResults = []
+          this.assignmentSearchComplete = false
           await this.reloadAssignments()
           this.showNotification(`Granted title set #${this.editModel.title_set} to ${normalized.name}`)
         } catch (error) {
@@ -1468,10 +1565,13 @@
       resetSearches () {
         this.itemSearch = ''
         this.itemResults = []
+        this.itemSearchComplete = false
         this.characterSearch = ''
         this.characterResults = []
+        this.characterSearchComplete = false
         this.assignmentSearch = ''
         this.assignmentResults = []
+        this.assignmentSearchComplete = false
       },
       showNotification (message, type = 'success') {
         window.clearTimeout(this.notification.timer)

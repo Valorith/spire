@@ -96,7 +96,14 @@
               <span class="spire-editor-directory-aside">#{{ aura.type }}</span>
             </button>
 
-            <div v-if="loading && !auras.length" class="spire-editor-directory-state">
+            <div v-if="loadError" class="spire-editor-directory-state spire-editor-directory-state--error">
+              <i class="fa fa-exclamation-triangle"></i>
+              <span>{{ loadError }}</span>
+              <button class="btn btn-sm btn-outline-warning" type="button" @click="loadAuras">
+                Retry
+              </button>
+            </div>
+            <div v-else-if="loading && !auras.length" class="spire-editor-directory-state">
               <i class="fa fa-spinner fa-spin"></i>
               <span>Loading real aura data…</span>
             </div>
@@ -136,7 +143,18 @@
       </aside>
 
       <main class="spire-editor-inspector">
-        <eq-window v-if="!editModel && !loading" title="Aura Workspace">
+        <eq-window v-if="!editModel && loadError" title="Aura Workspace">
+          <div class="spire-editor-empty spire-editor-empty--error" role="alert">
+            <div class="spire-editor-empty__sigil"><i class="fa fa-exclamation-triangle"></i></div>
+            <h3>Aura data could not be loaded</h3>
+            <p>{{ loadError }}</p>
+            <b-button size="sm" variant="outline-warning" @click="loadAuras">
+              <i class="fa fa-refresh mr-1"></i>Retry
+            </b-button>
+          </div>
+        </eq-window>
+
+        <eq-window v-else-if="!editModel && !loading" title="Aura Workspace">
           <div class="spire-editor-empty">
             <div class="spire-editor-empty__sigil"><i class="ra ra-burning-embers"></i></div>
             <h3>Select an aura</h3>
@@ -186,6 +204,7 @@
                   size="sm"
                   variant="outline-warning"
                   data-testid="aura-copy"
+                  :disabled="hasUnsavedChanges"
                   @click="copyAura"
                 >
                   <i class="fa fa-copy mr-1"></i>Copy
@@ -195,6 +214,7 @@
                   size="sm"
                   variant="outline-danger"
                   data-testid="aura-delete"
+                  :disabled="hasUnsavedChanges"
                   @click="deleteAura"
                 >
                   <i class="fa fa-trash mr-1"></i>Delete
@@ -203,6 +223,7 @@
                   v-if="hasUnsavedChanges"
                   size="sm"
                   variant="outline-secondary"
+                  data-testid="aura-reset"
                   @click="resetEditor"
                 >
                   <i class="fa fa-undo mr-1"></i>Reset
@@ -487,7 +508,7 @@
                         @input="queueSpellSearch"
                         @keyup.esc="spellResults = []"
                       >
-                      <div v-if="spellResults.length || searchingSpells" class="spire-editor-selector-results">
+                      <div v-if="spellResults.length || searchingSpells || spellSearchComplete" class="spire-editor-selector-results">
                         <button
                           v-for="spell in spellResults"
                           :key="'spell-result-' + spell.id"
@@ -500,6 +521,9 @@
                         </button>
                         <div v-if="searchingSpells" class="p-2 text-center text-muted small">
                           <i class="fa fa-spinner fa-spin mr-1"></i>Searching spells…
+                        </div>
+                        <div v-else-if="spellSearchComplete && !spellResults.length" class="p-2 text-center text-muted small">
+                          No matching spells found.
                         </div>
                       </div>
                     </div>
@@ -551,7 +575,7 @@
                         @input="queueNpcSearch"
                         @keyup.esc="npcResults = []"
                       >
-                      <div v-if="npcResults.length || searchingNpcs" class="spire-editor-selector-results">
+                      <div v-if="npcResults.length || searchingNpcs || npcSearchComplete" class="spire-editor-selector-results">
                         <button
                           v-for="npc in npcResults"
                           :key="'npc-result-' + npc.id"
@@ -564,6 +588,9 @@
                         </button>
                         <div v-if="searchingNpcs" class="p-2 text-center text-muted small">
                           <i class="fa fa-spinner fa-spin mr-1"></i>Searching NPC templates…
+                        </div>
+                        <div v-else-if="npcSearchComplete && !npcResults.length" class="p-2 text-center text-muted small">
+                          No matching NPC templates found.
                         </div>
                       </div>
                     </div>
@@ -770,10 +797,13 @@
     name: 'AuraEditor',
     components: { ContentArea, EqWindow, LoaderCastBarTimer, RangeVisualizer, SpellIconSelector },
     data () {
+      const tabs = ['Overview', 'Behavior', 'Linked Content', 'Safety']
+      const routeTab = this.$route.query.tab
       return {
         auras: [],
         npcMap: {},
         loading: false,
+        loadError: '',
         saving: false,
         selectedType: null,
         editModel: null,
@@ -786,8 +816,8 @@
         directoryFilter: 'all',
         currentPage: 1,
         pageSize: 12,
-        selectedTab: this.$route.query.tab || 'Overview',
-        tabs: ['Overview', 'Behavior', 'Linked Content', 'Safety'],
+        selectedTab: tabs.includes(routeTab) ? routeTab : 'Overview',
+        tabs,
         directoryFilters: [
           { value: 'all', label: 'All' },
           { value: 'support', label: 'Auras' },
@@ -800,10 +830,12 @@
         spellSearch: '',
         spellResults: [],
         searchingSpells: false,
+        spellSearchComplete: false,
         spellSearchTimer: null,
         npcSearch: '',
         npcResults: [],
         searchingNpcs: false,
+        npcSearchComplete: false,
         npcSearchTimer: null,
         notification: { message: '', type: 'success', timer: null }
       }
@@ -922,6 +954,9 @@
       '$route.query.aura' (value) {
         const type = Number(value)
         if (type && type !== Number(this.selectedType)) this.selectAura(type, false)
+      },
+      '$route.query.tab' (value) {
+        if (this.tabs.includes(value) && value !== this.selectedTab) this.selectedTab = value
       }
     },
     async created () {
@@ -943,6 +978,7 @@
     methods: {
       async loadAuras () {
         this.loading = true
+        this.loadError = ''
         try {
           const builder = new SpireQueryBuilder()
           builder.includes(['SpellsNew']).limit(1000).orderBy(['type']).orderDirection('asc')
@@ -956,7 +992,8 @@
             : (this.auras[0] && Number(this.auras[0].type))
           if (desired) await this.selectAura(desired, false)
         } catch (error) {
-          this.showNotification(this.errorMessage(error, 'Unable to load auras'), 'error')
+          this.loadError = this.errorMessage(error, 'Unable to load auras')
+          this.showNotification(this.loadError, 'error')
         } finally {
           this.loading = false
         }
@@ -986,8 +1023,10 @@
         this.selectedNpc = clone(this.npcMap[Number(aura.npc_type)] || null)
         this.spellSearch = ''
         this.spellResults = []
+        this.spellSearchComplete = false
         this.npcSearch = ''
         this.npcResults = []
+        this.npcSearchComplete = false
         if (updateRoute) await this.updateRoute()
       },
       createDraft (source = null) {
@@ -1014,11 +1053,18 @@
         this.originalModel = clone({ ...this.editModel, name: '' })
         this.selectedSpell = source ? clone(source.spells_new || this.selectedSpell) : null
         this.selectedNpc = source ? clone(this.npcMap[Number(source.npc_type)] || this.selectedNpc) : null
+        this.spellSearch = ''
+        this.spellResults = []
+        this.spellSearchComplete = false
+        this.npcSearch = ''
+        this.npcResults = []
+        this.npcSearchComplete = false
         this.selectedTab = 'Overview'
         this.updateRoute()
         this.$nextTick(() => document.getElementById('aura-name')?.focus())
       },
       async copyAura () {
+        if (!this.editModel || this.isCreating || this.hasUnsavedChanges) return
         const source = this.auras.find(record => Number(record.type) === Number(this.selectedType))
         const confirmed = await this.$bvModal.msgBoxConfirm(
           `Create a new draft from aura #${source.type} (${this.cleanName(source.name)})?`,
@@ -1059,7 +1105,7 @@
         }
       },
       async deleteAura () {
-        if (!this.editModel || this.isCreating) return
+        if (!this.editModel || this.isCreating || this.hasUnsavedChanges) return
         const name = this.cleanName(this.editModel.name)
         const confirmed = await this.$bvModal.msgBoxConfirm(
           `Delete aura #${this.editModel.type} (${name})? The linked spell and NPC template will remain intact.`,
@@ -1096,8 +1142,11 @@
         window.clearTimeout(this.spellSearchTimer)
         if (this.spellSearch.length < 2) {
           this.spellResults = []
+          this.spellSearchComplete = false
           return
         }
+        this.spellResults = []
+        this.spellSearchComplete = false
         this.spellSearchTimer = window.setTimeout(this.searchSpells, 260)
       },
       async searchSpells () {
@@ -1109,7 +1158,9 @@
           builder.limit(20).orderBy(['name']).orderDirection('asc')
           const response = await (new SpellsNewApi(...SpireApi.cfg())).listSpellsNews(builder.get())
           this.spellResults = response.data || []
+          this.spellSearchComplete = true
         } catch (error) {
+          this.spellSearchComplete = false
           this.showNotification(this.errorMessage(error, 'Unable to search spells'), 'error')
         } finally {
           this.searchingSpells = false
@@ -1120,13 +1171,17 @@
         this.selectedSpell = clone(spell)
         this.spellSearch = ''
         this.spellResults = []
+        this.spellSearchComplete = false
       },
       queueNpcSearch () {
         window.clearTimeout(this.npcSearchTimer)
         if (this.npcSearch.length < 2) {
           this.npcResults = []
+          this.npcSearchComplete = false
           return
         }
+        this.npcResults = []
+        this.npcSearchComplete = false
         this.npcSearchTimer = window.setTimeout(this.searchNpcs, 260)
       },
       async searchNpcs () {
@@ -1138,7 +1193,9 @@
           builder.limit(20).orderBy(['name']).orderDirection('asc')
           const response = await (new NpcTypeApi(...SpireApi.cfg())).listNpcTypes(builder.get())
           this.npcResults = response.data || []
+          this.npcSearchComplete = true
         } catch (error) {
+          this.npcSearchComplete = false
           this.showNotification(this.errorMessage(error, 'Unable to search NPC templates'), 'error')
         } finally {
           this.searchingNpcs = false
@@ -1149,6 +1206,7 @@
         this.selectedNpc = clone(npc)
         this.npcSearch = ''
         this.npcResults = []
+        this.npcSearchComplete = false
       },
       async selectTab (tab) {
         this.selectedTab = tab
