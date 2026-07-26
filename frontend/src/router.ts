@@ -189,6 +189,11 @@ const router = new Router({
           meta: {title: "Faction Editor"},
         },
         {
+          path: ROUTE.MERCENARIES,
+          component: () => import('./views/mercenaries/MercenaryEditor.vue'),
+          meta: {title: "Mercenary Editor"},
+        },
+        {
           path: ROUTE.CONTENT_FLAGS,
           component: () => import('./views/content-flags/ContentFlagEditor.vue'),
           meta: {title: "Content Flag Editor"},

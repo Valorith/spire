@@ -51,6 +51,7 @@ func (s *Service) RegisterManualResources() map[string][]string {
 		"Faction Editor":            {"faction-editor"},
 		"Content Flag Editor":       {"content-flag-editor"},
 		"Alternate Currency Editor": {"alternate-currency-editor"},
+		"Mercenary Editor":          {"mercenary-editor"},
 
 		// admin server
 		"Server Configuration":    {"admin/serverconfig"},

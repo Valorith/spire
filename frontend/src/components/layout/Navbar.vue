@@ -351,7 +351,7 @@ export default {
       npcNav: {
         label: "NPCs",
         labelIcon: "ra ra-dragon mr-1",
-        routePrefixMatches: ["npc", "merchant", "loot", "spawn", "faction"],
+        routePrefixMatches: ["npc", "merchant", "mercen", "loot", "spawn", "faction"],
         navs: [
           {
             title: "NPC Editor",
@@ -380,6 +380,14 @@ export default {
             to: ROUTE.MERCHANTS,
             icon: "ra ra-emerald mr-1",
             routes: ['merchant', 'merchants']
+          },
+          {
+            title: "Mercenaries",
+            to: ROUTE.MERCENARIES,
+            icon: "ra ra-shield mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['mercenaries']
           },
           {
             title: "Spells",
