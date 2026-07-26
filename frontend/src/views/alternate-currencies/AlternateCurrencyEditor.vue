@@ -1132,8 +1132,20 @@
         await this.updateRoute()
         this.$nextTick(() => document.getElementById('alternate-currency-item-search')?.focus())
       },
-      copyCurrency () {
-        this.createDraft(this.editModel)
+      async copyCurrency () {
+        const confirmed = await this.$bvModal.msgBoxConfirm(
+          `Create a new alternate currency draft from currency #${this.editModel.id} (${this.selectedItem.name})? ` +
+            'You will need to select a different token item before saving.',
+          {
+            title: 'Copy alternate currency',
+            okTitle: 'Create copy',
+            okVariant: 'warning',
+            cancelTitle: 'Cancel',
+            centered: true
+          }
+        )
+        if (!confirmed) return
+        await this.createDraft(this.editModel)
       },
       resetEditor () {
         this.editModel = clone(this.originalModel)
@@ -1418,6 +1430,19 @@
       },
       async requestDelete () {
         if (this.totalReferences > 0) {
+          const confirmed = await this.$bvModal.msgBoxConfirm(
+            `Currency #${this.editModel.id} (${this.selectedItem.name}) has ` +
+              `${this.totalReferences.toLocaleString()} usages. Review and resolve them safely before deleting? ` +
+              'No data will change until you complete the guided workflow.',
+            {
+              title: 'Deletion requires resolution',
+              okTitle: 'Review usages',
+              okVariant: 'warning',
+              cancelTitle: 'Cancel',
+              centered: true
+            }
+          )
+          if (!confirmed) return
           this.selectedTab = 'Usage & Safety'
           await this.updateRoute()
           await this.refreshActiveTab()
@@ -1654,11 +1679,11 @@
     transform: translateY(-50%);
   }
 
-  .directory-search input,
-  .inline-search input,
-  .item-picker__search input {
+  .alternate-currency-editor-page .directory-search > input.form-control,
+  .alternate-currency-editor-page .inline-search > input.form-control,
+  .alternate-currency-editor-page .item-picker__search > input.form-control {
     height: 30px;
-    padding-left: 28px;
+    padding-left: 30px !important;
     border-color: rgba(164, 172, 181, .35);
     background: rgba(4, 7, 11, .72);
     color: #e0e4e9;

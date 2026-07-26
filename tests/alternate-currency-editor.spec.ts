@@ -1,10 +1,25 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Locator, Page, test } from '@playwright/test';
 
 type AlternateCurrencyMockState = {
   balancePayload?: Record<string, unknown>;
   createPayload?: Record<string, unknown>;
+  deleteRequests?: number;
   resolutionPayload?: Record<string, unknown>;
+  zeroReferences?: boolean;
 };
+
+async function expectIconSearchClearance(input: Locator) {
+  const clearance = await input.evaluate((element) => {
+    const icon = element.previousElementSibling;
+    if (!icon) {
+      return -1;
+    }
+    const inputRect = element.getBoundingClientRect();
+    const iconRect = icon.getBoundingClientRect();
+    return Number.parseFloat(window.getComputedStyle(element).paddingLeft) - (iconRect.right - inputRect.left);
+  });
+  expect(clearance).toBeGreaterThanOrEqual(8);
+}
 
 const currencies = [
   {
@@ -193,13 +208,31 @@ async function installAlternateCurrencyMocks(page: Page, state: AlternateCurrenc
     });
   });
 
-  await page.route('**/api/v1/alternate-currency-editor/currency/4', route =>
-    route.fulfill({
+  await page.route('**/api/v1/alternate-currency-editor/currency/4', route => {
+    if (route.request().method() === 'DELETE') {
+      state.deleteRequests = Number(state.deleteRequests || 0) + 1;
+      return route.fulfill({ status: 204, body: '' });
+    }
+    const detail = state.zeroReferences
+      ? {
+        ...currencyDetail,
+        usage: {
+          npc_count: 0,
+          task_count: 0,
+          balance_count: 0,
+          total_balance: 0,
+          npc_samples: [],
+          task_samples: [],
+          balance_samples: [],
+        },
+      }
+      : currencyDetail;
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(currencyDetail),
-    })
-  );
+      body: JSON.stringify(detail),
+    });
+  });
 
   await page.route('**/api/v1/alternate-currency-editor/currency', async route => {
     state.createPayload = route.request().postDataJSON();
@@ -233,7 +266,9 @@ test.describe('Alternate Currency Editor', () => {
     await expect(page.getByTestId('alternate-currency-inspector').locator('h2')).toHaveText('Radiant Crystal');
     await expect(page.getByText('133 usages')).toHaveCount(0);
     await expect(page.getByTestId('alternate-currency-inspector').locator('.editor-identity p')).toContainText('3 usages');
-    await expect(page.locator('#sidebar .nav.nav-sm a[href="/alternate-currencies"]')).toBeVisible();
+    const navEntry = page.locator('#sidebar .nav.nav-sm a[href="/alternate-currencies"]');
+    await expect(navEntry).toBeVisible();
+    await expect(navEntry).toContainText('Alt. Currencies');
     await expect(page.locator('#sidebar a[href="/alternate-currencies"]')).toHaveCount(1);
     await expect(page.locator('.recognition-icon .item-1536')).toBeVisible();
   });
@@ -250,6 +285,21 @@ test.describe('Alternate Currency Editor', () => {
     await expect(balanceUsage).toBeVisible();
     await balanceUsage.click();
     await expect(page.getByRole('dialog', { name: 'Adjust character balance' })).toBeVisible();
+  });
+
+  test('keeps icon search placeholders clear across editor tabs', async ({ page }) => {
+    const state: AlternateCurrencyMockState = {};
+    await installAlternateCurrencyMocks(page, state);
+
+    await page.goto('/alternate-currencies?currency=4');
+    await expectIconSearchClearance(page.getByTestId('alternate-currency-item-search'));
+
+    await page.goto('/alternate-currencies?currency=4&tab=Usage+%26+Safety');
+    await expectIconSearchClearance(page.getByPlaceholder('Search task rewards…'));
+
+    await page.goto('/alternate-currencies?currency=4&tab=Balances');
+    await expectIconSearchClearance(page.getByTestId('alternate-currency-character-search'));
+    await expectIconSearchClearance(page.getByPlaceholder('Filter current balances…'));
   });
 
   test('requires explicit audited balance input and sends expected-value protection', async ({ page }) => {
@@ -283,6 +333,14 @@ test.describe('Alternate Currency Editor', () => {
     await page.goto('/alternate-currencies?currency=4');
 
     await page.getByTestId('alternate-currency-copy').click();
+    const copyConfirmation = page.getByRole('dialog', { name: 'Copy alternate currency' });
+    await expect(copyConfirmation).toContainText('select a different token item');
+    await copyConfirmation.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByTestId('alternate-currency-copy')).toBeVisible();
+
+    await page.getByTestId('alternate-currency-copy').click();
+    await page.getByRole('dialog', { name: 'Copy alternate currency' })
+      .getByRole('button', { name: 'Create copy' }).click();
     await page.getByTestId('alternate-currency-item-search').fill('Cloth');
     const assigned = page.getByTestId('alternate-currency-item-results').locator('button').filter({ hasText: 'Ebon Crystal' });
     await expect(assigned).toBeDisabled();
@@ -292,6 +350,36 @@ test.describe('Alternate Currency Editor', () => {
 
     await expect(page.getByText('Alternate currency created')).toBeVisible();
     expect(state.createPayload).toEqual({ id: 0, item_id: 1003 });
+  });
+
+  test('confirms referenced and direct deletion before taking effect', async ({ page }) => {
+    const referencedState: AlternateCurrencyMockState = {};
+    await installAlternateCurrencyMocks(page, referencedState);
+    await page.goto('/alternate-currencies?currency=4&tab=Balances');
+
+    await page.getByTestId('alternate-currency-delete').click();
+    const resolutionConfirmation = page.getByRole('dialog', { name: 'Deletion requires resolution' });
+    await expect(resolutionConfirmation).toContainText('3 usages');
+    await resolutionConfirmation.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page).toHaveURL(/tab=Balances/);
+    expect(referencedState.deleteRequests || 0).toBe(0);
+
+    await page.getByTestId('alternate-currency-delete').click();
+    await page.getByRole('dialog', { name: 'Deletion requires resolution' })
+      .getByRole('button', { name: 'Review usages' }).click();
+    await expect(page).toHaveURL(/tab=Usage\+%26\+Safety/);
+    expect(referencedState.deleteRequests || 0).toBe(0);
+
+    const directState: AlternateCurrencyMockState = { zeroReferences: true };
+    await installAlternateCurrencyMocks(page, directState);
+    await page.goto('/alternate-currencies?currency=4');
+
+    await page.getByTestId('alternate-currency-delete').click();
+    const directConfirmation = page.getByRole('dialog', { name: 'Delete alternate currency' });
+    await expect(directConfirmation).toContainText('cannot be undone');
+    expect(directState.deleteRequests || 0).toBe(0);
+    await directConfirmation.getByRole('button', { name: 'Delete permanently' }).click();
+    await expect.poll(() => directState.deleteRequests || 0).toBe(1);
   });
 
   test('submits transactional replacement with reason and typed confirmation', async ({ page }) => {

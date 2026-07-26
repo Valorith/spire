@@ -331,7 +331,7 @@ export default {
             routes: ['/items/evolving']
           },
           {
-            title: "Alternate Currencies",
+            title: "Alt. Currencies",
             to: ROUTE.ALTERNATE_CURRENCIES,
             icon: "fa fa-money mr-1",
             isNew: true,

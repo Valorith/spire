@@ -1,6 +1,6 @@
 ## [Unreleased] 7/25/2026
 
-* Add a self-sufficient Alternate Currency Editor with token-item recognition, live NPC/task/player usage, guarded transactional deletion, and audited character-balance administration.
+* Add an Alternate Currency Editor with token-item recognition, live NPC/task/player usage, guarded transactional deletion, and audited character-balance administration.
 
 ## [5.2.0] 7/26/2026
 
