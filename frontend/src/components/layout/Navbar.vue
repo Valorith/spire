@@ -516,13 +516,21 @@ export default {
       spellsAbilitiesNav: {
         label: "Spells/Abilities",
         labelIcon: "ra ra-book mr-1",
-        routePrefixMatches: ["spells", "aa"],
+        routePrefixMatches: ["spells", "auras", "aa"],
         navs: [
           {
             title: "Spell Editor",
             to: "/spells",
             icon: "ra ra-book mr-1",
             routes: ['spells']
+          },
+          {
+            title: "Auras",
+            to: ROUTE.AURAS,
+            icon: "ra ra-burning-embers mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['auras']
           },
           {
             title: "AA Editor",

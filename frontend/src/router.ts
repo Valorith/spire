@@ -138,6 +138,11 @@ const router = new Router({
           meta: {title: "Spells Browser"},
         },
         {
+          path: ROUTE.AURAS,
+          component: () => import('./views/auras/AuraEditor.vue'),
+          meta: {title: "Aura Editor"},
+        },
+        {
           path: ROUTE.AA_EDITOR,
           alias: ['/aa/editor', '/aa-editor'],
           component: () => import('./views/aa/AaEditor.vue'),
