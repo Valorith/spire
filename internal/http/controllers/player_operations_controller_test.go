@@ -4,6 +4,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -85,17 +86,24 @@ func TestValidatePlayerOperationsGuildAccess(t *testing.T) {
 		t.Fatalf("validatePlayerOperationsGuildAccess(valid) error = %v", err)
 	}
 
-	invalid := []playerOperationsGuildAccessInput{
-		{Reason: "too few"},
-		{Reason: valid.Reason, Ranks: []playerOperationsGuildRank{{Rank: 9, Title: "Invalid"}}},
-		{Reason: valid.Reason, Ranks: []playerOperationsGuildRank{{Rank: 2, Title: "Officer"}, {Rank: 2, Title: "Duplicate"}}},
-		{Reason: valid.Reason, Permissions: []playerOperationsGuildPermission{{ID: 31, Permission: 1}}},
-		{Reason: valid.Reason, Permissions: []playerOperationsGuildPermission{{ID: 2, Permission: 1}, {ID: 2, Permission: 2}}},
+	invalid := []struct {
+		name  string
+		input playerOperationsGuildAccessInput
+		want  string
+	}{
+		{name: "short reason", input: playerOperationsGuildAccessInput{Reason: "too few"}, want: "reason"},
+		{name: "invalid rank", input: playerOperationsGuildAccessInput{Reason: valid.Reason, Ranks: []playerOperationsGuildRank{{Rank: 9, Title: "Invalid"}}}, want: "rank"},
+		{name: "duplicate rank", input: playerOperationsGuildAccessInput{Reason: valid.Reason, Ranks: []playerOperationsGuildRank{{Rank: 2, Title: "Officer"}, {Rank: 2, Title: "Duplicate"}}}, want: "duplicated"},
+		{name: "invalid permission", input: playerOperationsGuildAccessInput{Reason: valid.Reason, Permissions: []playerOperationsGuildPermission{{ID: 31, Permission: 1}}}, want: "permission"},
+		{name: "duplicate permission", input: playerOperationsGuildAccessInput{Reason: valid.Reason, Permissions: []playerOperationsGuildPermission{{ID: 2, Permission: 1}, {ID: 2, Permission: 2}}}, want: "duplicated"},
 	}
-	for _, input := range invalid {
-		if err := validatePlayerOperationsGuildAccess(input); err == nil {
-			t.Fatalf("validatePlayerOperationsGuildAccess(%+v) expected an error", input)
-		}
+	for _, test := range invalid {
+		t.Run(test.name, func(t *testing.T) {
+			err := validatePlayerOperationsGuildAccess(test.input)
+			if err == nil || !strings.Contains(strings.ToLower(err.Error()), test.want) {
+				t.Fatalf("validatePlayerOperationsGuildAccess() error = %v, want %q", err, test.want)
+			}
+		})
 	}
 }
 
@@ -104,26 +112,73 @@ func TestPlayerOperationsRetirementNames(t *testing.T) {
 		t.Fatalf("playerOperationsRetiredName() = %q", got)
 	}
 	longName := strings.Repeat("a", 64)
-	if got := playerOperationsRetiredName(longName, 910001); len(got) != 64 || !strings.HasSuffix(got, "-deleted-910001") {
-		t.Fatalf("playerOperationsRetiredName(long) = %q", got)
+	if got := playerOperationsRetiredName(longName, 910001); got != "" {
+		t.Fatalf("playerOperationsRetiredName(long) = %q, want an empty rejection marker", got)
 	}
 	if got := playerOperationsRestoreName("Alder-DeLeTeD-910001"); got != "Alder" {
 		t.Fatalf("playerOperationsRestoreName() = %q", got)
 	}
 }
 
-func TestPlayerOperationsPagination(t *testing.T) {
-	e := echo.New()
-	request := httptest.NewRequest("GET", "/?page=0&limit=500", nil)
-	context := e.NewContext(request, nil)
+func TestPlayerOperationsTimesEqual(t *testing.T) {
+	base := time.Date(2026, time.July, 26, 20, 40, 30, 100, time.UTC)
+	sameInstant := base.In(time.FixedZone("EDT", -4*60*60))
+	sameSecond := base.Add(800 * time.Millisecond)
+	nextSecond := base.Add(time.Second)
 
-	page, limit := playerOperationsPagination(context)
-	if page != 1 || limit != playerOperationsMaxPageSize {
-		t.Fatalf(
-			"playerOperationsPagination() = (%d, %d), want (1, %d)",
-			page,
-			limit,
-			playerOperationsMaxPageSize,
-		)
+	for _, test := range []struct {
+		name        string
+		left, right *time.Time
+		want        bool
+	}{
+		{name: "both nil", want: true},
+		{name: "left nil", right: &base, want: false},
+		{name: "right nil", left: &base, want: false},
+		{name: "same instant across zones", left: &base, right: &sameInstant, want: true},
+		{name: "subsecond difference", left: &base, right: &sameSecond, want: true},
+		{name: "different second", left: &base, right: &nextSecond, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := playerOperationsTimesEqual(test.left, test.right); got != test.want {
+				t.Fatalf("playerOperationsTimesEqual() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestPlayerOperationsCurrencyWithinBounds(t *testing.T) {
+	if !playerOperationsCurrencyWithinBounds(playerOperationsCurrency{Platinum: playerOperationsMaxCurrency}) {
+		t.Fatal("playerOperationsCurrencyWithinBounds(max) = false, want true")
+	}
+	if playerOperationsCurrencyWithinBounds(playerOperationsCurrency{EbonCrystal: playerOperationsMaxCurrency + 1}) {
+		t.Fatal("playerOperationsCurrencyWithinBounds(over max) = true, want false")
+	}
+}
+
+func TestPlayerOperationsPagination(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		target   string
+		wantPage int
+	}{
+		{name: "minimum page", target: "/?page=0&limit=500", wantPage: 1},
+		{name: "maximum page", target: "/?page=5000&limit=500", wantPage: playerOperationsMaxPage},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			e := echo.New()
+			request := httptest.NewRequest("GET", test.target, nil)
+			context := e.NewContext(request, nil)
+
+			page, limit := playerOperationsPagination(context)
+			if page != test.wantPage || limit != playerOperationsMaxPageSize {
+				t.Fatalf(
+					"playerOperationsPagination() = (%d, %d), want (%d, %d)",
+					page,
+					limit,
+					test.wantPage,
+					playerOperationsMaxPageSize,
+				)
+			}
+		})
 	}
 }

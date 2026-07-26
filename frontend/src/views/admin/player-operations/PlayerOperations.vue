@@ -23,13 +23,18 @@
 
     <div class="operations-mode-switch" role="tablist" aria-label="Player operations record type">
       <button
-        v-for="option in modes"
+        v-for="(option, index) in modes"
         :key="option.value"
+        :id="'player-operations-mode-tab-' + option.value"
+        ref="modeTabs"
         type="button"
         role="tab"
+        aria-controls="player-operations-mode-panel"
         :aria-selected="mode === option.value ? 'true' : 'false'"
+        :tabindex="mode === option.value ? 0 : -1"
         :class="{ active: mode === option.value }"
         @click="selectMode(option.value)"
+        @keydown="onModeTabKeydown($event, index)"
       >
         <i :class="option.icon"></i>
         <span>{{ option.label }}</span>
@@ -37,7 +42,12 @@
       </button>
     </div>
 
-    <div class="spire-editor-workspace">
+    <div
+      id="player-operations-mode-panel"
+      class="spire-editor-workspace"
+      role="tabpanel"
+      :aria-labelledby="'player-operations-mode-tab-' + mode"
+    >
       <aside class="spire-editor-directory">
         <eq-window :title="modeTitle">
           <div class="spire-editor-directory-controls">
@@ -253,16 +263,26 @@
             </div>
           </eq-window>
 
-          <eq-window title="Workspace">
+          <eq-window
+            id="player-operations-workspace-panel"
+            title="Workspace"
+            role="tabpanel"
+            :aria-labelledby="'player-operations-workspace-tab-' + tabKey(selectedTab)"
+          >
             <div class="spire-editor-tabs" role="tablist" :aria-label="recordWindowTitle + ' sections'">
               <button
-                v-for="tab in tabs"
+                v-for="(tab, index) in tabs"
                 :key="tab"
+                :id="'player-operations-workspace-tab-' + tabKey(tab)"
+                ref="workspaceTabs"
                 type="button"
                 role="tab"
+                aria-controls="player-operations-workspace-panel"
                 :aria-selected="selectedTab === tab ? 'true' : 'false'"
+                :tabindex="selectedTab === tab ? 0 : -1"
                 :class="{ active: selectedTab === tab }"
                 @click="selectTab(tab)"
+                @keydown="onWorkspaceTabKeydown($event, index)"
               >
                 {{ tab }}
               </button>
@@ -448,7 +468,7 @@
               <div class="operations-two-column">
                 <div class="operations-action-card">
                   <span class="spire-editor-context-label">Account owner</span>
-                  <div class="selected-operation-target selected-operation-target--static">
+                  <div v-if="detail.context.account" class="selected-operation-target selected-operation-target--static">
                     <i class="fa fa-id-card"></i>
                     <span>
                       <strong>{{ detail.context.account.name || 'Unknown account' }}</strong>
@@ -458,6 +478,7 @@
                       <i class="fa fa-external-link"></i>
                     </button>
                   </div>
+                  <div v-else class="operations-empty-inline">This character is not linked to an account.</div>
                   <div class="spire-editor-field">
                     <label for="player-operations-account-lookup">Transfer to another account</label>
                     <div class="spire-editor-search operations-inline-search">
@@ -639,7 +660,7 @@
                   <span class="spire-editor-context-label">Current account state</span>
                   <h4>{{ accountSanctioned ? 'Access restricted' : 'No active sanction' }}</h4>
                   <p v-if="accountSanctioned">
-                    Until {{ dateTime(editModel.suspended_until) }}
+                    {{ accountSuspensionActive ? 'Until ' + dateTime(editModel.suspended_until) : 'Indefinite restriction' }}
                     · {{ editModel.ban_reason || editModel.suspension_reason || 'No legacy reason recorded' }}
                   </p>
                   <p v-else>The account can authenticate according to its status and server rules.</p>
@@ -931,6 +952,7 @@
       :title="confirmModal.title"
       hide-header-close
       no-close-on-backdrop
+      @show="confirmModalOpen = true"
       @hidden="resetConfirmModal"
     >
       <div class="operations-confirm-content">
@@ -977,6 +999,7 @@
       :title="memberDraft.editing ? 'Edit guild member' : 'Add guild member'"
       hide-header-close
       no-close-on-backdrop
+      @show="memberModalOpen = true"
       @hidden="resetMemberModal"
     >
       <div v-if="!memberDraft.character" class="spire-editor-field">
@@ -1177,6 +1200,7 @@ export default {
         permissions: [],
         reason: ''
       },
+      memberModalOpen: false,
       memberDraft: {
         editing: false,
         character: null,
@@ -1187,6 +1211,7 @@ export default {
         public_note: '',
         reason: ''
       },
+      confirmModalOpen: false,
       confirmModal: {
         action: '',
         title: '',
@@ -1321,15 +1346,19 @@ export default {
     validationMessages () {
       if (!this.editModel) return ['No record is selected.']
       const messages = []
+      const numberOutside = (value, minimum, maximum) => {
+        const numeric = Number(value)
+        return !Number.isFinite(numeric) || numeric < minimum || numeric > maximum
+      }
       if (this.mode === 'characters') {
         if (!String(this.editModel.name || '').trim()) messages.push('Character name is required.')
         if (String(this.editModel.name || '').length > 64) messages.push('Character name must be 64 characters or fewer.')
-        if (Number(this.editModel.level) < 1 || Number(this.editModel.level) > 255) messages.push('Level must be between 1 and 255.')
-        if (Number(this.editModel.race) <= 0) messages.push('Select a player race.')
-        if (Number(this.editModel.class) <= 0) messages.push('Select a player class.')
+        if (numberOutside(this.editModel.level, 1, 255)) messages.push('Level must be between 1 and 255.')
+        if (numberOutside(this.editModel.race, 1, Number.MAX_SAFE_INTEGER)) messages.push('Select a player race.')
+        if (numberOutside(this.editModel.class, 1, Number.MAX_SAFE_INTEGER)) messages.push('Select a player class.')
       } else if (this.mode === 'accounts') {
-        if (Number(this.editModel.status) < -1 || Number(this.editModel.status) > 255) messages.push('Account status must be between -1 and 255.')
-        if (Number(this.editModel.fly_mode) < 0 || Number(this.editModel.fly_mode) > 2) messages.push('Select a supported fly mode.')
+        if (numberOutside(this.editModel.status, -1, 255)) messages.push('Account status must be between -1 and 255.')
+        if (numberOutside(this.editModel.fly_mode, 0, 2)) messages.push('Select a supported fly mode.')
       } else {
         if (!String(this.editModel.name || '').trim()) messages.push('Guild name is required.')
         if (String(this.editModel.name || '').length > 32) messages.push('Guild name must be 32 characters or fewer.')
@@ -1393,8 +1422,12 @@ export default {
     accountCharacterCount () {
       return this.mode === 'accounts' && this.detail && this.detail.characters ? this.detail.characters.length : 0
     },
+    accountSuspensionActive () {
+      return Boolean(this.editModel && this.editModel.suspended_until && new Date(this.editModel.suspended_until).getTime() > Date.now())
+    },
     accountSanctioned () {
-      return Boolean(this.mode === 'accounts' && this.editModel && this.editModel.suspended_until && new Date(this.editModel.suspended_until).getTime() > Date.now())
+      if (this.mode !== 'accounts' || !this.editModel) return false
+      return Boolean(Number(this.editModel.status) < 0 || this.editModel.ban_reason || this.accountSuspensionActive)
     },
     canApplySanction () {
       if (this.sanction.reason.length < 8) return false
@@ -1432,6 +1465,15 @@ export default {
     },
     '$route.query.tab' (value) {
       if (this.tabs.includes(value) && value !== this.selectedTab) this.selectedTab = value
+    },
+    '$route.query.character' (value) {
+      this.onRouteRecordQuery('characters', value)
+    },
+    '$route.query.account' (value) {
+      this.onRouteRecordQuery('accounts', value)
+    },
+    '$route.query.guild' (value) {
+      this.onRouteRecordQuery('guilds', value)
     }
   },
   async created () {
@@ -1451,6 +1493,53 @@ export default {
     else next(false)
   },
   methods: {
+    tabKey (value) {
+      return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    },
+    keyboardTabIndex (event, current, length) {
+      if (!event || !event.key || !length) return null
+      if (event.key === 'Home') return 0
+      if (event.key === 'End') return length - 1
+      if (event.key === 'ArrowLeft') return (current - 1 + length) % length
+      if (event.key === 'ArrowRight') return (current + 1) % length
+      return null
+    },
+    async onModeTabKeydown (event, current) {
+      const next = this.keyboardTabIndex(event, current, this.modes.length)
+      if (next == null) return
+      event.preventDefault()
+      await this.selectMode(this.modes[next].value)
+      this.$nextTick(() => {
+        const tabs = this.$refs.modeTabs || []
+        const active = this.modes.findIndex(option => option.value === this.mode)
+        if (tabs[active]) tabs[active].focus()
+      })
+    },
+    onWorkspaceTabKeydown (event, current) {
+      const next = this.keyboardTabIndex(event, current, this.tabs.length)
+      if (next == null) return
+      event.preventDefault()
+      this.selectTab(this.tabs[next])
+      this.$nextTick(() => {
+        const tabs = this.$refs.workspaceTabs || []
+        if (tabs[next]) tabs[next].focus()
+      })
+    },
+    async onRouteRecordQuery (mode, value) {
+      if (this.mode !== mode) return
+      const id = Number(value)
+      if (id === this.selectedID) return
+      if (!id) {
+        if (this.hasUnsavedChanges && !window.confirm('Discard unsaved player operations changes?')) {
+          await this.syncRoute()
+          return
+        }
+        this.resetWorkspace()
+        return
+      }
+      const changed = await this.selectRecord(id, false)
+      if (changed === false) await this.syncRoute()
+    },
     async initializeFromRoute () {
       const requestedMode = this.$route.query.mode
       this.mode = this.modes.some(option => option.value === requestedMode) ? requestedMode : 'characters'
@@ -1519,7 +1608,7 @@ export default {
       await this.initializeFromRoute()
     },
     async selectRecord (id, updateRoute = true) {
-      if (this.hasUnsavedChanges && !window.confirm('Discard unsaved player operations changes?')) return
+      if (this.hasUnsavedChanges && !window.confirm('Discard unsaved player operations changes?')) return false
       this.selectedID = Number(id)
       this.loadingDetail = true
       this.detailError = ''
@@ -1535,6 +1624,7 @@ export default {
       } finally {
         this.loadingDetail = false
       }
+      return true
     },
     applyDetail (detail) {
       this.detail = detail
@@ -1614,6 +1704,9 @@ export default {
     resetEditor () {
       this.editModel = clone(this.originalModel)
     },
+    confirmDiscardBeforeOperation () {
+      return !this.hasUnsavedChanges || window.confirm('Discard unsaved profile changes before running this operation?')
+    },
     async savePrimary () {
       if (!this.canSave || this.saving) return
       this.saving = true
@@ -1662,6 +1755,7 @@ export default {
     },
     async relocateCharacter () {
       if (!this.canRelocate || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const response = await SpireApi.v1().post(`/player-operations/character/${this.selectedID}/relocate`, {
@@ -1691,6 +1785,7 @@ export default {
     },
     async transferCharacter () {
       if (!this.transferAccount || this.transferReason.length < 8 || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const response = await SpireApi.v1().post(`/player-operations/character/${this.selectedID}/transfer`, {
@@ -1720,6 +1815,7 @@ export default {
     },
     async persistCharacterGuild (guildID) {
       if (this.membershipDraft.reason.length < 8 || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const response = await SpireApi.v1().post(`/player-operations/character/${this.selectedID}/guild`, {
@@ -1743,6 +1839,7 @@ export default {
     },
     async saveCurrency () {
       if (!this.currencyChanged || this.currencyReason.length < 8 || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const response = await SpireApi.v1().post(`/player-operations/character/${this.selectedID}/currency`, {
@@ -1760,6 +1857,7 @@ export default {
     },
     async applySanction () {
       if (!this.canApplySanction || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const response = await SpireApi.v1().post(`/player-operations/account/${this.selectedID}/sanction`, {
@@ -1804,6 +1902,7 @@ export default {
     },
     async saveGuildAccess () {
       if (this.accessDraft.reason.length < 8 || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const response = await SpireApi.v1().patch(`/player-operations/guild/${this.selectedID}/access`, this.accessDraft)
@@ -1830,6 +1929,7 @@ export default {
       this.$refs.memberModal.show()
     },
     resetMemberModal () {
+      this.memberModalOpen = false
       this.memberDraft = { editing: false, character: null, rank: 5, banker: false, alt: false, tribute_enabled: false, public_note: '', reason: '' }
       this.characterSearch = ''
       this.clearLookup()
@@ -1841,6 +1941,7 @@ export default {
     },
     async saveGuildMember () {
       if (!this.canSaveMember || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const body = {
@@ -1870,6 +1971,7 @@ export default {
     },
     async removeGuildMember () {
       if (!this.memberDraft.character || this.memberDraft.reason.length < 8 || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         const response = await SpireApi.v1().delete(`/player-operations/guild/${this.selectedID}/member/${this.memberDraft.character.id}`, {
@@ -1922,11 +2024,13 @@ export default {
       this.$refs.confirmModal.show()
     },
     resetConfirmModal () {
+      this.confirmModalOpen = false
       this.confirmModal.confirmation = ''
       this.confirmModal.reason = ''
     },
     async submitConfirmation () {
       if (!this.canSubmitConfirmation || this.operationBusy) return
+      if (!this.confirmDiscardBeforeOperation()) return
       this.operationBusy = true
       try {
         let response
@@ -2082,6 +2186,7 @@ export default {
         : fallback
     },
     onKeydown (event) {
+      if (!event || !event.key || this.confirmModalOpen || this.memberModalOpen) return
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         this.savePrimary()
