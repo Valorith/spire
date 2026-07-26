@@ -912,6 +912,7 @@
         buffDraft: clone(EMPTY_BUFF),
         auditEntries: [],
         loadingAudit: false,
+        auditRequestToken: 0,
         auditError: '',
         deleteDraft: { confirmation: '', reason: '' },
         notification: { message: '', type: 'success', timer: null },
@@ -1061,6 +1062,7 @@
       this.detailRequestToken++
       this.ownerRequestToken++
       this.spellRequestToken++
+      this.auditRequestToken++
       clearTimeout(this.searchTimer)
       clearTimeout(this.ownerSearchTimer)
       clearTimeout(this.spellSearchTimer)
@@ -1183,6 +1185,8 @@
         }
       },
       applyDetail (detail) {
+        this.auditRequestToken++
+        this.loadingAudit = false
         this.detail = clone(detail)
         this.selectedID = Number(detail.mercenary.merc_id)
         this.editModel = pickMercenary(detail.mercenary)
@@ -1203,6 +1207,8 @@
         if (this.selectedTab === 'Audit Trail') this.loadAudit()
       },
       clearDetail () {
+        this.auditRequestToken++
+        this.loadingAudit = false
         this.selectedID = null
         this.detail = null
         this.editModel = null
@@ -1215,7 +1221,9 @@
       createDraft () {
         if (this.hasUnsavedChanges && !window.confirm('Discard unsaved mercenary changes?')) return
         this.detailRequestToken++
+        this.auditRequestToken++
         this.loadingDetail = false
+        this.loadingAudit = false
         this.selectedID = null
         this.detail = { mercenary: {}, buffs: [] }
         this.editModel = emptyMercenary()
@@ -1238,15 +1246,19 @@
       },
       async saveMercenary () {
         if (!this.canSave) return
+        const contextToken = this.detailRequestToken
+        const mercenaryID = Number(this.selectedID)
+        const wasCreating = this.isCreating
         this.saving = true
         try {
-          const wasCreating = this.isCreating
           const response = wasCreating
             ? await SpireApi.v1().put('/mercenary-editor/mercenary', this.payload())
-            : await SpireApi.v1().patch(`/mercenary-editor/mercenary/${this.selectedID}`, this.payload())
-          this.applyDetail(response.data)
+            : await SpireApi.v1().patch(`/mercenary-editor/mercenary/${mercenaryID}`, this.payload())
+          if (this.isDetailContextCurrent(contextToken, mercenaryID, wasCreating)) {
+            this.applyDetail(response.data)
+            this.updateRoute()
+          }
           await this.loadDirectory()
-          this.updateRoute()
           this.showNotification(wasCreating ? 'Mercenary created' : 'Mercenary saved')
         } catch (error) {
           this.showNotification(this.errorMessage(error, 'Unable to save mercenary'), 'error')
@@ -1259,12 +1271,16 @@
         this.copyMercenary()
       },
       async copyMercenary () {
+        const contextToken = this.detailRequestToken
+        const mercenaryID = Number(this.selectedID)
         this.operationBusy = true
         try {
-          const response = await SpireApi.v1().post(`/mercenary-editor/mercenary/${this.selectedID}/copy`)
-          this.applyDetail(response.data)
+          const response = await SpireApi.v1().post(`/mercenary-editor/mercenary/${mercenaryID}/copy`)
+          if (this.isDetailContextCurrent(contextToken, mercenaryID)) {
+            this.applyDetail(response.data)
+            this.updateRoute()
+          }
           await this.loadDirectory()
-          this.updateRoute()
           this.showNotification('Mercenary and active buffs copied')
         } catch (error) {
           this.showNotification(this.errorMessage(error, 'Unable to copy mercenary'), 'error')
@@ -1278,17 +1294,25 @@
       },
       async deleteMercenary () {
         if (!this.canDelete) return
+        const contextToken = this.detailRequestToken
+        const mercenaryID = Number(this.selectedID)
         this.operationBusy = true
         try {
-          await SpireApi.v1().delete(`/mercenary-editor/mercenary/${this.selectedID}`, { data: this.deleteDraft })
-          this.$refs.deleteModal.hide()
-          this.editModel = null
-          this.originalModel = null
-          this.detail = null
-          this.selectedID = null
+          await SpireApi.v1().delete(`/mercenary-editor/mercenary/${mercenaryID}`, { data: this.deleteDraft })
+          const deletedCurrentDetail = this.isDetailContextCurrent(contextToken, mercenaryID)
+          if (deletedCurrentDetail) {
+            this.$refs.deleteModal.hide()
+            this.clearDetail()
+          }
           await this.loadDirectory()
-          if (this.records.length) await this.selectMercenary(this.records[0].merc_id)
-          else this.updateRoute()
+          if (
+            deletedCurrentDetail &&
+            contextToken === this.detailRequestToken &&
+            Number(this.$route.query.mercenary || 0) === mercenaryID
+          ) {
+            if (this.records.length) await this.selectMercenary(this.records[0].merc_id)
+            else this.updateRoute()
+          }
           this.showNotification('Mercenary and active buffs deleted')
         } catch (error) {
           this.showNotification(this.errorMessage(error, 'Unable to delete mercenary'), 'error')
@@ -1346,17 +1370,25 @@
         const same = JSON.stringify(query) === JSON.stringify(this.$route.query)
         if (!same) this.$router.replace({ path: this.$route.path, query }).catch(() => {})
       },
+      isDetailContextCurrent (contextToken, mercenaryID, wasCreating = false) {
+        if (contextToken !== this.detailRequestToken) return false
+        return wasCreating ? this.isCreating : Number(this.selectedID) === Number(mercenaryID)
+      },
       async loadAudit () {
         if (!this.selectedID || this.isCreating) return
+        const requestToken = ++this.auditRequestToken
+        const mercenaryID = Number(this.selectedID)
         this.loadingAudit = true
         this.auditError = ''
         try {
-          const response = await SpireApi.v1().get(`/mercenary-editor/mercenary/${this.selectedID}/audit`, { params: { limit: 50 } })
+          const response = await SpireApi.v1().get(`/mercenary-editor/mercenary/${mercenaryID}/audit`, { params: { limit: 50 } })
+          if (requestToken !== this.auditRequestToken || Number(this.selectedID) !== mercenaryID) return
           this.auditEntries = Array.isArray(response.data.data) ? response.data.data : []
         } catch (error) {
+          if (requestToken !== this.auditRequestToken || Number(this.selectedID) !== mercenaryID) return
           this.auditError = this.errorMessage(error, 'Unable to load audit history')
         } finally {
-          this.loadingAudit = false
+          if (requestToken === this.auditRequestToken) this.loadingAudit = false
         }
       },
       openBuffModal (buff = null) {
@@ -1425,18 +1457,22 @@
       async saveBuff () {
         if (!this.canSaveBuff) return
         const isExisting = Boolean(this.buffDraft.merc_buff_id)
+        const contextToken = this.detailRequestToken
+        const mercenaryID = Number(this.selectedID)
         this.operationBusy = true
         try {
           const response = isExisting
-            ? await SpireApi.v1().patch(`/mercenary-editor/mercenary/${this.selectedID}/buff/${this.buffDraft.merc_buff_id}`, this.buffPayload())
-            : await SpireApi.v1().put(`/mercenary-editor/mercenary/${this.selectedID}/buff`, this.buffPayload())
+            ? await SpireApi.v1().patch(`/mercenary-editor/mercenary/${mercenaryID}/buff/${this.buffDraft.merc_buff_id}`, this.buffPayload())
+            : await SpireApi.v1().put(`/mercenary-editor/mercenary/${mercenaryID}/buff`, this.buffPayload())
           const buff = response.data
-          const index = this.buffs.findIndex(entry => Number(entry.merc_buff_id) === Number(buff.merc_buff_id))
-          if (index >= 0) this.detail.buffs.splice(index, 1, buff)
-          else this.detail.buffs.push(buff)
-          this.$refs.buffModal.hide()
+          if (this.isDetailContextCurrent(contextToken, mercenaryID)) {
+            const index = this.buffs.findIndex(entry => Number(entry.merc_buff_id) === Number(buff.merc_buff_id))
+            if (index >= 0) this.detail.buffs.splice(index, 1, buff)
+            else this.detail.buffs.push(buff)
+            this.$refs.buffModal.hide()
+            this.auditEntries = []
+          }
           await this.loadDirectory()
-          this.auditEntries = []
           this.showNotification(isExisting ? 'Mercenary buff saved' : 'Mercenary buff added')
         } catch (error) {
           this.showNotification(this.errorMessage(error, 'Unable to save mercenary buff'), 'error')
@@ -1446,14 +1482,19 @@
       },
       async deleteBuff () {
         if (!this.buffDraft.merc_buff_id || !window.confirm(`Remove ${this.selectedSpellName} from this mercenary?`)) return
+        const contextToken = this.detailRequestToken
+        const mercenaryID = Number(this.selectedID)
+        const buffID = Number(this.buffDraft.merc_buff_id)
         this.operationBusy = true
         try {
-          await SpireApi.v1().delete(`/mercenary-editor/mercenary/${this.selectedID}/buff/${this.buffDraft.merc_buff_id}`)
-          const index = this.buffs.findIndex(entry => Number(entry.merc_buff_id) === Number(this.buffDraft.merc_buff_id))
-          if (index >= 0) this.detail.buffs.splice(index, 1)
-          this.$refs.buffModal.hide()
+          await SpireApi.v1().delete(`/mercenary-editor/mercenary/${mercenaryID}/buff/${buffID}`)
+          if (this.isDetailContextCurrent(contextToken, mercenaryID)) {
+            const index = this.buffs.findIndex(entry => Number(entry.merc_buff_id) === buffID)
+            if (index >= 0) this.detail.buffs.splice(index, 1)
+            this.$refs.buffModal.hide()
+            this.auditEntries = []
+          }
           await this.loadDirectory()
-          this.auditEntries = []
           this.showNotification('Mercenary buff removed')
         } catch (error) {
           this.showNotification(this.errorMessage(error, 'Unable to remove mercenary buff'), 'error')

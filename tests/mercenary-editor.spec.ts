@@ -11,6 +11,9 @@ type MercenaryState = {
   buffUpdatePayload?: Record<string, unknown>;
   detailDelays?: Record<number, number>;
   detailFailures?: number[];
+  auditByMercenary?: Record<number, Array<Record<string, unknown>>>;
+  auditDelays?: Record<number, number>;
+  mercenaryPatchDelays?: Record<number, number>;
   deletedBuffs: number[];
 };
 
@@ -156,13 +159,18 @@ async function installMercenaryMocks(page: Page, state: MercenaryState) {
     })
   );
 
-  await page.route('**/api/v1/mercenary-editor/mercenary/*/audit**', route =>
-    route.fulfill({
+  await page.route('**/api/v1/mercenary-editor/mercenary/*/audit**', async route => {
+    const parts = new URL(route.request().url()).pathname.split('/');
+    const mercenaryID = Number(parts[parts.length - 2]);
+    const delay = state.auditDelays?.[mercenaryID] || 0;
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    const audit = state.auditByMercenary?.[mercenaryID] || state.audit;
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: state.audit, total: state.audit.length, page: 1, limit: 50 }),
-    })
-  );
+      body: JSON.stringify({ data: audit, total: audit.length, page: 1, limit: 50 }),
+    });
+  });
 
   await page.route('**/api/v1/mercenary-editor/mercenary/*/buff/*', async route => {
     const request = route.request();
@@ -255,6 +263,8 @@ async function installMercenaryMocks(page: Page, state: MercenaryState) {
     }
     if (request.method() === 'PATCH') {
       state.updatePayload = request.postDataJSON();
+      const delay = state.mercenaryPatchDelays?.[id] || 0;
+      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
       const selected = state.mercenaries.find(record => Number(record.merc_id) === id);
       if (!selected) throw new Error(`Missing mocked mercenary ${id}`);
       Object.assign(selected, state.updatePayload);
@@ -529,6 +539,75 @@ test.describe('Mercenary Editor', () => {
 
     await expect(page.locator('.mercenary-audit-list')).toContainText('QA Operator');
     await expect(page.locator('.mercenary-audit-list')).toContainText('Route audit regression coverage');
+  });
+
+  test('keeps audit and save responses scoped to the mercenary that started them', async ({ page }) => {
+    const secondMercenary = {
+      ...mercenary,
+      merc_id: 940002,
+      slot: 1,
+      name: 'Bryn Ward',
+    };
+    const state: MercenaryState = {
+      mercenaries: [{ ...mercenary }, secondMercenary],
+      buffs: [],
+      audit: [],
+      auditByMercenary: {
+        940001: [{
+          id: 81,
+          event_name: 'MERCENARY_UPDATE',
+          user_name: 'Old Audit',
+          created_at: '2026-07-26T20:00:00Z',
+          data: {},
+        }],
+        940002: [{
+          id: 82,
+          event_name: 'MERCENARY_UPDATE',
+          user_name: 'Current Audit',
+          created_at: '2026-07-26T20:01:00Z',
+          data: {},
+        }],
+      },
+      auditDelays: { 940001: 200 },
+      mercenaryPatchDelays: { 940001: 200 },
+      deletedBuffs: [],
+    };
+    await installMercenaryMocks(page, state);
+    await page.goto('/mercenaries?tab=Audit%20Trail&mercenary=940001');
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Alden Ward');
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?tab=Audit%20Trail&mercenary=940002');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Bryn Ward');
+    await expect(page.locator('.mercenary-audit-list')).toContainText('Current Audit');
+    await page.waitForTimeout(250);
+    await expect(page.locator('.mercenary-audit-list')).not.toContainText('Old Audit');
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?tab=Overview&mercenary=940001');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Alden Ward');
+    await page.locator('#mercenary-name').fill('Saved Alden');
+    const saveRequest = page.waitForRequest(request =>
+      request.method() === 'PATCH' && request.url().includes('/mercenary-editor/mercenary/940001')
+    );
+    await page.getByTestId('mercenary-save').click();
+    await saveRequest;
+    page.once('dialog', dialog => dialog.accept());
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?mercenary=940002');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Bryn Ward');
+    await page.waitForTimeout(250);
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Bryn Ward');
+    await expect(page).toHaveURL(/mercenary=940002/);
   });
 
   test('requires explicit confirmation for copy and exact-name guarded deletion', async ({ page }) => {
