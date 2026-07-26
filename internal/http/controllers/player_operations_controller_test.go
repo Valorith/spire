@@ -70,6 +70,28 @@ func TestValidatePlayerOperationsAccountAndGuild(t *testing.T) {
 	}
 }
 
+func TestPlayerOperationsGuildLeaderChanged(t *testing.T) {
+	tests := []struct {
+		name      string
+		current   int
+		requested int
+		want      bool
+	}{
+		{name: "unchanged unassigned leader", current: 0, requested: 0, want: false},
+		{name: "unchanged assigned leader", current: 910001, requested: 910001, want: false},
+		{name: "assign leader", current: 0, requested: 910001, want: true},
+		{name: "clear leader", current: 910001, requested: 0, want: true},
+		{name: "replace leader", current: 910001, requested: 910002, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := playerOperationsGuildLeaderChanged(test.current, test.requested); got != test.want {
+				t.Fatalf("playerOperationsGuildLeaderChanged(%d, %d) = %v, want %v", test.current, test.requested, got, test.want)
+			}
+		})
+	}
+}
+
 func TestValidatePlayerOperationsGuildAccess(t *testing.T) {
 	valid := playerOperationsGuildAccessInput{
 		Reason: "Updating guild access after an officer review",

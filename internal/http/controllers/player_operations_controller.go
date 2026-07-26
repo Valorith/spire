@@ -1439,8 +1439,11 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		return playerOperationsAuditError(c, err)
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		var locked struct{ ID int }
-		if err := tx.Table("guilds").Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", id).Take(&locked).Error; err != nil {
+		var locked struct {
+			ID       int
+			LeaderID int
+		}
+		if err := tx.Table("guilds").Clauses(clause.Locking{Strength: "UPDATE"}).Select("id, leader AS leader_id").Where("id = ?", id).Take(&locked).Error; err != nil {
 			return err
 		}
 		var duplicate int64
@@ -1450,22 +1453,26 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		if duplicate > 0 {
 			return playerOperationsConflict("A guild named %s already exists", strings.TrimSpace(input.Name))
 		}
-		if err := tx.Table("guild_members").Where("guild_id = ? AND rank = 1", id).Update("rank", 2).Error; err != nil {
-			return err
-		}
-		if input.LeaderID > 0 {
-			if err := playerOperationsEnsureCharacter(tx, input.LeaderID); err != nil {
+		if playerOperationsGuildLeaderChanged(locked.LeaderID, input.LeaderID) {
+			if input.LeaderID > 0 {
+				if err := playerOperationsEnsureCharacter(tx, input.LeaderID); err != nil {
+					return err
+				}
+				var membership int64
+				if err := tx.Table("guild_members").Where("char_id = ? AND guild_id = ?", input.LeaderID, id).Count(&membership).Error; err != nil {
+					return err
+				}
+				if membership == 0 {
+					return playerOperationsConflict("Select a current guild member as leader")
+				}
+			}
+			if err := tx.Table("guild_members").Where("guild_id = ? AND rank = 1", id).Update("rank", 2).Error; err != nil {
 				return err
 			}
-			var membership int64
-			if err := tx.Table("guild_members").Where("char_id = ? AND guild_id = ?", input.LeaderID, id).Count(&membership).Error; err != nil {
-				return err
-			}
-			if membership == 0 {
-				return playerOperationsConflict("Select a current guild member as leader")
-			}
-			if err := tx.Table("guild_members").Where("guild_id = ? AND char_id = ?", id, input.LeaderID).Update("rank", 1).Error; err != nil {
-				return err
+			if input.LeaderID > 0 {
+				if err := tx.Table("guild_members").Where("guild_id = ? AND char_id = ?", id, input.LeaderID).Update("rank", 1).Error; err != nil {
+					return err
+				}
 			}
 		}
 		return tx.Table("guilds").Where("id = ?", id).Updates(map[string]interface{}{
@@ -1482,6 +1489,10 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		return playerOperationsLoadError(c, "Guild", err)
 	}
 	return c.JSON(http.StatusOK, echo.Map{"detail": detail, "audit_id": auditID})
+}
+
+func playerOperationsGuildLeaderChanged(currentLeaderID, requestedLeaderID int) bool {
+	return currentLeaderID != requestedLeaderID
 }
 
 func (p *PlayerOperationsController) deleteGuild(c echo.Context) error {

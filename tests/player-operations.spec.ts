@@ -209,8 +209,8 @@ async function installPlayerOperationsMocks(page: Page, state: PlayerOperationsM
     }
     if (path === '/character/2' && request.method() === 'GET') {
       return fulfill({
-        character: { ...state.character, id: 2, name: 'Beryl' },
-        context: characterContext,
+        character: { ...state.character, id: 2, account_id: 0, name: 'Beryl' },
+        context: { ...characterContext, account: { id: 0, name: '', status: 0 } },
       });
     }
     if (path === '/character/1' && request.method() === 'PATCH') {
@@ -315,6 +315,9 @@ test.describe('Player Operations', () => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Beryl');
+    await page.getByRole('tab', { name: 'Connections', exact: true }).click();
+    await expect(page.getByText('This character is not linked to an account.')).toBeVisible();
+    await expect(page.getByTitle('Open this account')).toHaveCount(0);
     await expect(page.locator('a[href="/admin/player-operations?mode=characters"]')).toHaveAttribute('aria-current', 'page');
 
     for (const viewport of [

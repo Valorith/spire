@@ -468,7 +468,7 @@
               <div class="operations-two-column">
                 <div class="operations-action-card">
                   <span class="spire-editor-context-label">Account owner</span>
-                  <div v-if="detail.context.account" class="selected-operation-target selected-operation-target--static">
+                  <div v-if="hasLinkedAccount" class="selected-operation-target selected-operation-target--static">
                     <i class="fa fa-id-card"></i>
                     <span>
                       <strong>{{ detail.context.account.name || 'Unknown account' }}</strong>
@@ -1421,6 +1421,10 @@ export default {
     },
     accountCharacterCount () {
       return this.mode === 'accounts' && this.detail && this.detail.characters ? this.detail.characters.length : 0
+    },
+    hasLinkedAccount () {
+      const account = this.detail && this.detail.context && this.detail.context.account
+      return Boolean(account && Number(account.id) > 0)
     },
     accountSuspensionActive () {
       return Boolean(this.editModel && this.editModel.suspended_until && new Date(this.editModel.suspended_until).getTime() > Date.now())
