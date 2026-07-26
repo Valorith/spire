@@ -89,41 +89,42 @@
 
           <!-- Resource Metrics -->
           <div
-            class="col-lg-2 col-sm-12 pl-0 pr-0 mt-3-mobile"
-            v-for="(host, index) in hostMetrics"
-            style="display: inline-block"
+            v-for="(host, hostIndex) in hostMetrics"
+            :key="'host-metrics-' + hostIndex"
+            class="col-xl-3 col-lg-4 col-sm-12 mt-3-mobile admin-host-metrics"
+            data-testid="admin-host-metrics"
           >
             <!-- Render Metrics Dynamically -->
-            <div class="row" v-for="(metric, index) in host" :key="index">
-              <!-- Left Label -->
-              <div class="col-3 p-0 m-0 text-right" style="line-height: .8 !important">
-                  <span class="small font-weight-bold" style="font-size: 10px; opacity: .9">
-                    {{ metric.label }}
-                  </span>
-              </div>
+            <div
+              v-for="(metric, metricIndex) in host"
+              :key="metricIndex"
+              class="admin-host-metric"
+              :class="{ 'admin-host-metric--identity': typeof metric.percent === 'undefined' }"
+              data-testid="admin-host-metric"
+            >
+              <span class="admin-host-metric__label">
+                {{ metric.label }}
+              </span>
 
-              <!-- Progress Bar -->
-              <div class="col-6 p-0 m-0 mt-1" style="max-width: 120px" v-if="typeof metric.percent !== 'undefined'">
+              <div
+                v-if="typeof metric.percent !== 'undefined'"
+                class="admin-host-metric__progress"
+              >
                 <eq-progress-bar
-                  style="opacity: .95"
+                  style="opacity: .95;"
                   :percent="metric.percent"
                   :show-percent="false"
                   :color="metric.color"
                 />
               </div>
 
-              <!-- Right Value -->
-              <div
-                :class="'p-0 m-0 text-left' + (typeof metric.percent === 'undefined' ? 'col-9 ml-4 mb-1' : 'col-3')"
-                style="line-height: .8 !important"
+              <span
+                class="admin-host-metric__value"
+                :class="{ 'admin-host-metric__value--host': typeof metric.percent === 'undefined' }"
+                :title="typeof metric.percent === 'undefined' ? metric.value : null"
               >
-                  <span
-                    :class="' font-weight-bold' + (typeof metric.percent === 'undefined' ? '' : 'small text-muted')"
-                    style="font-size: 10px;"
-                  >
-                    {{ metric.value }}
-                  </span>
-              </div>
+                {{ metric.value }}
+              </span>
             </div>
           </div>
 
@@ -561,5 +562,64 @@ export default {
 <style scoped>
 .admin-header-window .text-muted {
 
+}
+
+.admin-host-metrics {
+  display: inline-block;
+  min-width: 0;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+.admin-host-metric {
+  align-items: center;
+  column-gap: 6px;
+  display: grid;
+  grid-template-columns: 42px minmax(62px, 1fr) minmax(56px, max-content);
+  line-height: 1;
+  min-height: 15px;
+  min-width: 0;
+}
+
+.admin-host-metric__label {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-host-metric__progress {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-host-metric__value {
+  color: #8f99a3;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.admin-host-metric__value--host {
+  color: #fff;
+  grid-column: 2 / 4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+::v-deep .admin-host-metric__progress .eq-progress-bar {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 991.98px) {
+  .admin-host-metrics {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 360px;
+  }
 }
 </style>

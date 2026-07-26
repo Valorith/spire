@@ -5,8 +5,6 @@
       :show-percent="false"
       :color="color"
     />
-    <!-- Stationary full-width frame — progress_bar_top.png always spans the full bar -->
-    <div class="cast-bar-frame"/>
   </div>
 </template>
 
@@ -96,23 +94,5 @@ export default {
 <style scoped>
 .cast-bar-outer {
   position: relative;
-}
-
-/* Full-width stationary frame overlay (progress_bar_top.png) */
-.cast-bar-frame {
-  position: absolute;
-  top: -2px;
-  left: -4px;
-  width: calc(100% + 8px);
-  height: 10px;
-  background-image: url('./eq-ui/images/progress_bar_top.png');
-  background-size: 100% 100%;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Suppress the fill div's moving overlay — replaced by the stationary frame above */
-.cast-bar-outer ::v-deep .eq-progress-bar > div::before {
-  display: none;
 }
 </style>

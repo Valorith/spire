@@ -1,9 +1,17 @@
 <template>
-  <div class="loader-fake-progress">
+  <div
+    class="loader-fake-progress"
+    role="progressbar"
+    aria-label="Loading"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    :aria-valuenow="progress"
+  >
     <div
       class="loader-fake-progress-fill"
       :style="{ clipPath: `inset(0 ${100 - progress}% 0 0)` }"
     />
+    <span class="loader-fake-progress-frame" aria-hidden="true"/>
     <span
       v-if="progress > 0"
       class="loader-fake-progress-label"
@@ -83,15 +91,17 @@ export default {
   transition: clip-path .3s;
 }
 
-.loader-fake-progress-fill::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: -4px;
-  width: calc(100% + 8px);
-  height: 10px;
+.loader-fake-progress-frame {
   background-image: url('./eq-ui/images/progress_bar_top.png');
   background-size: 100% 100%;
+  display: block;
+  height: 10px;
+  left: -4px;
+  pointer-events: none;
+  position: absolute;
+  top: -2px;
+  width: calc(100% + 8px);
+  z-index: 1;
 }
 
 .loader-fake-progress-label {
@@ -101,7 +111,13 @@ export default {
   transform: translateX(-50%);
   color: #ffffff;
   text-shadow: -2px 2px 3px #000;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader-fake-progress-fill {
+    transition: none;
+  }
 }
 </style>
