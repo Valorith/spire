@@ -673,15 +673,24 @@
 
 .aura-icon-picker__preview {
   align-items: center;
-  background: rgba(0, 0, 0, 0.24);
+  background: rgba(0, 0, 0, 0.24) !important;
   border: 1px solid rgba(210, 170, 69, 0.36);
   color: #d2aa45;
-  display: flex;
+  display: flex !important;
   flex: 0 0 46px;
   height: 46px;
   justify-content: center;
-  padding: 2px;
+  line-height: 0 !important;
+  overflow: hidden;
+  padding: 2px !important;
   width: 46px;
+}
+
+.aura-icon-picker__preview > span {
+  display: block;
+  flex: 0 0 40px;
+  height: 40px;
+  width: 40px;
 }
 
 .aura-icon-picker__preview:focus-visible {

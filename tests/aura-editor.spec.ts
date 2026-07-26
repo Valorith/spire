@@ -309,7 +309,28 @@ test.describe('Aura Editor', () => {
     await expect(iconValue).toHaveValue('-1');
     await expect(picker).toContainText('Linked spell icon');
     await expect(picker).toContainText('Inherits icon #161 from the linked effect spell.');
-    await expect(page.getByTestId('aura-icon-preview').locator('.spell-161-40')).toBeVisible();
+    const preview = page.getByTestId('aura-icon-preview');
+    const previewSprite = preview.locator('.spell-161-40');
+    await expect(previewSprite).toBeVisible();
+    await expect(preview).toHaveCSS('display', 'flex');
+    await expect(preview).toHaveCSS('padding', '2px');
+    await expect(previewSprite).toHaveCSS('background-image', /spell-icons-40\.png/);
+
+    for (const viewport of [
+      { width: 1280, height: 900 },
+      { width: 620, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const [previewBox, spriteBox] = await Promise.all([
+        preview.boundingBox(),
+        previewSprite.boundingBox(),
+      ]);
+      if (!previewBox || !spriteBox) throw new Error('Aura icon preview geometry is unavailable');
+      expect(Math.abs((previewBox.x + previewBox.width / 2) - (spriteBox.x + spriteBox.width / 2))).toBeLessThanOrEqual(1);
+      expect(Math.abs((previewBox.y + previewBox.height / 2) - (spriteBox.y + spriteBox.height / 2))).toBeLessThanOrEqual(1);
+      expect(spriteBox.x).toBeGreaterThan(previewBox.x);
+      expect(spriteBox.x + spriteBox.width).toBeLessThan(previewBox.x + previewBox.width);
+    }
   });
 
   test('guards copy and delete while persisting complete Aura records', async ({ page }) => {
