@@ -315,6 +315,7 @@ test.describe('Player Operations', () => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Beryl');
+    await expect(page.locator('a[href="/admin/player-operations?mode=characters"]')).toHaveAttribute('aria-current', 'page');
 
     for (const viewport of [
       { width: 1440, height: 900 },

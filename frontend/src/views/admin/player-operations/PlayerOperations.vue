@@ -1346,15 +1346,19 @@ export default {
     validationMessages () {
       if (!this.editModel) return ['No record is selected.']
       const messages = []
+      const numberOutside = (value, minimum, maximum) => {
+        const numeric = Number(value)
+        return !Number.isFinite(numeric) || numeric < minimum || numeric > maximum
+      }
       if (this.mode === 'characters') {
         if (!String(this.editModel.name || '').trim()) messages.push('Character name is required.')
         if (String(this.editModel.name || '').length > 64) messages.push('Character name must be 64 characters or fewer.')
-        if (Number(this.editModel.level) < 1 || Number(this.editModel.level) > 255) messages.push('Level must be between 1 and 255.')
-        if (Number(this.editModel.race) <= 0) messages.push('Select a player race.')
-        if (Number(this.editModel.class) <= 0) messages.push('Select a player class.')
+        if (numberOutside(this.editModel.level, 1, 255)) messages.push('Level must be between 1 and 255.')
+        if (numberOutside(this.editModel.race, 1, Number.MAX_SAFE_INTEGER)) messages.push('Select a player race.')
+        if (numberOutside(this.editModel.class, 1, Number.MAX_SAFE_INTEGER)) messages.push('Select a player class.')
       } else if (this.mode === 'accounts') {
-        if (Number(this.editModel.status) < -1 || Number(this.editModel.status) > 255) messages.push('Account status must be between -1 and 255.')
-        if (Number(this.editModel.fly_mode) < 0 || Number(this.editModel.fly_mode) > 2) messages.push('Select a supported fly mode.')
+        if (numberOutside(this.editModel.status, -1, 255)) messages.push('Account status must be between -1 and 255.')
+        if (numberOutside(this.editModel.fly_mode, 0, 2)) messages.push('Select a supported fly mode.')
       } else {
         if (!String(this.editModel.name || '').trim()) messages.push('Guild name is required.')
         if (String(this.editModel.name || '').length > 32) messages.push('Guild name must be 32 characters or fewer.')

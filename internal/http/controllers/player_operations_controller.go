@@ -592,7 +592,7 @@ func (p *PlayerOperationsController) listAccounts(c echo.Context) error {
 		a.id,
 		a.name,
 		a.status,
-		(SELECT COUNT(*) FROM character_data ch WHERE ch.account_id = a.id AND ch.deleted_at IS NULL) AS character_count,
+		(SELECT COUNT(*) FROM character_data ch WHERE ch.account_id = a.id) AS character_count,
 		(SELECT COUNT(*) FROM character_data ch WHERE ch.account_id = a.id AND ch.deleted_at IS NULL AND ch.ingame = 1) AS online_characters,
 		COALESCE((SELECT MAX(ch.last_login) FROM character_data ch WHERE ch.account_id = a.id), 0) AS last_login,
 		a.suspendeduntil AS suspended_until
