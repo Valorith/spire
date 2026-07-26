@@ -310,49 +310,9 @@
                     :time-ms="auraCastTimeMs"
                   />
                 </div>
-                <div class="spire-editor-field">
-                  <label>Aura icon</label>
-                  <input id="aura-icon" v-model.number="editModel.icon" type="hidden">
-                  <div class="aura-icon-picker" data-testid="aura-icon-picker">
-                    <button
-                      type="button"
-                      class="aura-icon-picker__preview"
-                      data-testid="aura-icon-preview"
-                      :aria-label="'Choose aura icon. ' + auraIconStatus"
-                      @click="$refs.auraIconModal.show()"
-                    >
-                      <span
-                        v-if="effectiveAuraIcon >= 0"
-                        :class="'spell-' + effectiveAuraIcon + '-40'"
-                      ></span>
-                      <i v-else class="ra ra-burning-embers"></i>
-                    </button>
-                    <div class="aura-icon-picker__body">
-                      <strong>{{ auraIconUsesLinkedSpell ? 'Linked spell icon' : 'Aura icon #' + editModel.icon }}</strong>
-                      <small>{{ auraIconStatus }}</small>
-                      <div class="aura-icon-picker__actions">
-                        <button
-                          type="button"
-                          class="btn btn-sm btn-outline-secondary"
-                          @click="$refs.auraIconModal.show()"
-                        >
-                          Choose icon
-                        </button>
-                        <button
-                          v-if="!auraIconUsesLinkedSpell"
-                          type="button"
-                          class="btn btn-sm btn-outline-warning"
-                          @click="useLinkedSpellIcon"
-                        >
-                          Use linked spell icon
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
 
-              <div class="spire-editor-grid spire-editor-grid--two mt-3">
+              <div class="aura-overview-workspace mt-3">
                 <div class="spire-editor-range-visualizer" aria-label="Aura effect radius visualizer">
                   <div class="spire-editor-context-label mb-2">Range visualizer · server units</div>
                   <range-visualizer
@@ -360,26 +320,73 @@
                     @input="editModel.distance = Number($event)"
                   />
                 </div>
-                <div class="spire-editor-context-card spire-editor-context-card--gold">
-                  <div class="spire-editor-context-label">Runtime summary</div>
-                  <h4>{{ auraTypeLabel(editModel.aura_type) }}</h4>
-                  <p>{{ auraTypeDescription(editModel.aura_type) }}</p>
-                  <div class="spire-editor-metric-row mt-3">
-                    <div class="spire-editor-metric">
-                      <span>Radius</span>
-                      <strong>{{ editModel.distance || 0 }}</strong>
+
+                <div class="aura-overview-rail">
+                  <div class="spire-editor-field aura-overview-icon-field">
+                    <label>Aura icon</label>
+                    <input id="aura-icon" v-model.number="editModel.icon" type="hidden">
+                    <div class="aura-icon-picker" data-testid="aura-icon-picker">
+                      <button
+                        type="button"
+                        class="aura-icon-picker__preview"
+                        data-testid="aura-icon-preview"
+                        :aria-label="'Choose aura icon. ' + auraIconStatus"
+                        @click="$refs.auraIconModal.show()"
+                      >
+                        <span
+                          v-if="effectiveAuraIcon >= 0"
+                          :class="'spell-' + effectiveAuraIcon + '-40'"
+                        ></span>
+                        <i v-else class="ra ra-burning-embers"></i>
+                      </button>
+                      <div class="aura-icon-picker__body">
+                        <strong>{{ auraIconUsesLinkedSpell ? 'Linked spell icon' : 'Aura icon #' + editModel.icon }}</strong>
+                        <small>{{ auraIconStatus }}</small>
+                        <div class="aura-icon-picker__actions">
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-secondary"
+                            @click="$refs.auraIconModal.show()"
+                          >
+                            Choose icon
+                          </button>
+                          <button
+                            v-if="!auraIconUsesLinkedSpell"
+                            type="button"
+                            class="btn btn-sm btn-outline-warning"
+                            @click="useLinkedSpellIcon"
+                          >
+                            Use linked spell icon
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div class="spire-editor-metric">
-                      <span>Duration</span>
-                      <strong>{{ compactDuration(editModel.duration) }}</strong>
-                    </div>
-                    <div class="spire-editor-metric">
-                      <span>Spawn</span>
-                      <strong>{{ editModel.spawn_type }}</strong>
-                    </div>
-                    <div class="spire-editor-metric">
-                      <span>Move</span>
-                      <strong>{{ editModel.movement }}</strong>
+                  </div>
+
+                  <div
+                    class="spire-editor-context-card spire-editor-context-card--gold spire-editor-context-card--fit aura-runtime-summary"
+                    data-testid="aura-runtime-summary"
+                  >
+                    <div class="spire-editor-context-label">Runtime summary</div>
+                    <h4>{{ auraTypeLabel(editModel.aura_type) }}</h4>
+                    <p>{{ auraTypeDescription(editModel.aura_type) }}</p>
+                    <div class="spire-editor-metric-row aura-runtime-summary__metrics">
+                      <div class="spire-editor-metric">
+                        <span>Radius</span>
+                        <strong>{{ editModel.distance || 0 }} units</strong>
+                      </div>
+                      <div class="spire-editor-metric">
+                        <span>Duration</span>
+                        <strong>{{ compactDuration(editModel.duration) }}</strong>
+                      </div>
+                      <div class="spire-editor-metric">
+                        <span>Visibility</span>
+                        <strong>{{ spawnTypeLabel(editModel.spawn_type) }}</strong>
+                      </div>
+                      <div class="spire-editor-metric">
+                        <span>Movement</span>
+                        <strong>{{ movementLabel(editModel.movement) }}</strong>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1178,6 +1185,10 @@
       spawnTypeDescription (value) {
         const option = SPAWN_TYPES.find(item => item.value === Number(value))
         return option ? option.description : 'Unknown spawn visibility.'
+      },
+      spawnTypeLabel (value) {
+        const option = SPAWN_TYPES.find(item => item.value === Number(value))
+        return option ? option.label : `Unknown visibility ${value}`
       },
       movementLabel (value) {
         const option = MOVEMENT_TYPES.find(item => item.value === Number(value))

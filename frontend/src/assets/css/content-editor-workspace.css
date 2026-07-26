@@ -661,6 +661,39 @@
   padding: 10px;
 }
 
+.aura-overview-workspace {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(270px, 0.95fr);
+}
+
+.aura-overview-rail {
+  align-content: start;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.aura-overview-icon-field label {
+  margin-bottom: 4px;
+}
+
+.aura-runtime-summary__metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 10px 0 0;
+}
+
+.aura-runtime-summary__metrics .spire-editor-metric {
+  min-height: 45px;
+  padding: 7px 9px;
+}
+
+.aura-runtime-summary__metrics .spire-editor-metric strong {
+  font-size: 13px;
+  line-height: 1.15;
+}
+
 .aura-icon-picker {
   align-items: center;
   background: rgba(3, 8, 12, 0.54);
@@ -909,6 +942,20 @@
   .spire-editor-grid--two,
   .spire-editor-grid--three,
   .spire-editor-metric-row {
+    grid-template-columns: 1fr;
+  }
+
+  .aura-overview-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .aura-runtime-summary__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .aura-runtime-summary__metrics {
     grid-template-columns: 1fr;
   }
 }

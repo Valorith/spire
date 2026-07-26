@@ -186,8 +186,13 @@ test.describe('Aura Editor', () => {
 
     const slider = page.locator('.spire-editor-range-visualizer .rv-slider');
     const numeric = page.locator('#aura-distance');
+    const summary = page.getByTestId('aura-runtime-summary');
     await expect(slider).toHaveValue('60');
     await expect(numeric).toHaveValue('60');
+    await expect(summary).toContainText('Applies the linked spell to members of the owner’s group.');
+    await expect(summary).toContainText('60 units');
+    await expect(summary.locator('.spire-editor-metric').filter({ hasText: 'Visibility' })).toContainText('Group members');
+    await expect(summary).toContainText('Follow');
 
     const visualizerStage = page.locator('.spire-editor-range-visualizer .range-visualizer-stage');
     const [stageBox, sliderBox] = await Promise.all([
@@ -199,6 +204,7 @@ test.describe('Aura Editor', () => {
 
     await slider.fill('75');
     await expect(numeric).toHaveValue('75');
+    await expect(summary).toContainText('75 units');
     await expect(page.getByTestId('aura-save')).toBeEnabled();
 
     const markerLabel = visualizerStage.locator('.unit-label--marker');
@@ -218,8 +224,17 @@ test.describe('Aura Editor', () => {
 
     await numeric.fill('60');
     await expect(slider).toHaveValue('60');
+    await expect(summary).toContainText('60 units');
     await expect(markerLabel).not.toHaveClass(/unit-label--before/);
     await expect(page.getByTestId('aura-save')).toBeDisabled();
+
+    await page.setViewportSize({ width: 620, height: 900 });
+    const [compactRangeBox, compactSummaryBox] = await Promise.all([
+      page.locator('.spire-editor-range-visualizer').boundingBox(),
+      summary.boundingBox(),
+    ]);
+    if (!compactRangeBox || !compactSummaryBox) throw new Error('Compact Overview geometry is unavailable');
+    expect(compactSummaryBox.y).toBeGreaterThanOrEqual(compactRangeBox.y + compactRangeBox.height + 8);
   });
 
   test('places the Spell Editor cast-time simulator beneath the Aura field with seconds converted to milliseconds', async ({ page }) => {
