@@ -5,6 +5,7 @@ type MailParcelsMockState = {
   broadcastMailPayload?: Record<string, unknown>;
   parcelPayload?: Record<string, unknown>;
   augmentSearch?: { scope: string | null; socketType: string | null };
+  directoryRequests?: number;
 };
 
 const character = {
@@ -145,6 +146,7 @@ async function installMailParcelsMocks(page: Page, state: MailParcelsMockState) 
       });
     }
     if (path === '/mail' && request.method() === 'GET') {
+      state.directoryRequests = Number(state.directoryRequests || 0) + 1;
       return fulfill({ data: [mail], total: 1, page: 1, limit: 30 });
     }
     if (path === '/mail/1' && request.method() === 'GET') {
@@ -240,6 +242,12 @@ test.describe('Mail & Parcels Editor', () => {
     await expect(page.getByText('Unsaved', { exact: true })).toHaveCount(0);
     await expect(page.locator('#mail-parcels-mail-sent-at')).toHaveAttribute('step', '1');
 
+    const directoryRequests = Number(state.directoryRequests || 0);
+    const refreshDirectory = page.getByRole('button', { name: 'Refresh mailbox messages' });
+    await expect(refreshDirectory).toBeVisible();
+    await refreshDirectory.click();
+    await expect.poll(() => Number(state.directoryRequests || 0)).toBeGreaterThan(directoryRequests);
+
     for (const viewport of [
       { width: 1600, height: 900 },
       { width: 1024, height: 900 },
@@ -265,6 +273,13 @@ test.describe('Mail & Parcels Editor', () => {
       expect(geometry.commandOverflow, geometryContext).toBeLessThanOrEqual(1);
       expect(geometry.modeOverflow, geometryContext).toBeLessThanOrEqual(1);
     }
+
+    await page.goto('/admin/mail-parcels?mode=parcels&tab=Package&parcel=1');
+    const parcelItemSelection = page.getByTestId('parcel-item-selection');
+    await expect(parcelItemSelection).toBeVisible();
+    await expect(parcelItemSelection.getByText('Selected item')).toBeVisible();
+    await expect(parcelItemSelection.getByText(/Single item|Stacks to/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Refresh queued parcels' })).toBeVisible();
   });
 
   test('sends direct and server-wide mail through the single tool authorization boundary', async ({ page }) => {

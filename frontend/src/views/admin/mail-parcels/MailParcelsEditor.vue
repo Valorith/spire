@@ -78,9 +78,22 @@
                 <i class="fa fa-times"></i>
               </button>
             </div>
-            <b-button size="sm" variant="outline-warning" @click="createDraft">
-              <i class="fa fa-plus mr-1"></i>New
-            </b-button>
+            <div class="mail-parcels-directory-actions">
+              <b-button
+                size="sm"
+                variant="outline-secondary"
+                data-testid="refresh-delivery-directory"
+                :aria-label="'Refresh ' + (mode === 'mail' ? 'mailbox messages' : 'queued parcels')"
+                :title="'Refresh ' + (mode === 'mail' ? 'mailbox messages' : 'queued parcels')"
+                :disabled="loadingDirectory || loadingDetail"
+                @click="refreshDirectory"
+              >
+                <i :class="loadingDirectory ? 'fa fa-spinner fa-spin' : 'fa fa-refresh'" aria-hidden="true"></i>
+              </b-button>
+              <b-button size="sm" variant="outline-warning" @click="createDraft">
+                <i class="fa fa-plus mr-1"></i>New
+              </b-button>
+            </div>
           </div>
 
           <div v-if="mode === 'mail'" class="spire-editor-filter" role="group" aria-label="Mail status filter">
@@ -469,32 +482,48 @@
                 <div>
                   <div class="spire-editor-field">
                     <label>Parcel item</label>
-                    <button class="item-selector" type="button" @click="openItemLookup('parcel', -1)">
-                      <span class="item-selector__icon">
-                        <span v-if="selectedItem && selectedItem.icon" :class="'item-' + selectedItem.icon"></span>
-                        <i v-else class="ra ra-wooden-box"></i>
-                      </span>
-                      <span>
-                        <strong>{{ selectedItem ? selectedItem.name : (editModel.item_name || 'Choose an item') }}</strong>
-                        <small>{{ editModel.item_id ? 'Item #' + editModel.item_id : 'Search by name or exact ID' }}</small>
-                      </span>
-                      <i class="fa fa-search"></i>
-                    </button>
-                  </div>
+                    <div class="parcel-item-selection" data-testid="parcel-item-selection">
+                      <button
+                        class="parcel-item-selection__main"
+                        type="button"
+                        :aria-label="selectedItem ? 'Change parcel item. Current item: ' + selectedItem.name : 'Choose parcel item'"
+                        @click="openItemLookup('parcel', -1)"
+                      >
+                        <span class="parcel-item-selection__icon">
+                          <span v-if="selectedItem && selectedItem.icon" :class="'item-' + selectedItem.icon"></span>
+                          <i v-else class="ra ra-wooden-box"></i>
+                        </span>
+                        <span class="parcel-item-selection__identity">
+                          <span class="context-label">{{ selectedItem ? 'Selected item' : 'Parcel item' }}</span>
+                          <strong>{{ selectedItem ? selectedItem.name : (editModel.item_name || 'Choose an item') }}</strong>
+                          <small>{{ editModel.item_id ? 'Item #' + editModel.item_id : 'Search by name or exact ID' }}</small>
+                        </span>
+                        <span class="parcel-item-selection__change">
+                          <i class="fa fa-search" aria-hidden="true"></i>
+                          {{ selectedItem ? 'Change' : 'Choose' }}
+                        </span>
+                      </button>
 
-                  <div v-if="selectedItem" class="item-context-card">
-                    <div>
-                      <span class="context-label">Item context</span>
-                      <h4>{{ selectedItem.name }}</h4>
-                      <p>
-                        {{ selectedItem.stackable ? 'Stackable up to ' + selectedItem.stack_size : 'Not stackable' }}
-                        · {{ selectedItem.bag_slots ? selectedItem.bag_slots + '-slot container' : 'Not a container' }}
-                        · {{ selectedItem.no_drop === 0 ? 'No-drop' : 'Droppable' }}
-                      </p>
+                      <div v-if="selectedItem" class="parcel-item-selection__context">
+                        <div class="parcel-item-selection__traits" aria-label="Selected item properties">
+                          <span>
+                            <i class="fa fa-cubes" aria-hidden="true"></i>
+                            {{ selectedItem.stackable ? 'Stacks to ' + selectedItem.stack_size : 'Single item' }}
+                          </span>
+                          <span>
+                            <i class="fa fa-archive" aria-hidden="true"></i>
+                            {{ selectedItem.bag_slots ? selectedItem.bag_slots + ' container slots' : 'Not a container' }}
+                          </span>
+                          <span :class="{ warning: selectedItem.no_drop === 0 }">
+                            <i :class="selectedItem.no_drop === 0 ? 'fa fa-lock' : 'fa fa-unlock-alt'" aria-hidden="true"></i>
+                            {{ selectedItem.no_drop === 0 ? 'No-drop' : 'Droppable' }}
+                          </span>
+                        </div>
+                        <button type="button" @click="openItemEditor(selectedItem.id)">
+                          <i class="fa fa-external-link mr-1"></i>Open in Item Editor
+                        </button>
+                      </div>
                     </div>
-                    <button type="button" @click="openItemEditor(selectedItem.id)">
-                      <i class="fa fa-external-link mr-1"></i>Item Editor
-                    </button>
                   </div>
 
                   <div v-if="selectedItem && selectedItem.no_drop === 0" class="spire-editor-callout spire-editor-callout--warning">
@@ -2132,6 +2161,12 @@
           this.loadingDirectory = false
         }
       },
+      async refreshDirectory () {
+        await Promise.all([
+          this.loadSummary(),
+          this.loadDirectory(this.currentPage)
+        ])
+      },
       queueDirectorySearch () {
         clearTimeout(this.searchTimer)
         this.searchTimer = setTimeout(() => this.loadDirectory(1), 250)
@@ -2792,6 +2827,21 @@
     gap: 6px;
   }
 
+  .mail-parcels-directory-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 5px;
+  }
+
+  .mail-parcels-directory-actions .btn:first-child {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    min-width: 30px;
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+
   .delivery-status-chip {
     align-items: center;
     border: 1px solid currentColor;
@@ -3089,36 +3139,128 @@
     color: #c9a84b;
   }
 
-  .item-context-card {
+  .parcel-item-selection {
+    background:
+      radial-gradient(circle at 10% 20%, rgba(210, 170, 69, 0.1), transparent 42%),
+      rgba(4, 12, 19, 0.82);
+    border: 1px solid rgba(210, 170, 69, 0.32);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.34);
+  }
+
+  .parcel-item-selection > .parcel-item-selection__main {
     align-items: center;
-    background: rgba(210, 170, 69, 0.07);
-    border: 1px solid rgba(210, 170, 69, 0.25);
+    background: transparent;
+    border: 0;
+    color: #cdd2d6;
+    display: grid;
+    gap: 11px;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    min-height: 66px;
+    padding: 9px 10px;
+    text-align: left;
+    transition: background-color 120ms ease;
+    width: 100%;
+  }
+
+  .parcel-item-selection > .parcel-item-selection__main:hover,
+  .parcel-item-selection > .parcel-item-selection__main:focus-visible {
+    background: rgba(210, 170, 69, 0.09);
+    outline: 1px solid rgba(224, 187, 84, 0.7);
+    outline-offset: -1px;
+  }
+
+  .parcel-item-selection__icon {
+    align-items: center;
+    background: rgba(210, 170, 69, 0.1);
+    border: 1px solid rgba(210, 170, 69, 0.28);
     display: flex;
-    gap: 12px;
-    justify-content: space-between;
-    margin-top: 8px;
-    padding: 10px;
+    height: 46px;
+    justify-content: center;
+    width: 46px;
   }
 
-  .item-context-card h4 {
-    color: #e7ca72;
-    font-size: 12px;
-    margin: 2px 0;
+  .parcel-item-selection__identity {
+    min-width: 0;
   }
 
-  .item-context-card p {
-    color: #8a949d;
-    font-size: 8px;
-    margin: 0;
+  .parcel-item-selection__identity strong,
+  .parcel-item-selection__identity small {
+    display: block;
   }
 
-  .item-context-card button {
-    background: rgba(0, 0, 0, 0.24);
-    border: 1px solid rgba(210, 170, 69, 0.4);
-    color: #d1b65c;
-    font-size: 9px;
-    padding: 5px 7px;
+  .parcel-item-selection__identity strong {
+    color: #e6ca70;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 13px;
+    line-height: 1.2;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .parcel-item-selection__identity small {
+    color: #818d96;
+    font-size: 8px;
+    margin-top: 3px;
+  }
+
+  .parcel-item-selection__change {
+    align-items: center;
+    border: 1px solid rgba(210, 170, 69, 0.38);
+    color: #d4b753;
+    display: inline-flex;
+    font-size: 8px;
+    gap: 5px;
+    padding: 5px 7px;
+    text-transform: uppercase;
+  }
+
+  .parcel-item-selection__context {
+    align-items: center;
+    border-top: 1px solid rgba(178, 191, 204, 0.13);
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 7px 9px;
+  }
+
+  .parcel-item-selection__traits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .parcel-item-selection__traits span {
+    align-items: center;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(178, 191, 204, 0.14);
+    color: #8f9aa3;
+    display: inline-flex;
+    font-size: 7px;
+    gap: 4px;
+    padding: 3px 5px;
+  }
+
+  .parcel-item-selection__traits span.warning {
+    border-color: rgba(224, 169, 63, 0.34);
+    color: #ddb553;
+  }
+
+  .parcel-item-selection__context > button {
+    background: transparent;
+    border: 0;
+    color: #cfb456;
+    flex: 0 0 auto;
+    font-size: 8px;
+    padding: 4px 2px;
+    white-space: nowrap;
+  }
+
+  .parcel-item-selection__context > button:hover,
+  .parcel-item-selection__context > button:focus-visible {
+    color: #f0d373;
+    text-decoration: underline;
   }
 
   .parcel-preview {
@@ -4059,6 +4201,11 @@
 
     .parcel-preview dl {
       grid-template-columns: 1fr;
+    }
+
+    .parcel-item-selection__context {
+      align-items: flex-start;
+      flex-direction: column;
     }
 
     .gm-audience-switch,
