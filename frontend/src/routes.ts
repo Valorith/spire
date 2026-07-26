@@ -62,6 +62,7 @@ export const ROUTE = {
   SPELL_EDIT: "/spell/%s",
   SPELLS_LIST: "/spells",
   AURAS: "/auras",
+  TITLES: "/titles",
   AA_EDITOR: "/aa",
   STRINGS_DATABASE: "/strings-database",
   TASK_EDIT: "/tasks/%s",

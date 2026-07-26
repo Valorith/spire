@@ -133,20 +133,21 @@
 }
 
 .spire-editor-filter button {
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(178, 191, 204, 0.2);
+  background: rgba(0, 0, 0, 0.28) !important;
+  border: 1px solid rgba(178, 191, 204, 0.2) !important;
+  border-radius: 0 !important;
   color: #9ca5ae;
   flex: 1;
-  font-size: 9px;
-  line-height: 1;
+  font-size: 9px !important;
+  line-height: 1 !important;
   min-height: 24px;
-  padding: 5px 4px;
+  padding: 5px 4px !important;
 }
 
 .spire-editor-filter button:hover,
 .spire-editor-filter button.active {
-  background: var(--editor-gold-soft);
-  border-color: rgba(210, 170, 69, 0.56);
+  background: var(--editor-gold-soft) !important;
+  border-color: rgba(210, 170, 69, 0.56) !important;
   color: #edcf74;
 }
 
@@ -172,28 +173,31 @@
 
 .spire-editor-directory-row {
   align-items: center;
-  background: rgba(4, 12, 19, 0.72);
-  border: 1px solid rgba(178, 191, 204, 0.14);
+  background: rgba(4, 12, 19, 0.72) !important;
+  border: 1px solid rgba(178, 191, 204, 0.14) !important;
+  border-radius: 0 !important;
   color: #d6d9dc;
-  display: grid;
+  display: grid !important;
+  font-size: inherit !important;
   gap: 9px;
   grid-template-columns: 35px minmax(0, 1fr) auto;
+  line-height: normal !important;
   min-height: 50px;
-  padding: 6px 8px;
-  text-align: left;
+  padding: 6px 8px !important;
+  text-align: left !important;
   transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
   width: 100%;
 }
 
 .spire-editor-directory-row:hover {
-  background: rgba(24, 34, 43, 0.88);
-  border-color: rgba(210, 170, 69, 0.35);
+  background: rgba(24, 34, 43, 0.88) !important;
+  border-color: rgba(210, 170, 69, 0.35) !important;
   transform: translateX(1px);
 }
 
 .spire-editor-directory-row.active {
-  background: linear-gradient(90deg, rgba(210, 170, 69, 0.2), rgba(17, 27, 36, 0.88));
-  border-color: rgba(210, 170, 69, 0.66);
+  background: linear-gradient(90deg, rgba(210, 170, 69, 0.2), rgba(17, 27, 36, 0.88)) !important;
+  border-color: rgba(210, 170, 69, 0.66) !important;
 }
 
 .spire-editor-directory-icon,
@@ -291,12 +295,14 @@
 
 .spire-editor-pagination button {
   align-items: center;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(178, 191, 204, 0.24);
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(178, 191, 204, 0.24) !important;
+  border-radius: 0 !important;
   color: #b8c0c7;
-  display: flex;
+  display: flex !important;
   height: 26px;
   justify-content: center;
+  padding: 0 !important;
   width: 28px;
 }
 
@@ -373,12 +379,14 @@
 }
 
 .spire-editor-tabs button {
-  background: rgba(0, 0, 0, 0.26);
-  border: 1px solid rgba(178, 191, 204, 0.32);
+  background: rgba(0, 0, 0, 0.26) !important;
+  border: 1px solid rgba(178, 191, 204, 0.32) !important;
+  border-radius: 0 !important;
   color: #c8cdd1;
-  font-size: 10px;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
   min-height: 31px;
-  padding: 6px 10px;
+  padding: 6px 10px !important;
 }
 
 .spire-editor-tabs button + button {
@@ -386,8 +394,8 @@
 }
 
 .spire-editor-tabs button.active {
-  background: rgba(210, 170, 69, 0.12);
-  border-color: rgba(210, 170, 69, 0.6);
+  background: rgba(210, 170, 69, 0.12) !important;
+  border-color: rgba(210, 170, 69, 0.6) !important;
   color: #efd171;
 }
 
@@ -552,20 +560,22 @@
 
 .spire-editor-selector-results button {
   align-items: center;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid rgba(178, 191, 204, 0.11);
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(178, 191, 204, 0.11) !important;
+  border-radius: 0 !important;
   color: #d8dcdf;
-  display: flex;
-  font-size: 10px;
+  display: flex !important;
+  font-size: 10px !important;
   gap: 9px;
-  padding: 8px;
-  text-align: left;
+  line-height: 1.2 !important;
+  padding: 8px !important;
+  text-align: left !important;
   width: 100%;
 }
 
 .spire-editor-selector-results button:hover {
-  background: rgba(210, 170, 69, 0.12);
+  background: rgba(210, 170, 69, 0.12) !important;
 }
 
 .spire-editor-selector-results small {

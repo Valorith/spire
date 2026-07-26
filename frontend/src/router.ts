@@ -143,6 +143,11 @@ const router = new Router({
           meta: {title: "Aura Editor"},
         },
         {
+          path: ROUTE.TITLES,
+          component: () => import('./views/titles/TitleEditor.vue'),
+          meta: {title: "Title Editor"},
+        },
+        {
           path: ROUTE.AA_EDITOR,
           alias: ['/aa/editor', '/aa-editor'],
           component: () => import('./views/aa/AaEditor.vue'),

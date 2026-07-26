@@ -1,6 +1,7 @@
 ## [Unreleased] 7/26/2026
 
 * Add a self-contained Aura Editor with linked spell and NPC context, official EQEmu behavior semantics, and safe create, copy, edit, and delete workflows.
+* Add a self-contained Title Editor with live composed previews, semantic eligibility controls, linked item and character context, title-set assignment management, and orphan-safe deletion.
 
 ## [5.3.0] 7/26/2026
 

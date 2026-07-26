@@ -409,7 +409,7 @@ export default {
       worldDataNav: {
         label: "World Data",
         labelIcon: "ra ra-compass mr-1",
-        routePrefixMatches: ["content-flags", "tasks", "strings-database", "zones"],
+        routePrefixMatches: ["content-flags", "tasks", "strings-database", "titles", "zones"],
         navs: [
           {
             title: "Content Flags",
@@ -430,6 +430,14 @@ export default {
             to: ROUTE.STRINGS_DATABASE,
             icon: "ra ra-scroll-unfurled mr-1",
             routes: ['strings-database']
+          },
+          {
+            title: "Titles",
+            to: ROUTE.TITLES,
+            icon: "ra ra-crown mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['titles']
           },
           {
             title: "Zones",
