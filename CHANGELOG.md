@@ -1,4 +1,4 @@
-## [Unreleased] 7/25/2026
+## [5.3.0] 7/26/2026
 
 * Add an Alternate Currency Editor with token-item recognition, live NPC/task/player usage, guarded transactional deletion, and audited character-balance administration.
 
