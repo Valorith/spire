@@ -243,7 +243,7 @@ test.describe('Content Flag Editor', () => {
     });
   });
 
-  test('groups flags with Zones under World Data and responds at tablet width', async ({ page }) => {
+  test('groups flags, Tasks, and Zones under World Data and responds at tablet width', async ({ page }) => {
     const state: ContentFlagEditorMocks = {};
     await page.setViewportSize({ width: 800, height: 900 });
     await installContentFlagMocks(page, state);
@@ -252,7 +252,9 @@ test.describe('Content Flag Editor', () => {
     const worldDataToggle = page.locator('#sidebar a.nav-link').filter({ hasText: 'World Data' }).first();
     await worldDataToggle.click();
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/content-flags"]')).toBeVisible();
+    await expect(page.locator('#sidebar .nav.nav-sm a[href="/tasks"]')).toBeVisible();
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/zones"]')).toBeVisible();
+    await expect(page.locator('#sidebar a[href="/tasks"]')).toHaveCount(1);
 
     const columns = await page.locator('.content-flag-workspace').evaluate(element =>
       window.getComputedStyle(element).gridTemplateColumns
