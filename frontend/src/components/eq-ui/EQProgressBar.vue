@@ -103,16 +103,18 @@
       rgba(220, 211, 171, 0.88) calc(75% + 1px),
       transparent calc(75% + 1px)
     ),
-    linear-gradient(
+    repeating-linear-gradient(
       to right,
       transparent 0,
-      transparent 7px,
-      rgba(194, 196, 181, 0.58) 7px,
-      rgba(194, 196, 181, 0.58) 8px
+      transparent calc(5% - 0.5px),
+      rgba(194, 196, 181, 0.58) calc(5% - 0.5px),
+      rgba(194, 196, 181, 0.58) calc(5% + 0.5px),
+      transparent calc(5% + 0.5px),
+      transparent 5%
     );
   background-position: left bottom, left bottom;
-  background-repeat: no-repeat, repeat-x;
-  background-size: 100% 4px, 8px 2px;
+  background-repeat: no-repeat;
+  background-size: 100% 4px, 100% 2px;
   bottom: 0;
   content: "";
   height: 4px;
