@@ -207,6 +207,12 @@ async function installPlayerOperationsMocks(page: Page, state: PlayerOperationsM
     if (path === '/character/1' && request.method() === 'GET') {
       return fulfill({ character: state.character, context: characterContext });
     }
+    if (path === '/character/2' && request.method() === 'GET') {
+      return fulfill({
+        character: { ...state.character, id: 2, name: 'Beryl' },
+        context: characterContext,
+      });
+    }
     if (path === '/character/1' && request.method() === 'PATCH') {
       state.characterUpdate = request.postDataJSON();
       state.character = { ...state.character, ...state.characterUpdate };
@@ -283,7 +289,7 @@ async function installPlayerOperationsMocks(page: Page, state: PlayerOperationsM
         },
       });
     }
-    return fulfill([]);
+    return fulfill({ error: `unmocked player-operations route: ${request.method()} ${path}` }, 501);
   });
 }
 
@@ -302,6 +308,13 @@ test.describe('Player Operations', () => {
     await expect(page.getByTestId('player-operations-inspector')).toBeVisible();
     await expect(page.locator('.spire-editor-directory .eq-window-simple')).toBeVisible();
     await expect(page.locator('.spire-editor-inspector .eq-window-simple')).toHaveCount(2);
+    await page.evaluate(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('character', '2');
+      window.history.pushState({ playerOperationsTest: true }, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Beryl');
 
     for (const viewport of [
       { width: 1440, height: 900 },
@@ -344,6 +357,8 @@ test.describe('Player Operations', () => {
     await page.getByRole('button', { name: /CodexAlder Player/ }).click();
     await expect(page.getByRole('heading', { name: 'CodexAlder' })).toBeVisible();
     await expect(page.getByTestId('player-operations-account-delete')).toBeDisabled();
+    await page.locator('#player-operations-account-shared-plat').fill('1251');
+    await expect(page.getByText('Unsaved', { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Access & Safety', exact: true }).click();
     await expect(page.getByText(/Transfer every character, including retired records/)).toBeVisible();
     const sanctionUntil = page.locator('#player-operations-sanction-until');
@@ -353,7 +368,16 @@ test.describe('Player Operations', () => {
     const localSuspension = '2035-01-02T13:45';
     await sanctionUntil.fill(localSuspension);
     await page.locator('#player-operations-sanction-reason').fill('Validating the temporary suspension workflow');
-    await page.getByRole('button', { name: 'Apply restriction' }).click();
+    const sanctionRequest = page.waitForRequest(request =>
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname.endsWith('/player-operations/account/101/sanction')
+    );
+    const discardDialog = page.waitForEvent('dialog');
+    const applyRestriction = page.getByRole('button', { name: 'Apply restriction' }).click();
+    const dialog = await discardDialog;
+    expect(dialog.message()).toContain('Discard unsaved profile changes');
+    await dialog.accept();
+    await Promise.all([sanctionRequest, applyRestriction]);
     expect(state.sanctionUpdate).toBeDefined();
     expect(new Date(String(state.sanctionUpdate?.until)).toISOString()).toBe(new Date(localSuspension).toISOString());
 
@@ -377,8 +401,13 @@ test.describe('Player Operations', () => {
     await page.locator('#player-operations-character-last-name').fill('QAVerified');
     await page.getByRole('checkbox', { name: /GM flagged/ }).check();
     await expect(page.getByText('Unsaved', { exact: true })).toBeVisible();
-    await page.getByTestId('player-operations-save').click();
-    await expect(page.getByTestId('player-operations-save')).toBeDisabled();
+    await Promise.all([
+      page.waitForRequest(request =>
+        request.method() === 'PATCH' &&
+        new URL(request.url()).pathname.endsWith('/player-operations/character/1')
+      ),
+      page.getByTestId('player-operations-save').click(),
+    ]);
     expect(state.characterUpdate).toMatchObject({
       name: 'Alder',
       last_name: 'QAVerified',
@@ -417,5 +446,8 @@ test.describe('Player Operations', () => {
     expect(state.accessUpdate).toBeDefined();
     expect(state.accessUpdate?.reason).toBe('Updating officer access after guild review');
     expect(state.accessUpdate?.ranks).toEqual(expect.arrayContaining([{ rank: 8, title: 'Prospect' }]));
+    const guildInvite = (state.accessUpdate?.permissions as Array<{ id: number; permission: number }>).find(permission => permission.id === 1);
+    expect(Number(guildInvite?.permission) & 1).toBe(1);
+    expect(Number(guildInvite?.permission) & 64).toBe(64);
   });
 });

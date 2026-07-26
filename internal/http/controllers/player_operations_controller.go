@@ -21,9 +21,11 @@ import (
 const (
 	playerOperationsDefaultPageSize = 30
 	playerOperationsMaxPageSize     = 100
+	playerOperationsMaxPage         = 1000
 	playerOperationsLookupLimit     = 20
 	playerOperationsReasonMinLength = 8
 	playerOperationsReasonMaxLength = 240
+	playerOperationsMaxCurrency     = uint64(2147483647)
 )
 
 const (
@@ -403,7 +405,7 @@ type playerOperationsAccountSanctionRequest struct {
 	ExpectedSuspendedAt *time.Time `json:"expected_suspended_until,omitempty"`
 }
 
-type playerOperationsAccountDeleteRequest struct {
+type playerOperationsConfirmedDeleteRequest struct {
 	Confirmation string `json:"confirmation"`
 	Reason       string `json:"reason"`
 }
@@ -539,11 +541,11 @@ func (p *PlayerOperationsController) listCharacters(c echo.Context) error {
 	}
 
 	var total int64
-	if err := base.Distinct("ch.id").Count(&total).Error; err != nil {
+	if err := base.Session(&gorm.Session{}).Distinct("ch.id").Count(&total).Error; err != nil {
 		return playerOperationsDatabaseError(c, err)
 	}
 	results := make([]playerOperationsCharacterSummary, 0)
-	if err := base.Select(`
+	if err := base.Session(&gorm.Session{}).Select(`
 		ch.id,
 		ch.account_id,
 		COALESCE(a.name, CONCAT('Unknown account #', ch.account_id)) AS account_name,
@@ -582,11 +584,11 @@ func (p *PlayerOperationsController) listAccounts(c echo.Context) error {
 		base = base.Where("a.status > 0")
 	}
 	var total int64
-	if err := base.Count(&total).Error; err != nil {
+	if err := base.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return playerOperationsDatabaseError(c, err)
 	}
 	results := make([]playerOperationsAccountSummary, 0)
-	if err := base.Select(`
+	if err := base.Session(&gorm.Session{}).Select(`
 		a.id,
 		a.name,
 		a.status,
@@ -610,17 +612,17 @@ func (p *PlayerOperationsController) listGuilds(c echo.Context) error {
 		base = base.Where("g.name LIKE ? OR leader.name LIKE ? OR CAST(g.id AS CHAR) LIKE ?", like, like, like)
 	}
 	var total int64
-	if err := base.Count(&total).Error; err != nil {
+	if err := base.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return playerOperationsDatabaseError(c, err)
 	}
 	results := make([]playerOperationsGuildSummary, 0)
-	if err := base.Select(`
+	if err := base.Session(&gorm.Session{}).Select(`
 		g.id,
 		g.name,
 		g.leader AS leader_id,
 		COALESCE(leader.name, '') AS leader_name,
 		(SELECT COUNT(*) FROM guild_members gm WHERE gm.guild_id = g.id) AS member_count,
-		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guild_id = g.id) AS bank_items,
+		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guildid = g.id) AS bank_items,
 		g.favor
 	`).Order("g.name, g.id").Limit(limit).Offset((page - 1) * limit).Scan(&results).Error; err != nil {
 		return playerOperationsDatabaseError(c, err)
@@ -682,6 +684,9 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 		return playerOperationsLoadError(c, "Character", err)
 	}
 	before := beforeDetail.Character
+	if before.DeletedAt != nil {
+		return c.JSON(http.StatusConflict, echo.Map{"error": "Restore the character before editing its profile"})
+	}
 	payload := map[string]interface{}{
 		"action": "update", "character_id": id, "character_name": before.Name,
 		"before": before, "after": input,
@@ -701,9 +706,26 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 		"lfp": boolInt(input.LookingForPlayers),
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		var locked struct{ ID int }
-		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Take(&locked).Error; err != nil {
+		var locked struct {
+			ID        int
+			Name      string
+			DeletedAt *time.Time `gorm:"column:deleted_at"`
+		}
+		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id, name, deleted_at").Where("id = ?", id).Take(&locked).Error; err != nil {
 			return err
+		}
+		if locked.DeletedAt != nil {
+			return playerOperationsConflict("Restore the character before editing its profile")
+		}
+		if input.Name != locked.Name {
+			var duplicate int64
+			if err := tx.Table("character_data").Where("name = ? AND id <> ?", input.Name, id).Count(&duplicate).Error; err != nil {
+				return err
+			}
+			if duplicate > 0 {
+				return playerOperationsConflict("Cannot rename %s because that name is already in use", locked.Name)
+			}
 		}
 		if err := tx.Table("character_data").Where("id = ?", id).Updates(updates).Error; err != nil {
 			return err
@@ -801,8 +823,8 @@ func (p *PlayerOperationsController) relocateCharacter(c echo.Context) error {
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid relocation payload"})
 	}
-	if request.ZoneID <= 0 || request.ZoneVersion < 0 {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Select a valid zone and version"})
+	if request.ZoneID <= 0 || request.ZoneVersion != 0 {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Select a valid base zone"})
 	}
 	if err := validatePlayerOperationsReason(request.Reason); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
@@ -852,7 +874,7 @@ func (p *PlayerOperationsController) relocateCharacter(c echo.Context) error {
 			return playerOperationsConflict("Character location changed; refresh before moving")
 		}
 		return tx.Table("character_data").Where("id = ?", id).Updates(map[string]interface{}{
-			"zone_id": request.ZoneID, "zone_instance": request.ZoneVersion,
+			"zone_id": request.ZoneID, "zone_instance": 0,
 			"x": x, "y": y, "z": z, "heading": heading,
 		}).Error
 	}); err != nil {
@@ -988,6 +1010,9 @@ func (p *PlayerOperationsController) updateCharacterCurrency(c echo.Context) err
 	if err := validatePlayerOperationsReason(request.Reason); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
+	if !playerOperationsCurrencyWithinBounds(request.Currency) || !playerOperationsCurrencyWithinBounds(request.Expected) {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Currency values cannot exceed %d", playerOperationsMaxCurrency)})
+	}
 	db := p.db.Get(models.CharacterCurrency{}, c)
 	var character struct{ Name string }
 	if err := db.Table("character_data").Select("name").Where("id = ? AND deleted_at IS NULL", id).Take(&character).Error; err != nil {
@@ -1090,6 +1115,9 @@ func (p *PlayerOperationsController) changeCharacterLifecycle(c echo.Context, re
 				return playerOperationsConflict("Character is already retired")
 			}
 			retiredName := playerOperationsRetiredName(locked.Name, id)
+			if retiredName == "" {
+				return playerOperationsConflict("Cannot retire %s because its name is too long for the reversible retirement marker", locked.Name)
+			}
 			return tx.Table("character_data").Where("id = ?", id).Updates(map[string]interface{}{
 				"name": retiredName, "deleted_at": time.Now(), "ingame": 0,
 			}).Error
@@ -1250,7 +1278,7 @@ func (p *PlayerOperationsController) deleteAccount(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	var request playerOperationsAccountDeleteRequest
+	var request playerOperationsConfirmedDeleteRequest
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid account deletion payload"})
 	}
@@ -1411,8 +1439,8 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		return playerOperationsAuditError(c, err)
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		var locked playerOperationsGuild
-		if err := tx.Table("guilds").Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Take(&locked).Error; err != nil {
+		var locked struct{ ID int }
+		if err := tx.Table("guilds").Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", id).Take(&locked).Error; err != nil {
 			return err
 		}
 		var duplicate int64
@@ -1421,6 +1449,9 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		}
 		if duplicate > 0 {
 			return playerOperationsConflict("A guild named %s already exists", strings.TrimSpace(input.Name))
+		}
+		if err := tx.Table("guild_members").Where("guild_id = ? AND rank = 1", id).Update("rank", 2).Error; err != nil {
+			return err
 		}
 		if input.LeaderID > 0 {
 			if err := playerOperationsEnsureCharacter(tx, input.LeaderID); err != nil {
@@ -1432,9 +1463,6 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 			}
 			if membership == 0 {
 				return playerOperationsConflict("Select a current guild member as leader")
-			}
-			if err := tx.Table("guild_members").Where("guild_id = ? AND rank = 1", id).Update("rank", 2).Error; err != nil {
-				return err
 			}
 			if err := tx.Table("guild_members").Where("guild_id = ? AND char_id = ?", id, input.LeaderID).Update("rank", 1).Error; err != nil {
 				return err
@@ -1461,7 +1489,7 @@ func (p *PlayerOperationsController) deleteGuild(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	var request playerOperationsAccountDeleteRequest
+	var request playerOperationsConfirmedDeleteRequest
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid guild deletion payload"})
 	}
@@ -1492,14 +1520,19 @@ func (p *PlayerOperationsController) deleteGuild(c echo.Context) error {
 			return err
 		}
 		var bankCount int64
-		if err := tx.Table("guild_bank").Where("guild_id = ?", id).Count(&bankCount).Error; err != nil {
+		if err := tx.Table("guild_bank").Where("guildid = ?", id).Count(&bankCount).Error; err != nil {
 			return err
 		}
 		if bankCount > 0 {
 			return playerOperationsConflict("Guild bank contains %d item(s); clear or transfer them before disbanding", bankCount)
 		}
-		for _, table := range []string{"guild_members", "guild_ranks", "guild_permissions", "guild_tributes"} {
+		for _, table := range []string{"guild_members", "guild_ranks", "guild_permissions"} {
 			if err := tx.Table(table).Where("guild_id = ?", id).Delete(nil).Error; err != nil {
+				return err
+			}
+		}
+		if tx.Migrator().HasTable("guild_tributes") {
+			if err := tx.Table("guild_tributes").Where("guild_id = ?", id).Delete(nil).Error; err != nil {
 				return err
 			}
 		}
@@ -1534,18 +1567,18 @@ func (p *PlayerOperationsController) changeGuildMember(c echo.Context, action st
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	var input playerOperationsGuildMemberInput
-	if action == "remove" || action == "update" {
-		input.CharacterID, err = playerOperationsPositiveParam(c, "character_id", "Character")
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
-		}
-	}
 	if action == "remove" {
 		if err := c.Bind(&input); err != nil {
 			return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid member removal payload"})
 		}
 	} else if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid guild member payload"})
+	}
+	if action == "remove" || action == "update" {
+		input.CharacterID, err = playerOperationsPositiveParam(c, "character_id", "Character")
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+		}
 	}
 	if input.CharacterID <= 0 || input.Rank < 0 || input.Rank > 255 {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Character and rank values are invalid"})
@@ -1768,9 +1801,11 @@ func (p *PlayerOperationsController) lookupCharacters(c echo.Context) error {
 		Joins("LEFT JOIN guild_members gm ON gm.char_id = ch.id").
 		Joins("LEFT JOIN guilds g ON g.id = gm.guild_id").
 		Joins("LEFT JOIN zone z ON z.zoneidnumber = ch.zone_id AND z.version = 0").
-		Where("ch.deleted_at IS NULL AND ch.name LIKE ?", like)
+		Where("ch.deleted_at IS NULL")
 	if id, err := strconv.Atoi(search); err == nil && id > 0 {
-		query = query.Where("ch.id = ? OR ch.name LIKE ?", id, like)
+		query = query.Where("(ch.id = ? OR ch.name LIKE ?)", id, like)
+	} else {
+		query = query.Where("ch.name LIKE ?", like)
 	}
 	if err := query.Select(`
 		ch.id, ch.account_id, COALESCE(a.name, '') AS account_name, ch.name, ch.race, ch.class,
@@ -1795,7 +1830,7 @@ func (p *PlayerOperationsController) lookupGuilds(c echo.Context) error {
 	if err := query.Select(`
 		g.id, g.name, g.leader AS leader_id, COALESCE(leader.name, '') AS leader_name,
 		(SELECT COUNT(*) FROM guild_members gm WHERE gm.guild_id = g.id) AS member_count,
-		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guild_id = g.id) AS bank_items, g.favor
+		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guildid = g.id) AS bank_items, g.favor
 	`).Order("g.name, g.id").Limit(playerOperationsLookupLimit).Scan(&results).Error; err != nil {
 		return playerOperationsDatabaseError(c, err)
 	}
@@ -1806,7 +1841,7 @@ func (p *PlayerOperationsController) lookupZones(c echo.Context) error {
 	db := p.db.Get(models.Zone{}, c)
 	search := strings.TrimSpace(c.QueryParam("q"))
 	results := make([]playerOperationsZone, 0)
-	query := db.Table("zone")
+	query := db.Table("zone").Where("version = 0")
 	if search != "" {
 		like := "%" + search + "%"
 		query = query.Where("short_name LIKE ? OR long_name LIKE ? OR CAST(zoneidnumber AS CHAR) LIKE ?", like, like, like)
@@ -1856,11 +1891,19 @@ func loadPlayerOperationsCharacterDetail(db *gorm.DB, id int) (playerOperationsC
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return detail, err
 	}
-	if err := db.Table("zone").Select(`
-		zoneidnumber AS id, version, COALESCE(short_name, '') AS short_name, long_name,
-		safe_x, safe_y, safe_z, safe_heading
-	`).Where("zoneidnumber = ? AND version = ?", detail.Character.ZoneID, detail.Character.ZoneInstance).
-		Take(&detail.Context.Zone).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	zoneQuery := db.Table("zone z").Select(`
+		z.zoneidnumber AS id, z.version, COALESCE(z.short_name, '') AS short_name, z.long_name,
+		z.safe_x, z.safe_y, z.safe_z, z.safe_heading
+	`).Where("z.zoneidnumber = ?", detail.Character.ZoneID)
+	if detail.Character.ZoneInstance > 0 {
+		zoneQuery = zoneQuery.Joins(
+			"JOIN instance_list il ON il.id = ? AND il.zone = z.zoneidnumber AND il.version = z.version",
+			detail.Character.ZoneInstance,
+		)
+	} else {
+		zoneQuery = zoneQuery.Where("z.version = 0")
+	}
+	if err := zoneQuery.Take(&detail.Context.Zone).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return detail, err
 	}
 	currency, err := loadPlayerOperationsCurrency(db, id, false)
@@ -1961,16 +2004,22 @@ func loadPlayerOperationsAccountDetail(db *gorm.DB, id int) (playerOperationsAcc
 		return detail, err
 	}
 	detail.IPs = make([]playerOperationsAccountIP, 0)
-	if err := db.Table("account_ip").Select("ip, count, lastused AS last_used").Where("accid = ?", id).Order("lastused DESC").Scan(&detail.IPs).Error; err != nil {
-		return detail, err
+	if db.Migrator().HasTable("account_ip") {
+		if err := db.Table("account_ip").Select("ip, count, lastused AS last_used").Where("accid = ?", id).Order("lastused DESC").Scan(&detail.IPs).Error; err != nil {
+			return detail, err
+		}
 	}
 	detail.Flags = make([]playerOperationsAccountFlag, 0)
-	if err := db.Table("account_flags").Select("p_flag AS name, p_value AS value").Where("p_accid = ?", id).Order("p_flag").Scan(&detail.Flags).Error; err != nil {
-		return detail, err
+	if db.Migrator().HasTable("account_flags") {
+		if err := db.Table("account_flags").Select("p_flag AS name, p_value AS value").Where("p_accid = ?", id).Order("p_flag").Scan(&detail.Flags).Error; err != nil {
+			return detail, err
+		}
 	}
 	detail.Rewards = make([]playerOperationsAccountReward, 0)
-	if err := db.Table("account_rewards").Select("reward_id, amount").Where("account_id = ?", id).Order("reward_id").Scan(&detail.Rewards).Error; err != nil {
-		return detail, err
+	if db.Migrator().HasTable("account_rewards") {
+		if err := db.Table("account_rewards").Select("reward_id, amount").Where("account_id = ?", id).Order("reward_id").Scan(&detail.Rewards).Error; err != nil {
+			return detail, err
+		}
 	}
 	return detail, nil
 }
@@ -2023,7 +2072,7 @@ func loadPlayerOperationsGuildDetail(db *gorm.DB, id int) (playerOperationsGuild
 		return detail, err
 	}
 	if err := db.Table("guild_bank").Select("COUNT(*) AS item_count, COUNT(DISTINCT CONCAT(area, ':', slot)) AS slots_used").
-		Where("guild_id = ?", id).Scan(&detail.Bank).Error; err != nil {
+		Where("guildid = ?", id).Scan(&detail.Bank).Error; err != nil {
 		return detail, err
 	}
 	detail.Relations = make([]playerOperationsGuildRelation, 0)
@@ -2181,9 +2230,30 @@ func playerOperationsRetiredName(name string, id int) string {
 	base := strings.TrimSpace(name)
 	suffix := fmt.Sprintf("-deleted-%d", id)
 	if len(base)+len(suffix) > 64 {
-		base = base[:64-len(suffix)]
+		return ""
 	}
 	return base + suffix
+}
+
+func playerOperationsCurrencyWithinBounds(currency playerOperationsCurrency) bool {
+	values := []uint64{
+		currency.Platinum,
+		currency.Gold,
+		currency.Silver,
+		currency.Copper,
+		currency.PlatinumBank,
+		currency.GoldBank,
+		currency.SilverBank,
+		currency.CopperBank,
+		currency.RadiantCrystal,
+		currency.EbonCrystal,
+	}
+	for _, value := range values {
+		if value > playerOperationsMaxCurrency {
+			return false
+		}
+	}
+	return true
 }
 
 func playerOperationsRestoreName(name string) string {
@@ -2213,6 +2283,9 @@ func playerOperationsPagination(c echo.Context) (int, int) {
 	}
 	if limit > playerOperationsMaxPageSize {
 		limit = playerOperationsMaxPageSize
+	}
+	if page > playerOperationsMaxPage {
+		page = playerOperationsMaxPage
 	}
 	return page, limit
 }
@@ -2248,11 +2321,13 @@ func playerOperationsLoadError(c echo.Context, label string, err error) error {
 }
 
 func playerOperationsAuditError(c echo.Context, err error) error {
-	return c.JSON(http.StatusServiceUnavailable, echo.Map{"error": fmt.Sprintf("Required operation audit could not be saved: %v", err)})
+	c.Logger().Errorf("Required player operations audit could not be saved: %v", err)
+	return c.JSON(http.StatusServiceUnavailable, echo.Map{"error": "Required operation audit could not be saved"})
 }
 
 func playerOperationsDatabaseError(c echo.Context, err error) error {
-	return c.JSON(http.StatusInternalServerError, echo.Map{"error": fmt.Sprintf("Player operations database error: %v", err)})
+	c.Logger().Errorf("Player operations database error: %v", err)
+	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Player operations database error"})
 }
 
 func (p *PlayerOperationsController) writeAudit(c echo.Context, event string, payload interface{}) (uint, error) {
