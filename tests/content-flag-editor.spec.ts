@@ -176,6 +176,7 @@ test.describe('Content Flag Editor', () => {
     await page.goto('/content-flags?flag=2');
 
     await expect(page.getByTestId('content-flag-inspector')).toBeVisible();
+    await expect(page.getByTestId('content-flag-copy')).toHaveText('Copy');
     await expect(page.getByTestId('content-flag-name')).toHaveValue('don_nest_unlocked');
     await page.getByTestId('content-flag-name').fill('don_nest_complete');
     await expect(page.getByTestId('content-flag-rename-notice')).toContainText(

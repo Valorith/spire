@@ -223,10 +223,11 @@
                   v-if="!isCreating"
                   size="sm"
                   variant="outline-warning"
-                  title="Create a new flag using this record as a starting point"
-                  @click="createSimilar"
+                  title="Copy this flag into a new draft"
+                  data-testid="content-flag-copy"
+                  @click="copyFlag"
                 >
-                  <i class="fa fa-copy mr-1"></i>Similar
+                  <i class="fa fa-copy mr-1"></i>Copy
                 </b-button>
                 <b-button
                   v-if="!isCreating"
@@ -852,7 +853,7 @@
         await this.updateRoute()
         this.$nextTick(() => document.getElementById('content-flag-name')?.focus())
       },
-      createSimilar () {
+      copyFlag () {
         this.createDraft(this.editModel)
       },
       resetEditor () {
