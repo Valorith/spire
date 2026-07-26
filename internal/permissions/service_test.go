@@ -47,3 +47,11 @@ func TestFactionEditorIsRegisteredAsManualResource(t *testing.T) {
 		t.Fatalf("Faction Editor resource = %#v, want [faction-editor]", prefixes)
 	}
 }
+
+func TestContentFlagEditorIsRegisteredAsManualResource(t *testing.T) {
+	resources := (&Service{}).RegisterManualResources()
+	prefixes, ok := resources["Content Flag Editor"]
+	if !ok || len(prefixes) != 1 || prefixes[0] != "content-flag-editor" {
+		t.Fatalf("Content Flag Editor resource = %#v, want [content-flag-editor]", prefixes)
+	}
+}

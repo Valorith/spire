@@ -68,18 +68,14 @@ export default {
   },
   methods: {
     calcAvailableOptions() {
-      console.log("calcing options", this.inputVal)
       this.availableOptions = this.options.filter(opt => this.inputVal.indexOf(opt) === -1)
-      console.log(this.availableOptions)
     },
   },
 
   watch: {
     value: {
-      handler(newVal) {
-        console.log("[ContentFlagSelector] value watcher [%s]", this.value)
+      handler() {
         setTimeout(() => {
-          console.log("firing options")
           this.calcAvailableOptions()
         }, 100)
       },
@@ -91,8 +87,6 @@ export default {
     inputVal: {
       get() {
         let val = this.value
-
-        console.log("[ContentFlagSelector] value computed [%s]", val)
 
         if (typeof val === 'undefined' || val === null) {
           return []
@@ -110,8 +104,6 @@ export default {
       },
       set(val) {
         const string = val ? val.join(",") : ""
-
-        console.log("[ContentFlagSelector] value computed set [%s]", string)
 
         // loop avoidance - keep from circular updating
         if (this.value !== string) {

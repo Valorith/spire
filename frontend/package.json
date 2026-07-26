@@ -9,7 +9,7 @@
     "serve": "npm run build:eqsage-embed && cross-env NODE_OPTIONS=--openssl-legacy-provider node --max_old_space_size=4096 --stack-size=10000 node_modules/@vue/cli-service/bin/vue-cli-service.js serve --host=0.0.0.0",
     "build:vue": "cross-env NODE_OPTIONS=--openssl-legacy-provider NODE_ENV=production node --max_old_space_size=4096 --stack-size=10000 node_modules/@vue/cli-service/bin/vue-cli-service.js build --nomaps",
     "build": "npm run build:eqsage-embed && npm run build:vue && node scripts/sync-eqsage-embed.js",
-    "lint": "vue-cli-service lint"
+    "lint": "vue-cli-service lint --no-fix --format stylish"
   },
   "dependencies": {
     "@exuanbo/file-icons-js": "^3.3.0",

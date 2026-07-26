@@ -47,8 +47,9 @@ func NewService(
 // these are routes that manipulate the database that do not fall under CRUD routes
 func (s *Service) RegisterManualResources() map[string][]string {
 	return map[string][]string{
-		"Client Files":   {"client-file"},
-		"Faction Editor": {"faction-editor"},
+		"Client Files":        {"client-file"},
+		"Faction Editor":      {"faction-editor"},
+		"Content Flag Editor": {"content-flag-editor"},
 
 		// admin server
 		"Server Configuration":    {"admin/serverconfig"},

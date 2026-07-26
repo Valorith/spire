@@ -34,6 +34,7 @@ export const ROUTE = {
   SPIRE_INITIALIZE: "/initialize",
   LOOT: "/loot",
   FACTIONS: "/factions",
+  CONTENT_FLAGS: "/content-flags",
   LOGIN: "/login",
   LOGOUT: "/logout",
   HOME: "/",

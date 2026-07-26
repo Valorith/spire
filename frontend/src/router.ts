@@ -174,6 +174,11 @@ const router = new Router({
           meta: {title: "Faction Editor"},
         },
         {
+          path: ROUTE.CONTENT_FLAGS,
+          component: () => import('./views/content-flags/ContentFlagEditor.vue'),
+          meta: {title: "Content Flag Editor"},
+        },
+        {
           path: ROUTE.ZONES,
           component: () => import('./views/zone/Zones.vue'),
           meta: {title: "Zones"},

@@ -67,12 +67,13 @@
               </router-link>
             </li>
 
-            <nav-section-component
-              v-for="nav in adminNavs"
-              :key="nav.label"
-              :config="nav"
-              v-if="isInAdmin()"
-            />
+            <template v-if="isInAdmin()">
+              <nav-section-component
+                v-for="nav in adminNavs"
+                :key="nav.label"
+                :config="nav"
+              />
+            </template>
 
           </ul>
 
@@ -108,6 +109,8 @@
 
             <nav-section-component :config="npcNav"/>
 
+            <nav-section-component :config="worldDataNav"/>
+
             <li class="nav-item">
               <router-link class="nav-link " to="/quest-api-explorer">
                 <i class="ra ra-compass mr-1"></i> Quest API Explorer
@@ -133,14 +136,6 @@
             </li>
             <nav-section-component :config="viewerNav"/>
 
-            <li class="nav-item">
-              <router-link class="nav-link " to="/zones">
-                <i class="ra ra-wooden-sign mr-2"></i> Zones
-                <b-badge class="ml-3" variant="primary">NEW!</b-badge>
-                <b-badge class="ml-3" variant="primary">ALPHA</b-badge>
-              </router-link>
-            </li>
-
           </ul>
 
           <!-- Heading -->
@@ -164,7 +159,7 @@
               </a>
               <div :class="'collapse ' + (hasRoute('components') ? 'show' : '')" id="sidebarComponents">
                 <ul class="nav nav-sm flex-column">
-                  <li v-for="nav in componentNavs">
+                  <li v-for="nav in componentNavs" :key="nav.to">
                     <router-link class="nav-link" :to="nav.to">{{ nav.title }}</router-link>
                   </li>
                 </ul>
@@ -410,6 +405,29 @@ export default {
             isNew: true,
             isAlpha: true,
             routes: ['factions']
+          },
+        ]
+      },
+      worldDataNav: {
+        label: "World Data",
+        labelIcon: "ra ra-compass mr-1",
+        routePrefixMatches: ["content-flags", "zones"],
+        navs: [
+          {
+            title: "Content Flags",
+            to: ROUTE.CONTENT_FLAGS,
+            icon: "fa fa-flag mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['content-flags']
+          },
+          {
+            title: "Zones",
+            to: ROUTE.ZONES,
+            icon: "ra ra-wooden-sign mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['zones']
           },
         ]
       },
@@ -681,6 +699,7 @@ export default {
         [this.botNav],
         [this.itemNav],
         [this.npcNav],
+        [this.worldDataNav],
         [this.viewerNav],
         [this.spireApiNav],
         [this.componentNavs],
@@ -699,7 +718,6 @@ export default {
         { name: "[Quest API] Explorer", route: ROUTE.QUEST_API_EXPLORER },
         { name: "[Quest API] Explorer (Perl)", route: `${ROUTE.QUEST_API_EXPLORER}?lang=perl` },
         { name: "[Quest API] Explorer (Lua)", route: `${ROUTE.QUEST_API_EXPLORER}?lang=lua` },
-        { name: "Zones", route: ROUTE.ZONES },
       ]
 
       for (let m of manualRoutes) {

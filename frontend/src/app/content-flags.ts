@@ -4,6 +4,10 @@ import {SpireApi} from "./api/spire-api";
 export class ContentFlags {
   public static flags = <any>[]
 
+  public static clear() {
+    this.flags = []
+  }
+
   public static async get() {
     if (this.flags && this.flags.length > 0) {
       return this.flags
