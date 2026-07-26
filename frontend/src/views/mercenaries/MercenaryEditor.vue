@@ -791,7 +791,6 @@
       else if (field === 'is_suspended') result[field] = Boolean(record[field])
       else result[field] = Number(record[field] || 0)
     })
-    if (!result.merc_size) result.merc_size = 5
     return result
   }
 
@@ -985,7 +984,10 @@
         if (id && id !== Number(this.selectedID)) this.loadDetail(id)
       },
       '$route.query.tab' (value) {
-        if (TABS.includes(value) && value !== this.selectedTab) this.selectedTab = value
+        if (TABS.includes(value) && value !== this.selectedTab) {
+          this.selectedTab = value
+          if (value === 'Audit Trail' && !this.auditEntries.length && !this.isCreating) this.loadAudit()
+        }
       }
     },
     created () {
@@ -1003,6 +1005,14 @@
     },
     beforeRouteLeave (to, from, next) {
       if (this.hasUnsavedChanges && !window.confirm('Discard unsaved mercenary changes?')) return next(false)
+      next()
+    },
+    beforeRouteUpdate (to, from, next) {
+      const nextID = Number(to.query.mercenary || 0)
+      const changesMercenary = nextID && nextID !== Number(this.selectedID)
+      if (changesMercenary && this.hasUnsavedChanges && !window.confirm('Discard unsaved mercenary changes?')) {
+        return next(false)
+      }
       next()
     },
     methods: {
@@ -1112,6 +1122,7 @@
         this.isCreating = false
         this.auditEntries = []
         this.auditError = ''
+        if (this.selectedTab === 'Audit Trail') this.loadAudit()
       },
       createDraft () {
         if (this.hasUnsavedChanges && !window.confirm('Discard unsaved mercenary changes?')) return
@@ -1139,13 +1150,14 @@
         if (!this.canSave) return
         this.saving = true
         try {
-          const response = this.isCreating
+          const wasCreating = this.isCreating
+          const response = wasCreating
             ? await SpireApi.v1().put('/mercenary-editor/mercenary', this.payload())
             : await SpireApi.v1().patch(`/mercenary-editor/mercenary/${this.selectedID}`, this.payload())
           this.applyDetail(response.data)
           await this.loadDirectory()
           this.updateRoute()
-          this.showNotification(this.isCreating ? 'Mercenary created' : 'Mercenary saved')
+          this.showNotification(wasCreating ? 'Mercenary created' : 'Mercenary saved')
         } catch (error) {
           this.showNotification(this.errorMessage(error, 'Unable to save mercenary'), 'error')
         } finally {

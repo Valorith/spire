@@ -353,6 +353,104 @@ test.describe('Mercenary Editor', () => {
     await expect(page.getByRole('tab', { name: 'Owner & State', exact: true })).toBeVisible();
   });
 
+  test('preserves a loaded zero size and labels a successful creation correctly', async ({ page }) => {
+    const state: MercenaryState = {
+      mercenaries: [{ ...mercenary, merc_size: 0 }],
+      buffs: [],
+      audit: [],
+      deletedBuffs: [],
+    };
+    await installMercenaryMocks(page, state);
+    await page.goto('/mercenaries?mercenary=940001');
+
+    await expect(page.locator('#mercenary-size')).toHaveValue('0');
+
+    await page.getByTestId('mercenary-new').click();
+    await page.locator('#mercenary-name').fill('New Mercenary');
+    await page.getByRole('tab', { name: 'Owner & State', exact: true }).click();
+    await page.getByLabel('Find owner character').fill('Mera');
+    await page.locator('.mercenary-lookup-results').getByRole('button', { name: /MeraStone/ }).click();
+    await expect(page.getByTestId('mercenary-save')).toBeEnabled();
+    await page.getByTestId('mercenary-save').click();
+
+    await expect(page.locator('.spire-editor-notification')).toHaveText(/Mercenary created/);
+    expect(state.createPayload).toMatchObject({
+      name: 'New Mercenary',
+      owner_character_id: owner.id,
+      merc_size: 5,
+    });
+  });
+
+  test('guards route-driven mercenary changes when the editor is dirty', async ({ page }) => {
+    const secondMercenary = {
+      ...mercenary,
+      merc_id: 940002,
+      slot: 1,
+      name: 'Bryn Ward',
+    };
+    const state: MercenaryState = {
+      mercenaries: [{ ...mercenary }, secondMercenary],
+      buffs: [],
+      audit: [],
+      deletedBuffs: [],
+    };
+    await installMercenaryMocks(page, state);
+    await page.goto('/mercenaries?mercenary=940001');
+
+    await page.locator('#mercenary-name').fill('Unsaved Alden');
+    const discardDialogPromise = page.waitForEvent('dialog');
+    const rejectedNavigation = page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?mercenary=940002');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+    const discardDialog = await discardDialogPromise;
+    expect(discardDialog.message()).toBe('Discard unsaved mercenary changes?');
+    await discardDialog.dismiss();
+    await rejectedNavigation;
+
+    await expect(page.locator('#mercenary-name')).toHaveValue('Unsaved Alden');
+    await expect(page).toHaveURL(/mercenary=940001/);
+
+    const acceptDialogPromise = page.waitForEvent('dialog');
+    const acceptedNavigation = page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?mercenary=940002');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+    const acceptDialog = await acceptDialogPromise;
+    await acceptDialog.accept();
+    await acceptedNavigation;
+
+    await expect(page.getByTestId('mercenary-inspector').locator('h2')).toHaveText('Bryn Ward');
+  });
+
+  test('loads audit data for route-driven and initial audit tabs', async ({ page }) => {
+    const state: MercenaryState = {
+      mercenaries: [{ ...mercenary }],
+      buffs: [],
+      audit: [{
+        id: 77,
+        event_name: 'MERCENARY_UPDATE',
+        user_name: 'QA Operator',
+        created_at: '2026-07-26T20:00:00Z',
+        data: { reason: 'Route audit regression coverage' },
+      }],
+      deletedBuffs: [],
+    };
+    await installMercenaryMocks(page, state);
+    await page.goto('/mercenaries?mercenary=940001');
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/mercenaries?tab=Audit%20Trail&mercenary=940001');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+    await expect(page.locator('.mercenary-audit-list')).toContainText('QA Operator');
+
+    await page.goto('/mercenaries?tab=Audit%20Trail&mercenary=940001');
+
+    await expect(page.locator('.mercenary-audit-list')).toContainText('QA Operator');
+    await expect(page.locator('.mercenary-audit-list')).toContainText('Route audit regression coverage');
+  });
+
   test('requires explicit confirmation for copy and exact-name guarded deletion', async ({ page }) => {
     const state: MercenaryState = {
       mercenaries: [{ ...mercenary }],
