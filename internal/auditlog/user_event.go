@@ -1,6 +1,7 @@
 package auditlog
 
 import (
+	"errors"
 	"fmt"
 	"github.com/EQEmuTools/spire/internal/database"
 	"github.com/EQEmuTools/spire/internal/discord"
@@ -38,28 +39,67 @@ const (
 )
 
 func (e *UserEvent) LogUserEvent(c echo.Context, eventName string, description string) {
+	_, _ = e.logUserEvent(c, eventName, description, false)
+}
+
+// LogEditorEvent persists an auditable editor mutation and returns the new
+// audit-log identifier. Unlike the legacy best-effort logger, local/default
+// development connections are recorded with connection ID 0 so sensitive
+// editor operations never succeed without a trace.
+func (e *UserEvent) LogEditorEvent(c echo.Context, eventName string, description string) (uint, error) {
+	return e.logUserEvent(c, eventName, description, true)
+}
+
+// ActiveConnectionID returns the authenticated user's active Spire database
+// connection ID. Local/default development sessions use zero.
+func (e *UserEvent) ActiveConnectionID(c echo.Context) uint {
+	user := request.GetUser(c)
+	connectionIdKey := fmt.Sprintf("active-connection-%v", user.ID)
+	cachedConn, found := e.cache.Get(connectionIdKey)
+	if !found {
+		return 0
+	}
+	connectionID, ok := cachedConn.(uint)
+	if !ok {
+		return 0
+	}
+	return connectionID
+}
+
+func (e *UserEvent) logUserEvent(
+	c echo.Context,
+	eventName string,
+	description string,
+	requirePersisted bool,
+) (uint, error) {
 	// request user context
 	user := request.GetUser(c)
 
 	// create
 	var event models.UserEventLog
 	event.UserId = user.ID
+	event.ServerDatabaseConnectionId = e.ActiveConnectionID(c)
 
-	// key for the users database connection identifier
-	connectionIdKey := fmt.Sprintf("active-connection-%v", user.ID)
-	cachedConn, found := e.cache.Get(connectionIdKey)
+	if event.ServerDatabaseConnectionId == 0 && !requirePersisted {
+		return 0, nil
+	}
+	if e.db.GetSpireDb() == nil {
+		if requirePersisted {
+			return 0, errors.New("Spire audit database is unavailable")
+		}
+		return 0, nil
+	}
 
-	// found cached connection
-	if found {
-		connectionId := cachedConn.(uint)
-		event.ServerDatabaseConnectionId = connectionId
+	event.EventName = eventName
+	event.Data = description
+	if err := e.db.GetSpireDb().Create(&event).Error; err != nil {
+		if requirePersisted {
+			return 0, err
+		}
+		return 0, nil
 	}
 
 	if event.ServerDatabaseConnectionId > 0 {
-		event.EventName = eventName
-		event.Data = description
-		_ = e.db.GetSpireDb().Create(&event)
-
 		conn := e.db.GetUserConnection(user)
 		if len(conn.ServerDatabaseConnection.DiscordWebhookUrl) > 0 {
 			// connection webhook
@@ -82,4 +122,6 @@ func (e *UserEvent) LogUserEvent(c echo.Context, eventName string, description s
 			}
 		}
 	}
+
+	return event.ID, nil
 }

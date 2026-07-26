@@ -31,6 +31,7 @@ export const ROUTE = {
   ITEM_VIEWER: "/item-viewer",
   ITEMS_LIST: "/items",
   ITEMS_EVOLVING: "/items/evolving",
+  ALTERNATE_CURRENCIES: "/alternate-currencies",
   SPIRE_INITIALIZE: "/initialize",
   LOOT: "/loot",
   FACTIONS: "/factions",

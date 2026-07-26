@@ -159,6 +159,11 @@ const router = new Router({
           meta: {title: "Evolving Items"},
         },
         {
+          path: ROUTE.ALTERNATE_CURRENCIES,
+          component: () => import('./views/alternate-currencies/AlternateCurrencyEditor.vue'),
+          meta: {title: "Alternate Currency Editor"},
+        },
+        {
           path: util.format(ROUTE.ITEM_EDIT, ":id"),
           component: () => import('./views/items/ItemEditor.vue'),
           meta: {title: "Item Edit"},

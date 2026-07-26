@@ -314,7 +314,7 @@ export default {
       itemNav: {
         label: "Items",
         labelIcon: "ra ra-relic-blade mr-1",
-        routePrefixMatches: ["/items", "/item/", "/tradeskills"],
+        routePrefixMatches: ["/items", "/item/", "/tradeskills", "/alternate-currencies"],
         navs: [
           {
             title: "Items",
@@ -329,6 +329,14 @@ export default {
             isNew: true,
             isAlpha: true,
             routes: ['/items/evolving']
+          },
+          {
+            title: "Alternate Currencies",
+            to: ROUTE.ALTERNATE_CURRENCIES,
+            icon: "fa fa-money mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['/alternate-currencies']
           },
           {
             title: "Tradeskills",
