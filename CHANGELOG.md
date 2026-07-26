@@ -1,4 +1,4 @@
-## [Unreleased] 7/26/2026
+## [5.4.0] 7/26/2026
 
 * Added an Aura Editor.
 * Added a Title Editor.
