@@ -1,4 +1,4 @@
-## [Unreleased] 7/25/2026
+## [5.2.0] 7/26/2026
 
 * New Content Flag Editor added.
 
