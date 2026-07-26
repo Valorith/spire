@@ -185,17 +185,28 @@ test.describe('Aura Editor', () => {
     await expect(page.getByTestId('aura-save')).toBeDisabled();
   });
 
-  test('reuses the Spell Editor cast-time simulator with Aura seconds converted to milliseconds', async ({ page }) => {
+  test('places the Spell Editor cast-time simulator beneath the Aura field with seconds converted to milliseconds', async ({ page }) => {
     const state: AuraMockState = { auras: [{ ...aura }], deleteRequests: 0 };
     await installAuraMocks(page, state);
     await page.goto('/auras?aura=100');
 
     const numeric = page.locator('#aura-cast-time');
     const simulator = page.getByTestId('aura-cast-time-simulator');
+    const castTimeField = numeric.locator('..');
+    const runtimeSummary = page.locator('.spire-editor-context-card--gold');
     await expect(numeric).toHaveValue('-1');
+    await expect(castTimeField.getByTestId('aura-cast-time-simulator')).toBeVisible();
+    await expect(runtimeSummary.getByTestId('aura-cast-time-simulator')).toHaveCount(0);
     await expect(simulator).toHaveAttribute('data-time-ms', '0');
     await expect(simulator).toHaveCSS('opacity', '0.5');
     await expect(page.getByText('Legacy -1', { exact: true })).toBeVisible();
+
+    const [numericBox, simulatorBox] = await Promise.all([
+      numeric.boundingBox(),
+      simulator.boundingBox(),
+    ]);
+    if (!numericBox || !simulatorBox) throw new Error('Aura cast-time geometry is unavailable');
+    expect(simulatorBox.y).toBeGreaterThanOrEqual(numericBox.y + numericBox.height + 5);
 
     await numeric.fill('12');
     await expect(simulator).toHaveAttribute('data-time-ms', '12000');

@@ -657,30 +657,24 @@
   padding: 10px;
 }
 
-.aura-cast-time-simulator {
-  border-top: 1px solid rgba(210, 170, 69, 0.2);
-  margin-top: 11px;
-  padding: 10px 4px 2px;
+.aura-cast-time-simulator__bar {
+  margin: 8px 4px 0;
 }
 
-.aura-cast-time-simulator__heading {
+.aura-cast-time-simulator__caption {
   align-items: center;
   color: #8e99a3;
   display: flex;
   font-size: 8px;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin: 6px 4px 0;
   text-transform: uppercase;
 }
 
-.aura-cast-time-simulator__heading strong {
+.aura-cast-time-simulator__caption strong {
   color: #e2c662;
   font-size: 9px;
   letter-spacing: 0.04em;
-}
-
-.aura-cast-time-simulator__bar {
-  margin: 0 4px;
 }
 
 .spire-editor-effect-list {

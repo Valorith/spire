@@ -301,6 +301,18 @@
                     type="number"
                     min="-1"
                   >
+                  <loader-cast-bar-timer
+                    class="aura-cast-time-simulator__bar"
+                    color="#FF00FF"
+                    data-testid="aura-cast-time-simulator"
+                    aria-label="Aura cast-time simulator"
+                    :data-time-ms="auraCastTimeMs"
+                    :time-ms="auraCastTimeMs"
+                  />
+                  <div class="aura-cast-time-simulator__caption">
+                    <span>Cast-time simulator</span>
+                    <strong>{{ auraCastTimeSummary }}</strong>
+                  </div>
                   <span class="spire-editor-field-help">Stored in whole seconds. Non-positive and legacy values remain editable and show a dormant preview.</span>
                 </div>
                 <div class="spire-editor-field">
@@ -328,19 +340,6 @@
                   <div class="spire-editor-context-label">Runtime summary</div>
                   <h4>{{ auraTypeLabel(editModel.aura_type) }}</h4>
                   <p>{{ auraTypeDescription(editModel.aura_type) }}</p>
-                  <div class="aura-cast-time-simulator">
-                    <div class="aura-cast-time-simulator__heading">
-                      <span>Cast-time simulator</span>
-                      <strong>{{ auraCastTimeSummary }}</strong>
-                    </div>
-                    <loader-cast-bar-timer
-                      class="aura-cast-time-simulator__bar"
-                      color="#FF00FF"
-                      data-testid="aura-cast-time-simulator"
-                      :data-time-ms="auraCastTimeMs"
-                      :time-ms="auraCastTimeMs"
-                    />
-                  </div>
                   <div class="spire-editor-metric-row mt-3">
                     <div class="spire-editor-metric">
                       <span>Radius</span>
