@@ -107,6 +107,36 @@ func TestValidatePlayerOperationsGuildAccess(t *testing.T) {
 	}
 }
 
+func TestValidatePlayerOperationsGuildMembership(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		guildID int
+		rank    int
+		wantErr bool
+	}{
+		{name: "member rank 1", guildID: 10, rank: 1},
+		{name: "member rank 8", guildID: 10, rank: 8},
+		{name: "membership removal", guildID: 0, rank: 0},
+		{name: "member rank 0", guildID: 10, rank: 0, wantErr: true},
+		{name: "member rank 9", guildID: 10, rank: 9, wantErr: true},
+		{name: "removal with rank", guildID: 0, rank: 1, wantErr: true},
+		{name: "negative guild", guildID: -1, rank: 1, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := validatePlayerOperationsGuildMembership(test.guildID, test.rank)
+			if (err != nil) != test.wantErr {
+				t.Fatalf(
+					"validatePlayerOperationsGuildMembership(%d, %d) error = %v, wantErr %v",
+					test.guildID,
+					test.rank,
+					err,
+					test.wantErr,
+				)
+			}
+		})
+	}
+}
+
 func TestPlayerOperationsRetirementNames(t *testing.T) {
 	if got := playerOperationsRetiredName("Alder", 910001); got != "Alder-deleted-910001" {
 		t.Fatalf("playerOperationsRetiredName() = %q", got)

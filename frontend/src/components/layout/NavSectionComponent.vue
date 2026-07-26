@@ -34,7 +34,7 @@
 
           <!-- internal link -->
           <router-link
-            :class="'nav-link collapse ' + (hasRoute(nav.to) || hasRouteInArray(nav.routes) ? 'active' : 'collapsed')"
+            :class="'nav-link collapse ' + (isNavActive(nav) ? 'active' : 'collapsed')"
             :to="nav.to"
             v-if="!nav.to.includes('http')"
             :exact="nav.exact ? nav.exact : false"
@@ -47,7 +47,7 @@
 
           <!-- external link -->
           <a
-            :class="'nav-link collapse ' + (hasRoute(nav.to) || hasRouteInArray(nav.routes) ? 'active' : 'collapsed')"
+            :class="'nav-link collapse ' + (isNavActive(nav) ? 'active' : 'collapsed')"
             :href="nav.to"
             :target="nav.to"
             v-if="nav.to.includes('http')"
@@ -66,6 +66,17 @@
 export default {
   name: "NavSectionComponent",
   methods: {
+    isNavActive (nav) {
+      if (!nav || !nav.to) return false
+      if (nav.to.includes('http')) return this.hasRoute(nav.to) || this.hasRouteInArray(nav.routes)
+      const target = this.$router.resolve(nav.to).route
+      const queryKeys = Object.keys(target.query || {})
+      if (queryKeys.length > 0) {
+        return this.$route.path === target.path &&
+          queryKeys.every(key => String(this.$route.query[key] || '') === String(target.query[key]))
+      }
+      return this.hasRoute(nav.to) || this.hasRouteInArray(nav.routes)
+    },
     hasRouteInArray(matches) {
       let matched = false
       if (matches && matches.length > 0) {

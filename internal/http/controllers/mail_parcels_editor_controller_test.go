@@ -47,15 +47,14 @@ func TestValidateMailInput(t *testing.T) {
 
 func TestValidateParcelInput(t *testing.T) {
 	valid := parcelEditorInput{
-		CharacterID:  1,
-		ItemID:       1001,
-		SlotID:       1,
-		Quantity:     1,
-		FromName:     "Server Staff",
-		Note:         "Restored item",
-		SentDate:     "2026-07-26 20:00:00",
-		Reason:       "Restoring a lost item",
-		EvolveAmount: 5,
+		CharacterID: 1,
+		ItemID:      1001,
+		SlotID:      1,
+		Quantity:    1,
+		FromName:    "Server Staff",
+		Note:        "Restored item",
+		SentDate:    "2026-07-26 20:00:00",
+		Reason:      "Restoring a lost item",
 	}
 	if err := validateParcelInput(valid); err != nil {
 		t.Fatalf("validateParcelInput(valid) error = %v", err)
@@ -77,6 +76,31 @@ func TestValidateParcelInput(t *testing.T) {
 				t.Fatalf("validateParcelInput(%s) expected an error", name)
 			}
 		})
+	}
+}
+
+func TestNormalizeParcelSentDate(t *testing.T) {
+	source := time.Date(2026, time.July, 26, 20, 0, 0, 0, time.FixedZone("EDT", -4*60*60))
+	got, err := normalizeParcelSentDate(source.Format(time.RFC3339))
+	if err != nil {
+		t.Fatalf("normalizeParcelSentDate(RFC3339) error = %v", err)
+	}
+	want := source.In(time.Local).Format(mailParcelsSQLDateTime)
+	if got != want {
+		t.Fatalf("normalizeParcelSentDate(RFC3339) = %q, want %q", got, want)
+	}
+
+	const legacy = "2026-07-26 20:00:00"
+	got, err = normalizeParcelSentDate(legacy)
+	if err != nil {
+		t.Fatalf("normalizeParcelSentDate(legacy) error = %v", err)
+	}
+	if got != legacy {
+		t.Fatalf("normalizeParcelSentDate(legacy) = %q, want %q", got, legacy)
+	}
+
+	if _, err := normalizeParcelSentDate("July 26"); err == nil {
+		t.Fatal("normalizeParcelSentDate(invalid) expected an error")
 	}
 }
 

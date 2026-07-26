@@ -6,6 +6,7 @@ type MailParcelsMockState = {
   parcelPayload?: Record<string, unknown>;
   augmentSearch?: { scope: string | null; socketType: string | null };
   directoryRequests?: number;
+  broadcastAudienceRequests?: number;
 };
 
 const character = {
@@ -57,10 +58,10 @@ const parcel = {
   augment_6: 0,
   slot_id: 1,
   quantity: 1,
-  evolve_amount: 0,
   from_name: 'Server Staff',
   note: 'Baseline parcel.',
   sent_date: '2026-07-26 18:05:00',
+  sent_timestamp: 1785103500,
   content_count: 0,
 };
 
@@ -173,6 +174,7 @@ async function installMailParcelsMocks(page: Page, state: MailParcelsMockState) 
       return fulfill({ data, total: data.length, page: 1, limit: 12 });
     }
     if (path === '/broadcast/audience') {
+      state.broadcastAudienceRequests = (state.broadcastAudienceRequests || 0) + 1;
       return fulfill({
         recipient_count: 2,
         recipients: [character, secondCharacter],
@@ -280,6 +282,10 @@ test.describe('Mail & Parcels Editor', () => {
     await expect(parcelItemSelection.getByText('Selected item')).toBeVisible();
     await expect(parcelItemSelection.getByText(/Single item|Stacks to/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Refresh queued parcels' })).toBeVisible();
+    await expect(page.getByText('Use 0 to choose the first free slot automatically.')).toBeVisible();
+    await expect(page.getByLabel('Evolve progress')).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Delivery', exact: true }).click();
+    await expect(page.locator('#mail-parcels-sent-date')).toHaveValue('2026-07-26T18:05');
   });
 
   test('sends direct and server-wide mail through the single tool authorization boundary', async ({ page }) => {
@@ -331,6 +337,7 @@ test.describe('Mail & Parcels Editor', () => {
       subject: 'Broadcast QA message',
       confirmation: 'BROADCAST TO 2 CHARACTERS',
     });
+    expect(state.broadcastAudienceRequests).toBeGreaterThanOrEqual(3);
     expect(Object.keys(state.broadcastMailPayload || {}).some(key => key.toLowerCase().includes('permission'))).toBe(false);
   });
 

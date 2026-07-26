@@ -27,6 +27,7 @@ const (
 	mailParcelsDefaultCapacity = 50
 	mailParcelsMaxBatchItems   = 20
 	mailParcelsMaxDirectMail   = 100
+	mailParcelsSQLDateTime     = "2006-01-02 15:04:05"
 
 	mailStatusUnread = 1
 	mailStatusRead   = 3
@@ -178,29 +179,28 @@ type parcelEditorRecord struct {
 	Augment6      uint   `json:"augment_6" gorm:"column:augment_6"`
 	SlotID        uint   `json:"slot_id" gorm:"column:slot_id"`
 	Quantity      uint   `json:"quantity" gorm:"column:quantity"`
-	EvolveAmount  uint   `json:"evolve_amount" gorm:"column:evolve_amount"`
 	FromName      string `json:"from_name" gorm:"column:from_name"`
 	Note          string `json:"note" gorm:"column:note"`
 	SentDate      string `json:"sent_date" gorm:"column:sent_date"`
+	SentTimestamp int64  `json:"sent_timestamp" gorm:"column:sent_timestamp"`
 	ContentCount  int64  `json:"content_count" gorm:"column:content_count"`
 }
 
 type parcelEditorInput struct {
-	CharacterID  uint   `json:"character_id"`
-	ItemID       uint   `json:"item_id"`
-	Augment1     uint   `json:"augment_1"`
-	Augment2     uint   `json:"augment_2"`
-	Augment3     uint   `json:"augment_3"`
-	Augment4     uint   `json:"augment_4"`
-	Augment5     uint   `json:"augment_5"`
-	Augment6     uint   `json:"augment_6"`
-	SlotID       uint   `json:"slot_id"`
-	Quantity     uint   `json:"quantity"`
-	EvolveAmount uint   `json:"evolve_amount"`
-	FromName     string `json:"from_name"`
-	Note         string `json:"note"`
-	SentDate     string `json:"sent_date"`
-	Reason       string `json:"reason"`
+	CharacterID uint   `json:"character_id"`
+	ItemID      uint   `json:"item_id"`
+	Augment1    uint   `json:"augment_1"`
+	Augment2    uint   `json:"augment_2"`
+	Augment3    uint   `json:"augment_3"`
+	Augment4    uint   `json:"augment_4"`
+	Augment5    uint   `json:"augment_5"`
+	Augment6    uint   `json:"augment_6"`
+	SlotID      uint   `json:"slot_id"`
+	Quantity    uint   `json:"quantity"`
+	FromName    string `json:"from_name"`
+	Note        string `json:"note"`
+	SentDate    string `json:"sent_date"`
+	Reason      string `json:"reason"`
 }
 
 type gmParcelSendInput struct {
@@ -214,16 +214,15 @@ type gmParcelSendInput struct {
 }
 
 type gmParcelSendItem struct {
-	ClientKey    string `json:"client_key"`
-	ItemID       uint   `json:"item_id"`
-	Augment1     uint   `json:"augment_1"`
-	Augment2     uint   `json:"augment_2"`
-	Augment3     uint   `json:"augment_3"`
-	Augment4     uint   `json:"augment_4"`
-	Augment5     uint   `json:"augment_5"`
-	Augment6     uint   `json:"augment_6"`
-	Quantity     uint   `json:"quantity"`
-	EvolveAmount uint   `json:"evolve_amount"`
+	ClientKey string `json:"client_key"`
+	ItemID    uint   `json:"item_id"`
+	Augment1  uint   `json:"augment_1"`
+	Augment2  uint   `json:"augment_2"`
+	Augment3  uint   `json:"augment_3"`
+	Augment4  uint   `json:"augment_4"`
+	Augment5  uint   `json:"augment_5"`
+	Augment6  uint   `json:"augment_6"`
+	Quantity  uint   `json:"quantity"`
 }
 
 type gmParcelSendDelivery struct {
@@ -241,35 +240,33 @@ type gmParcelSendResult struct {
 }
 
 type parcelContentRecord struct {
-	ID           uint   `json:"id" gorm:"column:id"`
-	ParcelID     uint   `json:"parcel_id" gorm:"column:parcel_id"`
-	SlotID       uint   `json:"slot_id" gorm:"column:slot_id"`
-	ItemID       uint   `json:"item_id" gorm:"column:item_id"`
-	ItemName     string `json:"item_name" gorm:"column:item_name"`
-	ItemIcon     int    `json:"item_icon" gorm:"column:item_icon"`
-	ItemNoDrop   int    `json:"item_no_drop" gorm:"column:item_no_drop"`
-	Augment1     uint   `json:"augment_1" gorm:"column:augment_1"`
-	Augment2     uint   `json:"augment_2" gorm:"column:augment_2"`
-	Augment3     uint   `json:"augment_3" gorm:"column:augment_3"`
-	Augment4     uint   `json:"augment_4" gorm:"column:augment_4"`
-	Augment5     uint   `json:"augment_5" gorm:"column:augment_5"`
-	Augment6     uint   `json:"augment_6" gorm:"column:augment_6"`
-	Quantity     uint   `json:"quantity" gorm:"column:quantity"`
-	EvolveAmount uint   `json:"evolve_amount" gorm:"column:evolve_amount"`
+	ID         uint   `json:"id" gorm:"column:id"`
+	ParcelID   uint   `json:"parcel_id" gorm:"column:parcel_id"`
+	SlotID     uint   `json:"slot_id" gorm:"column:slot_id"`
+	ItemID     uint   `json:"item_id" gorm:"column:item_id"`
+	ItemName   string `json:"item_name" gorm:"column:item_name"`
+	ItemIcon   int    `json:"item_icon" gorm:"column:item_icon"`
+	ItemNoDrop int    `json:"item_no_drop" gorm:"column:item_no_drop"`
+	Augment1   uint   `json:"augment_1" gorm:"column:augment_1"`
+	Augment2   uint   `json:"augment_2" gorm:"column:augment_2"`
+	Augment3   uint   `json:"augment_3" gorm:"column:augment_3"`
+	Augment4   uint   `json:"augment_4" gorm:"column:augment_4"`
+	Augment5   uint   `json:"augment_5" gorm:"column:augment_5"`
+	Augment6   uint   `json:"augment_6" gorm:"column:augment_6"`
+	Quantity   uint   `json:"quantity" gorm:"column:quantity"`
 }
 
 type parcelContentInput struct {
-	SlotID       uint   `json:"slot_id"`
-	ItemID       uint   `json:"item_id"`
-	Augment1     uint   `json:"augment_1"`
-	Augment2     uint   `json:"augment_2"`
-	Augment3     uint   `json:"augment_3"`
-	Augment4     uint   `json:"augment_4"`
-	Augment5     uint   `json:"augment_5"`
-	Augment6     uint   `json:"augment_6"`
-	Quantity     uint   `json:"quantity"`
-	EvolveAmount uint   `json:"evolve_amount"`
-	Reason       string `json:"reason"`
+	SlotID   uint   `json:"slot_id"`
+	ItemID   uint   `json:"item_id"`
+	Augment1 uint   `json:"augment_1"`
+	Augment2 uint   `json:"augment_2"`
+	Augment3 uint   `json:"augment_3"`
+	Augment4 uint   `json:"augment_4"`
+	Augment5 uint   `json:"augment_5"`
+	Augment6 uint   `json:"augment_6"`
+	Quantity uint   `json:"quantity"`
+	Reason   string `json:"reason"`
 }
 
 type parcelEditorDetail struct {
@@ -717,15 +714,26 @@ func (m *MailParcelsEditorController) deleteMail(c echo.Context) error {
 
 func (m *MailParcelsEditorController) listParcels(c echo.Context) error {
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	page, limit := mailParcelsPagination(c)
 	search := strings.TrimSpace(c.QueryParam("q"))
 	base := parcelBaseQuery(db)
 	if search != "" {
 		like := "%" + search + "%"
-		base = base.Where(`
-			character_record.name LIKE ? OR item_record.Name LIKE ? OR parcel.from_name LIKE ? OR parcel.note LIKE ?
+		itemIDs := make([]uint, 0)
+		if err := itemDB.Table("items").Where("Name LIKE ?", like).Limit(mailParcelsMaxPageSize).Pluck("id", &itemIDs).Error; err != nil {
+			return mailParcelsDatabaseError(c, err)
+		}
+		searchSQL := `
+			character_record.name LIKE ? OR parcel.from_name LIKE ? OR parcel.note LIKE ?
 			OR CAST(parcel.id AS CHAR) = ? OR CAST(parcel.char_id AS CHAR) = ? OR CAST(parcel.item_id AS CHAR) = ?
-		`, like, like, like, like, search, search, search)
+		`
+		searchArgs := []interface{}{like, like, like, search, search, search}
+		if len(itemIDs) > 0 {
+			searchSQL += " OR parcel.item_id IN ?"
+			searchArgs = append(searchArgs, itemIDs)
+		}
+		base = base.Where(searchSQL, searchArgs...)
 	}
 	var total int64
 	if err := base.Count(&total).Error; err != nil {
@@ -736,6 +744,9 @@ func (m *MailParcelsEditorController) listParcels(c echo.Context) error {
 		Limit(limit).Offset((page - 1) * limit).Scan(&records).Error; err != nil {
 		return mailParcelsDatabaseError(c, err)
 	}
+	if err := hydrateParcelRecords(itemDB, records); err != nil {
+		return mailParcelsDatabaseError(c, err)
+	}
 	return c.JSON(http.StatusOK, mailParcelsPage{Data: records, Total: total, Page: page, Limit: limit})
 }
 
@@ -744,7 +755,12 @@ func (m *MailParcelsEditorController) getParcel(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	detail, err := loadParcelDetail(m.db.Get(models.CharacterParcel{}, c), id, false)
+	detail, err := loadParcelDetail(
+		m.db.Get(models.CharacterParcel{}, c),
+		m.db.Get(models.Item{}, c),
+		id,
+		false,
+	)
 	if err != nil {
 		return mailParcelsLoadError(c, err, "Parcel")
 	}
@@ -756,23 +772,29 @@ func (m *MailParcelsEditorController) createParcel(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid parcel payload: %v", err)})
 	}
+	normalizedSentDate, err := normalizeParcelSentDate(input.SentDate)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	input.SentDate = normalizedSentDate
 	if err := validateParcelInput(input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	var detail parcelEditorDetail
 	var auditID uint
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err = db.Transaction(func(tx *gorm.DB) error {
 		character, err := ensureMailParcelsCharacter(tx, input.CharacterID)
 		if err != nil {
 			return err
 		}
-		item, err := ensureParcelItemChanges(tx, input.ItemID, parcelAugments(input), 0, nil)
+		item, err := ensureParcelItemChanges(itemDB, input.ItemID, parcelAugments(input), 0, nil)
 		if err != nil {
 			return err
 		}
 		if input.SlotID == 0 {
-			input.SlotID, err = nextParcelSlot(tx, input.CharacterID, m.parcelCapacity(tx))
+			input.SlotID, err = nextParcelSlot(tx, input.CharacterID, 0, m.parcelCapacity(tx))
 			if err != nil {
 				return err
 			}
@@ -781,7 +803,7 @@ func (m *MailParcelsEditorController) createParcel(c echo.Context) error {
 			return err
 		}
 		if input.SentDate == "" {
-			input.SentDate = time.Now().Format("2006-01-02 15:04:05")
+			input.SentDate = time.Now().Format(mailParcelsSQLDateTime)
 		}
 		if err := tx.Table("character_parcels").Create(parcelInputColumns(input)).Error; err != nil {
 			return err
@@ -790,7 +812,7 @@ func (m *MailParcelsEditorController) createParcel(c echo.Context) error {
 		if err := tx.Raw("SELECT LAST_INSERT_ID()").Scan(&id).Error; err != nil {
 			return err
 		}
-		detail, err = loadParcelDetail(tx, id, false)
+		detail, err = loadParcelDetail(tx, itemDB, id, false)
 		if err != nil {
 			return err
 		}
@@ -827,14 +849,20 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid GM parcel payload: %v", err)})
 	}
+	normalizedSentDate, err := normalizeParcelSentDate(input.SentDate)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	input.SentDate = normalizedSentDate
 	if err := validateGMParcelSendInput(input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	result := gmParcelSendResult{Deliveries: []gmParcelSendDelivery{}}
 	var auditID uint
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err = db.Transaction(func(tx *gorm.DB) error {
 		character, err := loadLockedGMRecipient(tx, input.CharacterID)
 		if err != nil {
 			return err
@@ -858,12 +886,12 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 		}
 		sentDate := strings.TrimSpace(input.SentDate)
 		if sentDate == "" {
-			sentDate = time.Now().Format("2006-01-02 15:04:05")
+			sentDate = time.Now().Format(mailParcelsSQLDateTime)
 		}
 		recordIDs := make([]uint, 0, len(input.Items))
 		itemMetadata := make([]map[string]interface{}, 0, len(input.Items))
 		for index, line := range input.Items {
-			item, err := ensureParcelItemChanges(tx, line.ItemID, gmParcelItemAugments(line), 0, nil)
+			item, err := ensureParcelItemChanges(itemDB, line.ItemID, gmParcelItemAugments(line), 0, nil)
 			if err != nil {
 				return mailParcelsConflict("Parcel %d: %s", index+1, err.Error())
 			}
@@ -871,20 +899,19 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 				return mailParcelsConflict("Parcel %d: %s", index+1, err.Error())
 			}
 			parcelInput := parcelEditorInput{
-				CharacterID:  input.CharacterID,
-				ItemID:       line.ItemID,
-				Augment1:     line.Augment1,
-				Augment2:     line.Augment2,
-				Augment3:     line.Augment3,
-				Augment4:     line.Augment4,
-				Augment5:     line.Augment5,
-				Augment6:     line.Augment6,
-				SlotID:       slots[index],
-				Quantity:     line.Quantity,
-				EvolveAmount: line.EvolveAmount,
-				FromName:     input.FromName,
-				Note:         input.Note,
-				SentDate:     sentDate,
+				CharacterID: input.CharacterID,
+				ItemID:      line.ItemID,
+				Augment1:    line.Augment1,
+				Augment2:    line.Augment2,
+				Augment3:    line.Augment3,
+				Augment4:    line.Augment4,
+				Augment5:    line.Augment5,
+				Augment6:    line.Augment6,
+				SlotID:      slots[index],
+				Quantity:    line.Quantity,
+				FromName:    input.FromName,
+				Note:        input.Note,
+				SentDate:    sentDate,
 			}
 			if err := tx.Table("character_parcels").Create(parcelInputColumns(parcelInput)).Error; err != nil {
 				return err
@@ -893,7 +920,7 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 			if err := tx.Raw("SELECT LAST_INSERT_ID()").Scan(&id).Error; err != nil {
 				return err
 			}
-			detail, err := loadParcelDetail(tx, id, false)
+			detail, err := loadParcelDetail(tx, itemDB, id, false)
 			if err != nil {
 				return err
 			}
@@ -956,14 +983,19 @@ func (m *MailParcelsEditorController) updateParcel(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid parcel payload: %v", err)})
 	}
+	input.SentDate, err = normalizeParcelSentDate(input.SentDate)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
 	if err := validateParcelInput(input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	var detail parcelEditorDetail
 	var auditID uint
 	err = db.Transaction(func(tx *gorm.DB) error {
-		currentDetail, err := loadParcelDetail(tx, id, true)
+		currentDetail, err := loadParcelDetail(tx, itemDB, id, true)
 		if err != nil {
 			return err
 		}
@@ -975,12 +1007,15 @@ func (m *MailParcelsEditorController) updateParcel(c echo.Context) error {
 				return err
 			}
 		}
-		item, err := ensureParcelItemChanges(tx, input.ItemID, parcelAugments(input), current.ItemID, parcelRecordAugments(current))
+		item, err := ensureParcelItemChanges(itemDB, input.ItemID, parcelAugments(input), current.ItemID, parcelRecordAugments(current))
 		if err != nil {
 			return err
 		}
 		if input.SlotID == 0 {
-			return mailParcelsConflict("Parcel slot must be at least 1")
+			input.SlotID, err = nextParcelSlot(tx, input.CharacterID, id, m.parcelCapacity(tx))
+			if err != nil {
+				return err
+			}
 		}
 		if err := ensureParcelSlotAvailable(tx, input.CharacterID, input.SlotID, id, m.parcelCapacity(tx)); err != nil {
 			return err
@@ -988,7 +1023,7 @@ func (m *MailParcelsEditorController) updateParcel(c echo.Context) error {
 		if err := tx.Table("character_parcels").Where("id = ?", id).Updates(parcelInputColumns(input)).Error; err != nil {
 			return err
 		}
-		detail, err = loadParcelDetail(tx, id, false)
+		detail, err = loadParcelDetail(tx, itemDB, id, false)
 		if err != nil {
 			return err
 		}
@@ -1024,10 +1059,14 @@ func (m *MailParcelsEditorController) deleteParcel(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Type %s to confirm deletion", expected)})
 	}
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	var auditID uint
 	err = db.Transaction(func(tx *gorm.DB) error {
-		current, err := loadParcelDetail(tx, id, true)
+		current, err := loadParcelDetail(tx, itemDB, id, true)
 		if err != nil {
+			return err
+		}
+		if err := tx.Table("character_parcels_containers").Where("parcels_id = ?", id).Delete(nil).Error; err != nil {
 			return err
 		}
 		if err := tx.Table("character_parcels").Where("id = ?", id).Delete(nil).Error; err != nil {
@@ -1061,10 +1100,11 @@ func (m *MailParcelsEditorController) createParcelContent(c echo.Context) error 
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	var result parcelContentRecord
 	var auditID uint
 	err = db.Transaction(func(tx *gorm.DB) error {
-		parent, err := loadParcelDetail(tx, parcelID, true)
+		parent, err := loadParcelDetail(tx, itemDB, parcelID, true)
 		if err != nil {
 			return err
 		}
@@ -1077,7 +1117,7 @@ func (m *MailParcelsEditorController) createParcelContent(c echo.Context) error 
 		if err := ensureParcelContentSlotAvailable(tx, parcelID, input.SlotID, 0); err != nil {
 			return err
 		}
-		item, err := ensureParcelItemChanges(tx, input.ItemID, contentAugments(input), 0, nil)
+		item, err := ensureParcelItemChanges(itemDB, input.ItemID, contentAugments(input), 0, nil)
 		if err != nil {
 			return err
 		}
@@ -1088,7 +1128,7 @@ func (m *MailParcelsEditorController) createParcelContent(c echo.Context) error 
 		if err := tx.Raw("SELECT LAST_INSERT_ID()").Scan(&id).Error; err != nil {
 			return err
 		}
-		result, err = loadParcelContent(tx, parcelID, id, false)
+		result, err = loadParcelContent(tx, itemDB, parcelID, id, false)
 		if err != nil {
 			return err
 		}
@@ -1124,14 +1164,15 @@ func (m *MailParcelsEditorController) updateParcelContent(c echo.Context) error 
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	var result parcelContentRecord
 	var auditID uint
 	err = db.Transaction(func(tx *gorm.DB) error {
-		parent, err := loadParcelDetail(tx, parcelID, true)
+		parent, err := loadParcelDetail(tx, itemDB, parcelID, true)
 		if err != nil {
 			return err
 		}
-		current, err := loadParcelContent(tx, parcelID, contentID, true)
+		current, err := loadParcelContent(tx, itemDB, parcelID, contentID, true)
 		if err != nil {
 			return err
 		}
@@ -1143,7 +1184,7 @@ func (m *MailParcelsEditorController) updateParcelContent(c echo.Context) error 
 				return err
 			}
 		}
-		item, err := ensureParcelItemChanges(tx, input.ItemID, contentAugments(input), current.ItemID, contentRecordAugments(current))
+		item, err := ensureParcelItemChanges(itemDB, input.ItemID, contentAugments(input), current.ItemID, contentRecordAugments(current))
 		if err != nil {
 			return err
 		}
@@ -1152,7 +1193,7 @@ func (m *MailParcelsEditorController) updateParcelContent(c echo.Context) error 
 			Updates(contentInputColumns(parcelID, input)).Error; err != nil {
 			return err
 		}
-		result, err = loadParcelContent(tx, parcelID, contentID, false)
+		result, err = loadParcelContent(tx, itemDB, parcelID, contentID, false)
 		if err != nil {
 			return err
 		}
@@ -1192,13 +1233,14 @@ func (m *MailParcelsEditorController) deleteParcelContent(c echo.Context) error 
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Type %s to confirm removal", expected)})
 	}
 	db := m.db.Get(models.CharacterParcel{}, c)
+	itemDB := m.db.Get(models.Item{}, c)
 	var auditID uint
 	err = db.Transaction(func(tx *gorm.DB) error {
-		parent, err := loadParcelDetail(tx, parcelID, true)
+		parent, err := loadParcelDetail(tx, itemDB, parcelID, true)
 		if err != nil {
 			return err
 		}
-		current, err := loadParcelContent(tx, parcelID, contentID, true)
+		current, err := loadParcelContent(tx, itemDB, parcelID, contentID, true)
 		if err != nil {
 			return err
 		}
@@ -1386,8 +1428,7 @@ func loadMailRecord(db *gorm.DB, id uint, lock bool) (mailEditorRecord, error) {
 
 func parcelBaseQuery(db *gorm.DB) *gorm.DB {
 	return db.Table("character_parcels parcel").
-		Joins("LEFT JOIN character_data character_record ON character_record.id = parcel.char_id").
-		Joins("LEFT JOIN items item_record ON item_record.id = parcel.item_id")
+		Joins("LEFT JOIN character_data character_record ON character_record.id = parcel.char_id")
 }
 
 func parcelSelect(query *gorm.DB) *gorm.DB {
@@ -1396,10 +1437,6 @@ func parcelSelect(query *gorm.DB) *gorm.DB {
 		parcel.char_id AS character_id,
 		COALESCE(character_record.name, CONCAT('Unknown character #', parcel.char_id)) AS character_name,
 		parcel.item_id,
-		COALESCE(item_record.Name, CONCAT('Unknown item #', parcel.item_id)) AS item_name,
-		COALESCE(item_record.icon, 0) AS item_icon,
-		COALESCE(item_record.nodrop, 1) AS item_no_drop,
-		COALESCE(item_record.bagslots, 0) AS item_bag_slots,
 		parcel.aug_slot_1 AS augment_1,
 		parcel.aug_slot_2 AS augment_2,
 		parcel.aug_slot_3 AS augment_3,
@@ -1408,15 +1445,15 @@ func parcelSelect(query *gorm.DB) *gorm.DB {
 		parcel.aug_slot_6 AS augment_6,
 		parcel.slot_id,
 		parcel.quantity,
-		parcel.evolve_amount,
 		COALESCE(parcel.from_name, '') AS from_name,
 		COALESCE(parcel.note, '') AS note,
 		COALESCE(DATE_FORMAT(parcel.sent_date, '%Y-%m-%d %H:%i:%s'), '') AS sent_date,
+		COALESCE(UNIX_TIMESTAMP(parcel.sent_date), 0) AS sent_timestamp,
 		(SELECT COUNT(*) FROM character_parcels_containers content WHERE content.parcels_id = parcel.id) AS content_count
 	`)
 }
 
-func loadParcelDetail(db *gorm.DB, id uint, lock bool) (parcelEditorDetail, error) {
+func loadParcelDetail(db, itemDB *gorm.DB, id uint, lock bool) (parcelEditorDetail, error) {
 	var result parcelEditorDetail
 	query := parcelBaseQuery(db)
 	if lock {
@@ -1427,33 +1464,35 @@ func loadParcelDetail(db *gorm.DB, id uint, lock bool) (parcelEditorDetail, erro
 	}
 	result.Content = make([]parcelContentRecord, 0)
 	if err := db.Table("character_parcels_containers content").
-		Joins("LEFT JOIN items item_record ON item_record.id = content.item_id").
 		Select(`
 			content.id,
 			content.parcels_id AS parcel_id,
 			content.slot_id,
 			content.item_id,
-			COALESCE(item_record.Name, CONCAT('Unknown item #', content.item_id)) AS item_name,
-			COALESCE(item_record.icon, 0) AS item_icon,
-			COALESCE(item_record.nodrop, 1) AS item_no_drop,
 			content.aug_slot_1 AS augment_1,
 			content.aug_slot_2 AS augment_2,
 			content.aug_slot_3 AS augment_3,
 			content.aug_slot_4 AS augment_4,
 			content.aug_slot_5 AS augment_5,
 			content.aug_slot_6 AS augment_6,
-			content.quantity,
-			content.evolve_amount
+			content.quantity
 		`).Where("content.parcels_id = ?", id).Order("content.slot_id, content.id").Scan(&result.Content).Error; err != nil {
+		return result, err
+	}
+	parcelRecords := []parcelEditorRecord{result.Parcel}
+	if err := hydrateParcelRecords(itemDB, parcelRecords); err != nil {
+		return result, err
+	}
+	result.Parcel = parcelRecords[0]
+	if err := hydrateParcelContentRecords(itemDB, result.Content); err != nil {
 		return result, err
 	}
 	return result, nil
 }
 
-func loadParcelContent(db *gorm.DB, parcelID, contentID uint, lock bool) (parcelContentRecord, error) {
+func loadParcelContent(db, itemDB *gorm.DB, parcelID, contentID uint, lock bool) (parcelContentRecord, error) {
 	var result parcelContentRecord
-	query := db.Table("character_parcels_containers content").
-		Joins("LEFT JOIN items item_record ON item_record.id = content.item_id")
+	query := db.Table("character_parcels_containers content")
 	if lock {
 		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
@@ -1462,18 +1501,19 @@ func loadParcelContent(db *gorm.DB, parcelID, contentID uint, lock bool) (parcel
 		content.parcels_id AS parcel_id,
 		content.slot_id,
 		content.item_id,
-		COALESCE(item_record.Name, CONCAT('Unknown item #', content.item_id)) AS item_name,
-		COALESCE(item_record.icon, 0) AS item_icon,
-		COALESCE(item_record.nodrop, 1) AS item_no_drop,
 		content.aug_slot_1 AS augment_1,
 		content.aug_slot_2 AS augment_2,
 		content.aug_slot_3 AS augment_3,
 		content.aug_slot_4 AS augment_4,
 		content.aug_slot_5 AS augment_5,
 		content.aug_slot_6 AS augment_6,
-		content.quantity,
-		content.evolve_amount
+		content.quantity
 	`).Where("content.parcels_id = ? AND content.id = ?", parcelID, contentID).Take(&result).Error
+	if err == nil {
+		records := []parcelContentRecord{result}
+		err = hydrateParcelContentRecords(itemDB, records)
+		result = records[0]
+	}
 	return result, err
 }
 
@@ -1711,9 +1751,6 @@ func validateGMParcelItemConfiguration(item mailParcelsItemReference, input gmPa
 	if item.Stackable != 0 && item.StackSize > 0 && int(input.Quantity) > item.StackSize {
 		return fmt.Errorf("quantity cannot exceed this item's stack size of %d", item.StackSize)
 	}
-	if item.EvolvingLevel <= 0 && input.EvolveAmount > 0 {
-		return errors.New("evolve amount is only valid for evolving items")
-	}
 	return nil
 }
 
@@ -1754,6 +1791,82 @@ func loadMailParcelsItem(db *gorm.DB, id uint) (mailParcelsItemReference, error)
 		evolvinglevel AS evolving_level
 	`).Where("id = ?", id).Take(&result).Error
 	return result, err
+}
+
+func loadMailParcelsItems(db *gorm.DB, ids []uint) (map[uint]mailParcelsItemReference, error) {
+	items := make([]mailParcelsItemReference, 0)
+	if len(ids) == 0 {
+		return map[uint]mailParcelsItemReference{}, nil
+	}
+	if err := db.Table("items").Select(`
+		id,
+		Name AS name,
+		icon,
+		nodrop AS no_drop,
+		bagslots AS bag_slots
+	`).Where("id IN ?", ids).Scan(&items).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[uint]mailParcelsItemReference, len(items))
+	for _, item := range items {
+		result[item.ID] = item
+	}
+	return result, nil
+}
+
+func hydrateParcelRecords(db *gorm.DB, records []parcelEditorRecord) error {
+	ids := make([]uint, 0, len(records))
+	seen := make(map[uint]bool, len(records))
+	for _, record := range records {
+		if record.ItemID > 0 && !seen[record.ItemID] {
+			seen[record.ItemID] = true
+			ids = append(ids, record.ItemID)
+		}
+	}
+	items, err := loadMailParcelsItems(db, ids)
+	if err != nil {
+		return err
+	}
+	for index := range records {
+		item, found := items[records[index].ItemID]
+		if !found {
+			records[index].ItemName = fmt.Sprintf("Unknown item #%d", records[index].ItemID)
+			records[index].ItemNoDrop = 1
+			continue
+		}
+		records[index].ItemName = item.Name
+		records[index].ItemIcon = item.Icon
+		records[index].ItemNoDrop = item.NoDrop
+		records[index].ItemBagSlots = item.BagSlots
+	}
+	return nil
+}
+
+func hydrateParcelContentRecords(db *gorm.DB, records []parcelContentRecord) error {
+	ids := make([]uint, 0, len(records))
+	seen := make(map[uint]bool, len(records))
+	for _, record := range records {
+		if record.ItemID > 0 && !seen[record.ItemID] {
+			seen[record.ItemID] = true
+			ids = append(ids, record.ItemID)
+		}
+	}
+	items, err := loadMailParcelsItems(db, ids)
+	if err != nil {
+		return err
+	}
+	for index := range records {
+		item, found := items[records[index].ItemID]
+		if !found {
+			records[index].ItemName = fmt.Sprintf("Unknown item #%d", records[index].ItemID)
+			records[index].ItemNoDrop = 1
+			continue
+		}
+		records[index].ItemName = item.Name
+		records[index].ItemIcon = item.Icon
+		records[index].ItemNoDrop = item.NoDrop
+	}
+	return nil
 }
 
 func ensureParcelItemChanges(
@@ -1825,10 +1938,13 @@ func ensureParcelSlotAvailable(db *gorm.DB, characterID, slotID, excludeID uint,
 	return nil
 }
 
-func nextParcelSlot(db *gorm.DB, characterID uint, capacity int) (uint, error) {
+func nextParcelSlot(db *gorm.DB, characterID, excludeID uint, capacity int) (uint, error) {
 	slots := make([]uint, 0)
-	if err := db.Table("character_parcels").
-		Where("char_id = ?", characterID).Order("slot_id").Pluck("slot_id", &slots).Error; err != nil {
+	query := db.Table("character_parcels").Where("char_id = ?", characterID)
+	if excludeID > 0 {
+		query = query.Where("id <> ?", excludeID)
+	}
+	if err := query.Order("slot_id").Pluck("slot_id", &slots).Error; err != nil {
 		return 0, err
 	}
 	occupied := make(map[uint]bool, len(slots))
@@ -1887,7 +2003,7 @@ func parcelInputColumns(input parcelEditorInput) map[string]interface{} {
 		"char_id": input.CharacterID, "item_id": input.ItemID,
 		"aug_slot_1": input.Augment1, "aug_slot_2": input.Augment2, "aug_slot_3": input.Augment3,
 		"aug_slot_4": input.Augment4, "aug_slot_5": input.Augment5, "aug_slot_6": input.Augment6,
-		"slot_id": input.SlotID, "quantity": input.Quantity, "evolve_amount": input.EvolveAmount,
+		"slot_id": input.SlotID, "quantity": input.Quantity,
 		"from_name": strings.TrimSpace(input.FromName), "note": strings.TrimSpace(input.Note),
 	}
 	if strings.TrimSpace(input.SentDate) == "" {
@@ -1903,7 +2019,7 @@ func contentInputColumns(parcelID uint, input parcelContentInput) map[string]int
 		"parcels_id": parcelID, "slot_id": input.SlotID, "item_id": input.ItemID,
 		"aug_slot_1": input.Augment1, "aug_slot_2": input.Augment2, "aug_slot_3": input.Augment3,
 		"aug_slot_4": input.Augment4, "aug_slot_5": input.Augment5, "aug_slot_6": input.Augment6,
-		"quantity": input.Quantity, "evolve_amount": input.EvolveAmount,
+		"quantity": input.Quantity,
 	}
 }
 
@@ -1911,7 +2027,7 @@ func parcelPlayerEventData(
 	parcel parcelEditorRecord,
 	item mailParcelsItemReference,
 ) (playerEventParcelSendData, error) {
-	sentAt, err := time.ParseInLocation("2006-01-02 15:04:05", parcel.SentDate, time.Local)
+	sentAt, err := time.ParseInLocation(mailParcelsSQLDateTime, parcel.SentDate, time.Local)
 	if err != nil {
 		return playerEventParcelSendData{}, fmt.Errorf("parcel sent date is not valid for player event logging: %w", err)
 	}
@@ -2051,7 +2167,7 @@ func validateParcelInput(input parcelEditorInput) error {
 		return errors.New("Parcel note must be 1,024 characters or fewer")
 	}
 	if input.SentDate != "" {
-		if _, err := time.Parse("2006-01-02 15:04:05", input.SentDate); err != nil {
+		if _, err := time.Parse(mailParcelsSQLDateTime, input.SentDate); err != nil {
 			return errors.New("Sent date must use YYYY-MM-DD HH:MM:SS")
 		}
 	}
@@ -2078,7 +2194,7 @@ func validateGMParcelSendInput(input gmParcelSendInput) error {
 		return errors.New("Parcel note must be 1,024 characters or fewer")
 	}
 	if input.SentDate != "" {
-		if _, err := time.Parse("2006-01-02 15:04:05", input.SentDate); err != nil {
+		if _, err := time.Parse(mailParcelsSQLDateTime, input.SentDate); err != nil {
 			return errors.New("Sent date must use YYYY-MM-DD HH:MM:SS")
 		}
 	}
@@ -2091,6 +2207,20 @@ func validateGMParcelSendInput(input gmParcelSendInput) error {
 		}
 	}
 	return validateMailParcelsReason(input.Reason)
+}
+
+func normalizeParcelSentDate(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	if instant, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return instant.In(time.Local).Format(mailParcelsSQLDateTime), nil
+	}
+	if _, err := time.ParseInLocation(mailParcelsSQLDateTime, value, time.Local); err == nil {
+		return value, nil
+	}
+	return "", errors.New("Sent date must be an RFC3339 timestamp or use YYYY-MM-DD HH:MM:SS")
 }
 
 func validateParcelContentInput(input parcelContentInput) error {

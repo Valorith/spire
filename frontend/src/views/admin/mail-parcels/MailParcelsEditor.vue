@@ -141,7 +141,7 @@
                     {{ record.character_name }} · from {{ record.from || 'Unknown' }} · {{ formatUnix(record.timestamp) }}
                   </template>
                   <template v-else>
-                    {{ record.character_name }} · qty {{ record.quantity }} · {{ formatParcelDate(record.sent_date) }}
+                    {{ record.character_name }} · qty {{ record.quantity }} · {{ formatParcelDate(record.sent_date, record.sent_timestamp) }}
                   </template>
                 </span>
                 <span
@@ -544,16 +544,6 @@
                       <span class="spire-editor-field-help">{{ isMoneyParcel ? 'Stored as raw copper value.' : 'Stacks use quantity; charged items use charges.' }}</span>
                     </div>
                     <div class="spire-editor-field">
-                      <label for="mail-parcels-evolve-amount">Evolve progress</label>
-                      <input
-                        id="mail-parcels-evolve-amount"
-                        v-model.number="editModel.evolve_amount"
-                        class="form-control form-control-sm"
-                        type="number"
-                        min="0"
-                      >
-                    </div>
-                    <div class="spire-editor-field">
                       <label for="mail-parcels-slot">Mailbox slot</label>
                       <input
                         id="mail-parcels-slot"
@@ -563,7 +553,7 @@
                         min="0"
                         :max="summary.parcel_capacity"
                       >
-                      <span class="spire-editor-field-help">Use 0 on creation to choose the first free slot automatically.</span>
+                      <span class="spire-editor-field-help">Use 0 to choose the first free slot automatically.</span>
                     </div>
                   </div>
                 </div>
@@ -960,10 +950,6 @@
           <label for="mail-parcels-content-quantity">Quantity / charges</label>
           <input id="mail-parcels-content-quantity" v-model.number="contentDraft.quantity" class="form-control form-control-sm" type="number" min="1">
         </div>
-        <div class="spire-editor-field">
-          <label for="mail-parcels-content-evolve">Evolve progress</label>
-          <input id="mail-parcels-content-evolve" v-model.number="contentDraft.evolve_amount" class="form-control form-control-sm" type="number" min="0">
-        </div>
       </div>
 
       <div class="augment-section augment-section--modal">
@@ -1343,10 +1329,6 @@
                     :disabled="Boolean(line.item && !line.item.stackable)"
                   >
                 </div>
-                <div v-if="line.item && Number(line.item.evolving_level) > 0" class="spire-editor-field">
-                  <label :for="'gm-parcel-evolve-' + line.client_key">Evolve progress</label>
-                  <input :id="'gm-parcel-evolve-' + line.client_key" v-model.number="line.evolve_amount" class="form-control form-control-sm" type="number" min="0">
-                </div>
               </div>
               <div v-if="line.item && gmParcelSocketOptions(line).length" class="gm-parcel-augments">
                 <span class="context-label">Compatible augments</span>
@@ -1499,11 +1481,11 @@
   const MAIL_FIELDS = ['character_id', 'timestamp', 'from', 'subject', 'body', 'to', 'status']
   const PARCEL_FIELDS = [
     'character_id', 'item_id', 'augment_1', 'augment_2', 'augment_3', 'augment_4', 'augment_5', 'augment_6',
-    'slot_id', 'quantity', 'evolve_amount', 'from_name', 'note', 'sent_date'
+    'slot_id', 'quantity', 'from_name', 'note', 'sent_date'
   ]
   const CONTENT_FIELDS = [
     'slot_id', 'item_id', 'augment_1', 'augment_2', 'augment_3', 'augment_4', 'augment_5', 'augment_6',
-    'quantity', 'evolve_amount'
+    'quantity'
   ]
 
   function clone (value) {
@@ -1548,7 +1530,6 @@
       augment_6: 0,
       slot_id: 0,
       quantity: 1,
-      evolve_amount: 0,
       from_name: 'Server Staff',
       note: '',
       sent_date: ''
@@ -1570,7 +1551,6 @@
       augment_5: 0,
       augment_6: 0,
       quantity: 1,
-      evolve_amount: 0,
       reason: ''
     }
   }
@@ -1590,8 +1570,7 @@
       augment_5: 0,
       augment_6: 0,
       augment_refs: [null, null, null, null, null, null],
-      quantity: 1,
-      evolve_amount: 0
+      quantity: 1
     }
   }
 
@@ -1965,9 +1944,11 @@
             { recipient_count: 0, recipients: [], confirmation: '' },
             response.data || {}
           )
+          return true
         } catch (error) {
           this.gmMailDraft.audiencePreview = { recipient_count: 0, recipients: [], confirmation: '' }
           this.gmMailDraft.audienceError = this.apiError(error, 'Could not resolve the server-wide audience.')
+          return false
         } finally {
           this.gmMailDraft.loadingAudience = false
         }
@@ -2021,13 +2002,27 @@
       removeGMMailRecipient (id) {
         this.gmMailDraft.recipients = this.gmMailDraft.recipients.filter(character => Number(character.id) !== Number(id))
       },
-      reviewGMMail () {
+      async reviewGMMail () {
         if (!this.canReviewGMMail) return
+        if (this.gmMailDraft.audience === 'broadcast') {
+          const refreshed = await this.loadGMBroadcastAudience()
+          if (!refreshed || !this.canReviewGMMail) return
+        }
         this.gmMailDraft.confirmation = ''
         this.gmMailDraft.step = 'review'
       },
       async sendGMMail () {
         if (!this.canSendGMMail || this.gmMailDraft.busy) return
+        if (this.gmMailDraft.audience === 'broadcast') {
+          const enteredConfirmation = this.gmMailDraft.confirmation.trim()
+          const refreshed = await this.loadGMBroadcastAudience()
+          if (!refreshed) return
+          if (enteredConfirmation !== this.gmMailExpectedConfirmation) {
+            this.gmMailDraft.confirmation = ''
+            this.notify('The active broadcast audience changed. Review the new recipient count and confirm again.', 'error')
+            return
+          }
+        }
         this.gmMailDraft.busy = true
         try {
           const payload = {
@@ -2117,8 +2112,7 @@
               augment_4: Number(line.augment_4 || 0),
               augment_5: Number(line.augment_5 || 0),
               augment_6: Number(line.augment_6 || 0),
-              quantity: Number(line.quantity),
-              evolve_amount: Number(line.evolve_amount || 0)
+              quantity: Number(line.quantity)
             }))
           }
           const response = await SpireApi.v1().put('/mail-parcels-editor/parcel/send', payload)
@@ -2269,8 +2263,12 @@
           item_no_drop: Number(record.item_no_drop),
           item_bag_slots: Number(record.item_bag_slots || 0)
         })
+        const sentInstant = Number(record.sent_timestamp) > 0
+          ? new Date(Number(record.sent_timestamp) * 1000)
+          : new Date(String(record.sent_date || '').replace(' ', 'T'))
+        this.parcelSentAt = localDateTimeValue(sentInstant)
+        this.editModel.sent_date = this.sqlDateTime(this.parcelSentAt)
         this.originalModel = clone(this.editModel)
-        this.parcelSentAt = localDateTimeValue(String(record.sent_date || '').replace(' ', 'T'))
         this.selectedCharacter = {
           id: Number(record.character_id),
           name: record.character_name,
@@ -2532,7 +2530,6 @@
           line.item = clone(item)
           line.item_id = Number(item.id)
           line.quantity = Number(item.stackable) ? Math.max(1, Math.min(Number(line.quantity) || 1, Number(item.stack_size) || 1)) : 1
-          line.evolve_amount = Number(item.evolving_level) > 0 ? Number(line.evolve_amount || 0) : 0
           for (let augmentIndex = 0; augmentIndex < 6; augmentIndex++) {
             this.$set(line.augment_refs, augmentIndex, null)
             this.$set(line, `augment_${augmentIndex + 1}`, 0)
@@ -2702,7 +2699,8 @@
         if (Number.isNaN(date.getTime())) return 'Unknown time'
         return date.toLocaleString()
       },
-      formatParcelDate (value) {
+      formatParcelDate (value, timestamp = 0) {
+        if (Number(timestamp) > 0) return this.formatDateTime(new Date(Number(timestamp) * 1000))
         if (!value) return 'No sent time'
         return this.formatDateTime(String(value).replace(' ', 'T'))
       },
@@ -2710,8 +2708,7 @@
         if (!value) return ''
         const date = new Date(value)
         if (Number.isNaN(date.getTime())) return ''
-        const local = localDateTimeValue(date)
-        return `${local.slice(0, 10)} ${local.slice(11, 19)}`
+        return date.toISOString()
       },
       openItemEditor (id) {
         if (Number(id) > 0) this.$router.push(`/item/${id}`)

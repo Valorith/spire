@@ -515,6 +515,7 @@ func (p *PlayerOperationsController) summary(c echo.Context) error {
 
 func (p *PlayerOperationsController) listCharacters(c echo.Context) error {
 	db := p.db.Get(models.CharacterDatum{}, c)
+	zoneDB := p.db.Get(models.Zone{}, c)
 	page, limit := playerOperationsPagination(c)
 	search := strings.TrimSpace(c.QueryParam("q"))
 	state := strings.ToLower(strings.TrimSpace(c.QueryParam("state")))
@@ -522,8 +523,7 @@ func (p *PlayerOperationsController) listCharacters(c echo.Context) error {
 	base := db.Table("character_data ch").
 		Joins("LEFT JOIN account a ON a.id = ch.account_id").
 		Joins("LEFT JOIN guild_members gm ON gm.char_id = ch.id").
-		Joins("LEFT JOIN guilds g ON g.id = gm.guild_id").
-		Joins("LEFT JOIN zone z ON z.zoneidnumber = ch.zone_id AND z.version = 0")
+		Joins("LEFT JOIN guilds g ON g.id = gm.guild_id")
 	if search != "" {
 		like := "%" + search + "%"
 		base = base.Where(
@@ -554,13 +554,16 @@ func (p *PlayerOperationsController) listCharacters(c echo.Context) error {
 		ch.class,
 		ch.level,
 		ch.zone_id,
-		COALESCE(z.long_name, z.short_name, CONCAT('Zone #', ch.zone_id)) AS zone_name,
+		CONCAT('Zone #', ch.zone_id) AS zone_name,
 		COALESCE(gm.guild_id, 0) AS guild_id,
 		COALESCE(g.name, '') AS guild_name,
 		COALESCE(gm.rank, 0) AS guild_rank,
 		ch.ingame = 1 AS online,
 		ch.deleted_at
 	`).Order("ch.name, ch.id").Limit(limit).Offset((page - 1) * limit).Scan(&results).Error; err != nil {
+		return playerOperationsDatabaseError(c, err)
+	}
+	if err := hydratePlayerOperationsCharacterZones(zoneDB, results); err != nil {
 		return playerOperationsDatabaseError(c, err)
 	}
 	return c.JSON(http.StatusOK, playerOperationsPage{Data: results, Total: total, Page: page, Limit: limit})
@@ -635,7 +638,11 @@ func (p *PlayerOperationsController) getCharacter(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	detail, err := loadPlayerOperationsCharacterDetail(p.db.Get(models.CharacterDatum{}, c), id)
+	detail, err := loadPlayerOperationsCharacterDetail(
+		p.db.Get(models.CharacterDatum{}, c),
+		p.db.Get(models.Zone{}, c),
+		id,
+	)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -647,7 +654,11 @@ func (p *PlayerOperationsController) getAccount(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	detail, err := loadPlayerOperationsAccountDetail(p.db.Get(models.Account{}, c), id)
+	detail, err := loadPlayerOperationsAccountDetail(
+		p.db.Get(models.Account{}, c),
+		p.db.Get(models.Zone{}, c),
+		id,
+	)
 	if err != nil {
 		return playerOperationsLoadError(c, "Account", err)
 	}
@@ -659,7 +670,11 @@ func (p *PlayerOperationsController) getGuild(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	detail, err := loadPlayerOperationsGuildDetail(p.db.Get(models.Guild{}, c), id)
+	detail, err := loadPlayerOperationsGuildDetail(
+		p.db.Get(models.Guild{}, c),
+		p.db.Get(models.Zone{}, c),
+		id,
+	)
 	if err != nil {
 		return playerOperationsLoadError(c, "Guild", err)
 	}
@@ -679,7 +694,7 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := p.db.Get(models.CharacterDatum{}, c)
-	beforeDetail, err := loadPlayerOperationsCharacterDetail(db, id)
+	beforeDetail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -735,7 +750,7 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
-	detail, err := loadPlayerOperationsCharacterDetail(db, id)
+	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -807,7 +822,7 @@ func (p *PlayerOperationsController) transferCharacter(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
-	detail, err := loadPlayerOperationsCharacterDetail(db, id)
+	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -830,8 +845,9 @@ func (p *PlayerOperationsController) relocateCharacter(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := p.db.Get(models.CharacterDatum{}, c)
+	zoneDB := p.db.Get(models.Zone{}, c)
 	var zone playerOperationsZone
-	if err := db.Table("zone").Select(`
+	if err := zoneDB.Table("zone").Select(`
 		zoneidnumber AS id, version, COALESCE(short_name, '') AS short_name, long_name,
 		safe_x, safe_y, safe_z, safe_heading
 	`).Where("zoneidnumber = ? AND version = ?", request.ZoneID, request.ZoneVersion).Take(&zone).Error; err != nil {
@@ -881,7 +897,7 @@ func (p *PlayerOperationsController) relocateCharacter(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
-	detail, err := loadPlayerOperationsCharacterDetail(db, id)
+	detail, err := loadPlayerOperationsCharacterDetail(db, zoneDB, id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -897,8 +913,8 @@ func (p *PlayerOperationsController) updateCharacterGuild(c echo.Context) error 
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid guild membership payload"})
 	}
-	if request.GuildID < 0 || request.Rank < 0 || request.Rank > 255 {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Guild and rank values are invalid"})
+	if err := validatePlayerOperationsGuildMembership(request.GuildID, request.Rank); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	if err := validatePlayerOperationsReason(request.Reason); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
@@ -991,7 +1007,7 @@ func (p *PlayerOperationsController) updateCharacterGuild(c echo.Context) error 
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Guild membership", err)
 	}
-	detail, err := loadPlayerOperationsCharacterDetail(db, id)
+	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -1043,7 +1059,7 @@ func (p *PlayerOperationsController) updateCharacterCurrency(c echo.Context) err
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Character currency", err)
 	}
-	detail, err := loadPlayerOperationsCharacterDetail(db, id)
+	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -1140,7 +1156,7 @@ func (p *PlayerOperationsController) changeCharacterLifecycle(c echo.Context, re
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
-	detail, err := loadPlayerOperationsCharacterDetail(db, id)
+	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Character", err)
 	}
@@ -1160,7 +1176,7 @@ func (p *PlayerOperationsController) updateAccount(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := p.db.Get(models.Account{}, c)
-	beforeDetail, err := loadPlayerOperationsAccountDetail(db, id)
+	beforeDetail, err := loadPlayerOperationsAccountDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Account", err)
 	}
@@ -1190,7 +1206,7 @@ func (p *PlayerOperationsController) updateAccount(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Account", err)
 	}
-	detail, err := loadPlayerOperationsAccountDetail(db, id)
+	detail, err := loadPlayerOperationsAccountDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Account", err)
 	}
@@ -1266,7 +1282,7 @@ func (p *PlayerOperationsController) sanctionAccount(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Account", err)
 	}
-	detail, err := loadPlayerOperationsAccountDetail(db, id)
+	detail, err := loadPlayerOperationsAccountDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Account", err)
 	}
@@ -1406,7 +1422,7 @@ func (p *PlayerOperationsController) createGuild(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Guild", err)
 	}
-	detail, err := loadPlayerOperationsGuildDetail(db, guildID)
+	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), guildID)
 	if err != nil {
 		return playerOperationsLoadError(c, "Guild", err)
 	}
@@ -1477,7 +1493,7 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Guild", err)
 	}
-	detail, err := loadPlayerOperationsGuildDetail(db, id)
+	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Guild", err)
 	}
@@ -1580,8 +1596,13 @@ func (p *PlayerOperationsController) changeGuildMember(c echo.Context, action st
 			return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 		}
 	}
-	if input.CharacterID <= 0 || input.Rank < 0 || input.Rank > 255 {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Character and rank values are invalid"})
+	if input.CharacterID <= 0 {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Character is invalid"})
+	}
+	if action != "remove" {
+		if err := validatePlayerOperationsGuildMembership(guildID, input.Rank); err != nil {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+		}
 	}
 	if err := validatePlayerOperationsReason(input.Reason); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
@@ -1672,7 +1693,7 @@ func (p *PlayerOperationsController) changeGuildMember(c echo.Context, action st
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Guild member", err)
 	}
-	detail, err := loadPlayerOperationsGuildDetail(db, guildID)
+	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), guildID)
 	if err != nil {
 		return playerOperationsLoadError(c, "Guild", err)
 	}
@@ -1757,7 +1778,7 @@ func (p *PlayerOperationsController) updateGuildAccess(c echo.Context) error {
 		p.discardAudit(auditID)
 		return playerOperationsMutationError(c, "Guild access", err)
 	}
-	detail, err := loadPlayerOperationsGuildDetail(db, guildID)
+	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), guildID)
 	if err != nil {
 		return playerOperationsLoadError(c, "Guild", err)
 	}
@@ -1790,6 +1811,7 @@ func (p *PlayerOperationsController) lookupAccounts(c echo.Context) error {
 
 func (p *PlayerOperationsController) lookupCharacters(c echo.Context) error {
 	db := p.db.Get(models.CharacterDatum{}, c)
+	zoneDB := p.db.Get(models.Zone{}, c)
 	search := strings.TrimSpace(c.QueryParam("q"))
 	results := make([]playerOperationsCharacterSummary, 0)
 	if len(search) < 2 {
@@ -1800,7 +1822,6 @@ func (p *PlayerOperationsController) lookupCharacters(c echo.Context) error {
 		Joins("LEFT JOIN account a ON a.id = ch.account_id").
 		Joins("LEFT JOIN guild_members gm ON gm.char_id = ch.id").
 		Joins("LEFT JOIN guilds g ON g.id = gm.guild_id").
-		Joins("LEFT JOIN zone z ON z.zoneidnumber = ch.zone_id AND z.version = 0").
 		Where("ch.deleted_at IS NULL")
 	if id, err := strconv.Atoi(search); err == nil && id > 0 {
 		query = query.Where("(ch.id = ? OR ch.name LIKE ?)", id, like)
@@ -1809,10 +1830,13 @@ func (p *PlayerOperationsController) lookupCharacters(c echo.Context) error {
 	}
 	if err := query.Select(`
 		ch.id, ch.account_id, COALESCE(a.name, '') AS account_name, ch.name, ch.race, ch.class,
-		ch.level, ch.zone_id, COALESCE(z.long_name, z.short_name, '') AS zone_name,
+		ch.level, ch.zone_id, CONCAT('Zone #', ch.zone_id) AS zone_name,
 		COALESCE(gm.guild_id, 0) AS guild_id, COALESCE(g.name, '') AS guild_name,
 		COALESCE(gm.rank, 0) AS guild_rank, ch.ingame = 1 AS online, ch.deleted_at
 	`).Order("ch.name, ch.id").Limit(playerOperationsLookupLimit).Scan(&results).Error; err != nil {
+		return playerOperationsDatabaseError(c, err)
+	}
+	if err := hydratePlayerOperationsCharacterZones(zoneDB, results); err != nil {
 		return playerOperationsDatabaseError(c, err)
 	}
 	return c.JSON(http.StatusOK, playerOperationsPage{Data: results, Total: int64(len(results)), Page: 1, Limit: playerOperationsLookupLimit})
@@ -1855,7 +1879,71 @@ func (p *PlayerOperationsController) lookupZones(c echo.Context) error {
 	return c.JSON(http.StatusOK, playerOperationsPage{Data: results, Total: int64(len(results)), Page: 1, Limit: playerOperationsLookupLimit})
 }
 
-func loadPlayerOperationsCharacterDetail(db *gorm.DB, id int) (playerOperationsCharacterDetail, error) {
+func loadPlayerOperationsZoneNames(db *gorm.DB, zoneIDs []int) (map[int]string, error) {
+	names := make(map[int]string)
+	uniqueIDs := make([]int, 0, len(zoneIDs))
+	seen := make(map[int]bool)
+	for _, zoneID := range zoneIDs {
+		if zoneID <= 0 || seen[zoneID] {
+			continue
+		}
+		seen[zoneID] = true
+		uniqueIDs = append(uniqueIDs, zoneID)
+	}
+	if len(uniqueIDs) == 0 {
+		return names, nil
+	}
+	var zones []struct {
+		ID   int
+		Name string
+	}
+	if err := db.Table("zone").Select(`
+		zoneidnumber AS id,
+		COALESCE(long_name, short_name, CONCAT('Zone #', zoneidnumber)) AS name
+	`).Where("version = 0 AND zoneidnumber IN ?", uniqueIDs).Scan(&zones).Error; err != nil {
+		return nil, err
+	}
+	for _, zone := range zones {
+		names[zone.ID] = zone.Name
+	}
+	return names, nil
+}
+
+func hydratePlayerOperationsCharacterZones(db *gorm.DB, characters []playerOperationsCharacterSummary) error {
+	zoneIDs := make([]int, 0, len(characters))
+	for _, character := range characters {
+		zoneIDs = append(zoneIDs, character.ZoneID)
+	}
+	names, err := loadPlayerOperationsZoneNames(db, zoneIDs)
+	if err != nil {
+		return err
+	}
+	for index := range characters {
+		if name, ok := names[characters[index].ZoneID]; ok {
+			characters[index].ZoneName = name
+		}
+	}
+	return nil
+}
+
+func hydratePlayerOperationsBindZones(db *gorm.DB, binds []playerOperationsBind) error {
+	zoneIDs := make([]int, 0, len(binds))
+	for _, bind := range binds {
+		zoneIDs = append(zoneIDs, bind.ZoneID)
+	}
+	names, err := loadPlayerOperationsZoneNames(db, zoneIDs)
+	if err != nil {
+		return err
+	}
+	for index := range binds {
+		if name, ok := names[binds[index].ZoneID]; ok {
+			binds[index].ZoneName = name
+		}
+	}
+	return nil
+}
+
+func loadPlayerOperationsCharacterDetail(db *gorm.DB, zoneDB *gorm.DB, id int) (playerOperationsCharacterDetail, error) {
 	var detail playerOperationsCharacterDetail
 	if err := db.Table("character_data").Select(`
 		id, account_id, name, last_name, title, suffix, zone_id, zone_instance,
@@ -1891,19 +1979,25 @@ func loadPlayerOperationsCharacterDetail(db *gorm.DB, id int) (playerOperationsC
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return detail, err
 	}
-	zoneQuery := db.Table("zone z").Select(`
-		z.zoneidnumber AS id, z.version, COALESCE(z.short_name, '') AS short_name, z.long_name,
-		z.safe_x, z.safe_y, z.safe_z, z.safe_heading
-	`).Where("z.zoneidnumber = ?", detail.Character.ZoneID)
+	zoneVersion := 0
 	if detail.Character.ZoneInstance > 0 {
-		zoneQuery = zoneQuery.Joins(
-			"JOIN instance_list il ON il.id = ? AND il.zone = z.zoneidnumber AND il.version = z.version",
-			detail.Character.ZoneInstance,
-		)
-	} else {
-		zoneQuery = zoneQuery.Where("z.version = 0")
+		var instance struct {
+			Zone    int
+			Version int
+		}
+		err := db.Table("instance_list").Select("zone, version").Where("id = ?", detail.Character.ZoneInstance).Take(&instance).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return detail, err
+		}
+		if err == nil && instance.Zone == detail.Character.ZoneID {
+			zoneVersion = instance.Version
+		}
 	}
-	if err := zoneQuery.Take(&detail.Context.Zone).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if err := zoneDB.Table("zone").Select(`
+		zoneidnumber AS id, version, COALESCE(short_name, '') AS short_name, long_name,
+		safe_x, safe_y, safe_z, safe_heading
+	`).Where("zoneidnumber = ? AND version = ?", detail.Character.ZoneID, zoneVersion).
+		Take(&detail.Context.Zone).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return detail, err
 	}
 	currency, err := loadPlayerOperationsCurrency(db, id, false)
@@ -1915,10 +2009,12 @@ func loadPlayerOperationsCharacterDetail(db *gorm.DB, id int) (playerOperationsC
 	if err := db.Table("character_bind cb").
 		Select(`
 			cb.slot, cb.zone_id, cb.instance_id, cb.x, cb.y, cb.z, cb.heading,
-			COALESCE(z.long_name, z.short_name, CONCAT('Zone #', cb.zone_id)) AS zone_name
+			CONCAT('Zone #', cb.zone_id) AS zone_name
 		`).
-		Joins("LEFT JOIN zone z ON z.zoneidnumber = cb.zone_id AND z.version = 0").
 		Where("cb.id = ?", id).Order("cb.slot").Scan(&detail.Context.Binds).Error; err != nil {
+		return detail, err
+	}
+	if err := hydratePlayerOperationsBindZones(zoneDB, detail.Context.Binds); err != nil {
 		return detail, err
 	}
 	detail.Context.RelatedCounts = make(map[string]int64)
@@ -1949,7 +2045,7 @@ func loadPlayerOperationsCharacterDetail(db *gorm.DB, id int) (playerOperationsC
 	return detail, nil
 }
 
-func loadPlayerOperationsAccountDetail(db *gorm.DB, id int) (playerOperationsAccountDetail, error) {
+func loadPlayerOperationsAccountDetail(db *gorm.DB, zoneDB *gorm.DB, id int) (playerOperationsAccountDetail, error) {
 	var detail playerOperationsAccountDetail
 	var accountRow struct {
 		ID               int
@@ -1994,13 +2090,15 @@ func loadPlayerOperationsAccountDetail(db *gorm.DB, id int) (playerOperationsAcc
 		Joins("LEFT JOIN account a ON a.id = ch.account_id").
 		Joins("LEFT JOIN guild_members gm ON gm.char_id = ch.id").
 		Joins("LEFT JOIN guilds g ON g.id = gm.guild_id").
-		Joins("LEFT JOIN zone z ON z.zoneidnumber = ch.zone_id AND z.version = 0").
 		Select(`
 			ch.id, ch.account_id, COALESCE(a.name, '') AS account_name, ch.name, ch.race, ch.class,
-			ch.level, ch.zone_id, COALESCE(z.long_name, z.short_name, '') AS zone_name,
+			ch.level, ch.zone_id, CONCAT('Zone #', ch.zone_id) AS zone_name,
 			COALESCE(gm.guild_id, 0) AS guild_id, COALESCE(g.name, '') AS guild_name,
 			COALESCE(gm.rank, 0) AS guild_rank, ch.ingame = 1 AS online, ch.deleted_at
 		`).Where("ch.account_id = ?", id).Order("ch.deleted_at, ch.name").Scan(&detail.Characters).Error; err != nil {
+		return detail, err
+	}
+	if err := hydratePlayerOperationsCharacterZones(zoneDB, detail.Characters); err != nil {
 		return detail, err
 	}
 	detail.IPs = make([]playerOperationsAccountIP, 0)
@@ -2024,7 +2122,7 @@ func loadPlayerOperationsAccountDetail(db *gorm.DB, id int) (playerOperationsAcc
 	return detail, nil
 }
 
-func loadPlayerOperationsGuildDetail(db *gorm.DB, id int) (playerOperationsGuildDetail, error) {
+func loadPlayerOperationsGuildDetail(db *gorm.DB, zoneDB *gorm.DB, id int) (playerOperationsGuildDetail, error) {
 	var detail playerOperationsGuildDetail
 	if err := db.Table("guilds g").
 		Select(`
@@ -2039,15 +2137,17 @@ func loadPlayerOperationsGuildDetail(db *gorm.DB, id int) (playerOperationsGuild
 	if err := db.Table("guild_members gm").
 		Select(`
 			ch.id, ch.account_id, COALESCE(a.name, '') AS account_name, ch.name, ch.race, ch.class,
-			ch.level, ch.zone_id, COALESCE(z.long_name, z.short_name, '') AS zone_name,
+			ch.level, ch.zone_id, CONCAT('Zone #', ch.zone_id) AS zone_name,
 			gm.guild_id, g.name AS guild_name, gm.rank AS guild_rank,
 			(ch.ingame = 1 OR gm.online = 1) AS online, ch.deleted_at
 		`).
 		Joins("JOIN character_data ch ON ch.id = gm.char_id").
 		Joins("LEFT JOIN account a ON a.id = ch.account_id").
 		Joins("LEFT JOIN guilds g ON g.id = gm.guild_id").
-		Joins("LEFT JOIN zone z ON z.zoneidnumber = ch.zone_id AND z.version = 0").
 		Where("gm.guild_id = ?", id).Order("gm.rank, ch.name").Scan(&detail.Members).Error; err != nil {
+		return detail, err
+	}
+	if err := hydratePlayerOperationsCharacterZones(zoneDB, detail.Members); err != nil {
 		return detail, err
 	}
 	detail.Memberships = make([]playerOperationsGuildMembership, 0)
@@ -2170,6 +2270,22 @@ func validatePlayerOperationsGuild(input playerOperationsGuildInput) error {
 	}
 	if input.LeaderID < 0 || input.MinStatus < -1 || input.MinStatus > 255 {
 		return errors.New("Guild leader or minimum status is invalid")
+	}
+	return nil
+}
+
+func validatePlayerOperationsGuildMembership(guildID int, rank int) error {
+	if guildID < 0 {
+		return errors.New("Guild is invalid")
+	}
+	if guildID == 0 {
+		if rank != 0 {
+			return errors.New("Rank must be 0 when removing guild membership")
+		}
+		return nil
+	}
+	if rank < 1 || rank > 8 {
+		return errors.New("Guild rank must be between 1 and 8")
 	}
 	return nil
 }
