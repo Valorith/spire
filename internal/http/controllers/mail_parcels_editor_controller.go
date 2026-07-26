@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,10 +25,15 @@ const (
 	mailParcelsReasonMinLength = 8
 	mailParcelsReasonMaxLength = 240
 	mailParcelsDefaultCapacity = 50
+	mailParcelsMaxBatchItems   = 20
+	mailParcelsMaxDirectMail   = 100
 
 	mailStatusUnread = 1
 	mailStatusRead   = 3
 	mailStatusTrash  = 4
+
+	playerEventParcelSend     = 50
+	playerEventParcelSendName = "Parcel Item Sent"
 
 	mailParcelsEventMailCreate    = "MAIL_PARCELS_MAIL_CREATE"
 	mailParcelsEventMailUpdate    = "MAIL_PARCELS_MAIL_UPDATE"
@@ -38,6 +44,9 @@ const (
 	mailParcelsEventContentCreate = "MAIL_PARCELS_CONTENT_CREATE"
 	mailParcelsEventContentUpdate = "MAIL_PARCELS_CONTENT_UPDATE"
 	mailParcelsEventContentDelete = "MAIL_PARCELS_CONTENT_DELETE"
+	mailParcelsEventGMSendParcels = "MAIL_PARCELS_GM_SEND_PARCELS"
+	mailParcelsEventGMSendMail    = "MAIL_PARCELS_GM_SEND_MAIL"
+	mailParcelsEventGMBroadcast   = "MAIL_PARCELS_GM_BROADCAST"
 )
 
 type MailParcelsEditorController struct {
@@ -84,6 +93,12 @@ type mailParcelsItemReference struct {
 	BagSlots      int    `json:"bag_slots" gorm:"column:bag_slots"`
 	BagType       int    `json:"bag_type" gorm:"column:bag_type"`
 	AugmentType   int    `json:"augment_type" gorm:"column:augment_type"`
+	AugmentSlot1  int    `json:"augment_slot_1_type" gorm:"column:augment_slot_1_type"`
+	AugmentSlot2  int    `json:"augment_slot_2_type" gorm:"column:augment_slot_2_type"`
+	AugmentSlot3  int    `json:"augment_slot_3_type" gorm:"column:augment_slot_3_type"`
+	AugmentSlot4  int    `json:"augment_slot_4_type" gorm:"column:augment_slot_4_type"`
+	AugmentSlot5  int    `json:"augment_slot_5_type" gorm:"column:augment_slot_5_type"`
+	AugmentSlot6  int    `json:"augment_slot_6_type" gorm:"column:augment_slot_6_type"`
 	EvolvingLevel int    `json:"evolving_level" gorm:"column:evolving_level"`
 }
 
@@ -108,6 +123,42 @@ type mailEditorInput struct {
 	To          string `json:"to"`
 	Status      int8   `json:"status"`
 	Reason      string `json:"reason"`
+}
+
+type gmMailSendInput struct {
+	CharacterIDs []uint `json:"character_ids"`
+	Timestamp    int64  `json:"timestamp"`
+	From         string `json:"from"`
+	Subject      string `json:"subject"`
+	Body         string `json:"body"`
+	Reason       string `json:"reason"`
+	Confirmation string `json:"confirmation"`
+}
+
+type gmMailSendResult struct {
+	Audience       string                          `json:"audience"`
+	RecipientCount int                             `json:"recipient_count"`
+	MessageCount   int                             `json:"message_count"`
+	MessageIDs     []uint                          `json:"message_ids,omitempty"`
+	Recipients     []mailParcelsCharacterReference `json:"recipients"`
+	AuditID        uint                            `json:"audit_id"`
+}
+
+type gmMailAudiencePreview struct {
+	RecipientCount int                             `json:"recipient_count"`
+	Recipients     []mailParcelsCharacterReference `json:"recipients"`
+	Confirmation   string                          `json:"confirmation"`
+}
+
+type gmMailInsert struct {
+	MsgID     uint   `gorm:"column:msgid;primaryKey;autoIncrement"`
+	CharID    uint   `gorm:"column:charid"`
+	Timestamp int64  `gorm:"column:timestamp"`
+	From      string `gorm:"column:from"`
+	Subject   string `gorm:"column:subject"`
+	Body      string `gorm:"column:body"`
+	To        string `gorm:"column:to"`
+	Status    int8   `gorm:"column:status"`
 }
 
 type parcelEditorRecord struct {
@@ -152,6 +203,43 @@ type parcelEditorInput struct {
 	Reason       string `json:"reason"`
 }
 
+type gmParcelSendInput struct {
+	CharacterID  uint               `json:"character_id"`
+	FromName     string             `json:"from_name"`
+	Note         string             `json:"note"`
+	SentDate     string             `json:"sent_date"`
+	Reason       string             `json:"reason"`
+	Confirmation string             `json:"confirmation"`
+	Items        []gmParcelSendItem `json:"items"`
+}
+
+type gmParcelSendItem struct {
+	ClientKey    string `json:"client_key"`
+	ItemID       uint   `json:"item_id"`
+	Augment1     uint   `json:"augment_1"`
+	Augment2     uint   `json:"augment_2"`
+	Augment3     uint   `json:"augment_3"`
+	Augment4     uint   `json:"augment_4"`
+	Augment5     uint   `json:"augment_5"`
+	Augment6     uint   `json:"augment_6"`
+	Quantity     uint   `json:"quantity"`
+	EvolveAmount uint   `json:"evolve_amount"`
+}
+
+type gmParcelSendDelivery struct {
+	ClientKey        string             `json:"client_key"`
+	Parcel           parcelEditorRecord `json:"parcel"`
+	PlayerEventLogID int64              `json:"player_event_log_id"`
+}
+
+type gmParcelSendResult struct {
+	CharacterID   uint                   `json:"character_id"`
+	CharacterName string                 `json:"character_name"`
+	ParcelCount   int                    `json:"parcel_count"`
+	Deliveries    []gmParcelSendDelivery `json:"deliveries"`
+	AuditID       uint                   `json:"audit_id"`
+}
+
 type parcelContentRecord struct {
 	ID           uint   `json:"id" gorm:"column:id"`
 	ParcelID     uint   `json:"parcel_id" gorm:"column:parcel_id"`
@@ -185,8 +273,39 @@ type parcelContentInput struct {
 }
 
 type parcelEditorDetail struct {
-	Parcel  parcelEditorRecord    `json:"parcel"`
-	Content []parcelContentRecord `json:"content"`
+	Parcel           parcelEditorRecord    `json:"parcel"`
+	Content          []parcelContentRecord `json:"content"`
+	PlayerEventLogID int64                 `json:"player_event_log_id,omitempty"`
+}
+
+// playerEventParcelSendData mirrors PlayerEvent::ParcelSend in the EQEmu
+// server's common/events/player_events.h. Keep this payload schema compatible
+// with the server so the existing event-log consumers can deserialize it.
+type playerEventParcelSendData struct {
+	ItemID         uint   `json:"item_id"`
+	ItemUniqueID   string `json:"item_unique_id"`
+	Augment1ID     uint   `json:"augment_1_id"`
+	Augment2ID     uint   `json:"augment_2_id"`
+	Augment3ID     uint   `json:"augment_3_id"`
+	Augment4ID     uint   `json:"augment_4_id"`
+	Augment5ID     uint   `json:"augment_5_id"`
+	Augment6ID     uint   `json:"augment_6_id"`
+	Quantity       uint   `json:"quantity"`
+	Charges        int    `json:"charges"`
+	FromPlayerName string `json:"from_player_name"`
+	ToPlayerName   string `json:"to_player_name"`
+	SentDate       uint   `json:"sent_date"`
+}
+
+type playerEventLogInsert struct {
+	ID            int64     `gorm:"column:id;primaryKey;autoIncrement"`
+	AccountID     int       `gorm:"column:account_id"`
+	CharacterID   uint      `gorm:"column:character_id"`
+	EventTypeID   int       `gorm:"column:event_type_id"`
+	EventTypeName string    `gorm:"column:event_type_name"`
+	EventData     string    `gorm:"column:event_data"`
+	EtlTableID    int64     `gorm:"column:etl_table_id"`
+	CreatedAt     time.Time `gorm:"column:created_at"`
 }
 
 type mailParcelsDeleteRequest struct {
@@ -213,18 +332,23 @@ type mailParcelsAuditRow struct {
 }
 
 type mailParcelsAuditPayload struct {
-	Action        string      `json:"action"`
-	Kind          string      `json:"kind"`
-	RecordID      uint        `json:"record_id"`
-	ParentID      uint        `json:"parent_id,omitempty"`
-	CharacterID   uint        `json:"character_id,omitempty"`
-	CharacterName string      `json:"character_name,omitempty"`
-	ItemID        uint        `json:"item_id,omitempty"`
-	ItemName      string      `json:"item_name,omitempty"`
-	Subject       string      `json:"subject,omitempty"`
-	Reason        string      `json:"reason"`
-	Before        interface{} `json:"before,omitempty"`
-	After         interface{} `json:"after,omitempty"`
+	Action         string      `json:"action"`
+	Kind           string      `json:"kind"`
+	RecordID       uint        `json:"record_id"`
+	ParentID       uint        `json:"parent_id,omitempty"`
+	CharacterID    uint        `json:"character_id,omitempty"`
+	CharacterName  string      `json:"character_name,omitempty"`
+	ItemID         uint        `json:"item_id,omitempty"`
+	ItemName       string      `json:"item_name,omitempty"`
+	Subject        string      `json:"subject,omitempty"`
+	Audience       string      `json:"audience,omitempty"`
+	RecipientCount int         `json:"recipient_count,omitempty"`
+	ParcelCount    int         `json:"parcel_count,omitempty"`
+	RecordIDs      []uint      `json:"record_ids,omitempty"`
+	Details        interface{} `json:"details,omitempty"`
+	Reason         string      `json:"reason"`
+	Before         interface{} `json:"before,omitempty"`
+	After          interface{} `json:"after,omitempty"`
 }
 
 type mailParcelsConflictError struct {
@@ -248,11 +372,15 @@ func (m *MailParcelsEditorController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodGet, "mail-parcels-editor/mail", m.listMail, nil),
 		routes.RegisterRoute(http.MethodGet, "mail-parcels-editor/mail/:id", m.getMail, nil),
 		routes.RegisterRoute(http.MethodPut, "mail-parcels-editor/mail", m.createMail, nil),
+		routes.RegisterRoute(http.MethodPut, "mail-parcels-editor/mail/send", m.sendDirectMail, nil),
 		routes.RegisterRoute(http.MethodPatch, "mail-parcels-editor/mail/:id", m.updateMail, nil),
 		routes.RegisterRoute(http.MethodDelete, "mail-parcels-editor/mail/:id", m.deleteMail, nil),
+		routes.RegisterRoute(http.MethodGet, "mail-parcels-editor/broadcast/audience", m.broadcastAudience, nil),
+		routes.RegisterRoute(http.MethodPut, "mail-parcels-editor/broadcast/mail/send", m.sendBroadcastMail, nil),
 		routes.RegisterRoute(http.MethodGet, "mail-parcels-editor/parcels", m.listParcels, nil),
 		routes.RegisterRoute(http.MethodGet, "mail-parcels-editor/parcel/:id", m.getParcel, nil),
 		routes.RegisterRoute(http.MethodPut, "mail-parcels-editor/parcel", m.createParcel, nil),
+		routes.RegisterRoute(http.MethodPut, "mail-parcels-editor/parcel/send", m.sendGMParcels, nil),
 		routes.RegisterRoute(http.MethodPatch, "mail-parcels-editor/parcel/:id", m.updateParcel, nil),
 		routes.RegisterRoute(http.MethodDelete, "mail-parcels-editor/parcel/:id", m.deleteParcel, nil),
 		routes.RegisterRoute(http.MethodPut, "mail-parcels-editor/parcel/:id/content", m.createParcelContent, nil),
@@ -394,6 +522,108 @@ func (m *MailParcelsEditorController) createMail(c echo.Context) error {
 	if err != nil {
 		m.discardAudit(auditID)
 		return mailParcelsMutationError(c, err, "Mail message")
+	}
+	return c.JSON(http.StatusCreated, result)
+}
+
+func (m *MailParcelsEditorController) sendDirectMail(c echo.Context) error {
+	var input gmMailSendInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid GM mail payload: %v", err)})
+	}
+	if err := validateGMMailInput(input); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	characterIDs := uniquePositiveIDs(input.CharacterIDs)
+	if len(characterIDs) == 0 {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Select at least one recipient character"})
+	}
+	if len(characterIDs) > mailParcelsMaxDirectMail {
+		return c.JSON(http.StatusBadRequest, echo.Map{
+			"error": fmt.Sprintf("Direct messages are limited to %d selected characters", mailParcelsMaxDirectMail),
+		})
+	}
+
+	db := m.db.Get(models.Mail{}, c)
+	result := gmMailSendResult{Audience: "direct", Recipients: []mailParcelsCharacterReference{}}
+	var auditID uint
+	err := db.Transaction(func(tx *gorm.DB) error {
+		recipients, err := loadGMDirectRecipients(tx, characterIDs)
+		if err != nil {
+			return err
+		}
+		expected := gmMailConfirmation("direct", len(recipients))
+		if strings.TrimSpace(input.Confirmation) != expected {
+			return mailParcelsConflict("Type %s to confirm delivery", expected)
+		}
+		rows, err := createGMMailRows(tx, recipients, input)
+		if err != nil {
+			return err
+		}
+		result = gmMailResult("direct", recipients, rows)
+		auditID, err = m.writeAudit(c, mailParcelsEventGMSendMail, gmMailAuditPayload(input, result, rows))
+		result.AuditID = auditID
+		return err
+	})
+	if err != nil {
+		m.discardAudit(auditID)
+		return mailParcelsMutationError(c, err, "GM direct message")
+	}
+	return c.JSON(http.StatusCreated, result)
+}
+
+func (m *MailParcelsEditorController) broadcastAudience(c echo.Context) error {
+	recipients, err := loadGMBroadcastRecipients(m.db.Get(models.Mail{}, c), false)
+	if err != nil {
+		return mailParcelsDatabaseError(c, err)
+	}
+	preview := recipients
+	if len(preview) > 12 {
+		preview = preview[:12]
+	}
+	return c.JSON(http.StatusOK, gmMailAudiencePreview{
+		RecipientCount: len(recipients),
+		Recipients:     preview,
+		Confirmation:   gmMailConfirmation("broadcast", len(recipients)),
+	})
+}
+
+func (m *MailParcelsEditorController) sendBroadcastMail(c echo.Context) error {
+	var input gmMailSendInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid GM broadcast payload: %v", err)})
+	}
+	if err := validateGMMailInput(input); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+
+	db := m.db.Get(models.Mail{}, c)
+	result := gmMailSendResult{Audience: "broadcast", Recipients: []mailParcelsCharacterReference{}}
+	var auditID uint
+	err := db.Transaction(func(tx *gorm.DB) error {
+		recipients, err := loadGMBroadcastRecipients(tx, true)
+		if err != nil {
+			return err
+		}
+		if len(recipients) == 0 {
+			return mailParcelsConflict("There are no active characters to receive this broadcast")
+		}
+		expected := gmMailConfirmation("broadcast", len(recipients))
+		if strings.TrimSpace(input.Confirmation) != expected {
+			return mailParcelsConflict("Type %s to confirm server-wide delivery", expected)
+		}
+		rows, err := createGMMailRows(tx, recipients, input)
+		if err != nil {
+			return err
+		}
+		result = gmMailResult("broadcast", recipients, rows)
+		auditID, err = m.writeAudit(c, mailParcelsEventGMBroadcast, gmMailAuditPayload(input, result, rows))
+		result.AuditID = auditID
+		return err
+	})
+	if err != nil {
+		m.discardAudit(auditID)
+		return mailParcelsMutationError(c, err, "GM server-wide message")
 	}
 	return c.JSON(http.StatusCreated, result)
 }
@@ -564,11 +794,24 @@ func (m *MailParcelsEditorController) createParcel(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		detail.PlayerEventLogID, err = writeParcelPlayerEvent(
+			tx,
+			character,
+			detail.Parcel,
+			item,
+		)
+		if err != nil {
+			return err
+		}
 		auditID, err = m.writeAudit(c, mailParcelsEventParcelCreate, mailParcelsAuditPayload{
 			Action: "create", Kind: "parcel", RecordID: id,
 			CharacterID: input.CharacterID, CharacterName: character.Name,
 			ItemID: input.ItemID, ItemName: item.Name,
-			Reason: strings.TrimSpace(input.Reason), After: detail.Parcel,
+			Reason: strings.TrimSpace(input.Reason),
+			Details: map[string]interface{}{
+				"player_event_log_id": detail.PlayerEventLogID,
+			},
+			After: detail.Parcel,
 		})
 		return err
 	})
@@ -577,6 +820,131 @@ func (m *MailParcelsEditorController) createParcel(c echo.Context) error {
 		return mailParcelsMutationError(c, err, "Parcel")
 	}
 	return c.JSON(http.StatusCreated, detail)
+}
+
+func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
+	var input gmParcelSendInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid GM parcel payload: %v", err)})
+	}
+	if err := validateGMParcelSendInput(input); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+
+	db := m.db.Get(models.CharacterParcel{}, c)
+	result := gmParcelSendResult{Deliveries: []gmParcelSendDelivery{}}
+	var auditID uint
+	err := db.Transaction(func(tx *gorm.DB) error {
+		character, err := loadLockedGMRecipient(tx, input.CharacterID)
+		if err != nil {
+			return err
+		}
+		expected := gmParcelConfirmation(len(input.Items), character.Name)
+		if strings.TrimSpace(input.Confirmation) != expected {
+			return mailParcelsConflict("Type %s to confirm parcel delivery", expected)
+		}
+		capacity := m.parcelCapacity(tx)
+		slots, err := availableParcelSlots(tx, input.CharacterID, capacity)
+		if err != nil {
+			return err
+		}
+		if len(slots) < len(input.Items) {
+			return mailParcelsConflict(
+				"%s has %d free parcel slots but this batch requires %d",
+				character.Name,
+				len(slots),
+				len(input.Items),
+			)
+		}
+		sentDate := strings.TrimSpace(input.SentDate)
+		if sentDate == "" {
+			sentDate = time.Now().Format("2006-01-02 15:04:05")
+		}
+		recordIDs := make([]uint, 0, len(input.Items))
+		itemMetadata := make([]map[string]interface{}, 0, len(input.Items))
+		for index, line := range input.Items {
+			item, err := ensureParcelItemChanges(tx, line.ItemID, gmParcelItemAugments(line), 0, nil)
+			if err != nil {
+				return mailParcelsConflict("Parcel %d: %s", index+1, err.Error())
+			}
+			if err := validateGMParcelItemConfiguration(item, line); err != nil {
+				return mailParcelsConflict("Parcel %d: %s", index+1, err.Error())
+			}
+			parcelInput := parcelEditorInput{
+				CharacterID:  input.CharacterID,
+				ItemID:       line.ItemID,
+				Augment1:     line.Augment1,
+				Augment2:     line.Augment2,
+				Augment3:     line.Augment3,
+				Augment4:     line.Augment4,
+				Augment5:     line.Augment5,
+				Augment6:     line.Augment6,
+				SlotID:       slots[index],
+				Quantity:     line.Quantity,
+				EvolveAmount: line.EvolveAmount,
+				FromName:     input.FromName,
+				Note:         input.Note,
+				SentDate:     sentDate,
+			}
+			if err := tx.Table("character_parcels").Create(parcelInputColumns(parcelInput)).Error; err != nil {
+				return err
+			}
+			var id uint
+			if err := tx.Raw("SELECT LAST_INSERT_ID()").Scan(&id).Error; err != nil {
+				return err
+			}
+			detail, err := loadParcelDetail(tx, id, false)
+			if err != nil {
+				return err
+			}
+			playerEventLogID, err := writeParcelPlayerEvent(tx, character, detail.Parcel, item)
+			if err != nil {
+				return err
+			}
+			recordIDs = append(recordIDs, id)
+			result.Deliveries = append(result.Deliveries, gmParcelSendDelivery{
+				ClientKey:        line.ClientKey,
+				Parcel:           detail.Parcel,
+				PlayerEventLogID: playerEventLogID,
+			})
+			itemMetadata = append(itemMetadata, map[string]interface{}{
+				"parcel_id":           id,
+				"player_event_log_id": playerEventLogID,
+				"slot_id":             slots[index],
+				"item_id":             item.ID,
+				"item_name":           item.Name,
+				"quantity":            line.Quantity,
+				"augment_ids":         gmParcelItemAugments(line),
+			})
+		}
+		result.CharacterID = character.ID
+		result.CharacterName = character.Name
+		result.ParcelCount = len(result.Deliveries)
+		auditID, err = m.writeAudit(c, mailParcelsEventGMSendParcels, mailParcelsAuditPayload{
+			Action:        "gm_send",
+			Kind:          "parcel_batch",
+			RecordID:      firstUint(recordIDs),
+			RecordIDs:     recordIDs,
+			CharacterID:   character.ID,
+			CharacterName: character.Name,
+			ParcelCount:   len(recordIDs),
+			Reason:        strings.TrimSpace(input.Reason),
+			Details: map[string]interface{}{
+				"delivery_semantics": "one_parcel_per_item",
+				"from_name":          strings.TrimSpace(input.FromName),
+				"note":               strings.TrimSpace(input.Note),
+				"sent_date":          sentDate,
+				"items":              itemMetadata,
+			},
+		})
+		result.AuditID = auditID
+		return err
+	})
+	if err != nil {
+		m.discardAudit(auditID)
+		return mailParcelsMutationError(c, err, "GM parcel batch")
+	}
+	return c.JSON(http.StatusCreated, result)
 }
 
 func (m *MailParcelsEditorController) updateParcel(c echo.Context) error {
@@ -901,6 +1269,9 @@ func (m *MailParcelsEditorController) searchItems(c echo.Context) error {
 	}
 	if strings.EqualFold(c.QueryParam("scope"), "augment") {
 		query = query.Where("augtype > 0")
+		if socketType, err := strconv.Atoi(c.QueryParam("socket_type")); err == nil && socketType > 0 && socketType <= 31 {
+			query = query.Where("(augtype & ?) <> 0", uint64(1)<<uint(socketType-1))
+		}
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -918,6 +1289,12 @@ func (m *MailParcelsEditorController) searchItems(c echo.Context) error {
 		bagslots AS bag_slots,
 		bagtype AS bag_type,
 		augtype AS augment_type,
+		augslot1type AS augment_slot_1_type,
+		augslot2type AS augment_slot_2_type,
+		augslot3type AS augment_slot_3_type,
+		augslot4type AS augment_slot_4_type,
+		augslot5type AS augment_slot_5_type,
+		augslot6type AS augment_slot_6_type,
 		evolvinglevel AS evolving_level
 	`).Order("Name, id").Limit(12).Scan(&results).Error; err != nil {
 		return mailParcelsDatabaseError(c, err)
@@ -1111,6 +1488,250 @@ func ensureMailParcelsCharacter(db *gorm.DB, id uint) (mailParcelsCharacterRefer
 	return result, err
 }
 
+func loadLockedGMRecipient(db *gorm.DB, id uint) (mailParcelsCharacterReference, error) {
+	var result mailParcelsCharacterReference
+	err := db.Table("character_data").
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("id, name, account_id, level, class, race").
+		Where("id = ? AND deleted_at IS NULL", id).
+		Take(&result).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return result, mailParcelsConflict("Character #%d was not found", id)
+	}
+	return result, err
+}
+
+func loadGMDirectRecipients(db *gorm.DB, ids []uint) ([]mailParcelsCharacterReference, error) {
+	found := make([]mailParcelsCharacterReference, 0, len(ids))
+	if err := db.Table("character_data").
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("id, name, account_id, level, class, race").
+		Where("id IN ? AND deleted_at IS NULL", ids).
+		Find(&found).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[uint]mailParcelsCharacterReference, len(found))
+	for _, recipient := range found {
+		byID[recipient.ID] = recipient
+	}
+	ordered := make([]mailParcelsCharacterReference, 0, len(ids))
+	missing := make([]string, 0)
+	for _, id := range ids {
+		recipient, ok := byID[id]
+		if !ok {
+			missing = append(missing, strconv.FormatUint(uint64(id), 10))
+			continue
+		}
+		ordered = append(ordered, recipient)
+	}
+	if len(missing) > 0 {
+		return nil, mailParcelsConflict("Recipient character IDs were not found: %s", strings.Join(missing, ", "))
+	}
+	return ordered, nil
+}
+
+func loadGMBroadcastRecipients(db *gorm.DB, lock bool) ([]mailParcelsCharacterReference, error) {
+	recipients := make([]mailParcelsCharacterReference, 0)
+	query := db.Table("character_data").
+		Select("id, name, account_id, level, class, race").
+		Where("deleted_at IS NULL")
+	if lock {
+		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	if err := query.Order("name, id").Find(&recipients).Error; err != nil {
+		return nil, err
+	}
+	return recipients, nil
+}
+
+func createGMMailRows(
+	db *gorm.DB,
+	recipients []mailParcelsCharacterReference,
+	input gmMailSendInput,
+) ([]gmMailInsert, error) {
+	timestamp := input.Timestamp
+	if timestamp <= 0 {
+		timestamp = time.Now().Unix()
+	}
+	rows := make([]gmMailInsert, 0, len(recipients))
+	for _, recipient := range recipients {
+		rows = append(rows, gmMailInsert{
+			CharID:    recipient.ID,
+			Timestamp: timestamp,
+			From:      strings.TrimSpace(input.From),
+			Subject:   strings.TrimSpace(input.Subject),
+			Body:      input.Body,
+			To:        recipient.Name,
+			Status:    mailStatusUnread,
+		})
+	}
+	if err := db.Table("mail").CreateInBatches(&rows, 500).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func gmMailResult(
+	audience string,
+	recipients []mailParcelsCharacterReference,
+	rows []gmMailInsert,
+) gmMailSendResult {
+	messageIDs := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		if row.MsgID > 0 {
+			messageIDs = append(messageIDs, row.MsgID)
+		}
+	}
+	preview := recipients
+	if len(preview) > 12 {
+		preview = preview[:12]
+	}
+	return gmMailSendResult{
+		Audience:       audience,
+		RecipientCount: len(recipients),
+		MessageCount:   len(rows),
+		MessageIDs:     messageIDs,
+		Recipients:     preview,
+	}
+}
+
+func gmMailAuditPayload(
+	input gmMailSendInput,
+	result gmMailSendResult,
+	rows []gmMailInsert,
+) mailParcelsAuditPayload {
+	recordIDs := result.MessageIDs
+	if len(recordIDs) > 100 {
+		recordIDs = recordIDs[:100]
+	}
+	recipientIDs := make([]uint, 0, len(result.Recipients))
+	for _, recipient := range result.Recipients {
+		recipientIDs = append(recipientIDs, recipient.ID)
+	}
+	bodyHash := sha256.Sum256([]byte(input.Body))
+	return mailParcelsAuditPayload{
+		Action:         "gm_send",
+		Kind:           "mail_batch",
+		RecordID:       firstUint(result.MessageIDs),
+		RecordIDs:      recordIDs,
+		Subject:        strings.TrimSpace(input.Subject),
+		Audience:       result.Audience,
+		RecipientCount: result.RecipientCount,
+		Reason:         strings.TrimSpace(input.Reason),
+		Details: map[string]interface{}{
+			"from":                      strings.TrimSpace(input.From),
+			"timestamp":                 mailBatchTimestamp(rows),
+			"body_length":               len(input.Body),
+			"body_sha256":               fmt.Sprintf("%x", bodyHash),
+			"recipient_id_sample":       recipientIDs,
+			"message_id_sample_limited": len(result.MessageIDs) > len(recordIDs),
+		},
+	}
+}
+
+func mailBatchTimestamp(rows []gmMailInsert) int64 {
+	if len(rows) == 0 {
+		return 0
+	}
+	return rows[0].Timestamp
+}
+
+func gmMailConfirmation(audience string, count int) string {
+	noun := "CHARACTERS"
+	if count == 1 {
+		noun = "CHARACTER"
+	}
+	if audience == "broadcast" {
+		return fmt.Sprintf("BROADCAST TO %d %s", count, noun)
+	}
+	return fmt.Sprintf("SEND TO %d %s", count, noun)
+}
+
+func uniquePositiveIDs(values []uint) []uint {
+	seen := make(map[uint]bool, len(values))
+	result := make([]uint, 0, len(values))
+	for _, value := range values {
+		if value == 0 || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
+}
+
+func availableParcelSlots(db *gorm.DB, characterID uint, capacity int) ([]uint, error) {
+	occupiedSlots := make([]uint, 0)
+	if err := db.Table("character_parcels").
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("char_id = ?", characterID).
+		Order("slot_id").
+		Pluck("slot_id", &occupiedSlots).Error; err != nil {
+		return nil, err
+	}
+	occupied := make(map[uint]bool, len(occupiedSlots))
+	for _, slot := range occupiedSlots {
+		occupied[slot] = true
+	}
+	available := make([]uint, 0, capacity-len(occupiedSlots))
+	for slot := 1; slot <= capacity; slot++ {
+		if !occupied[uint(slot)] {
+			available = append(available, uint(slot))
+		}
+	}
+	return available, nil
+}
+
+func gmParcelItemAugments(input gmParcelSendItem) []uint {
+	return []uint{input.Augment1, input.Augment2, input.Augment3, input.Augment4, input.Augment5, input.Augment6}
+}
+
+func itemAugmentSlotTypes(item mailParcelsItemReference) []int {
+	return []int{
+		item.AugmentSlot1,
+		item.AugmentSlot2,
+		item.AugmentSlot3,
+		item.AugmentSlot4,
+		item.AugmentSlot5,
+		item.AugmentSlot6,
+	}
+}
+
+func augmentFitsSocket(augmentType, socketType int) bool {
+	if augmentType <= 0 || socketType <= 0 {
+		return false
+	}
+	return augmentType&(1<<(socketType-1)) != 0
+}
+
+func validateGMParcelItemConfiguration(item mailParcelsItemReference, input gmParcelSendItem) error {
+	if item.Stackable == 0 && input.Quantity != 1 {
+		return errors.New("non-stackable items must use a quantity of 1")
+	}
+	if item.Stackable != 0 && item.StackSize > 0 && int(input.Quantity) > item.StackSize {
+		return fmt.Errorf("quantity cannot exceed this item's stack size of %d", item.StackSize)
+	}
+	if item.EvolvingLevel <= 0 && input.EvolveAmount > 0 {
+		return errors.New("evolve amount is only valid for evolving items")
+	}
+	return nil
+}
+
+func gmParcelConfirmation(count int, characterName string) string {
+	noun := "PARCELS"
+	if count == 1 {
+		noun = "PARCEL"
+	}
+	return fmt.Sprintf("SEND %d %s TO %s", count, noun, characterName)
+}
+
+func firstUint(values []uint) uint {
+	if len(values) == 0 {
+		return 0
+	}
+	return values[0]
+}
+
 func loadMailParcelsItem(db *gorm.DB, id uint) (mailParcelsItemReference, error) {
 	var result mailParcelsItemReference
 	err := db.Table("items").Select(`
@@ -1124,6 +1745,12 @@ func loadMailParcelsItem(db *gorm.DB, id uint) (mailParcelsItemReference, error)
 		bagslots AS bag_slots,
 		bagtype AS bag_type,
 		augtype AS augment_type,
+		augslot1type AS augment_slot_1_type,
+		augslot2type AS augment_slot_2_type,
+		augslot3type AS augment_slot_3_type,
+		augslot4type AS augment_slot_4_type,
+		augslot5type AS augment_slot_5_type,
+		augslot6type AS augment_slot_6_type,
 		evolvinglevel AS evolving_level
 	`).Where("id = ?", id).Take(&result).Error
 	return result, err
@@ -1162,6 +1789,19 @@ func ensureParcelItemChanges(
 		}
 		if augment.AugmentType <= 0 && !unchangedLegacy {
 			return item, mailParcelsConflict("Item #%d is not an augment", augmentID)
+		}
+		socketType := itemAugmentSlotTypes(item)[index]
+		if !unchangedLegacy && socketType <= 0 {
+			return item, mailParcelsConflict("Item #%d does not have augment socket %d", itemID, index+1)
+		}
+		if !unchangedLegacy && !augmentFitsSocket(augment.AugmentType, socketType) {
+			return item, mailParcelsConflict(
+				"Augment item #%d is not compatible with socket %d (type %d) on item #%d",
+				augmentID,
+				index+1,
+				socketType,
+				itemID,
+			)
 		}
 	}
 	return item, nil
@@ -1267,6 +1907,71 @@ func contentInputColumns(parcelID uint, input parcelContentInput) map[string]int
 	}
 }
 
+func parcelPlayerEventData(
+	parcel parcelEditorRecord,
+	item mailParcelsItemReference,
+) (playerEventParcelSendData, error) {
+	sentAt, err := time.ParseInLocation("2006-01-02 15:04:05", parcel.SentDate, time.Local)
+	if err != nil {
+		return playerEventParcelSendData{}, fmt.Errorf("parcel sent date is not valid for player event logging: %w", err)
+	}
+	return playerEventParcelSendData{
+		ItemID:         parcel.ItemID,
+		ItemUniqueID:   "",
+		Augment1ID:     parcel.Augment1,
+		Augment2ID:     parcel.Augment2,
+		Augment3ID:     parcel.Augment3,
+		Augment4ID:     parcel.Augment4,
+		Augment5ID:     parcel.Augment5,
+		Augment6ID:     parcel.Augment6,
+		Quantity:       parcel.Quantity,
+		Charges:        parcelPlayerEventCharges(item, parcel.Quantity),
+		FromPlayerName: parcel.FromName,
+		ToPlayerName:   parcel.CharacterName,
+		SentDate:       uint(sentAt.Unix()),
+	}, nil
+}
+
+func parcelPlayerEventCharges(item mailParcelsItemReference, quantity uint) int {
+	if item.Stackable != 0 || item.MaxCharges <= 0 {
+		return 0
+	}
+	return int(quantity)
+}
+
+func writeParcelPlayerEvent(
+	tx *gorm.DB,
+	character mailParcelsCharacterReference,
+	parcel parcelEditorRecord,
+	item mailParcelsItemReference,
+) (int64, error) {
+	eventData, err := parcelPlayerEventData(parcel, item)
+	if err != nil {
+		return 0, err
+	}
+	encoded, err := json.Marshal(eventData)
+	if err != nil {
+		return 0, fmt.Errorf("could not serialize the parcel player event: %w", err)
+	}
+	row := playerEventLogInsert{
+		AccountID:     character.AccountID,
+		CharacterID:   character.ID,
+		EventTypeID:   playerEventParcelSend,
+		EventTypeName: playerEventParcelSendName,
+		EventData:     string(encoded),
+		EtlTableID:    0,
+		CreatedAt:     time.Now(),
+	}
+	if err := tx.Table("player_event_logs").Create(&row).Error; err != nil {
+		return 0, fmt.Errorf(
+			"parcel delivery requires a transactional %s player event in the active EQEmu database: %w",
+			playerEventParcelSendName,
+			err,
+		)
+	}
+	return row.ID, nil
+}
+
 func parcelAugments(input parcelEditorInput) []uint {
 	return []uint{input.Augment1, input.Augment2, input.Augment3, input.Augment4, input.Augment5, input.Augment6}
 }
@@ -1307,6 +2012,28 @@ func validateMailInput(input mailEditorInput, currentStatus *int8) error {
 	return validateMailParcelsReason(input.Reason)
 }
 
+func validateGMMailInput(input gmMailSendInput) error {
+	if strings.TrimSpace(input.From) == "" {
+		return errors.New("Sender is required")
+	}
+	if len(strings.TrimSpace(input.From)) > 100 {
+		return errors.New("Sender must be 100 characters or fewer")
+	}
+	if strings.TrimSpace(input.Subject) == "" {
+		return errors.New("Subject is required")
+	}
+	if len(strings.TrimSpace(input.Subject)) > 200 {
+		return errors.New("Subject must be 200 characters or fewer")
+	}
+	if strings.TrimSpace(input.Body) == "" {
+		return errors.New("Message body is required")
+	}
+	if len(input.Body) > 65535 {
+		return errors.New("Message body must be 65,535 characters or fewer")
+	}
+	return validateMailParcelsReason(input.Reason)
+}
+
 func validateParcelInput(input parcelEditorInput) error {
 	if input.CharacterID == 0 {
 		return errors.New("Select a recipient character")
@@ -1326,6 +2053,41 @@ func validateParcelInput(input parcelEditorInput) error {
 	if input.SentDate != "" {
 		if _, err := time.Parse("2006-01-02 15:04:05", input.SentDate); err != nil {
 			return errors.New("Sent date must use YYYY-MM-DD HH:MM:SS")
+		}
+	}
+	return validateMailParcelsReason(input.Reason)
+}
+
+func validateGMParcelSendInput(input gmParcelSendInput) error {
+	if input.CharacterID == 0 {
+		return errors.New("Select a recipient character")
+	}
+	if len(input.Items) == 0 {
+		return errors.New("Add at least one parcel item")
+	}
+	if len(input.Items) > mailParcelsMaxBatchItems {
+		return fmt.Errorf("A parcel batch is limited to %d items", mailParcelsMaxBatchItems)
+	}
+	if strings.TrimSpace(input.FromName) == "" {
+		return errors.New("Sender name is required")
+	}
+	if len(strings.TrimSpace(input.FromName)) > 64 {
+		return errors.New("Sender name must be 64 characters or fewer")
+	}
+	if len(strings.TrimSpace(input.Note)) > 1024 {
+		return errors.New("Parcel note must be 1,024 characters or fewer")
+	}
+	if input.SentDate != "" {
+		if _, err := time.Parse("2006-01-02 15:04:05", input.SentDate); err != nil {
+			return errors.New("Sent date must use YYYY-MM-DD HH:MM:SS")
+		}
+	}
+	for index, item := range input.Items {
+		if item.ItemID == 0 {
+			return fmt.Errorf("Parcel %d requires an item", index+1)
+		}
+		if item.Quantity == 0 {
+			return fmt.Errorf("Parcel %d quantity must be at least 1", index+1)
 		}
 	}
 	return validateMailParcelsReason(input.Reason)

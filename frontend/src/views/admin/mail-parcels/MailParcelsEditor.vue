@@ -38,6 +38,22 @@
       </button>
     </div>
 
+    <div class="mail-parcels-command-bar" aria-label="Administrative delivery actions">
+      <div>
+        <span class="spire-editor-kicker">GM delivery desk</span>
+        <strong>Compose new player deliveries</strong>
+        <small>Every send is validated, confirmed, and written to the same immutable tool audit trail.</small>
+      </div>
+      <div class="mail-parcels-command-bar__actions">
+        <b-button size="sm" variant="outline-warning" data-testid="open-gm-mail" @click="openGMMailComposer">
+          <i class="ra ra-feather-wing mr-1"></i>Send GM mail
+        </b-button>
+        <b-button size="sm" variant="outline-warning" data-testid="open-gm-parcels" @click="openGMParcelComposer">
+          <i class="ra ra-wooden-box mr-1"></i>Send GM parcels
+        </b-button>
+      </div>
+    </div>
+
     <div class="spire-editor-workspace">
       <aside class="spire-editor-directory">
         <eq-window :title="mode === 'mail' ? 'Mailbox Messages' : 'Queued Parcels'">
@@ -109,11 +125,19 @@
                 </span>
                 <span class="spire-editor-directory-detail">
                   <template v-if="mode === 'mail'">
-                    {{ record.character_name }} · from {{ record.from || 'Unknown' }} · {{ mailStatusLabel(record.status) }}
+                    {{ record.character_name }} · from {{ record.from || 'Unknown' }} · {{ formatUnix(record.timestamp) }}
                   </template>
                   <template v-else>
-                    {{ record.character_name }} · qty {{ record.quantity }} · from {{ record.from_name || 'Unknown' }}
+                    {{ record.character_name }} · qty {{ record.quantity }} · {{ formatParcelDate(record.sent_date) }}
                   </template>
+                </span>
+                <span
+                  class="delivery-status-chip"
+                  :class="mode === 'mail' ? mailStatusClass(record.status) : 'delivery-status-chip--queued'"
+                  :aria-label="mode === 'mail' ? 'Mailbox status: ' + mailStatusLabel(record.status) : 'Parcel status: queued for pickup'"
+                >
+                  <i :class="mode === 'mail' ? mailStatusIcon(record.status) : 'fa fa-clock-o'" aria-hidden="true"></i>
+                  {{ mode === 'mail' ? mailStatusLabel(record.status) : 'Queued for pickup' }}
                 </span>
               </span>
               <span class="spire-editor-directory-aside">#{{ recordKey(record) }}</span>
@@ -214,6 +238,14 @@
                   </div>
                   <h2>{{ identityTitle }}</h2>
                   <p>{{ identitySubtitle }}</p>
+                  <span
+                    v-if="!isCreating"
+                    class="delivery-status-chip delivery-status-chip--header"
+                    :class="mode === 'mail' ? mailStatusClass(editModel.status) : 'delivery-status-chip--queued'"
+                  >
+                    <i :class="mode === 'mail' ? mailStatusIcon(editModel.status) : 'fa fa-clock-o'" aria-hidden="true"></i>
+                    {{ mode === 'mail' ? mailStatusLabel(editModel.status) : 'Queued for pickup' }}
+                  </span>
                 </div>
               </div>
               <div class="spire-editor-actions">
@@ -386,6 +418,7 @@
                         v-model="mailSentAt"
                         class="form-control form-control-sm"
                         type="datetime-local"
+                        step="1"
                       >
                     </div>
                   </div>
@@ -674,6 +707,7 @@
                       v-model="parcelSentAt"
                       class="form-control form-control-sm"
                       type="datetime-local"
+                      step="1"
                     >
                   </div>
                   <div class="spire-editor-field spire-editor-grid-span">
@@ -952,6 +986,466 @@
       </div>
     </b-modal>
 
+    <b-modal
+      ref="gmMailModal"
+      modal-class="mail-parcels-editor-modal gm-delivery-modal"
+      title="GM Messaging"
+      size="xl"
+      hide-footer
+      @hidden="resetGMMailComposer"
+    >
+      <div class="gm-workflow-steps" aria-label="GM message workflow">
+        <span :class="{ active: gmMailDraft.step === 'compose' }"><b>1</b> Compose</span>
+        <span :class="{ active: gmMailDraft.step === 'review' }"><b>2</b> Review</span>
+        <span :class="{ active: gmMailDraft.step === 'result' }"><b>3</b> Result</span>
+      </div>
+
+      <template v-if="gmMailDraft.step === 'compose'">
+        <div class="gm-audience-switch" role="radiogroup" aria-label="Message audience">
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="gmMailDraft.audience === 'direct'"
+            :class="{ active: gmMailDraft.audience === 'direct' }"
+            @click="setGMMailAudience('direct')"
+          >
+            <i class="fa fa-user"></i>
+            <span><strong>Selected characters</strong><small>Send one mailbox message to each chosen recipient.</small></span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="gmMailDraft.audience === 'broadcast'"
+            :class="{ active: gmMailDraft.audience === 'broadcast' }"
+            @click="setGMMailAudience('broadcast')"
+          >
+            <i class="fa fa-bullhorn"></i>
+            <span><strong>Server-wide</strong><small>Send through the real mail system to every active character.</small></span>
+          </button>
+        </div>
+
+        <div v-if="gmMailDraft.audience === 'direct'" class="gm-recipient-builder">
+          <div class="spire-editor-field">
+            <label for="gm-mail-character-search">Recipients</label>
+            <div class="spire-editor-search">
+              <i class="fa fa-search"></i>
+              <input
+                id="gm-mail-character-search"
+                v-model="gmCharacterSearch"
+                class="form-control form-control-sm"
+                placeholder="Search character name or exact ID…"
+                @input="queueGMCharacterSearch('mail')"
+              >
+            </div>
+          </div>
+          <div v-if="gmCharacterResults.length" class="reference-results">
+            <button
+              v-for="character in gmCharacterResults"
+              :key="'gm-mail-character-' + character.id"
+              type="button"
+              :disabled="gmMailRecipientSelected(character.id)"
+              @click="addGMMailRecipient(character)"
+            >
+              <span><strong>{{ character.name }}</strong><small>Level {{ character.level }} · Character #{{ character.id }}</small></span>
+              <span>{{ gmMailRecipientSelected(character.id) ? 'Selected' : 'Add' }}</span>
+            </button>
+          </div>
+          <div v-if="gmMailDraft.recipients.length" class="gm-recipient-chips" aria-label="Selected recipients">
+            <span v-for="character in gmMailDraft.recipients" :key="'gm-recipient-chip-' + character.id">
+              <i class="ra ra-player"></i>{{ character.name }}
+              <button type="button" :aria-label="'Remove ' + character.name" @click="removeGMMailRecipient(character.id)">
+                <i class="fa fa-times"></i>
+              </button>
+            </span>
+          </div>
+          <div v-else class="gm-inline-state"><i class="fa fa-user-plus"></i>Select at least one character.</div>
+        </div>
+
+        <div v-else class="gm-broadcast-preview" :class="{ error: gmMailDraft.audienceError }">
+          <template v-if="gmMailDraft.loadingAudience">
+            <i class="fa fa-spinner fa-spin"></i>
+            <span><strong>Counting the live audience…</strong><small>The recipient set will be rechecked inside the send transaction.</small></span>
+          </template>
+          <template v-else-if="gmMailDraft.audienceError">
+            <i class="fa fa-exclamation-triangle"></i>
+            <span><strong>Audience preview unavailable</strong><small>{{ gmMailDraft.audienceError }}</small></span>
+            <button type="button" @click="loadGMBroadcastAudience">Retry</button>
+          </template>
+          <template v-else>
+            <i class="fa fa-bullhorn"></i>
+            <span>
+              <strong>
+                {{ gmMailDraft.audiencePreview.recipient_count.toLocaleString() }}
+                active character{{ gmMailDraft.audiencePreview.recipient_count === 1 ? '' : 's' }}
+              </strong>
+              <small>
+                Sample:
+                {{ gmMailDraft.audiencePreview.recipients.map(character => character.name).join(', ') || 'No recipients' }}
+              </small>
+            </span>
+          </template>
+        </div>
+
+        <div class="spire-editor-grid spire-editor-grid--two mt-3">
+          <div class="spire-editor-field">
+            <label for="gm-mail-from">From</label>
+            <input id="gm-mail-from" v-model="gmMailDraft.from" class="form-control form-control-sm" maxlength="100" placeholder="Server Staff">
+          </div>
+          <div class="spire-editor-field">
+            <label for="gm-mail-subject">Subject</label>
+            <input id="gm-mail-subject" v-model="gmMailDraft.subject" class="form-control form-control-sm" maxlength="200" placeholder="Concise mailbox subject…">
+          </div>
+          <div class="spire-editor-field spire-editor-grid-span">
+            <label for="gm-mail-body">Message body</label>
+            <textarea id="gm-mail-body" v-model="gmMailDraft.body" class="form-control gm-message-body" rows="7" placeholder="Write the player-visible message…"></textarea>
+          </div>
+          <div class="spire-editor-field spire-editor-grid-span">
+            <label for="gm-mail-reason">Required audit reason</label>
+            <textarea
+              id="gm-mail-reason"
+              v-model="gmMailDraft.reason"
+              class="form-control"
+              rows="2"
+              maxlength="240"
+              placeholder="Ticket, announcement, support, or moderation reason…"
+            ></textarea>
+            <span class="spire-editor-field-help">8–240 characters. The message body is hashed in the immutable audit record.</span>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="gmMailDraft.step === 'review'">
+        <div class="gm-review-grid">
+          <section class="gm-review-card">
+            <span class="context-label">Audience</span>
+            <h4>{{ gmMailAudienceLabel }}</h4>
+            <p>{{ gmMailRecipientCount.toLocaleString() }} mailbox message{{ gmMailRecipientCount === 1 ? '' : 's' }} will be created atomically.</p>
+            <div v-if="gmMailDraft.audience === 'direct'" class="gm-review-recipients">
+              <span v-for="character in gmMailDraft.recipients" :key="'gm-review-recipient-' + character.id">
+                {{ character.name }} <small>#{{ character.id }}</small>
+              </span>
+            </div>
+          </section>
+          <section class="mail-client-preview gm-review-message">
+            <div class="mail-client-preview__top">
+              <span><i class="ra ra-feather-wing mr-1"></i>Delivery preview</span>
+              <span>Unread</span>
+            </div>
+            <h4>{{ gmMailDraft.subject }}</h4>
+            <div class="mail-client-preview__meta">From {{ gmMailDraft.from }} · {{ gmMailAudienceLabel }}</div>
+            <p>{{ gmMailDraft.body }}</p>
+          </section>
+        </div>
+        <div class="gm-confirmation" :class="{ 'gm-confirmation--danger': gmMailDraft.audience === 'broadcast' }">
+          <div>
+            <i :class="gmMailDraft.audience === 'broadcast' ? 'fa fa-exclamation-triangle' : 'fa fa-shield'"></i>
+            <span>
+              <strong>{{ gmMailDraft.audience === 'broadcast' ? 'Confirm server-wide delivery' : 'Confirm direct delivery' }}</strong>
+              <small>The audience is re-resolved and every message is written in one database transaction.</small>
+            </span>
+          </div>
+          <label for="gm-mail-confirmation">Type {{ gmMailExpectedConfirmation }}</label>
+          <input
+            id="gm-mail-confirmation"
+            v-model="gmMailDraft.confirmation"
+            class="form-control form-control-sm"
+            autocomplete="off"
+          >
+        </div>
+      </template>
+
+      <div v-else class="gm-delivery-result" role="status">
+        <span class="gm-delivery-result__icon"><i class="fa fa-check"></i></span>
+        <div>
+          <span class="context-label">Delivery complete</span>
+          <h4>{{ gmMailDraft.result.message_count.toLocaleString() }} unread message{{ gmMailDraft.result.message_count === 1 ? '' : 's' }} delivered</h4>
+          <p>{{ gmMailAudienceLabel }} · Audit event #{{ gmMailDraft.result.audit_id }}</p>
+          <span class="delivery-status-chip delivery-status-chip--unread"><i class="fa fa-envelope"></i>Unread</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <b-button
+          v-if="gmMailDraft.step === 'compose'"
+          size="sm"
+          variant="outline-secondary"
+          @click="$refs.gmMailModal.hide()"
+        >Cancel</b-button>
+        <b-button
+          v-if="gmMailDraft.step === 'review'"
+          size="sm"
+          variant="outline-secondary"
+          :disabled="gmMailDraft.busy"
+          @click="gmMailDraft.step = 'compose'"
+        ><i class="fa fa-angle-left mr-1"></i>Back</b-button>
+        <b-button
+          v-if="gmMailDraft.step === 'compose'"
+          size="sm"
+          variant="outline-warning"
+          :disabled="!canReviewGMMail"
+          @click="reviewGMMail"
+        >Review delivery<i class="fa fa-angle-right ml-1"></i></b-button>
+        <b-button
+          v-if="gmMailDraft.step === 'review'"
+          size="sm"
+          :variant="gmMailDraft.audience === 'broadcast' ? 'outline-danger' : 'outline-warning'"
+          :disabled="!canSendGMMail || gmMailDraft.busy"
+          @click="sendGMMail"
+        >
+          <i :class="gmMailDraft.busy ? 'fa fa-spinner fa-spin mr-1' : 'fa fa-paper-plane mr-1'"></i>
+          {{ gmMailDraft.audience === 'broadcast' ? 'Send server-wide' : 'Send messages' }}
+        </b-button>
+        <b-button
+          v-if="gmMailDraft.step === 'result'"
+          size="sm"
+          variant="outline-warning"
+          @click="$refs.gmMailModal.hide()"
+        >Done</b-button>
+      </div>
+    </b-modal>
+
+    <b-modal
+      ref="gmParcelModal"
+      modal-class="mail-parcels-editor-modal gm-delivery-modal"
+      title="GM Send Parcels"
+      size="xl"
+      hide-footer
+      @hidden="resetGMParcelComposer"
+    >
+      <div class="gm-workflow-steps" aria-label="GM parcel workflow">
+        <span :class="{ active: gmParcelDraft.step === 'compose' }"><b>1</b> Compose</span>
+        <span :class="{ active: gmParcelDraft.step === 'review' }"><b>2</b> Review</span>
+        <span :class="{ active: gmParcelDraft.step === 'result' }"><b>3</b> Result</span>
+      </div>
+
+      <template v-if="gmParcelDraft.step === 'compose'">
+        <div class="gm-parcel-rule">
+          <i class="ra ra-wooden-box"></i>
+          <span>
+            <strong>One selected item creates one parcel message</strong>
+            <small>A batch of {{ gmParcelDraft.items.length }} item{{ gmParcelDraft.items.length === 1 ? '' : 's' }} will reserve and create {{ gmParcelDraft.items.length }} separate parcel{{ gmParcelDraft.items.length === 1 ? '' : 's' }} atomically.</small>
+          </span>
+        </div>
+
+        <div class="spire-editor-grid spire-editor-grid--two mt-3">
+          <div class="gm-recipient-builder">
+            <div class="spire-editor-field">
+              <label for="gm-parcel-character-search">Recipient character</label>
+              <div class="spire-editor-search">
+                <i class="fa fa-search"></i>
+                <input
+                  id="gm-parcel-character-search"
+                  v-model="gmCharacterSearch"
+                  class="form-control form-control-sm"
+                  placeholder="Search character name or exact ID…"
+                  @input="queueGMCharacterSearch('parcel')"
+                >
+              </div>
+            </div>
+            <div v-if="gmCharacterResults.length" class="reference-results">
+              <button
+                v-for="character in gmCharacterResults"
+                :key="'gm-parcel-character-' + character.id"
+                type="button"
+                @click="selectGMParcelRecipient(character)"
+              >
+                <span><strong>{{ character.name }}</strong><small>Level {{ character.level }} · Character #{{ character.id }}</small></span>
+                <span>{{ character.parcel_count }}/{{ summary.parcel_capacity }} parcels</span>
+              </button>
+            </div>
+            <div v-if="gmParcelDraft.recipient" class="selected-reference-card">
+              <span class="selected-reference-card__icon"><i class="ra ra-player"></i></span>
+              <span>
+                <strong>{{ gmParcelDraft.recipient.name }}</strong>
+                <small>Character #{{ gmParcelDraft.recipient.id }} · {{ gmParcelDraft.recipient.parcel_count || 0 }}/{{ summary.parcel_capacity }} slots used</small>
+              </span>
+              <button type="button" aria-label="Change parcel recipient" @click="focusGMCharacterSearch">
+                <i class="fa fa-pencil"></i>
+              </button>
+            </div>
+          </div>
+          <div class="spire-editor-grid spire-editor-grid--two">
+            <div class="spire-editor-field">
+              <label for="gm-parcel-from">Sender name</label>
+              <input id="gm-parcel-from" v-model="gmParcelDraft.from_name" class="form-control form-control-sm" maxlength="64" placeholder="Server Staff">
+            </div>
+            <div class="spire-editor-field">
+              <label for="gm-parcel-sent-at">Sent at</label>
+              <input id="gm-parcel-sent-at" v-model="gmParcelDraft.sent_at" class="form-control form-control-sm" type="datetime-local" step="1">
+            </div>
+            <div class="spire-editor-field spire-editor-grid-span">
+              <label for="gm-parcel-note">Parcel note</label>
+              <textarea id="gm-parcel-note" v-model="gmParcelDraft.note" class="form-control" rows="3" maxlength="1024" placeholder="Player-visible delivery context…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="gm-parcel-lines">
+          <div class="gm-parcel-lines__heading">
+            <div><span class="context-label">Parcel messages</span><strong>Items to deliver</strong></div>
+            <b-button size="sm" variant="outline-warning" :disabled="gmParcelDraft.items.length >= 20" @click="addGMParcelLine">
+              <i class="fa fa-plus mr-1"></i>Add parcel
+            </b-button>
+          </div>
+          <article v-for="(line, lineIndex) in gmParcelDraft.items" :key="line.client_key" class="gm-parcel-line">
+            <div class="gm-parcel-line__number">{{ lineIndex + 1 }}</div>
+            <div class="gm-parcel-line__main">
+              <button class="item-selector" type="button" @click="openItemLookup('gm-parcel-item', -1, lineIndex)">
+                <span class="item-selector__icon">
+                  <span v-if="line.item && line.item.icon" :class="'item-' + line.item.icon"></span>
+                  <i v-else class="ra ra-wooden-box"></i>
+                </span>
+                <span>
+                  <strong>{{ line.item ? line.item.name : 'Choose an item' }}</strong>
+                  <small>{{ line.item ? itemConfigurationSummary(line.item) : 'Search the live item catalog by name or exact ID' }}</small>
+                </span>
+                <i class="fa fa-search"></i>
+              </button>
+              <div class="gm-parcel-line__configuration">
+                <div class="spire-editor-field">
+                  <label :for="'gm-parcel-quantity-' + line.client_key">Quantity</label>
+                  <input
+                    :id="'gm-parcel-quantity-' + line.client_key"
+                    v-model.number="line.quantity"
+                    class="form-control form-control-sm"
+                    type="number"
+                    min="1"
+                    :max="line.item && line.item.stackable && line.item.stack_size > 0 ? line.item.stack_size : 1"
+                    :disabled="Boolean(line.item && !line.item.stackable)"
+                  >
+                </div>
+                <div v-if="line.item && Number(line.item.evolving_level) > 0" class="spire-editor-field">
+                  <label :for="'gm-parcel-evolve-' + line.client_key">Evolve progress</label>
+                  <input :id="'gm-parcel-evolve-' + line.client_key" v-model.number="line.evolve_amount" class="form-control form-control-sm" type="number" min="0">
+                </div>
+              </div>
+              <div v-if="line.item && gmParcelSocketOptions(line).length" class="gm-parcel-augments">
+                <span class="context-label">Compatible augments</span>
+                <button
+                  v-for="socket in gmParcelSocketOptions(line)"
+                  :key="line.client_key + '-augment-' + socket.index"
+                  type="button"
+                  @click="openItemLookup('gm-parcel-augment', socket.index, lineIndex)"
+                >
+                  <b>{{ socket.index + 1 }}</b>
+                  <span><strong>{{ line.augment_refs[socket.index] ? line.augment_refs[socket.index].name : 'Empty socket' }}</strong><small>Type {{ socket.type }}</small></span>
+                  <i class="fa fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+            <button
+              class="gm-parcel-line__remove"
+              type="button"
+              :disabled="gmParcelDraft.items.length === 1"
+              :aria-label="'Remove parcel ' + (lineIndex + 1)"
+              @click="removeGMParcelLine(lineIndex)"
+            ><i class="fa fa-trash"></i></button>
+          </article>
+        </div>
+
+        <div class="spire-editor-field mt-3">
+          <label for="gm-parcel-reason">Required audit reason</label>
+          <textarea
+            id="gm-parcel-reason"
+            v-model="gmParcelDraft.reason"
+            class="form-control"
+            rows="2"
+            maxlength="240"
+            placeholder="Ticket, reimbursement, event reward, or support reason…"
+          ></textarea>
+          <span class="spire-editor-field-help">8–240 characters. Recipient, item, slot, quantity, augment, and result IDs are recorded.</span>
+        </div>
+      </template>
+
+      <template v-else-if="gmParcelDraft.step === 'review'">
+        <div class="gm-parcel-rule">
+          <i class="fa fa-database"></i>
+          <span>
+            <strong>{{ gmParcelDraft.items.length }} separate parcel message{{ gmParcelDraft.items.length === 1 ? '' : 's' }} for {{ gmParcelDraft.recipient.name }}</strong>
+            <small>Every item consumes one parcel slot. Capacity and every item/augment are revalidated before any parcel is written.</small>
+          </span>
+        </div>
+        <div class="gm-parcel-review-list">
+          <article v-for="(line, index) in gmParcelDraft.items" :key="'review-' + line.client_key">
+            <span class="gm-parcel-review-list__icon">
+              <span v-if="line.item.icon" :class="'item-' + line.item.icon"></span>
+              <i v-else class="ra ra-wooden-box"></i>
+            </span>
+            <span>
+              <strong>Parcel {{ index + 1 }} · {{ line.item.name }}</strong>
+              <small>
+                Item #{{ line.item.id }} · quantity {{ line.quantity }}
+                <template v-if="line.augment_refs.some(Boolean)"> · {{ line.augment_refs.filter(Boolean).length }} augment{{ line.augment_refs.filter(Boolean).length === 1 ? '' : 's' }}</template>
+              </small>
+            </span>
+            <span class="delivery-status-chip delivery-status-chip--queued"><i class="fa fa-clock-o"></i>Queued after send</span>
+          </article>
+        </div>
+        <div class="gm-confirmation">
+          <div>
+            <i class="fa fa-shield"></i>
+            <span><strong>Confirm atomic parcel delivery</strong><small>No sender inventory is consumed. All parcel messages succeed together or none are created.</small></span>
+          </div>
+          <label for="gm-parcel-confirmation">Type {{ gmParcelExpectedConfirmation }}</label>
+          <input id="gm-parcel-confirmation" v-model="gmParcelDraft.confirmation" class="form-control form-control-sm" autocomplete="off">
+        </div>
+      </template>
+
+      <div v-else class="gm-delivery-result" role="status">
+        <span class="gm-delivery-result__icon"><i class="fa fa-check"></i></span>
+        <div>
+          <span class="context-label">Delivery complete</span>
+          <h4>{{ gmParcelDraft.result.parcel_count }} separate parcel{{ gmParcelDraft.result.parcel_count === 1 ? '' : 's' }} queued for {{ gmParcelDraft.result.character_name }}</h4>
+          <p>Audit event #{{ gmParcelDraft.result.audit_id }} · The recipient may need to reopen the parcel merchant or relog.</p>
+        </div>
+        <div class="gm-parcel-result-list">
+          <span v-for="delivery in gmParcelDraft.result.deliveries" :key="'result-parcel-' + delivery.parcel.id">
+            <b>#{{ delivery.parcel.id }}</b>{{ delivery.parcel.item_name }} · slot {{ delivery.parcel.slot_id }}
+            · player event #{{ delivery.player_event_log_id }}
+            <em class="delivery-status-chip delivery-status-chip--queued"><i class="fa fa-clock-o"></i>Queued for pickup</em>
+          </span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <b-button
+          v-if="gmParcelDraft.step === 'compose'"
+          size="sm"
+          variant="outline-secondary"
+          @click="$refs.gmParcelModal.hide()"
+        >Cancel</b-button>
+        <b-button
+          v-if="gmParcelDraft.step === 'review'"
+          size="sm"
+          variant="outline-secondary"
+          :disabled="gmParcelDraft.busy"
+          @click="gmParcelDraft.step = 'compose'"
+        ><i class="fa fa-angle-left mr-1"></i>Back</b-button>
+        <b-button
+          v-if="gmParcelDraft.step === 'compose'"
+          size="sm"
+          variant="outline-warning"
+          :disabled="!canReviewGMParcels"
+          @click="reviewGMParcels"
+        >Review {{ gmParcelDraft.items.length }} parcel{{ gmParcelDraft.items.length === 1 ? '' : 's' }}<i class="fa fa-angle-right ml-1"></i></b-button>
+        <b-button
+          v-if="gmParcelDraft.step === 'review'"
+          size="sm"
+          variant="outline-warning"
+          :disabled="!canSendGMParcels || gmParcelDraft.busy"
+          @click="sendGMParcels"
+        >
+          <i :class="gmParcelDraft.busy ? 'fa fa-spinner fa-spin mr-1' : 'fa fa-paper-plane mr-1'"></i>Send parcels
+        </b-button>
+        <b-button
+          v-if="gmParcelDraft.step === 'result'"
+          size="sm"
+          variant="outline-warning"
+          @click="$refs.gmParcelModal.hide()"
+        >Done</b-button>
+      </div>
+    </b-modal>
+
     <transition name="mail-parcels-notification">
       <div
         v-if="notification.message"
@@ -1052,11 +1546,64 @@
     }
   }
 
+  let gmParcelLineSequence = 0
+
+  function emptyGMParcelLine () {
+    gmParcelLineSequence += 1
+    return {
+      client_key: `parcel-${gmParcelLineSequence}`,
+      item_id: 0,
+      item: null,
+      augment_1: 0,
+      augment_2: 0,
+      augment_3: 0,
+      augment_4: 0,
+      augment_5: 0,
+      augment_6: 0,
+      augment_refs: [null, null, null, null, null, null],
+      quantity: 1,
+      evolve_amount: 0
+    }
+  }
+
+  function emptyGMMailDraft () {
+    return {
+      audience: 'direct',
+      recipients: [],
+      audiencePreview: { recipient_count: 0, recipients: [], confirmation: '' },
+      loadingAudience: false,
+      audienceError: '',
+      from: 'Server Staff',
+      subject: '',
+      body: '',
+      reason: '',
+      confirmation: '',
+      step: 'compose',
+      busy: false,
+      result: null
+    }
+  }
+
+  function emptyGMParcelDraft () {
+    return {
+      recipient: null,
+      from_name: 'Server Staff',
+      note: '',
+      sent_at: localDateTimeValue(new Date()),
+      reason: '',
+      confirmation: '',
+      items: [emptyGMParcelLine()],
+      step: 'compose',
+      busy: false,
+      result: null
+    }
+  }
+
   function localDateTimeValue (date) {
     const value = date instanceof Date ? date : new Date(date)
     if (Number.isNaN(value.getTime())) return ''
     const pad = number => String(number).padStart(2, '0')
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`
   }
 
   export default {
@@ -1121,12 +1668,19 @@
         contentDraft: emptyContent(),
         selectedContentItem: null,
         contentAugmentRefs: [null, null, null, null, null, null],
-        itemLookup: { scope: '', index: -1 },
+        itemLookup: { scope: '', index: -1, lineIndex: -1 },
         itemSearch: '',
         itemSearchTimer: null,
         itemResults: [],
         searchingItems: false,
         itemSearchComplete: false,
+        gmMailDraft: emptyGMMailDraft(),
+        gmParcelDraft: emptyGMParcelDraft(),
+        gmCharacterSearch: '',
+        gmCharacterSearchTimer: null,
+        gmCharacterResults: [],
+        gmCharacterContext: '',
+        searchingGMCharacters: false,
         operationReason: '',
         deleteKind: '',
         deleteTarget: null,
@@ -1254,6 +1808,61 @@
       canDelete () {
         return this.deleteDraft.confirmation.trim() === this.deleteExpectedConfirmation &&
           this.deleteDraft.reason.trim().length >= 8
+      },
+      gmMailRecipientCount () {
+        return this.gmMailDraft.audience === 'broadcast'
+          ? Number(this.gmMailDraft.audiencePreview.recipient_count || 0)
+          : this.gmMailDraft.recipients.length
+      },
+      gmMailAudienceLabel () {
+        if (this.gmMailDraft.audience === 'broadcast') {
+          const noun = this.gmMailRecipientCount === 1 ? 'character' : 'characters'
+          return `Server-wide · ${this.gmMailRecipientCount.toLocaleString()} active ${noun}`
+        }
+        if (this.gmMailRecipientCount === 1) return this.gmMailDraft.recipients[0].name
+        return `${this.gmMailRecipientCount.toLocaleString()} selected characters`
+      },
+      gmMailExpectedConfirmation () {
+        if (this.gmMailDraft.audience === 'broadcast' && this.gmMailDraft.audiencePreview.confirmation) {
+          return this.gmMailDraft.audiencePreview.confirmation
+        }
+        const noun = this.gmMailRecipientCount === 1 ? 'CHARACTER' : 'CHARACTERS'
+        const prefix = this.gmMailDraft.audience === 'broadcast' ? 'BROADCAST TO' : 'SEND TO'
+        return `${prefix} ${this.gmMailRecipientCount} ${noun}`
+      },
+      canReviewGMMail () {
+        return this.gmMailRecipientCount > 0 &&
+          !this.gmMailDraft.loadingAudience &&
+          !this.gmMailDraft.audienceError &&
+          this.gmMailDraft.from.trim().length > 0 &&
+          this.gmMailDraft.subject.trim().length > 0 &&
+          this.gmMailDraft.body.trim().length > 0 &&
+          this.gmMailDraft.reason.trim().length >= 8
+      },
+      canSendGMMail () {
+        return this.canReviewGMMail &&
+          this.gmMailDraft.confirmation.trim() === this.gmMailExpectedConfirmation
+      },
+      gmParcelExpectedConfirmation () {
+        if (!this.gmParcelDraft.recipient) return ''
+        const count = this.gmParcelDraft.items.length
+        const noun = count === 1 ? 'PARCEL' : 'PARCELS'
+        return `SEND ${count} ${noun} TO ${this.gmParcelDraft.recipient.name}`
+      },
+      canReviewGMParcels () {
+        if (!this.gmParcelDraft.recipient ||
+          !this.gmParcelDraft.from_name.trim() ||
+          this.gmParcelDraft.reason.trim().length < 8 ||
+          !this.gmParcelDraft.sent_at) return false
+        return this.gmParcelDraft.items.length > 0 && this.gmParcelDraft.items.every(line => {
+          if (!line.item || Number(line.item_id) <= 0 || Number(line.quantity) <= 0) return false
+          if (!Number(line.item.stackable) && Number(line.quantity) !== 1) return false
+          return !Number(line.item.stack_size) || Number(line.quantity) <= Number(line.item.stack_size)
+        })
+      },
+      canSendGMParcels () {
+        return this.canReviewGMParcels &&
+          this.gmParcelDraft.confirmation.trim() === this.gmParcelExpectedConfirmation
       }
     },
     watch: {
@@ -1289,6 +1898,7 @@
     beforeDestroy () {
       clearTimeout(this.searchTimer)
       clearTimeout(this.characterSearchTimer)
+      clearTimeout(this.gmCharacterSearchTimer)
       clearTimeout(this.itemSearchTimer)
       clearTimeout(this.notification.timer)
     },
@@ -1300,6 +1910,198 @@
         return (error && error.response && error.response.data && error.response.data.error) ||
           (error && error.message) ||
           fallback
+      },
+      openGMMailComposer () {
+        this.resetGMMailComposer()
+        this.$refs.gmMailModal.show()
+      },
+      resetGMMailComposer () {
+        clearTimeout(this.gmCharacterSearchTimer)
+        this.gmMailDraft = emptyGMMailDraft()
+        this.resetGMCharacterSearch()
+      },
+      setGMMailAudience (audience) {
+        if (this.gmMailDraft.audience === audience) return
+        this.gmMailDraft.audience = audience
+        this.gmMailDraft.confirmation = ''
+        this.resetGMCharacterSearch()
+        if (audience === 'broadcast') this.loadGMBroadcastAudience()
+      },
+      async loadGMBroadcastAudience () {
+        this.gmMailDraft.loadingAudience = true
+        this.gmMailDraft.audienceError = ''
+        try {
+          const response = await SpireApi.v1().get('/mail-parcels-editor/broadcast/audience')
+          this.gmMailDraft.audiencePreview = Object.assign(
+            { recipient_count: 0, recipients: [], confirmation: '' },
+            response.data || {}
+          )
+        } catch (error) {
+          this.gmMailDraft.audiencePreview = { recipient_count: 0, recipients: [], confirmation: '' }
+          this.gmMailDraft.audienceError = this.apiError(error, 'Could not resolve the server-wide audience.')
+        } finally {
+          this.gmMailDraft.loadingAudience = false
+        }
+      },
+      queueGMCharacterSearch (context) {
+        this.gmCharacterContext = context
+        clearTimeout(this.gmCharacterSearchTimer)
+        this.gmCharacterSearchTimer = setTimeout(() => this.searchGMCharacters(), 250)
+      },
+      async searchGMCharacters () {
+        if (!this.gmCharacterSearch.trim()) {
+          this.gmCharacterResults = []
+          return
+        }
+        this.searchingGMCharacters = true
+        try {
+          const response = await SpireApi.v1().get('/mail-parcels-editor/characters', {
+            params: { q: this.gmCharacterSearch.trim() }
+          })
+          this.gmCharacterResults = response.data.data || []
+        } catch (error) {
+          this.gmCharacterResults = []
+          this.notify(this.apiError(error, 'Character search failed.'), 'error')
+        } finally {
+          this.searchingGMCharacters = false
+        }
+      },
+      resetGMCharacterSearch () {
+        clearTimeout(this.gmCharacterSearchTimer)
+        this.gmCharacterSearch = ''
+        this.gmCharacterResults = []
+        this.gmCharacterContext = ''
+        this.searchingGMCharacters = false
+      },
+      focusGMCharacterSearch () {
+        this.$nextTick(() => {
+          const id = this.gmCharacterContext === 'mail' ? 'gm-mail-character-search' : 'gm-parcel-character-search'
+          const input = document.getElementById(id)
+          if (input) input.focus()
+        })
+      },
+      gmMailRecipientSelected (id) {
+        return this.gmMailDraft.recipients.some(character => Number(character.id) === Number(id))
+      },
+      addGMMailRecipient (character) {
+        if (this.gmMailRecipientSelected(character.id) || this.gmMailDraft.recipients.length >= 100) return
+        this.gmMailDraft.recipients.push(clone(character))
+        this.gmCharacterSearch = ''
+        this.gmCharacterResults = []
+      },
+      removeGMMailRecipient (id) {
+        this.gmMailDraft.recipients = this.gmMailDraft.recipients.filter(character => Number(character.id) !== Number(id))
+      },
+      reviewGMMail () {
+        if (!this.canReviewGMMail) return
+        this.gmMailDraft.confirmation = ''
+        this.gmMailDraft.step = 'review'
+      },
+      async sendGMMail () {
+        if (!this.canSendGMMail || this.gmMailDraft.busy) return
+        this.gmMailDraft.busy = true
+        try {
+          const payload = {
+            character_ids: this.gmMailDraft.audience === 'direct'
+              ? this.gmMailDraft.recipients.map(character => Number(character.id))
+              : [],
+            from: this.gmMailDraft.from.trim(),
+            subject: this.gmMailDraft.subject.trim(),
+            body: this.gmMailDraft.body,
+            reason: this.gmMailDraft.reason.trim(),
+            confirmation: this.gmMailDraft.confirmation.trim()
+          }
+          const path = this.gmMailDraft.audience === 'broadcast'
+            ? '/mail-parcels-editor/broadcast/mail/send'
+            : '/mail-parcels-editor/mail/send'
+          const response = await SpireApi.v1().put(path, payload)
+          this.gmMailDraft.result = response.data
+          this.gmMailDraft.step = 'result'
+          await this.loadSummary()
+          if (this.mode === 'mail') await this.loadDirectory(1)
+        } catch (error) {
+          this.notify(this.apiError(error, 'Could not send GM mail.'), 'error')
+          if (this.gmMailDraft.audience === 'broadcast') await this.loadGMBroadcastAudience()
+        } finally {
+          this.gmMailDraft.busy = false
+        }
+      },
+      openGMParcelComposer () {
+        this.resetGMParcelComposer()
+        this.gmCharacterContext = 'parcel'
+        this.$refs.gmParcelModal.show()
+      },
+      resetGMParcelComposer () {
+        clearTimeout(this.gmCharacterSearchTimer)
+        this.gmParcelDraft = emptyGMParcelDraft()
+        this.resetGMCharacterSearch()
+      },
+      selectGMParcelRecipient (character) {
+        this.gmParcelDraft.recipient = clone(character)
+        this.gmCharacterSearch = ''
+        this.gmCharacterResults = []
+      },
+      addGMParcelLine () {
+        if (this.gmParcelDraft.items.length < 20) this.gmParcelDraft.items.push(emptyGMParcelLine())
+      },
+      removeGMParcelLine (index) {
+        if (this.gmParcelDraft.items.length > 1) this.gmParcelDraft.items.splice(index, 1)
+      },
+      gmParcelSocketOptions (line) {
+        if (!line.item) return []
+        return Array.from({ length: 6 }, (_, index) => ({
+          index,
+          type: Number(line.item[`augment_slot_${index + 1}_type`] || 0)
+        })).filter(socket => socket.type > 0)
+      },
+      itemConfigurationSummary (item) {
+        const details = [`Item #${item.id}`]
+        if (Number(item.stackable)) details.push(`stackable to ${Number(item.stack_size).toLocaleString()}`)
+        else details.push('non-stackable')
+        const sockets = Array.from({ length: 6 }, (_, index) => Number(item[`augment_slot_${index + 1}_type`] || 0)).filter(Boolean)
+        if (sockets.length) details.push(`${sockets.length} augment socket${sockets.length === 1 ? '' : 's'}`)
+        if (Number(item.evolving_level) > 0) details.push('evolving')
+        return details.join(' · ')
+      },
+      reviewGMParcels () {
+        if (!this.canReviewGMParcels) return
+        this.gmParcelDraft.confirmation = ''
+        this.gmParcelDraft.step = 'review'
+      },
+      async sendGMParcels () {
+        if (!this.canSendGMParcels || this.gmParcelDraft.busy) return
+        this.gmParcelDraft.busy = true
+        try {
+          const payload = {
+            character_id: Number(this.gmParcelDraft.recipient.id),
+            from_name: this.gmParcelDraft.from_name.trim(),
+            note: this.gmParcelDraft.note,
+            sent_date: this.sqlDateTime(this.gmParcelDraft.sent_at),
+            reason: this.gmParcelDraft.reason.trim(),
+            confirmation: this.gmParcelDraft.confirmation.trim(),
+            items: this.gmParcelDraft.items.map(line => ({
+              client_key: line.client_key,
+              item_id: Number(line.item_id),
+              augment_1: Number(line.augment_1 || 0),
+              augment_2: Number(line.augment_2 || 0),
+              augment_3: Number(line.augment_3 || 0),
+              augment_4: Number(line.augment_4 || 0),
+              augment_5: Number(line.augment_5 || 0),
+              augment_6: Number(line.augment_6 || 0),
+              quantity: Number(line.quantity),
+              evolve_amount: Number(line.evolve_amount || 0)
+            }))
+          }
+          const response = await SpireApi.v1().put('/mail-parcels-editor/parcel/send', payload)
+          this.gmParcelDraft.result = response.data
+          this.gmParcelDraft.step = 'result'
+          await this.loadSummary()
+          if (this.mode === 'parcels') await this.loadDirectory(1)
+        } catch (error) {
+          this.notify(this.apiError(error, 'Could not send GM parcels.'), 'error')
+        } finally {
+          this.gmParcelDraft.busy = false
+        }
       },
       async loadSummary () {
         try {
@@ -1616,8 +2418,8 @@
           this.operationBusy = false
         }
       },
-      openItemLookup (scope, index) {
-        this.itemLookup = { scope, index }
+      openItemLookup (scope, index, lineIndex = -1) {
+        this.itemLookup = { scope, index, lineIndex }
         this.itemSearch = ''
         this.itemResults = []
         this.itemSearchComplete = false
@@ -1631,7 +2433,7 @@
       },
       resetItemLookup () {
         clearTimeout(this.itemSearchTimer)
-        this.itemLookup = { scope: '', index: -1 }
+        this.itemLookup = { scope: '', index: -1, lineIndex: -1 }
         this.itemSearch = ''
         this.itemResults = []
         this.itemSearchComplete = false
@@ -1649,7 +2451,15 @@
         this.searchingItems = true
         try {
           const params = { q: this.itemSearch.trim() }
-          if (this.itemLookup.scope.indexOf('augment') >= 0) params.scope = 'augment'
+          if (this.itemLookup.scope.indexOf('augment') >= 0) {
+            params.scope = 'augment'
+            if (this.itemLookup.scope === 'gm-parcel-augment') {
+              const line = this.gmParcelDraft.items[this.itemLookup.lineIndex]
+              if (line && line.item) {
+                params.socket_type = Number(line.item[`augment_slot_${this.itemLookup.index + 1}_type`] || 0)
+              }
+            }
+          }
           const response = await SpireApi.v1().get('/mail-parcels-editor/items', { params })
           this.itemResults = response.data.data || []
           this.itemSearchComplete = true
@@ -1664,6 +2474,7 @@
       selectLookupItem (item) {
         const scope = this.itemLookup.scope
         const index = this.itemLookup.index
+        const lineIndex = this.itemLookup.lineIndex
         if (scope === 'parcel') {
           this.selectedItem = clone(item)
           this.editModel.item_id = Number(item.id)
@@ -1680,18 +2491,41 @@
         } else if (scope === 'content-augment') {
           this.$set(this.contentAugmentRefs, index, clone(item))
           this.$set(this.contentDraft, `augment_${index + 1}`, Number(item.id))
+        } else if (scope === 'gm-parcel-item') {
+          const line = this.gmParcelDraft.items[lineIndex]
+          if (!line) return
+          line.item = clone(item)
+          line.item_id = Number(item.id)
+          line.quantity = Number(item.stackable) ? Math.max(1, Math.min(Number(line.quantity) || 1, Number(item.stack_size) || 1)) : 1
+          line.evolve_amount = Number(item.evolving_level) > 0 ? Number(line.evolve_amount || 0) : 0
+          for (let augmentIndex = 0; augmentIndex < 6; augmentIndex++) {
+            this.$set(line.augment_refs, augmentIndex, null)
+            this.$set(line, `augment_${augmentIndex + 1}`, 0)
+          }
+        } else if (scope === 'gm-parcel-augment') {
+          const line = this.gmParcelDraft.items[lineIndex]
+          if (!line) return
+          this.$set(line.augment_refs, index, clone(item))
+          this.$set(line, `augment_${index + 1}`, Number(item.id))
         }
         this.$refs.itemLookupModal.hide()
       },
       clearItemLookupTarget () {
         const scope = this.itemLookup.scope
         const index = this.itemLookup.index
+        const lineIndex = this.itemLookup.lineIndex
         if (scope === 'parcel-augment') {
           this.$set(this.augmentRefs, index, null)
           this.$set(this.editModel, `augment_${index + 1}`, 0)
         } else if (scope === 'content-augment') {
           this.$set(this.contentAugmentRefs, index, null)
           this.$set(this.contentDraft, `augment_${index + 1}`, 0)
+        } else if (scope === 'gm-parcel-augment') {
+          const line = this.gmParcelDraft.items[lineIndex]
+          if (line) {
+            this.$set(line.augment_refs, index, null)
+            this.$set(line, `augment_${index + 1}`, 0)
+          }
         }
         this.$refs.itemLookupModal.hide()
       },
@@ -1815,6 +2649,12 @@
         if (Number(status) === 4) return 'fa fa-trash'
         return 'fa fa-question-circle'
       },
+      mailStatusClass (status) {
+        if (Number(status) === 1) return 'delivery-status-chip--unread'
+        if (Number(status) === 3) return 'delivery-status-chip--read'
+        if (Number(status) === 4) return 'delivery-status-chip--trash'
+        return 'delivery-status-chip--legacy'
+      },
       isUnknownMailStatus (status) {
         return ![1, 3, 4].includes(Number(status))
       },
@@ -1827,12 +2667,16 @@
         if (Number.isNaN(date.getTime())) return 'Unknown time'
         return date.toLocaleString()
       },
+      formatParcelDate (value) {
+        if (!value) return 'No sent time'
+        return this.formatDateTime(String(value).replace(' ', 'T'))
+      },
       sqlDateTime (value) {
         if (!value) return ''
         const date = new Date(value)
         if (Number.isNaN(date.getTime())) return ''
         const local = localDateTimeValue(date)
-        return `${local.slice(0, 10)} ${local.slice(11, 16)}:00`
+        return `${local.slice(0, 10)} ${local.slice(11, 19)}`
       },
       openItemEditor (id) {
         if (Number(id) > 0) this.$router.push(`/item/${id}`)
@@ -1911,6 +2755,86 @@
   .mail-parcels-mode-switch > button.active strong,
   .mail-parcels-mode-switch > button.active b {
     color: #e8c85f;
+  }
+
+  .mail-parcels-command-bar {
+    align-items: center;
+    background:
+      linear-gradient(90deg, rgba(210, 170, 69, 0.1), rgba(5, 12, 19, 0.92) 42%),
+      rgba(5, 12, 19, 0.9);
+    border: 1px solid rgba(210, 170, 69, 0.31);
+    display: flex;
+    gap: 14px;
+    justify-content: space-between;
+    margin: -5px 0 12px;
+    padding: 9px 11px;
+  }
+
+  .mail-parcels-command-bar strong,
+  .mail-parcels-command-bar small {
+    display: block;
+  }
+
+  .mail-parcels-command-bar strong {
+    color: #dce0e2;
+    font-size: 11px;
+  }
+
+  .mail-parcels-command-bar small {
+    color: #7f8a93;
+    font-size: 8px;
+    margin-top: 2px;
+  }
+
+  .mail-parcels-command-bar__actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  .delivery-status-chip {
+    align-items: center;
+    border: 1px solid currentColor;
+    display: inline-flex;
+    font-size: 7px;
+    font-style: normal;
+    font-weight: 800;
+    gap: 4px;
+    letter-spacing: 0.045em;
+    line-height: 1;
+    margin-top: 4px;
+    padding: 3px 5px;
+    text-transform: uppercase;
+    width: max-content;
+  }
+
+  .delivery-status-chip--header {
+    margin-top: 6px;
+  }
+
+  .delivery-status-chip--unread {
+    background: rgba(46, 164, 112, 0.12);
+    color: #6ed3a6;
+  }
+
+  .delivery-status-chip--read {
+    background: rgba(92, 137, 177, 0.13);
+    color: #88b3d5;
+  }
+
+  .delivery-status-chip--trash {
+    background: rgba(180, 66, 66, 0.13);
+    color: #e18383;
+  }
+
+  .delivery-status-chip--queued {
+    background: rgba(210, 170, 69, 0.11);
+    color: #e0c164;
+  }
+
+  .delivery-status-chip--legacy {
+    background: rgba(194, 118, 55, 0.14);
+    color: #e7a766;
   }
 
   .mail-body {
@@ -2596,7 +3520,492 @@
     text-transform: uppercase;
   }
 
+  .gm-workflow-steps {
+    display: grid;
+    gap: 5px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 14px;
+  }
+
+  .gm-workflow-steps span {
+    align-items: center;
+    background: rgba(5, 13, 20, 0.78);
+    border: 1px solid rgba(178, 191, 204, 0.14);
+    color: #7d8892;
+    display: flex;
+    font-size: 8px;
+    gap: 6px;
+    padding: 6px 8px;
+    text-transform: uppercase;
+  }
+
+  .gm-workflow-steps b {
+    align-items: center;
+    border: 1px solid currentColor;
+    display: inline-flex;
+    height: 18px;
+    justify-content: center;
+    width: 18px;
+  }
+
+  .gm-workflow-steps span.active {
+    background: rgba(210, 170, 69, 0.12);
+    border-color: rgba(210, 170, 69, 0.48);
+    color: #e2c360;
+  }
+
+  .gm-audience-switch {
+    display: grid;
+    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gm-audience-switch > button {
+    align-items: center;
+    background: rgba(5, 13, 20, 0.8);
+    border: 1px solid rgba(178, 191, 204, 0.18);
+    color: #939da5;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 30px minmax(0, 1fr);
+    padding: 10px;
+    text-align: left;
+  }
+
+  .gm-audience-switch > button > i {
+    color: #99a3ab;
+    font-size: 17px;
+    text-align: center;
+  }
+
+  .gm-audience-switch strong,
+  .gm-audience-switch small {
+    display: block;
+  }
+
+  .gm-audience-switch strong {
+    color: #d7dbde;
+    font-size: 10px;
+  }
+
+  .gm-audience-switch small {
+    color: #7a858e;
+    font-size: 8px;
+    margin-top: 2px;
+  }
+
+  .gm-audience-switch > button:hover,
+  .gm-audience-switch > button.active {
+    background: rgba(210, 170, 69, 0.12);
+    border-color: rgba(210, 170, 69, 0.5);
+  }
+
+  .gm-audience-switch > button.active > i,
+  .gm-audience-switch > button.active strong {
+    color: #e3c463;
+  }
+
+  .gm-recipient-builder {
+    margin-top: 12px;
+    position: relative;
+  }
+
+  .gm-recipient-chips,
+  .gm-review-recipients {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 8px;
+  }
+
+  .gm-recipient-chips > span,
+  .gm-review-recipients > span {
+    align-items: center;
+    background: rgba(210, 170, 69, 0.09);
+    border: 1px solid rgba(210, 170, 69, 0.27);
+    color: #d7dbde;
+    display: inline-flex;
+    font-size: 8px;
+    gap: 5px;
+    padding: 4px 6px;
+  }
+
+  .gm-recipient-chips > span > i {
+    color: #d5b34f;
+  }
+
+  .gm-recipient-chips button {
+    background: transparent;
+    border: 0;
+    color: #9aa4ac;
+    line-height: 1;
+    padding: 1px 0 1px 3px;
+  }
+
+  .gm-inline-state {
+    border: 1px dashed rgba(178, 191, 204, 0.2);
+    color: #808b94;
+    font-size: 8px;
+    margin-top: 8px;
+    padding: 8px;
+  }
+
+  .gm-broadcast-preview,
+  .gm-parcel-rule {
+    align-items: center;
+    background: rgba(210, 170, 69, 0.08);
+    border: 1px solid rgba(210, 170, 69, 0.29);
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    margin-top: 12px;
+    min-height: 50px;
+    padding: 8px 10px;
+  }
+
+  .gm-parcel-rule {
+    grid-template-columns: 34px minmax(0, 1fr);
+    margin-top: 0;
+  }
+
+  .gm-broadcast-preview > i,
+  .gm-parcel-rule > i {
+    color: #d7b64f;
+    font-size: 18px;
+    text-align: center;
+  }
+
+  .gm-broadcast-preview strong,
+  .gm-broadcast-preview small,
+  .gm-parcel-rule strong,
+  .gm-parcel-rule small {
+    display: block;
+  }
+
+  .gm-broadcast-preview strong,
+  .gm-parcel-rule strong {
+    color: #e1c46b;
+    font-size: 10px;
+  }
+
+  .gm-broadcast-preview small,
+  .gm-parcel-rule small {
+    color: #858f98;
+    font-size: 8px;
+    margin-top: 2px;
+  }
+
+  .gm-broadcast-preview > button {
+    background: rgba(0, 0, 0, 0.26);
+    border: 1px solid currentColor;
+    color: #d5b454;
+    font-size: 8px;
+    padding: 5px 7px;
+  }
+
+  .gm-broadcast-preview.error {
+    background: rgba(135, 42, 42, 0.1);
+    border-color: rgba(216, 78, 78, 0.37);
+  }
+
+  .gm-broadcast-preview.error > i,
+  .gm-broadcast-preview.error strong {
+    color: #e47b7b;
+  }
+
+  .gm-message-body {
+    min-height: 125px;
+    resize: vertical;
+  }
+
+  .gm-review-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  }
+
+  .gm-review-card {
+    background: rgba(5, 13, 20, 0.76);
+    border: 1px solid rgba(178, 191, 204, 0.16);
+    padding: 13px;
+  }
+
+  .gm-review-card h4,
+  .gm-delivery-result h4 {
+    color: #e4c86f;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    margin: 4px 0;
+  }
+
+  .gm-review-card p,
+  .gm-delivery-result p {
+    color: #89949c;
+    font-size: 8px;
+    margin: 0;
+  }
+
+  .gm-review-message {
+    margin-top: 0;
+    min-height: 150px;
+  }
+
+  .gm-confirmation {
+    background: rgba(210, 170, 69, 0.07);
+    border: 1px solid rgba(210, 170, 69, 0.28);
+    margin-top: 12px;
+    padding: 11px;
+  }
+
+  .gm-confirmation--danger {
+    background: rgba(143, 38, 38, 0.1);
+    border-color: rgba(217, 70, 70, 0.4);
+  }
+
+  .gm-confirmation > div {
+    align-items: center;
+    display: grid;
+    gap: 9px;
+    grid-template-columns: 28px minmax(0, 1fr);
+    margin-bottom: 9px;
+  }
+
+  .gm-confirmation > div > i {
+    color: #deb957;
+    font-size: 17px;
+    text-align: center;
+  }
+
+  .gm-confirmation--danger > div > i {
+    color: #e36f6f;
+  }
+
+  .gm-confirmation strong,
+  .gm-confirmation small {
+    display: block;
+  }
+
+  .gm-confirmation strong {
+    color: #dce0e2;
+    font-size: 10px;
+  }
+
+  .gm-confirmation small {
+    color: #818c95;
+    font-size: 8px;
+    margin-top: 2px;
+  }
+
+  .gm-confirmation label {
+    color: #cdb058;
+    font-size: 8px;
+    margin-bottom: 4px;
+  }
+
+  .gm-delivery-result {
+    align-items: center;
+    background:
+      radial-gradient(circle at 12% 20%, rgba(67, 168, 113, 0.13), transparent 34%),
+      rgba(5, 13, 20, 0.82);
+    border: 1px solid rgba(92, 191, 136, 0.34);
+    display: grid;
+    gap: 13px;
+    grid-template-columns: 54px minmax(0, 1fr);
+    min-height: 190px;
+    padding: 18px;
+  }
+
+  .gm-delivery-result__icon {
+    align-items: center;
+    border: 1px solid rgba(92, 191, 136, 0.45);
+    color: #71d4a2;
+    display: flex;
+    font-size: 22px;
+    height: 52px;
+    justify-content: center;
+    width: 52px;
+  }
+
+  .gm-parcel-lines {
+    border-top: 1px solid rgba(178, 191, 204, 0.14);
+    margin-top: 16px;
+    padding-top: 12px;
+  }
+
+  .gm-parcel-lines__heading {
+    align-items: flex-end;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 7px;
+  }
+
+  .gm-parcel-lines__heading strong {
+    color: #d9dde0;
+    display: block;
+    font-size: 10px;
+  }
+
+  .gm-parcel-line {
+    align-items: start;
+    background: rgba(5, 13, 20, 0.75);
+    border: 1px solid rgba(178, 191, 204, 0.14);
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 25px minmax(0, 1fr) 28px;
+    margin-bottom: 6px;
+    padding: 7px;
+  }
+
+  .gm-parcel-line__number {
+    align-items: center;
+    background: rgba(210, 170, 69, 0.12);
+    color: #d9b84f;
+    display: flex;
+    font-size: 9px;
+    height: 25px;
+    justify-content: center;
+  }
+
+  .gm-parcel-line__configuration {
+    display: grid;
+    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 130px));
+    margin-top: 7px;
+  }
+
+  .gm-parcel-line__remove {
+    background: rgba(128, 37, 37, 0.11);
+    border: 1px solid rgba(214, 76, 76, 0.28);
+    color: #d66565;
+    height: 28px;
+  }
+
+  .gm-parcel-line__remove:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+
+  .gm-parcel-augments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+  }
+
+  .gm-parcel-augments > .context-label {
+    flex-basis: 100%;
+  }
+
+  .gm-parcel-augments > button {
+    align-items: center;
+    background: rgba(0, 0, 0, 0.23);
+    border: 1px solid rgba(210, 170, 69, 0.23);
+    color: #89939b;
+    display: grid;
+    gap: 6px;
+    grid-template-columns: 20px minmax(80px, 1fr) auto;
+    min-width: 150px;
+    padding: 4px;
+    text-align: left;
+  }
+
+  .gm-parcel-augments b {
+    align-items: center;
+    background: rgba(210, 170, 69, 0.12);
+    color: #d8b650;
+    display: flex;
+    height: 20px;
+    justify-content: center;
+  }
+
+  .gm-parcel-augments strong,
+  .gm-parcel-augments small {
+    display: block;
+  }
+
+  .gm-parcel-augments strong {
+    color: #d0d4d7;
+    font-size: 8px;
+  }
+
+  .gm-parcel-augments small {
+    color: #747f88;
+    font-size: 7px;
+  }
+
+  .gm-parcel-review-list,
+  .gm-parcel-result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 10px;
+  }
+
+  .gm-parcel-review-list article {
+    align-items: center;
+    background: rgba(5, 13, 20, 0.76);
+    border: 1px solid rgba(178, 191, 204, 0.14);
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    padding: 7px;
+  }
+
+  .gm-parcel-review-list__icon {
+    align-items: center;
+    background: rgba(210, 170, 69, 0.1);
+    display: flex;
+    height: 36px;
+    justify-content: center;
+    width: 36px;
+  }
+
+  .gm-parcel-review-list strong,
+  .gm-parcel-review-list small {
+    display: block;
+  }
+
+  .gm-parcel-review-list strong {
+    color: #d7dbde;
+    font-size: 9px;
+  }
+
+  .gm-parcel-review-list small {
+    color: #7b8690;
+    font-size: 7px;
+    margin-top: 2px;
+  }
+
+  .gm-parcel-result-list {
+    grid-column: 1 / -1;
+  }
+
+  .gm-parcel-result-list > span {
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(178, 191, 204, 0.13);
+    color: #cdd2d5;
+    display: grid;
+    font-size: 8px;
+    gap: 7px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 6px;
+  }
+
+  .gm-parcel-result-list b {
+    color: #d7b64f;
+  }
+
   @media (max-width: 1050px) {
+    .spire-editor-workspace {
+      grid-template-columns: 1fr;
+    }
+
+    .spire-editor-directory-list {
+      max-height: 360px;
+      min-height: 0;
+    }
+
     .delivery-layout,
     .parcel-package-layout {
       grid-template-columns: 1fr;
@@ -2605,11 +4014,25 @@
     .augment-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .gm-review-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 720px) {
     .mail-parcels-mode-switch {
       grid-template-columns: 1fr;
+    }
+
+    .mail-parcels-command-bar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .mail-parcels-command-bar__actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .mail-parcels-mode-switch small {
@@ -2636,6 +4059,41 @@
 
     .parcel-preview dl {
       grid-template-columns: 1fr;
+    }
+
+    .gm-audience-switch,
+    .gm-review-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .gm-parcel-line {
+      grid-template-columns: 22px minmax(0, 1fr) 28px;
+    }
+
+    .gm-parcel-line__configuration {
+      grid-template-columns: 1fr;
+    }
+
+    .gm-parcel-review-list article,
+    .gm-parcel-result-list > span {
+      grid-template-columns: 36px minmax(0, 1fr);
+    }
+
+    .gm-parcel-review-list .delivery-status-chip,
+    .gm-parcel-result-list .delivery-status-chip {
+      grid-column: 2;
+    }
+
+    .gm-delivery-result {
+      align-items: start;
+      grid-template-columns: 42px minmax(0, 1fr);
+      padding: 12px;
+    }
+
+    .gm-delivery-result__icon {
+      font-size: 17px;
+      height: 40px;
+      width: 40px;
     }
   }
 </style>
