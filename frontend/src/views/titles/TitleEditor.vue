@@ -303,11 +303,16 @@
 
                 <div class="title-live-preview" data-testid="title-live-preview">
                   <div class="spire-editor-context-label">Live client preview</div>
-                  <div class="title-live-preview__name">{{ composedTitle }}</div>
-                  <div class="title-live-preview__meta">
-                    <span v-if="editModel.prefix"><i class="fa fa-long-arrow-left"></i> prefix</span>
-                    <span data-testid="title-preview-character">{{ previewCharacterName }}</span>
-                    <span v-if="editModel.suffix">suffix <i class="fa fa-long-arrow-right"></i></span>
+                  <div class="title-live-preview__composition">
+                    <div class="title-live-preview__name">{{ composedTitle }}</div>
+                    <div
+                      class="title-live-preview__meta"
+                      :aria-label="'Preview character: ' + previewCharacterName"
+                    >
+                      <span>Preview character</span>
+                      <span class="title-live-preview__separator" aria-hidden="true"></span>
+                      <strong data-testid="title-preview-character">{{ previewCharacterName }}</strong>
+                    </div>
                   </div>
                   <p v-if="!editModel.prefix && !editModel.suffix">
                     Add a prefix, a suffix, or both to make this title visible.
@@ -1617,17 +1622,45 @@
     font-family: Georgia, "Times New Roman", serif;
     font-size: 23px;
     line-height: 1.25;
-    margin: 13px 0 8px;
+    margin: 0;
     overflow-wrap: anywhere;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
   }
 
-  .title-live-preview__meta {
-    color: #87919b;
+  .title-live-preview__composition {
+    align-items: center;
     display: flex;
-    font-size: 8px;
-    gap: 10px;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 12px;
+    max-width: 100%;
+  }
+
+  .title-live-preview__meta {
+    align-items: center;
+    color: #77818b;
+    display: flex;
+    font-size: 8.5px;
+    gap: 6px;
+    justify-content: center;
+    letter-spacing: 0.035em;
+    line-height: 1.2;
     text-transform: uppercase;
+  }
+
+  .title-live-preview__separator {
+    background: rgba(210, 170, 69, 0.55);
+    border-radius: 50%;
+    display: inline-block;
+    flex: 0 0 auto;
+    height: 3px;
+    width: 3px;
+  }
+
+  .title-live-preview__meta strong {
+    color: #b7bec4;
+    font-size: inherit;
+    font-weight: 700;
   }
 
   .title-live-preview p {

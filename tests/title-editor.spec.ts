@@ -188,8 +188,26 @@ test.describe('Title Editor', () => {
     await expect(page.locator('#title-preview-name')).toHaveCount(0);
     await expect(page.getByTestId('title-preview-character')).toHaveText('Farren');
     await expect(page.getByTestId('title-live-preview')).toContainText('Windcaller Farren');
+    await expect(page.locator('.title-live-preview__meta')).toHaveAttribute('aria-label', 'Preview character: Farren');
+    await expect(page.locator('.title-live-preview__meta')).toContainText('Preview character');
+    await expect(page.locator('.title-live-preview .fa-long-arrow-left, .title-live-preview .fa-long-arrow-right')).toHaveCount(0);
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/titles"]')).toHaveCount(1);
     await expect(page.locator('#sidebar .nav.nav-sm a[href="/titles"]')).toBeVisible();
+
+    const previewAlignment = await page.getByTestId('title-live-preview').evaluate(element => {
+      const cardRect = element.getBoundingClientRect();
+      const nameRect = element.querySelector('.title-live-preview__name')?.getBoundingClientRect();
+      const metaRect = element.querySelector('.title-live-preview__meta')?.getBoundingClientRect();
+      return {
+        centerOffset: Math.abs(
+          ((metaRect?.left || 0) + (metaRect?.width || 0) / 2) -
+          (cardRect.left + cardRect.width / 2)
+        ),
+        verticalGap: (metaRect?.top || 0) - (nameRect?.bottom || 0),
+      };
+    });
+    expect(previewAlignment.centerOffset).toBeLessThanOrEqual(1);
+    expect(previewAlignment.verticalGap).toBeGreaterThanOrEqual(5);
 
     await page.evaluate(() => {
       window.history.pushState({}, '', '/titles?tab=Eligibility&title=93');
@@ -338,11 +356,14 @@ test.describe('Title Editor', () => {
     };
     await installTitleMocks(page, state);
     await page.setViewportSize({ width: 900, height: 900 });
-    await page.goto('/titles?title=93&tab=Unlock%20Sources');
+    await page.goto('/titles?title=93');
 
     await expect(page.getByTestId('title-inspector')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
+    await expect(page.locator('.title-live-preview__meta')).toBeVisible();
+    await expect(page.locator('.title-live-preview__meta')).toHaveAttribute('aria-label', 'Preview character: Farren');
+    await page.getByRole('tab', { name: 'Unlock Sources', exact: true }).click();
     await expect(page.locator('#title-item-search')).toBeVisible();
   });
 

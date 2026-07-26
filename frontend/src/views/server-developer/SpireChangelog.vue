@@ -1002,9 +1002,15 @@ export default {
       this.$nextTick(() => {
         const editor = this.$refs.editor;
         if (editor) {
-          editor.focus();
+          editor.focus({preventScroll: true});
           const pos = heading.indexOf("* ") + 2;
           editor.setSelectionRange(pos, pos);
+          editor.scrollTop = 0;
+          editor.scrollLeft = 0;
+          window.requestAnimationFrame(() => {
+            editor.scrollTop = 0;
+            editor.scrollLeft = 0;
+          });
         }
       });
     },
