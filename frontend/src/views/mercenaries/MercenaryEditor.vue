@@ -1166,6 +1166,7 @@
       async loadDetail (id) {
         const requestToken = ++this.detailRequestToken
         this.loadingDetail = true
+        this.clearDetail()
         try {
           const response = await SpireApi.v1().get(`/mercenary-editor/mercenary/${id}`)
           if (requestToken !== this.detailRequestToken) return false
@@ -1174,6 +1175,7 @@
         } catch (error) {
           if (requestToken !== this.detailRequestToken) return false
           this.clearDetail()
+          this.updateRoute()
           this.showNotification(this.errorMessage(error, 'Unable to load mercenary'), 'error')
           return false
         } finally {

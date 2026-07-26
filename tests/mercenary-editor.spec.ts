@@ -478,6 +478,13 @@ test.describe('Mercenary Editor', () => {
     await page.evaluate(() => {
       window.history.pushState({}, '', '/mercenaries?mercenary=940002');
       window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
+    });
+
+    await expect(page.getByTestId('mercenary-inspector')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Loading mercenary context…' })).toBeVisible();
+    await expect(page.getByTestId('mercenary-save')).toHaveCount(0);
+
+    await page.evaluate(() => {
       window.history.pushState({}, '', '/mercenaries?mercenary=940003');
       window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
     });
@@ -493,6 +500,7 @@ test.describe('Mercenary Editor', () => {
 
     await expect(page.locator('.spire-editor-notification')).toHaveText(/Mercenary not found/);
     await expect(page.getByTestId('mercenary-inspector')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/mercenaries\?tab=Overview$/);
   });
 
   test('loads audit data for route-driven and initial audit tabs', async ({ page }) => {
