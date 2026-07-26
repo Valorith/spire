@@ -92,6 +92,39 @@ func TestPlayerOperationsGuildLeaderChanged(t *testing.T) {
 	}
 }
 
+func TestPlayerOperationsSanctionUpdates(t *testing.T) {
+	until := time.Date(2035, time.January, 2, 18, 45, 0, 0, time.UTC)
+
+	suspend := playerOperationsSanctionUpdates("suspend", &until, " Temporary suspension ")
+	if _, overwritesBanReason := suspend["ban_reason"]; overwritesBanReason {
+		t.Fatal("temporary suspension must preserve the stored ban reason")
+	}
+	if suspend["suspend_reason"] != "Temporary suspension" {
+		t.Fatalf("suspend_reason = %v", suspend["suspend_reason"])
+	}
+
+	ban := playerOperationsSanctionUpdates("ban", &until, " Indefinite ban ")
+	if ban["ban_reason"] != "Indefinite ban" || ban["suspend_reason"] != "" {
+		t.Fatalf("ban updates = %#v", ban)
+	}
+
+	clear := playerOperationsSanctionUpdates("clear", nil, "Clearing sanction")
+	if clear["ban_reason"] != "" || clear["suspend_reason"] != "" {
+		t.Fatalf("clear updates = %#v", clear)
+	}
+}
+
+func TestPlayerOperationsHasBanReason(t *testing.T) {
+	blank := " "
+	reason := "Policy violation"
+	if playerOperationsHasBanReason(nil) || playerOperationsHasBanReason(&blank) {
+		t.Fatal("blank ban reason reported as active")
+	}
+	if !playerOperationsHasBanReason(&reason) {
+		t.Fatal("stored ban reason was not detected")
+	}
+}
+
 func TestValidatePlayerOperationsGuildAccess(t *testing.T) {
 	valid := playerOperationsGuildAccessInput{
 		Reason: "Updating guild access after an officer review",

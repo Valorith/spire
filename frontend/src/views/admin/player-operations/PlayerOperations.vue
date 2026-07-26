@@ -1330,6 +1330,7 @@ export default {
     tabs () {
       if (this.mode === 'characters') return ['Overview', 'Location', 'Economy', 'Connections']
       if (this.mode === 'accounts') return ['Overview', 'Access & Safety', 'Characters', 'Activity']
+      if (this.isCreating) return ['Overview']
       return ['Overview', 'Members', 'Ranks & Access', 'Assets']
     },
     totalPages () {

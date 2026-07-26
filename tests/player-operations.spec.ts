@@ -387,6 +387,12 @@ test.describe('Player Operations', () => {
 
     await page.getByRole('tab', { name: /Guilds/ }).click();
     await expect(page).toHaveURL(/mode=guilds/);
+    await page.getByTestId('player-operations-new-guild').click();
+    const guildTabs = page.getByRole('tablist', { name: 'Guild sections' });
+    await expect(guildTabs.getByRole('tab')).toHaveCount(1);
+    await expect(guildTabs.getByRole('tab', { name: 'Overview', exact: true })).toBeVisible();
+    await expect(guildTabs.getByRole('tab', { name: 'Members', exact: true })).toHaveCount(0);
+    await expect(guildTabs.getByRole('tab', { name: 'Ranks & Access', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: /Keepers of the Spire 1 members/ }).click();
     await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Keepers of the Spire');
     await page.getByRole('tab', { name: 'Members', exact: true }).click();
