@@ -357,6 +357,11 @@ const router = new Router({
           meta: {title: "Players Online"},
         },
         {
+          path: 'mail-parcels',
+          component: () => import('./views/admin/mail-parcels/MailParcelsEditor.vue'),
+          meta: {title: "Mail & Parcels"},
+        },
+        {
           path: 'zones',
           component: () => import('./views/admin/ZoneServers.vue'),
           meta: {title: "Zone Servers"},
