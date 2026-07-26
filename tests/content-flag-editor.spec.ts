@@ -257,6 +257,12 @@ test.describe('Content Flag Editor', () => {
     const statusFilter = page.getByTestId('content-flag-status-filter');
     await expect(statusFilter).toHaveAttribute('role', 'group');
     await expect(allFilter).toHaveAttribute('aria-pressed', 'true');
+    const desktopFilterSize = await statusFilter.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    expect(desktopFilterSize.width).toBeLessThan(220);
+    expect(desktopFilterSize.height).toBeLessThan(28);
 
     await enabledFilter.click();
 

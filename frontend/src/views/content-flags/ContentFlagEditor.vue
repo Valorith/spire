@@ -69,7 +69,7 @@
               <button
                 v-for="filter in statusFilters"
                 :key="filter.value"
-                class="status-filter__option"
+                class="btn status-filter__option"
                 :class="{ active: statusFilter === filter.value }"
                 type="button"
                 :aria-pressed="statusFilter === filter.value ? 'true' : 'false'"
@@ -1176,9 +1176,10 @@
 .directory-filter {
   align-items: center;
   display: grid;
-  gap: 7px;
-  grid-template-columns: auto minmax(0, 1fr);
-  margin-top: 7px;
+  gap: 6px;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  margin-top: 6px;
 }
 
 .directory-filter__label {
@@ -1190,14 +1191,15 @@
 }
 
 .status-filter {
-  background: rgba(4, 6, 8, .5);
-  border: 1px solid rgba(195, 155, 73, .2);
+  background: rgba(4, 6, 8, .38);
+  border: 1px solid rgba(195, 155, 73, .16);
   border-radius: 3px;
-  box-shadow: inset 0 1px 5px rgba(0, 0, 0, .38);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .32);
   display: grid;
-  gap: 2px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 2px;
+  gap: 1px;
+  grid-template-columns: repeat(3, auto);
+  padding: 1px;
+  width: fit-content;
 }
 
 button.status-filter__option {
@@ -1207,13 +1209,13 @@ button.status-filter__option {
   border-radius: 2px;
   color: rgba(255, 255, 255, .48);
   display: flex;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  gap: 5px;
+  gap: 4px;
   justify-content: center;
   letter-spacing: .015em;
-  min-height: 27px;
-  padding: 4px 7px;
+  min-height: 21px;
+  padding: 2px 7px;
   transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
 }
 
@@ -1229,9 +1231,9 @@ button.status-filter__option:focus-visible {
 }
 
 button.status-filter__option.active {
-  background: linear-gradient(180deg, rgba(195, 155, 73, .19), rgba(195, 155, 73, .08));
-  border-color: rgba(195, 155, 73, .48);
-  box-shadow: inset 0 1px 0 rgba(255, 235, 170, .08), 0 1px 5px rgba(0, 0, 0, .32);
+  background: linear-gradient(180deg, rgba(195, 155, 73, .16), rgba(195, 155, 73, .065));
+  border-color: rgba(195, 155, 73, .4);
+  box-shadow: inset 0 1px 0 rgba(255, 235, 170, .06), 0 1px 3px rgba(0, 0, 0, .26);
   color: #efd384;
 }
 
@@ -1243,9 +1245,9 @@ button.status-filter__option:disabled {
 .status-filter__dot {
   border: 1px solid rgba(255, 255, 255, .3);
   border-radius: 50%;
-  height: 6px;
+  height: 5px;
   transition: border-color .15s ease, box-shadow .15s ease;
-  width: 6px;
+  width: 5px;
 }
 
 .status-filter__dot--all {
@@ -2232,6 +2234,12 @@ button.directory-row.active {
 @media (max-width: 640px) {
   .content-flag-title {
     font-size: 22px;
+  }
+
+  button.status-filter__option {
+    font-size: 10px;
+    min-height: 30px;
+    padding: 4px 8px;
   }
 
   .flag-form-grid,
