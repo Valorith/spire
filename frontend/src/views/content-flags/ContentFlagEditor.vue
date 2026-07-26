@@ -59,17 +59,32 @@
           </div>
 
           <div class="directory-filter">
-            <label for="content-flag-status-filter">Status</label>
-            <select
-              id="content-flag-status-filter"
-              v-model="statusFilter"
-              class="form-control form-control-sm"
-              @change="loadDirectory(1)"
+            <span id="content-flag-status-label" class="directory-filter__label">Status</span>
+            <div
+              class="status-filter"
+              role="group"
+              aria-labelledby="content-flag-status-label"
+              data-testid="content-flag-status-filter"
             >
-              <option value="all">All flags</option>
-              <option value="enabled">Enabled</option>
-              <option value="disabled">Disabled</option>
-            </select>
+              <button
+                v-for="filter in statusFilters"
+                :key="filter.value"
+                class="status-filter__option"
+                :class="{ active: statusFilter === filter.value }"
+                type="button"
+                :aria-pressed="statusFilter === filter.value ? 'true' : 'false'"
+                :disabled="loadingDirectory"
+                :data-testid="'content-flag-status-' + filter.value"
+                @click="setStatusFilter(filter.value)"
+              >
+                <span
+                  class="status-filter__dot"
+                  :class="'status-filter__dot--' + filter.value"
+                  aria-hidden="true"
+                ></span>
+                <span>{{ filter.label }}</span>
+              </button>
+            </div>
           </div>
 
           <div class="directory-meta">
@@ -639,6 +654,11 @@
       return {
         search: '',
         statusFilter: 'all',
+        statusFilters: [
+          { value: 'all', label: 'All' },
+          { value: 'enabled', label: 'Enabled' },
+          { value: 'disabled', label: 'Disabled' }
+        ],
         directory: [],
         flagOptions: [],
         totalRows: 0,
@@ -803,6 +823,11 @@
       },
       clearSearch () {
         this.search = ''
+        this.loadDirectory(1)
+      },
+      setStatusFilter (status) {
+        if (status === this.statusFilter) return
+        this.statusFilter = status
         this.loadDirectory(1)
       },
       goToPage (page) {
@@ -1156,12 +1181,88 @@
   margin-top: 7px;
 }
 
-.directory-filter label {
+.directory-filter__label {
   color: rgba(255, 239, 198, .58);
   font-size: 9px;
   letter-spacing: .08em;
   margin: 0;
   text-transform: uppercase;
+}
+
+.status-filter {
+  background: rgba(4, 6, 8, .5);
+  border: 1px solid rgba(195, 155, 73, .2);
+  border-radius: 3px;
+  box-shadow: inset 0 1px 5px rgba(0, 0, 0, .38);
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 2px;
+}
+
+button.status-filter__option {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: rgba(255, 255, 255, .48);
+  display: flex;
+  font-size: 10px;
+  font-weight: 600;
+  gap: 5px;
+  justify-content: center;
+  letter-spacing: .015em;
+  min-height: 27px;
+  padding: 4px 7px;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+button.status-filter__option:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .045);
+  color: rgba(255, 255, 255, .75);
+}
+
+button.status-filter__option:focus-visible {
+  border-color: rgba(239, 211, 132, .8);
+  box-shadow: inset 0 0 0 1px rgba(239, 211, 132, .24);
+  outline: none;
+}
+
+button.status-filter__option.active {
+  background: linear-gradient(180deg, rgba(195, 155, 73, .19), rgba(195, 155, 73, .08));
+  border-color: rgba(195, 155, 73, .48);
+  box-shadow: inset 0 1px 0 rgba(255, 235, 170, .08), 0 1px 5px rgba(0, 0, 0, .32);
+  color: #efd384;
+}
+
+button.status-filter__option:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.status-filter__dot {
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 50%;
+  height: 6px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+  width: 6px;
+}
+
+.status-filter__dot--all {
+  background: linear-gradient(90deg, #55c98c 0 50%, rgba(255, 255, 255, .34) 50% 100%);
+}
+
+.status-filter__dot--enabled {
+  background: #55c98c;
+  border-color: rgba(85, 201, 140, .72);
+}
+
+.status-filter__dot--disabled {
+  background: rgba(255, 255, 255, .24);
+}
+
+button.status-filter__option.active .status-filter__dot--enabled {
+  box-shadow: 0 0 6px rgba(85, 201, 140, .45);
 }
 
 .directory-meta {
@@ -2176,6 +2277,13 @@ button.directory-row.active {
     left: 12px;
     max-width: none;
     right: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.status-filter__option,
+  .status-filter__dot {
+    transition: none;
   }
 }
 </style>

@@ -4,6 +4,7 @@ type ContentFlagEditorMocks = {
   savePayload?: Record<string, unknown>;
   createPayload?: Record<string, unknown>;
   resolutionPayload?: Record<string, unknown>;
+  directoryStatuses?: string[];
 };
 
 const flags = [
@@ -98,8 +99,10 @@ async function installContentFlagMocks(page: Page, state: ContentFlagEditorMocks
     })
   );
 
-  await page.route('**/api/v1/content-flag-editor/flags**', route =>
-    route.fulfill({
+  await page.route('**/api/v1/content-flag-editor/flags**', route => {
+    const status = new URL(route.request().url()).searchParams.get('status');
+    if (status) state.directoryStatuses = [...(state.directoryStatuses || []), status];
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
@@ -110,8 +113,8 @@ async function installContentFlagMocks(page: Page, state: ContentFlagEditorMocks
         reference_table_count: 20,
         scanned_field_count: 40,
       }),
-    })
-  );
+    });
+  });
 
   await page.route('**/api/v1/content-flag-editor/flag/2/resolve', async route => {
     state.resolutionPayload = route.request().postDataJSON();
@@ -242,6 +245,42 @@ test.describe('Content Flag Editor', () => {
       enabled: false,
       notes: 'Seasonal summer content.',
     });
+  });
+
+  test('filters the directory with an accessible segmented status control', async ({ page }) => {
+    const state: ContentFlagEditorMocks = {};
+    await installContentFlagMocks(page, state);
+    await page.goto('/content-flags');
+
+    const allFilter = page.getByTestId('content-flag-status-all');
+    const enabledFilter = page.getByTestId('content-flag-status-enabled');
+    const statusFilter = page.getByTestId('content-flag-status-filter');
+    await expect(statusFilter).toHaveAttribute('role', 'group');
+    await expect(allFilter).toHaveAttribute('aria-pressed', 'true');
+
+    await enabledFilter.click();
+
+    await expect(enabledFilter).toHaveAttribute('aria-pressed', 'true');
+    await expect(allFilter).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => {
+      const statuses = state.directoryStatuses || [];
+      return statuses[statuses.length - 1];
+    }).toBe('enabled');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const filterLayout = await statusFilter.evaluate(element => {
+      const groupRect = element.getBoundingClientRect();
+      const buttons = Array.from(element.querySelectorAll('button'));
+      return {
+        hasOverflow: element.scrollWidth > element.clientWidth,
+        buttonsFit: buttons.every(button => {
+          const buttonRect = button.getBoundingClientRect();
+          return buttonRect.left >= groupRect.left - 1 && buttonRect.right <= groupRect.right + 1;
+        }),
+      };
+    });
+    expect(filterLayout.hasOverflow).toBe(false);
+    expect(filterLayout.buttonsFit).toBe(true);
   });
 
   test('groups flags, Tasks, and Zones under World Data and responds at tablet width', async ({ page }) => {
