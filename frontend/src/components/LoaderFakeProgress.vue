@@ -12,6 +12,13 @@
       :style="{ clipPath: `inset(0 ${100 - progress}% 0 0)` }"
     />
     <span class="loader-fake-progress-frame" aria-hidden="true"/>
+    <span class="loader-fake-progress-scale" aria-hidden="true">
+      <span
+        v-for="segment in 4"
+        :key="segment"
+        class="loader-fake-progress-scale-segment"
+      />
+    </span>
     <span
       v-if="progress > 0"
       class="loader-fake-progress-label"
@@ -101,13 +108,24 @@ export default {
     rgba(255, 255, 255, 0.02) 35%,
     rgba(0, 0, 0, 0.34) 100%
   );
+  background-origin: padding-box;
   border-color: transparent;
-  border-image-repeat: repeat stretch;
-  border-image-slice: 2 4;
-  border-image-source: url('./eq-ui/images/progress_bar_top.png');
+  border-image-repeat: stretch;
+  border-image-slice: 1;
+  border-image-source: linear-gradient(
+    to bottom,
+    rgba(220, 211, 171, 0.9) 0,
+    rgba(111, 103, 72, 0.92) 34%,
+    rgba(48, 43, 27, 0.96) 68%,
+    rgba(183, 174, 128, 0.88) 100%
+  );
   border-style: solid;
   border-width: 2px 4px;
   box-sizing: border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.52),
+    0 0 0 1px rgba(0, 0, 0, 0.46);
   display: block;
   height: 10px;
   left: -4px;
@@ -118,43 +136,68 @@ export default {
   z-index: 1;
 }
 
-.loader-fake-progress-frame::after {
-  background-image:
-    linear-gradient(
-      to right,
-      transparent 0,
-      transparent calc(25% - 1px),
-      rgba(220, 211, 171, 0.88) calc(25% - 1px),
-      rgba(220, 211, 171, 0.88) calc(25% + 1px),
-      transparent calc(25% + 1px),
-      transparent calc(50% - 1px),
-      rgba(220, 211, 171, 0.88) calc(50% - 1px),
-      rgba(220, 211, 171, 0.88) calc(50% + 1px),
-      transparent calc(50% + 1px),
-      transparent calc(75% - 1px),
-      rgba(220, 211, 171, 0.88) calc(75% - 1px),
-      rgba(220, 211, 171, 0.88) calc(75% + 1px),
-      transparent calc(75% + 1px)
-    ),
-    repeating-linear-gradient(
-      to right,
-      transparent 0,
-      transparent calc(5% - 0.5px),
-      rgba(194, 196, 181, 0.58) calc(5% - 0.5px),
-      rgba(194, 196, 181, 0.58) calc(5% + 0.5px),
-      transparent calc(5% + 0.5px),
-      transparent 5%
-    );
-  background-position: left bottom, left bottom;
-  background-repeat: no-repeat;
-  background-size: 100% 4px, 100% 2px;
+.loader-fake-progress-scale {
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  height: 4px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: 2;
+}
+
+.loader-fake-progress-scale::after {
+  background-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(25% - 1px),
+    rgba(220, 211, 171, 0.88) calc(25% - 1px),
+    rgba(220, 211, 171, 0.88) calc(25% + 1px),
+    transparent calc(25% + 1px),
+    transparent calc(50% - 1px),
+    rgba(220, 211, 171, 0.88) calc(50% - 1px),
+    rgba(220, 211, 171, 0.88) calc(50% + 1px),
+    transparent calc(50% + 1px),
+    transparent calc(75% - 1px),
+    rgba(220, 211, 171, 0.88) calc(75% - 1px),
+    rgba(220, 211, 171, 0.88) calc(75% + 1px),
+    transparent calc(75% + 1px)
+  );
   bottom: 0;
   content: "";
   height: 4px;
-  left: 4px;
-  pointer-events: none;
+  left: 0;
   position: absolute;
-  right: 4px;
+  right: 0;
+}
+
+.loader-fake-progress-scale-segment {
+  align-self: end;
+  background-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(20% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(20% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(20% + 0.5px),
+    transparent calc(20% + 0.5px),
+    transparent calc(40% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(40% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(40% + 0.5px),
+    transparent calc(40% + 0.5px),
+    transparent calc(60% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(60% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(60% + 0.5px),
+    transparent calc(60% + 0.5px),
+    transparent calc(80% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(80% - 0.5px),
+    rgba(194, 196, 181, 0.58) calc(80% + 0.5px),
+    transparent calc(80% + 0.5px),
+    transparent 100%
+  );
+  height: 2px;
+  min-width: 0;
 }
 
 .loader-fake-progress-label {
@@ -164,7 +207,7 @@ export default {
   transform: translateX(-50%);
   color: #ffffff;
   text-shadow: -2px 2px 3px #000;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
 }
 
