@@ -146,7 +146,7 @@ export default {
   background-position: left bottom, left bottom;
   background-repeat: no-repeat, repeat-x;
   background-size: 100% 4px, 8px 2px;
-  bottom: 1px;
+  bottom: 0;
   content: "";
   height: 4px;
   left: 4px;
