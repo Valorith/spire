@@ -123,11 +123,6 @@
               </router-link>
             </li>
 
-            <li class="nav-item">
-              <router-link class="nav-link " to="/strings-database">
-                <i class="ra  ra-scroll-unfurled mr-1"></i> Strings DB
-              </router-link>
-            </li>
             <nav-section-component :config="spellsAbilitiesNav"/>
             <nav-section-component :config="viewerNav"/>
 
@@ -406,7 +401,7 @@ export default {
       worldDataNav: {
         label: "World Data",
         labelIcon: "ra ra-compass mr-1",
-        routePrefixMatches: ["content-flags", "tasks", "zones"],
+        routePrefixMatches: ["content-flags", "tasks", "strings-database", "zones"],
         navs: [
           {
             title: "Content Flags",
@@ -421,6 +416,12 @@ export default {
             to: ROUTE.TASKS,
             icon: "ra ra-zebra-shield mr-1",
             routes: ['tasks']
+          },
+          {
+            title: "Strings DB",
+            to: ROUTE.STRINGS_DATABASE,
+            icon: "ra ra-scroll-unfurled mr-1",
+            routes: ['strings-database']
           },
           {
             title: "Zones",
