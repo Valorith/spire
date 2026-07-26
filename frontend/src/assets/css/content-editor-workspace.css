@@ -43,8 +43,10 @@
   align-items: center;
   background: rgba(0, 0, 0, 0.58);
   border: 1px solid rgba(210, 170, 69, 0.42);
+  color: #bac3cb;
   display: flex;
   font-size: 10px;
+  font-weight: 600;
   gap: 10px;
   min-height: 38px;
   padding: 0 12px;
@@ -106,8 +108,8 @@
   color: #f1f2f3;
   font-size: 11px;
   height: 31px;
-  padding-left: 29px;
-  padding-right: 28px;
+  padding-left: 29px !important;
+  padding-right: 28px !important;
 }
 
 .spire-editor-search .form-control:focus {
@@ -244,6 +246,40 @@
 .spire-editor-directory-aside {
   color: #7f8a94;
   font-size: 9px;
+}
+
+.aura-editor-page .spire-editor-directory-list {
+  gap: 3px;
+}
+
+.aura-editor-page .spire-editor-directory-row {
+  align-items: center !important;
+  gap: 8px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  min-height: 44px;
+  padding: 4px 7px !important;
+}
+
+.aura-editor-page .spire-editor-directory-icon {
+  height: 30px;
+  width: 30px;
+}
+
+.aura-editor-page .spire-editor-directory-body {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 30px;
+}
+
+.aura-editor-page .spire-editor-directory-name {
+  line-height: 1.15;
+}
+
+.aura-editor-page .spire-editor-directory-detail {
+  line-height: 1.15;
+  margin-top: 1px;
 }
 
 .spire-editor-directory-state,
@@ -619,6 +655,32 @@
   border: 1px solid rgba(178, 191, 204, 0.16);
   overflow: hidden;
   padding: 10px;
+}
+
+.aura-cast-time-simulator {
+  border-top: 1px solid rgba(210, 170, 69, 0.2);
+  margin-top: 11px;
+  padding: 10px 4px 2px;
+}
+
+.aura-cast-time-simulator__heading {
+  align-items: center;
+  color: #8e99a3;
+  display: flex;
+  font-size: 8px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.aura-cast-time-simulator__heading strong {
+  color: #e2c662;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.aura-cast-time-simulator__bar {
+  margin: 0 4px;
 }
 
 .spire-editor-effect-list {

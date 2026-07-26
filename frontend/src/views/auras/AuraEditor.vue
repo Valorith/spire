@@ -293,7 +293,7 @@
                   <span class="spire-editor-field-help">{{ durationSummary }}</span>
                 </div>
                 <div class="spire-editor-field">
-                  <label for="aura-cast-time">Aura cast time</label>
+                  <label for="aura-cast-time">Aura cast time (seconds)</label>
                   <input
                     id="aura-cast-time"
                     v-model.number="editModel.cast_time"
@@ -301,7 +301,7 @@
                     type="number"
                     min="-1"
                   >
-                  <span class="spire-editor-field-help">Use -1 for the server default.</span>
+                  <span class="spire-editor-field-help">Stored in whole seconds. Non-positive and legacy values remain editable and show a dormant preview.</span>
                 </div>
                 <div class="spire-editor-field">
                   <label for="aura-icon">Aura icon value</label>
@@ -328,6 +328,19 @@
                   <div class="spire-editor-context-label">Runtime summary</div>
                   <h4>{{ auraTypeLabel(editModel.aura_type) }}</h4>
                   <p>{{ auraTypeDescription(editModel.aura_type) }}</p>
+                  <div class="aura-cast-time-simulator">
+                    <div class="aura-cast-time-simulator__heading">
+                      <span>Cast-time simulator</span>
+                      <strong>{{ auraCastTimeSummary }}</strong>
+                    </div>
+                    <loader-cast-bar-timer
+                      class="aura-cast-time-simulator__bar"
+                      color="#FF00FF"
+                      data-testid="aura-cast-time-simulator"
+                      :data-time-ms="auraCastTimeMs"
+                      :time-ms="auraCastTimeMs"
+                    />
+                  </div>
                   <div class="spire-editor-metric-row mt-3">
                     <div class="spire-editor-metric">
                       <span>Radius</span>
@@ -640,6 +653,7 @@
   import { DB_SPELL_EFFECTS } from '../../app/constants/eq-spell-constants'
   import { DB_CLASSES } from '../../app/constants/eq-classes-constants'
   import { DB_RACE_NAMES } from '../../app/constants/eq-races-constants'
+  import LoaderCastBarTimer from '../../components/LoaderCastBarTimer'
   import RangeVisualizer from '../../components/tools/RangeVisualizer'
 
   const AURA_FIELDS = [
@@ -683,7 +697,7 @@
 
   export default {
     name: 'AuraEditor',
-    components: { ContentArea, EqWindow, RangeVisualizer },
+    components: { ContentArea, EqWindow, LoaderCastBarTimer, RangeVisualizer },
     data () {
       return {
         auras: [],
@@ -789,6 +803,17 @@
       durationSummary () {
         if (!this.editModel) return ''
         return `${this.compactDuration(this.editModel.duration)} runtime lifetime.`
+      },
+      auraCastTimeMs () {
+        const seconds = Number(this.editModel && this.editModel.cast_time)
+        return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0
+      },
+      auraCastTimeSummary () {
+        const seconds = Number(this.editModel && this.editModel.cast_time)
+        if (!Number.isFinite(seconds)) return 'No timer'
+        if (seconds < 0) return `Legacy ${seconds}`
+        if (seconds === 0) return 'No timer'
+        return `${seconds} sec timer`
       },
       spellDisposition () {
         if (!this.selectedSpell) return ''

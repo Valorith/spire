@@ -267,6 +267,55 @@ test.describe('Title Editor', () => {
     expect(state.assignmentPayload).toMatchObject({ char_id: 42, title_set: 77 });
   });
 
+  test('keeps placeholder text clear of every search icon', async ({ page }) => {
+    const setTitle = { ...title, id: 120, prefix: 'Set Keeper', title_set: 77 };
+    const state: TitleMockState = {
+      titles: [setTitle],
+      assignments: [],
+      deletedTitles: [],
+      deletedAssignments: [],
+    };
+    await installTitleMocks(page, state);
+    await page.goto('/titles?title=120&tab=Unlock%20Sources');
+
+    const measureClearance = (ids: string[]) => page.evaluate((inputIds) => inputIds.map(id => {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      const icon = input?.parentElement?.querySelector(':scope > i');
+      if (!input || !icon) return { id, available: false, paddingLeft: 0, clearance: 0 };
+      const inputRect = input.getBoundingClientRect();
+      const iconRect = icon.getBoundingClientRect();
+      const paddingLeft = Number.parseFloat(window.getComputedStyle(input).paddingLeft);
+      return {
+        id,
+        available: true,
+        paddingLeft,
+        clearance: inputRect.left + paddingLeft - iconRect.right,
+      };
+    }), ids);
+
+    const unlockSearches = await measureClearance([
+      'title-directory-search',
+      'title-item-search',
+      'title-character-search',
+    ]);
+    unlockSearches.forEach(search => {
+      expect(search.available, `${search.id} should have an icon`).toBe(true);
+      expect(search.paddingLeft, `${search.id} left padding`).toBeGreaterThanOrEqual(28);
+      expect(search.clearance, `${search.id} icon clearance`).toBeGreaterThanOrEqual(8);
+    });
+
+    await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
+    const assignmentSearches = await measureClearance([
+      'title-directory-search',
+      'title-assignment-character-search',
+    ]);
+    assignmentSearches.forEach(search => {
+      expect(search.available, `${search.id} should have an icon`).toBe(true);
+      expect(search.paddingLeft, `${search.id} left padding`).toBeGreaterThanOrEqual(28);
+      expect(search.clearance, `${search.id} icon clearance`).toBeGreaterThanOrEqual(8);
+    });
+  });
+
   test('keeps the editor usable at a compact desktop viewport', async ({ page }) => {
     const state: TitleMockState = {
       titles: [{ ...title }],

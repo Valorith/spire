@@ -1,18 +1,23 @@
 <template>
-  <div
-    :style="'position: relative;'"
-  >
-    <img
-      :src="getImageFromMax()"
-      class="range-visualizer"
-      style="width: 100%; "
-    >
-    <div class="unit-label" :style="'left: ' + unitsToPositionText(unitMarkerComputed) + '%'">{{ unitMarkerComputed }} Units</div>
-    <div class="rv-vertical-line" :style="'left: ' + unitsToPositionLine(unitMarkerComputed) + '%'"></div>
+  <div class="range-visualizer-control">
+    <div class="range-visualizer-stage">
+      <img
+        :src="getImageFromMax()"
+        class="range-visualizer"
+      >
+      <div
+        class="unit-label unit-label--marker"
+        :class="{ 'unit-label--before': unitLabelPrecedesMarker }"
+        :style="'left: ' + unitMarkerPosition + '%'"
+      >
+        {{ unitMarkerComputed }} Units
+      </div>
+      <div class="rv-vertical-line" :style="'left: ' + unitMarkerPosition + '%'"></div>
 
-    <div v-for="tick in unitTicks">
-      <div class="unit-label tick" :style="'left: ' + (tick + 1) + '%'">{{ percentToUnits(tick) }}</div>
-      <div class="rv-vertical-line-tick" :style="'left: ' + tick + '%'" v-if="tick > 0"></div>
+      <div v-for="tick in unitTicks" :key="tick">
+        <div class="unit-label tick" :style="'left: ' + (tick + 1) + '%'">{{ percentToUnits(tick) }}</div>
+        <div v-if="tick > 0" class="rv-vertical-line-tick" :style="'left: ' + tick + '%'"></div>
+      </div>
     </div>
 
     <div class="rv-slider-container">
@@ -44,6 +49,12 @@ export default {
   computed: {
     unitMarkerComputed() {
       return this.localValue > 1000 ? 1000 : this.localValue
+    },
+    unitMarkerPosition() {
+      return this.unitsToPosition(this.unitMarkerComputed)
+    },
+    unitLabelPrecedesMarker() {
+      return this.unitMarkerPosition >= 75
     }
   },
   props: {
@@ -92,13 +103,6 @@ export default {
       return Math.round(this.getCurrentRangeMax() * (percent / 100))
     },
 
-    unitsToPositionText(units) {
-      return this.unitsToPosition(units) + 1 > 88 ? 88 : this.unitsToPosition(units) + 1
-    },
-    unitsToPositionLine(units) {
-      return this.unitsToPosition(units)
-    },
-
     unitsToPosition(units) {
       return parseInt(Math.round(units / this.getCurrentRangeMax() * 100))
     }
@@ -107,9 +111,20 @@ export default {
 </script>
 
 <style>
+.range-visualizer-control {
+  width: 100%;
+}
+
+.range-visualizer-stage {
+  line-height: 0;
+  position: relative;
+}
+
 .range-visualizer {
   border-radius: 5px;
   border: 1px solid black;
+  display: block;
+  width: 100%;
 }
 
 .unit-label {
@@ -122,6 +137,16 @@ export default {
   font-weight: bold;
   text-shadow: 1px 3px 1px black;
   z-index: 9999;
+}
+
+.unit-label--marker {
+  transform: translateX(8px);
+  white-space: nowrap;
+}
+
+.unit-label--marker.unit-label--before {
+  text-align: right;
+  transform: translateX(calc(-100% - 8px));
 }
 
 .tick {
@@ -157,7 +182,8 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 16px;
+  padding: 0 4px 2px;
 }
 
 .rv-slider {

@@ -152,12 +152,60 @@ test.describe('Aura Editor', () => {
     await expect(slider).toHaveValue('60');
     await expect(numeric).toHaveValue('60');
 
+    const visualizerStage = page.locator('.spire-editor-range-visualizer .range-visualizer-stage');
+    const [stageBox, sliderBox] = await Promise.all([
+      visualizerStage.boundingBox(),
+      slider.boundingBox(),
+    ]);
+    if (!stageBox || !sliderBox) throw new Error('Range visualizer geometry is unavailable');
+    expect(sliderBox.y).toBeGreaterThanOrEqual(stageBox.y + stageBox.height + 8);
+
     await slider.fill('75');
     await expect(numeric).toHaveValue('75');
     await expect(page.getByTestId('aura-save')).toBeEnabled();
 
+    const markerLabel = visualizerStage.locator('.unit-label--marker');
+    const markerLine = visualizerStage.locator('.rv-vertical-line');
+    await slider.fill('950');
+    await expect(markerLabel).toHaveClass(/unit-label--before/);
+    const [edgeStageBox, markerLabelBox, markerLineBox] = await Promise.all([
+      visualizerStage.boundingBox(),
+      markerLabel.boundingBox(),
+      markerLine.boundingBox(),
+    ]);
+    if (!edgeStageBox || !markerLabelBox || !markerLineBox) {
+      throw new Error('Range marker geometry is unavailable');
+    }
+    expect(markerLabelBox.x).toBeGreaterThanOrEqual(edgeStageBox.x);
+    expect(markerLabelBox.x + markerLabelBox.width).toBeLessThanOrEqual(markerLineBox.x - 5);
+
     await numeric.fill('60');
     await expect(slider).toHaveValue('60');
+    await expect(markerLabel).not.toHaveClass(/unit-label--before/);
+    await expect(page.getByTestId('aura-save')).toBeDisabled();
+  });
+
+  test('reuses the Spell Editor cast-time simulator with Aura seconds converted to milliseconds', async ({ page }) => {
+    const state: AuraMockState = { auras: [{ ...aura }], deleteRequests: 0 };
+    await installAuraMocks(page, state);
+    await page.goto('/auras?aura=100');
+
+    const numeric = page.locator('#aura-cast-time');
+    const simulator = page.getByTestId('aura-cast-time-simulator');
+    await expect(numeric).toHaveValue('-1');
+    await expect(simulator).toHaveAttribute('data-time-ms', '0');
+    await expect(simulator).toHaveCSS('opacity', '0.5');
+    await expect(page.getByText('Legacy -1', { exact: true })).toBeVisible();
+
+    await numeric.fill('12');
+    await expect(simulator).toHaveAttribute('data-time-ms', '12000');
+    await expect(simulator).toHaveCSS('opacity', '1');
+    await expect(page.getByText('12 sec timer', { exact: true })).toBeVisible();
+    await expect(simulator.locator('.eq-progress-bar')).toBeVisible();
+    await expect(page.getByTestId('aura-save')).toBeEnabled();
+
+    await numeric.fill('-1');
+    await expect(simulator).toHaveAttribute('data-time-ms', '0');
     await expect(page.getByTestId('aura-save')).toBeDisabled();
   });
 
