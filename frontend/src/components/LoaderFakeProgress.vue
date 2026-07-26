@@ -80,7 +80,9 @@ export default {
   width: 100%;
   margin: 0 auto;
   background-image: url('./eq-ui/images/progress_bar_bottom.png');
-  background-size: 100% 100%;
+  background-position: left center;
+  background-repeat: repeat-x;
+  background-size: auto 100%;
   line-height: 10px;
 }
 
@@ -92,8 +94,20 @@ export default {
 }
 
 .loader-fake-progress-frame {
-  background-image: url('./eq-ui/images/progress_bar_top.png');
-  background-size: 100% 100%;
+  background-clip: padding-box;
+  background-image: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.08) 0,
+    rgba(255, 255, 255, 0.02) 35%,
+    rgba(0, 0, 0, 0.34) 100%
+  );
+  border-color: transparent;
+  border-image-repeat: repeat stretch;
+  border-image-slice: 2 4;
+  border-image-source: url('./eq-ui/images/progress_bar_top.png');
+  border-style: solid;
+  border-width: 2px 4px;
+  box-sizing: border-box;
   display: block;
   height: 10px;
   left: -4px;
@@ -102,6 +116,43 @@ export default {
   top: -2px;
   width: calc(100% + 8px);
   z-index: 1;
+}
+
+.loader-fake-progress-frame::after {
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(25% - 1px),
+      rgba(220, 211, 171, 0.88) calc(25% - 1px),
+      rgba(220, 211, 171, 0.88) calc(25% + 1px),
+      transparent calc(25% + 1px),
+      transparent calc(50% - 1px),
+      rgba(220, 211, 171, 0.88) calc(50% - 1px),
+      rgba(220, 211, 171, 0.88) calc(50% + 1px),
+      transparent calc(50% + 1px),
+      transparent calc(75% - 1px),
+      rgba(220, 211, 171, 0.88) calc(75% - 1px),
+      rgba(220, 211, 171, 0.88) calc(75% + 1px),
+      transparent calc(75% + 1px)
+    ),
+    linear-gradient(
+      to right,
+      transparent 0,
+      transparent 7px,
+      rgba(194, 196, 181, 0.58) 7px,
+      rgba(194, 196, 181, 0.58) 8px
+    );
+  background-position: left bottom, left bottom;
+  background-repeat: no-repeat, repeat-x;
+  background-size: 100% 4px, 8px 2px;
+  bottom: 1px;
+  content: "";
+  height: 4px;
+  left: 4px;
+  pointer-events: none;
+  position: absolute;
+  right: 4px;
 }
 
 .loader-fake-progress-label {
