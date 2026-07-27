@@ -63,3 +63,11 @@ func TestAlternateCurrencyEditorIsRegisteredAsManualResource(t *testing.T) {
 		t.Fatalf("Alternate Currency Editor resource = %#v, want [alternate-currency-editor]", prefixes)
 	}
 }
+
+func TestPlayerOperationsIsRegisteredAsManualResource(t *testing.T) {
+	resources := (&Service{}).RegisterManualResources()
+	prefixes, ok := resources["Player Operations"]
+	if !ok || len(prefixes) != 1 || prefixes[0] != "player-operations" {
+		t.Fatalf("Player Operations resource = %#v, want [player-operations]", prefixes)
+	}
+}
