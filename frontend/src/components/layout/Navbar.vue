@@ -463,7 +463,7 @@ export default {
         {
           label: "Player Operations",
           labelIcon: "ra ra-player mr-1",
-          routePrefixMatches: ["admin/player-operations", "admin/mail-parcels"],
+          routePrefixMatches: ["admin/player-operations", "admin/mail-parcels", "admin/inventory-keyring"],
           navs: [
             {
               title: "Characters",
@@ -484,6 +484,13 @@ export default {
               title: "Mail & Parcels",
               to: ROUTE.ADMIN_MAIL_PARCELS,
               icon: "ra ra-envelope mr-1",
+              isNew: true,
+              isAlpha: true
+            },
+            {
+              title: "Inventory & Keyring",
+              to: ROUTE.ADMIN_INVENTORY_KEYRING,
+              icon: "ra ra-backpack mr-1",
               isNew: true,
               isAlpha: true
             },

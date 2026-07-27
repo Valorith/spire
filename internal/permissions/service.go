@@ -54,6 +54,7 @@ func (s *Service) RegisterManualResources() map[string][]string {
 		"Mail & Parcels Editor":     {"mail-parcels-editor"},
 		"Mercenary Editor":          {"mercenary-editor"},
 		"Player Operations":         {"player-operations"},
+		"Inventory & Keyring":       {"inventory-keyring"},
 
 		// admin server
 		"Server Configuration":    {"admin/serverconfig"},

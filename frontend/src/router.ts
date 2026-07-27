@@ -372,6 +372,11 @@ const router = new Router({
           meta: {title: "Player Operations"},
         },
         {
+          path: 'inventory-keyring',
+          component: () => import('./views/admin/inventory-keyring/InventoryKeyringEditor.vue'),
+          meta: {title: "Inventory & Keyring"},
+        },
+        {
           path: 'zones',
           component: () => import('./views/admin/ZoneServers.vue'),
           meta: {title: "Zone Servers"},
