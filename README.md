@@ -31,6 +31,7 @@
 <hr>
 
 - [Why Spire?](#why-spire)
+- [Upgrade AkkStack to Valorith Spire](#upgrade-akkstack-to-valorith-spire)
 - [Using Spire - Locally](#using-spire---locally)
 - [Using Spire - Hosted](#using-spire---hosted)
 - [Using Spire - Locally, but Remote](#using-spire---locally-but-remote)
@@ -62,6 +63,51 @@ The motive for Spire is simple, to empower creativity in the super fans of EverQ
 Rich, deep, tooling that leaves no stone un-turned for quality and intuitiveness.
 
 Built for the long haul with code generation to make keeping things up to date far easier.
+
+## Upgrade AkkStack to Valorith Spire
+
+Use one of these options once to replace AkkStack's upstream Spire with the
+latest Valorith release.
+
+### Option 1: Automatic upgrade (recommended)
+
+Open a terminal in the AkkStack folder that contains `docker-compose.yml`, then
+run the command for your system.
+
+#### Linux or WSL
+
+```bash
+set -o pipefail && curl -fsSL https://raw.githubusercontent.com/Valorith/spire/master/scripts/upgrade-akkstack.sh | bash
+```
+
+#### Windows PowerShell
+
+```powershell
+& { $ErrorActionPreference = "Stop"; irm https://raw.githubusercontent.com/Valorith/spire/master/scripts/upgrade-akkstack.ps1 | iex }
+```
+
+The script downloads the release, backs up the current binary, restarts
+AkkStack, and automatically restores the backup if the new Spire does not start.
+
+### Option 2: Manual upgrade
+
+1. Download `spire-linux-amd64.zip` from the
+   [latest Valorith Spire release](https://github.com/Valorith/spire/releases/latest).
+2. From your AkkStack folder, run `docker compose stop eqemu-server`.
+3. Back up `server/bin/spire`, extract the ZIP, and replace it with the extracted
+   `spire-linux-amd64` file renamed to `spire`.
+4. Make the replacement executable and restart AkkStack:
+
+```bash
+docker compose run --rm --no-deps --entrypoint sh eqemu-server -c "chmod 0755 /home/eqemu/server/bin/spire"
+docker compose up -d eqemu-server
+```
+
+If your AkkStack uses `docker-compose`, use it in place of `docker compose`.
+
+Afterward, install future releases from **Spire Update Check** inside Spire.
+Do not use AkkStack's `make update-admin-panel` command because it installs the
+upstream build again.
 
 ## Using Spire - Locally
 
