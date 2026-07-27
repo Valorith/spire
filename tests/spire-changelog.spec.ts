@@ -7,10 +7,13 @@ const longChangelog = [
   '',
 ].join('\n');
 
-async function installChangelogMocks(page: Page, stateFailures = 0, initialBetaRelease = false) {
+async function installChangelogMocks(page: Page, stateFailures = 0, initialBetaRelease = false, saveFailures = 0) {
   let stateAttempts = 0;
+  let saveAttempts = 0;
   let betaRelease = initialBetaRelease;
-  let currentChangelog = longChangelog;
+  let currentChangelog = initialBetaRelease
+    ? longChangelog.replace(/^## \[([^\]]+)] ([^\n]+)$/m, '## [$1] (Beta) $2')
+    : longChangelog;
   let savedContent = '';
 
   // Register broad handlers first because Playwright resolves matching routes LIFO.
@@ -72,15 +75,28 @@ async function installChangelogMocks(page: Page, stateFailures = 0, initialBetaR
           current_branch: 'master',
           writable: true,
           source: 'live',
+          top_release: {
+            is_beta: betaRelease,
+          },
         },
       }),
     });
   });
 
   await page.route('**/api/v1/spirechangelog/content', async route => {
+    saveAttempts += 1;
+    if (saveAttempts <= saveFailures) {
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'CHANGELOG.md save failed.' }),
+      });
+    }
+
     const body = route.request().postDataJSON() as { content?: string };
     currentChangelog = body.content || '';
     savedContent = currentChangelog;
+    betaRelease = /^## \[[^\]]+] \(Beta\) /m.test(currentChangelog);
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -95,6 +111,9 @@ async function installChangelogMocks(page: Page, stateFailures = 0, initialBetaR
           current_branch: 'master',
           writable: true,
           source: 'live',
+          top_release: {
+            is_beta: betaRelease,
+          },
         },
       }),
     });
@@ -102,6 +121,7 @@ async function installChangelogMocks(page: Page, stateFailures = 0, initialBetaR
 
   return {
     stateAttempts: () => stateAttempts,
+    saveAttempts: () => saveAttempts,
     savedContent: () => savedContent,
     setBetaRelease: (value: boolean) => {
       betaRelease = value;
@@ -153,6 +173,7 @@ test('flags, saves, and reloads a beta release with the canonical heading', asyn
 
   const editor = page.locator('textarea.changelog-editor');
   const betaToggle = page.getByTestId('beta-release-toggle');
+  const sharedBrand = page.getByTestId('spire-brand');
   await expect(editor).toHaveValue(/^## \[5\.3\.0] 7\/26\/2026/);
   await expect(betaToggle).toHaveAttribute('aria-pressed', 'false');
 
@@ -162,10 +183,19 @@ test('flags, saves, and reloads a beta release with the canonical heading', asyn
   await expect(editor).toHaveValue(/^## \[5\.3\.0] \(Beta\) 7\/26\/2026/);
   await expect(editor).not.toHaveValue(/Release Type:/);
   await expect(page.locator('.spire-changelog-preview h2').filter({ hasText: '[5.3.0] (Beta) 7/26/2026' })).toHaveCount(1);
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home, beta release preview');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
+
+  await betaToggle.click();
+  await expect(betaToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toHaveCount(0);
+
+  await betaToggle.click();
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
 
   await page.getByRole('button', { name: 'Save' }).click();
   await expect.poll(requests.savedContent).toMatch(/^## \[5\.3\.0] \(Beta\) 7\/26\/2026/);
-  const sharedBrand = page.getByTestId('spire-brand');
   await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home, beta release');
   await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
 
@@ -176,6 +206,8 @@ test('flags, saves, and reloads a beta release with the canonical heading', asyn
   await betaToggle.click();
   await expect(editor).toHaveValue(/^## \[5\.3\.0] 7\/26\/2026/);
   await expect(editor).not.toHaveValue(/^## \[5\.3\.0] \(Stable\)/);
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home, stable release preview');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toHaveCount(0);
   await page.getByRole('button', { name: 'Save' }).click();
   await expect.poll(requests.savedContent).toMatch(/^## \[5\.3\.0] 7\/26\/2026/);
   await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home');
@@ -186,8 +218,61 @@ test('flags, saves, and reloads a beta release with the canonical heading', asyn
   await expect(betaToggle).toHaveAttribute('aria-pressed', 'false');
 });
 
+test('rolls an unsaved beta logo preview back on reload and navigation discard', async ({ page }) => {
+  await installChangelogMocks(page);
+  await page.goto('/dev/spirechangelog');
+
+  const betaToggle = page.getByTestId('beta-release-toggle');
+  const sharedBrand = page.getByTestId('spire-brand');
+  const editor = page.locator('textarea.changelog-editor');
+
+  await betaToggle.click();
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Reload' }).click();
+  await expect(editor).toHaveValue(/^## \[5\.3\.0] 7\/26\/2026/);
+  await expect(betaToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toHaveCount(0);
+
+  await betaToggle.click();
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
+
+  page.once('dialog', dialog => dialog.accept());
+  await sharedBrand.click();
+  await expect(page).toHaveURL('/');
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toHaveCount(0);
+});
+
+test('rolls a failed beta save preview back to the persisted stable state', async ({ page }) => {
+  const requests = await installChangelogMocks(page, 0, false, 1);
+  await page.goto('/dev/spirechangelog');
+
+  const betaToggle = page.getByTestId('beta-release-toggle');
+  const sharedBrand = page.getByTestId('spire-brand');
+  const editor = page.locator('textarea.changelog-editor');
+
+  await betaToggle.click();
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  expect(requests.saveAttempts()).toBe(1);
+  await expect(page.getByText('The logo preview was restored to the saved Stable state.')).toBeVisible();
+  await expect(editor).toHaveValue(/^## \[5\.3\.0] \(Beta\) 7\/26\/2026/);
+  await expect(page.getByText('Unsaved changes')).toBeVisible();
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(requests.savedContent).toMatch(/^## \[5\.3\.0] \(Beta\) 7\/26\/2026/);
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home, beta release');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
+});
+
 test('shows the beta stamp without moving the Spire brand at desktop and compact widths', async ({ page }) => {
-  const requests = await installChangelogMocks(page);
+  await installChangelogMocks(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/dev/spirechangelog');
 
@@ -197,8 +282,7 @@ test('shows the beta stamp without moving the Spire brand at desktop and compact
   expect(stableBox).not.toBeNull();
   await expect(page.getByTestId('spire-beta-stamp')).toHaveCount(0);
 
-  requests.setBetaRelease(true);
-  await page.reload();
+  await page.getByTestId('beta-release-toggle').click();
 
   const betaStamp = page.getByTestId('spire-beta-stamp');
   await expect(betaStamp).toBeVisible();

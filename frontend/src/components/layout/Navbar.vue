@@ -31,13 +31,13 @@
         class="spire-brand-link ml-3 mt-3"
         data-testid="spire-brand"
         to="/"
-        :aria-label="isBetaRelease ? 'Spire home, beta release' : 'Spire home'"
+        :aria-label="spireBrandLabel"
       >
         <h1 class="spire-brand-title text-center eq-header small-mobile">
           <span class="spire-logo-mark" data-testid="spire-logo-mark">
             Spire
             <span
-              v-if="isBetaRelease"
+              v-if="showBetaRelease"
               class="spire-beta-stamp"
               data-testid="spire-beta-stamp"
               aria-label="Beta release"
@@ -288,6 +288,15 @@ export default {
     isSageRoute() {
       return this.$route.path.startsWith("/sage")
     },
+    showBetaRelease() {
+      return this.betaReleasePreview === null ? this.isBetaRelease : this.betaReleasePreview
+    },
+    spireBrandLabel() {
+      if (this.betaReleasePreview !== null) {
+        return this.betaReleasePreview ? "Spire home, beta release preview" : "Spire home, stable release preview"
+      }
+      return this.isBetaRelease ? "Spire home, beta release" : "Spire home"
+    },
     hasUpdate() {
       if (!this.latestAppVersion) {
         return false
@@ -313,6 +322,7 @@ export default {
       appEnv: AppEnv.getEnv(),
       appVersion: AppEnv.getVersion(),
       isBetaRelease: AppEnv.isBetaRelease(),
+      betaReleasePreview: null,
       latestAppVersion: LocalSettings.getLatestUpdateVersion(),
       appFeatures: AppEnv.getFeatures(),
       botNav: {
@@ -695,12 +705,14 @@ export default {
     EventBus.$on("HIDE_NAVBAR", this.toggleNavbarCollapse);
     EventBus.$on("APP_ENV_LOADED", this.handleAppEnvLoaded);
     EventBus.$on("APP_BETA_RELEASE_CHANGED", this.handleBetaReleaseChanged);
+    EventBus.$on("APP_BETA_RELEASE_PREVIEW_CHANGED", this.handleBetaReleasePreviewChanged);
     EventBus.$on("ROUTE_CHANGE", this.handleRouteChange);
   },
   destroyed() {
     EventBus.$off("HIDE_NAVBAR", this.toggleNavbarCollapse);
     EventBus.$off("APP_ENV_LOADED", this.handleAppEnvLoaded);
     EventBus.$off("APP_BETA_RELEASE_CHANGED", this.handleBetaReleaseChanged);
+    EventBus.$off("APP_BETA_RELEASE_PREVIEW_CHANGED", this.handleBetaReleasePreviewChanged);
     EventBus.$off("ROUTE_CHANGE", this.handleRouteChange);
   },
 
@@ -909,6 +921,10 @@ export default {
     },
     handleBetaReleaseChanged(isBetaRelease) {
       this.isBetaRelease = isBetaRelease === true;
+      this.betaReleasePreview = null;
+    },
+    handleBetaReleasePreviewChanged(isBetaRelease) {
+      this.betaReleasePreview = typeof isBetaRelease === "boolean" ? isBetaRelease : null;
     },
     expandNavbar() {
       Navbar.expand()

@@ -506,6 +506,7 @@ export default {
       error: "",
       content: "",
       originalContent: "",
+      savedReleaseIsBeta: false,
       packageVersion: "",
       releaseRepository: "",
       releaseRepositorySource: "",
@@ -781,12 +782,14 @@ export default {
   destroyed() {
     window.removeEventListener("beforeunload", this.handleBeforeUnload);
     this.stopReleaseStatusPolling();
+    this.clearBetaReleasePreview();
   },
   beforeRouteLeave(to, from, next) {
     if (this.isDirty && !window.confirm("Discard unsaved changelog changes?")) {
       next(false);
       return;
     }
+    this.clearBetaReleasePreview();
     next();
   },
   methods: {
@@ -829,6 +832,7 @@ export default {
       const savedReleaseIsBeta = state.top_release && typeof state.top_release.is_beta === "boolean"
         ? state.top_release.is_beta
         : parseTopRelease(this.content).isBeta;
+      this.savedReleaseIsBeta = savedReleaseIsBeta;
       AppEnv.setIsBetaRelease(savedReleaseIsBeta);
       EventBus.$emit("APP_BETA_RELEASE_CHANGED", savedReleaseIsBeta);
       this.packageVersion = state.package_version || "";
@@ -977,6 +981,12 @@ export default {
     markDirty() {
       this.isDirty = this.content !== this.originalContent;
     },
+    previewBetaRelease(isBetaRelease) {
+      EventBus.$emit("APP_BETA_RELEASE_PREVIEW_CHANGED", isBetaRelease === true);
+    },
+    clearBetaReleasePreview() {
+      EventBus.$emit("APP_BETA_RELEASE_PREVIEW_CHANGED", null);
+    },
     toggleTopReleaseBeta() {
       if (!this.canEdit || !this.topRelease.version) {
         return;
@@ -989,6 +999,11 @@ export default {
 
       this.content = updated;
       this.markDirty();
+      if (this.topRelease.isBeta === this.savedReleaseIsBeta) {
+        this.clearBetaReleasePreview();
+      } else {
+        this.previewBetaRelease(this.topRelease.isBeta);
+      }
       this.$nextTick(() => {
         const editor = this.$refs.editor;
         if (editor) {
@@ -1014,6 +1029,10 @@ export default {
         this.fetchReleaseStatus(false);
       } catch (e) {
         this.error = e.response?.data?.error || "Failed to save CHANGELOG.md.";
+        if (this.topRelease.isBeta !== this.savedReleaseIsBeta) {
+          this.clearBetaReleasePreview();
+          this.error += ` The logo preview was restored to the saved ${this.savedReleaseIsBeta ? "Beta" : "Stable"} state.`;
+        }
       } finally {
         this.saving = false;
       }
@@ -1022,9 +1041,11 @@ export default {
       if (this.isDirty && !window.confirm("Reload CHANGELOG.md and discard unsaved edits?")) {
         return;
       }
-      await this.fetchState();
-      this.fetchReleaseStatus(false);
-      this.notification = "CHANGELOG.md reloaded.";
+      const loaded = await this.fetchState();
+      if (loaded) {
+        this.fetchReleaseStatus(false);
+        this.notification = "CHANGELOG.md reloaded.";
+      }
     },
     copyContent() {
       Clipboard.copyFromText(this.content);
