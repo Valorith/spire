@@ -460,6 +460,28 @@ export default {
       adminNavs: [
         { label: "Server Admin", labelIcon: "ra ra-eye-shield mr-1", to: ROUTE.ADMIN_ROOT, exact: true },
         { label: "Players Online", labelIcon: "ra ra-double-team mr-1", to: ROUTE.ADMIN_PLAYERS_ONLINE },
+        {
+          label: "Player Operations",
+          labelIcon: "ra ra-player mr-1",
+          routePrefixMatch: "admin/player-operations",
+          navs: [
+            {
+              title: "Characters",
+              to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=characters",
+              icon: "ra ra-player mr-1"
+            },
+            {
+              title: "Accounts",
+              to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=accounts",
+              icon: "fa fa-id-card mr-1"
+            },
+            {
+              title: "Guilds",
+              to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=guilds",
+              icon: "ra ra-double-team mr-1"
+            },
+          ]
+        },
         { label: "Zone Servers", labelIcon: "ra ra-tower mr-1", to: ROUTE.ADMIN_ZONE_SERVERS },
         { label: "Backups", labelIcon: "fa fa-download mr-1", to: ROUTE.ADMIN_BACKUPS },
         { label: "Client Files", labelIcon: "fa fa-download mr-1", to: ROUTE.ADMIN_CLIENT_FILE_DOWNLOADS },
