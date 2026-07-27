@@ -79,3 +79,11 @@ func TestMailParcelsEditorIsRegisteredAsManualResource(t *testing.T) {
 		t.Fatalf("Mail & Parcels Editor resource = %#v, want [mail-parcels-editor]", prefixes)
 	}
 }
+
+func TestInventoryKeyringIsRegisteredAsManualResource(t *testing.T) {
+	resources := (&Service{}).RegisterManualResources()
+	prefixes, ok := resources["Inventory & Keyring"]
+	if !ok || len(prefixes) != 1 || prefixes[0] != "inventory-keyring" {
+		t.Fatalf("Inventory & Keyring resource = %#v, want [inventory-keyring]", prefixes)
+	}
+}

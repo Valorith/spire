@@ -4,6 +4,7 @@ export const ROUTE = {
   ADMIN_PLAYERS_ONLINE: "/admin/players-online",
   ADMIN_MAIL_PARCELS: "/admin/mail-parcels",
   ADMIN_PLAYER_OPERATIONS: "/admin/player-operations",
+  ADMIN_INVENTORY_KEYRING: "/admin/inventory-keyring",
   ADMIN_ZONE_SERVERS: "/admin/zones",
   ADMIN_CONFIGURATION: "/admin/configuration",
   ADMIN_CONFIG_DISCORD_CRASH_WEBHOOK: "/admin/configuration/settings/discord-crash-webhook",
