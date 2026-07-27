@@ -59,6 +59,7 @@ const augmentItem = {
 };
 
 const slots = [
+  { id: 2, label: 'Head', group: 'Equipment', known: true, selectable: true, description: 'Equipped character slot' },
   { id: 13, label: 'Primary', group: 'Equipment', known: true, selectable: true, description: 'Equipped character slot' },
   { id: 23, label: 'General 1', group: 'Inventory', known: true, selectable: true, description: 'Top-level carried inventory slot' },
   { id: 24, label: 'General 2', group: 'Inventory', known: true, selectable: true, description: 'Top-level carried inventory slot' },
@@ -66,12 +67,12 @@ const slots = [
   { id: 2500, label: 'Shared Bank 1', group: 'Shared Bank', known: true, selectable: true, description: 'Account-shared bank slot' },
 ];
 
-function character(online = false) {
+function character(online = false, id = 42) {
   return {
-    id: 42,
-    account_id: 7,
-    account_name: 'CodexAlder',
-    name: 'Alder',
+    id,
+    account_id: id === 43 ? 8 : 7,
+    account_name: id === 43 ? 'CodexMira' : 'CodexAlder',
+    name: id === 43 ? 'Mira' : 'Alder',
     level: 65,
     class: 3,
     race: 1,
@@ -82,10 +83,10 @@ function character(online = false) {
   };
 }
 
-function inventoryRecord(item = sword, slot = slots[0]) {
+function inventoryRecord(item = sword, slot = slots[1], characterID = 42) {
   return {
-    character_id: 42,
-    account_id: 7,
+    character_id: characterID,
+    account_id: characterID === 43 ? 8 : 7,
     storage_kind: 'character',
     slot_id: slot.id,
     slot,
@@ -105,11 +106,11 @@ function inventoryRecord(item = sword, slot = slots[0]) {
   };
 }
 
-function detail(state: InventoryKeyringMockState) {
+function detail(state: InventoryKeyringMockState, characterID = 42) {
   return {
-    character: character(Boolean(state.online)),
-    inventory: [inventoryRecord()],
-    keyring: [{ id: 1, char_id: 42, item_id: keyItem.id, item: keyItem }],
+    character: character(Boolean(state.online), characterID),
+    inventory: [inventoryRecord(sword, slots[1], characterID)],
+    keyring: [{ id: 1, char_id: characterID, item_id: keyItem.id, item: keyItem }],
     snapshots: [{ time_index: 1785100000, item_count: 1 }],
     slots,
   };
@@ -158,10 +159,16 @@ async function installInventoryKeyringMocks(page: Page, state: InventoryKeyringM
       });
     }
     if (path === '/characters') {
-      return fulfill({ data: [character(Boolean(state.online))], total: 1, page: 1, limit: 30 });
+      return fulfill({
+        data: [character(Boolean(state.online)), character(false, 43)],
+        total: 2,
+        page: 1,
+        limit: 30,
+      });
     }
-    if (path === '/character/42' && request.method() === 'GET') {
-      return fulfill(detail(state));
+    const characterMatch = path.match(/^\/character\/(42|43)$/);
+    if (characterMatch && request.method() === 'GET') {
+      return fulfill(detail(state, Number(characterMatch[1])));
     }
     if (path === '/character/42/snapshot/1785100000') {
       return fulfill({
@@ -185,7 +192,7 @@ async function installInventoryKeyringMocks(page: Page, state: InventoryKeyringM
       ) || potion;
       const created = inventoryRecord(
         selectedItem,
-        slots.find(slot => Number(slot.id) === Number(state.inventoryCreate?.slot_id)) || slots[1]
+        slots.find(slot => Number(slot.id) === Number(state.inventoryCreate?.slot_id)) || slots[2]
       );
       const updated = detail(state);
       updated.inventory.push(created);
@@ -357,6 +364,8 @@ test.describe('Inventory & Keyring Editor', () => {
     }
 
     const destination = page.locator('#inventory-keyring-slot');
+    await expect(destination.locator('option[value="2"]')).toBeDisabled();
+    await expect(destination.locator('option[value="2"]')).toContainText('incompatible');
     await expect(destination.locator('option[value="13"]')).toBeDisabled();
     await expect(destination).toHaveValue('23');
     await page.locator('#inventory-keyring-charges').fill('5');
@@ -399,6 +408,37 @@ test.describe('Inventory & Keyring Editor', () => {
       target_slot_id: 23,
       reason: 'Creating a verified replacement for player support',
     });
+  });
+
+  test('guards dirty item drafts when browser history changes the selected character', async ({ page }) => {
+    const state: InventoryKeyringMockState = {};
+    await installInventoryKeyringMocks(page, state);
+    await page.goto('/admin/inventory-keyring?character=43');
+    await page.getByTestId('inventory-keyring-character-directory').getByRole('button', { name: /Alder/ }).click();
+    await expect(page).toHaveURL(/character=42/);
+    await page.getByRole('button', { name: /Guard Captain Sword/ }).click();
+    await page.locator('#inventory-keyring-charges').fill('2');
+
+    page.once('dialog', async dialog => {
+      expect(dialog.message()).toContain('Discard unsaved inventory or keyring changes?');
+      await dialog.dismiss();
+    });
+    await page.goBack();
+    await expect(page).toHaveURL(/character=42/);
+    await expect(page.getByTestId('inventory-keyring-inspector')).toContainText('Alder');
+    await expect(page.locator('#inventory-keyring-charges')).toHaveValue('2');
+
+    await page.goto('/admin/inventory-keyring?character=43');
+    await page.getByTestId('inventory-keyring-character-directory').getByRole('button', { name: /Alder/ }).click();
+    await page.getByRole('button', { name: /Guard Captain Sword/ }).click();
+    await page.locator('#inventory-keyring-charges').fill('2');
+    page.once('dialog', async dialog => {
+      await dialog.accept();
+    });
+    await page.goBack();
+    await expect(page).toHaveURL(/character=43/);
+    await expect(page.getByTestId('inventory-keyring-inspector')).toContainText('Mira');
+    await expect(page.getByTestId('inventory-item-editor')).toBeHidden();
   });
 
   test('guards destructive inventory writes and locks all mutations while a character is online', async ({ page }) => {

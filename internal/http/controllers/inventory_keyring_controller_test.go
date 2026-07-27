@@ -98,6 +98,112 @@ func TestValidateInventoryKeyringMutationRequest(t *testing.T) {
 	}
 }
 
+func TestValidateInventoryKeyringItemPlacement(t *testing.T) {
+	tests := []struct {
+		name    string
+		slotID  int
+		item    inventoryKeyringItem
+		charges int
+		wantErr string
+	}{
+		{
+			name:   "equippable item in supported slot",
+			slotID: 13,
+			item: inventoryKeyringItem{
+				Name: "Guard Captain Sword", Slots: int64(1) << 13,
+			},
+			charges: 1,
+		},
+		{
+			name:   "zero mask cannot enter equipment slot",
+			slotID: 13,
+			item: inventoryKeyringItem{
+				Name: "Distillate", Slots: 0,
+			},
+			charges: 1,
+			wantErr: "cannot be equipped",
+		},
+		{
+			name:   "different equipment mask is rejected",
+			slotID: 13,
+			item: inventoryKeyringItem{
+				Name: "Cloth Cap", Slots: int64(1) << 2,
+			},
+			charges: 1,
+			wantErr: "cannot be equipped",
+		},
+		{
+			name:   "zero mask remains valid in carried inventory",
+			slotID: 23,
+			item: inventoryKeyringItem{
+				Name: "Distillate", Slots: 0,
+			},
+			charges: 20,
+		},
+		{
+			name:   "finite stack accepts exact maximum",
+			slotID: 23,
+			item: inventoryKeyringItem{
+				Name: "Distillate", Stackable: true, StackSize: 20,
+			},
+			charges: 20,
+		},
+		{
+			name:   "finite stack rejects excess charges",
+			slotID: 23,
+			item: inventoryKeyringItem{
+				Name: "Distillate", Stackable: true, StackSize: 20,
+			},
+			charges: 21,
+			wantErr: "at most 20",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateInventoryKeyringItemPlacement(test.slotID, test.item, test.charges)
+			if test.wantErr == "" && err != nil {
+				t.Fatalf("validateInventoryKeyringItemPlacement() error = %v", err)
+			}
+			if test.wantErr != "" && (err == nil || !strings.Contains(err.Error(), test.wantErr)) {
+				t.Fatalf("validateInventoryKeyringItemPlacement() error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestInventoryKeyringAugmentRestrictionAllows(t *testing.T) {
+	allowedByRestriction := map[int][]int{
+		0:  {0, 1, 2, 3, 4, 5, 8, 10, 35, 45},
+		1:  {10},
+		2:  {0, 1, 2, 3, 4, 5, 35, 45},
+		3:  {0, 2, 3, 45},
+		4:  {1, 4, 35},
+		5:  {0},
+		6:  {3},
+		7:  {2},
+		8:  {45},
+		9:  {1},
+		10: {4},
+		11: {35},
+		12: {5},
+		13: {8},
+		14: {0, 3, 45},
+		15: {3, 45},
+	}
+	itemTypes := []int{0, 1, 2, 3, 4, 5, 8, 10, 35, 45}
+	for restriction, allowedTypes := range allowedByRestriction {
+		for _, itemType := range itemTypes {
+			want := containsInt(allowedTypes, itemType)
+			if got := inventoryKeyringAugmentRestrictionAllows(itemType, restriction); got != want {
+				t.Fatalf("inventoryKeyringAugmentRestrictionAllows(%d, %d) = %t, want %t", itemType, restriction, got, want)
+			}
+		}
+	}
+	if inventoryKeyringAugmentRestrictionAllows(0, 99) {
+		t.Fatal("unknown augment restrictions must be rejected")
+	}
+}
+
 func TestInventoryKeyringStorageKindAndValues(t *testing.T) {
 	tests := []struct {
 		slot int
@@ -159,4 +265,13 @@ func sameOptionalInt(left, right *int) bool {
 		return left == nil && right == nil
 	}
 	return *left == *right
+}
+
+func containsInt(values []int, target int) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }

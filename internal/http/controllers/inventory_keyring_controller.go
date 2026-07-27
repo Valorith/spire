@@ -411,7 +411,7 @@ func (i *InventoryKeyringController) createInventory(c echo.Context) error {
 		if _, err := inventoryKeyringLockEditableStorage(tx, characterID, storageKind == inventoryStorageSharedBank); err != nil {
 			return err
 		}
-		if err := validateInventoryKeyringDestination(tx, characterID, accountID, request.SlotID, item, request.Augments, -1); err != nil {
+		if err := validateInventoryKeyringDestination(tx, characterID, accountID, request.SlotID, item, request.Charges, request.Augments, -1); err != nil {
 			return err
 		}
 		values := inventoryKeyringInventoryValues(characterID, accountID, request.SlotID, request)
@@ -420,7 +420,7 @@ func (i *InventoryKeyringController) createInventory(c echo.Context) error {
 		}
 		return nil
 	}); err != nil {
-		i.discardAudit(auditID)
+		i.discardAudit(c, auditID)
 		return inventoryKeyringMutationError(c, err)
 	}
 	detail, err := loadInventoryKeyringCharacter(db, characterID)
@@ -496,7 +496,7 @@ func (i *InventoryKeyringController) updateInventory(c echo.Context) error {
 		if sourceStorage == targetStorage {
 			ignoreSlot = sourceSlot
 		}
-		if err := validateInventoryKeyringDestination(tx, characterID, accountID, targetSlot, item, request.Augments, ignoreSlot); err != nil {
+		if err := validateInventoryKeyringDestination(tx, characterID, accountID, targetSlot, item, request.Charges, request.Augments, ignoreSlot); err != nil {
 			return err
 		}
 		children, err := inventoryKeyringContainerChildren(tx, characterID, accountID, sourceSlot)
@@ -531,7 +531,7 @@ func (i *InventoryKeyringController) updateInventory(c echo.Context) error {
 		}
 		return nil
 	}); err != nil {
-		i.discardAudit(auditID)
+		i.discardAudit(c, auditID)
 		return inventoryKeyringMutationError(c, err)
 	}
 	detail, err := loadInventoryKeyringCharacter(db, characterID)
@@ -602,7 +602,7 @@ func (i *InventoryKeyringController) deleteInventory(c echo.Context) error {
 		return inventoryKeyringStorageScope(tx, storageKind, characterID, accountID).
 			Where("slot_id = ?", slotID).Delete(nil).Error
 	}); err != nil {
-		i.discardAudit(auditID)
+		i.discardAudit(c, auditID)
 		return inventoryKeyringMutationError(c, err)
 	}
 	detail, err := loadInventoryKeyringCharacter(db, characterID)
@@ -718,7 +718,7 @@ func (i *InventoryKeyringController) mutateKey(c echo.Context, action string) er
 		}
 		return nil
 	}); err != nil {
-		i.discardAudit(auditID)
+		i.discardAudit(c, auditID)
 		return inventoryKeyringMutationError(c, err)
 	}
 	detail, err := loadInventoryKeyringCharacter(db, characterID)
@@ -1317,11 +1317,12 @@ func validateInventoryKeyringDestination(
 	accountID int,
 	slotID int,
 	item inventoryKeyringItem,
+	charges int,
 	augmentIDs []int,
 	ignoreSlot int,
 ) error {
-	if slotID < 0 {
-		return inventoryKeyringConflict("Select a valid destination slot")
+	if err := validateInventoryKeyringItemPlacement(slotID, item, charges); err != nil {
+		return err
 	}
 	var occupied int64
 	storageKind := inventoryKeyringStorageKind(slotID)
@@ -1335,9 +1336,6 @@ func validateInventoryKeyringDestination(
 		}
 	}
 	slot := inventoryKeyringDescribeSlot(slotID)
-	if slot.Group == "Equipment" && slotID <= 22 && item.Slots > 0 && item.Slots&(int64(1)<<uint(slotID)) == 0 {
-		return inventoryKeyringConflict("%s cannot be equipped in %s", item.Name, slot.Label)
-	}
 	if slot.ParentSlot != nil {
 		var parent struct {
 			ItemID   int `gorm:"column:item_id"`
@@ -1391,12 +1389,65 @@ func validateInventoryKeyringDestination(
 		if augment.AugmentTypeMask <= 0 || augment.AugmentTypeMask&(int64(1)<<uint(socketType-1)) == 0 {
 			return inventoryKeyringConflict("%s is not compatible with %s socket %d (type %d)", augment.Name, item.Name, index+1, socketType)
 		}
-	}
-	if item.Stackable && item.StackSize > 0 {
-		// Charges are checked in the request validator. Stack sizes are enforced
-		// by the server and intentionally surfaced as a conflict here.
+		if !inventoryKeyringAugmentRestrictionAllows(item.ItemType, augment.AugmentRestrict) {
+			return inventoryKeyringConflict("%s cannot be applied to %s because of its augment restriction", augment.Name, item.Name)
+		}
 	}
 	return nil
+}
+
+func validateInventoryKeyringItemPlacement(slotID int, item inventoryKeyringItem, charges int) error {
+	if slotID < 0 {
+		return inventoryKeyringConflict("Select a valid destination slot")
+	}
+	slot := inventoryKeyringDescribeSlot(slotID)
+	if slot.Group == "Equipment" && slotID <= 22 && item.Slots&(int64(1)<<uint(slotID)) == 0 {
+		return inventoryKeyringConflict("%s cannot be equipped in %s", item.Name, slot.Label)
+	}
+	if item.Stackable && item.StackSize > 0 && charges > item.StackSize {
+		return inventoryKeyringConflict("%s supports at most %d charges per stack", item.Name, item.StackSize)
+	}
+	return nil
+}
+
+func inventoryKeyringAugmentRestrictionAllows(itemType int, restriction int) bool {
+	switch restriction {
+	case 0:
+		return true
+	case 1:
+		return itemType == 10
+	case 2:
+		return itemType == 0 || itemType == 1 || itemType == 2 || itemType == 3 ||
+			itemType == 4 || itemType == 5 || itemType == 35 || itemType == 45
+	case 3:
+		return itemType == 0 || itemType == 2 || itemType == 3 || itemType == 45
+	case 4:
+		return itemType == 1 || itemType == 4 || itemType == 35
+	case 5:
+		return itemType == 0
+	case 6:
+		return itemType == 3
+	case 7:
+		return itemType == 2
+	case 8:
+		return itemType == 45
+	case 9:
+		return itemType == 1
+	case 10:
+		return itemType == 4
+	case 11:
+		return itemType == 35
+	case 12:
+		return itemType == 5
+	case 13:
+		return itemType == 8
+	case 14:
+		return itemType == 0 || itemType == 3 || itemType == 45
+	case 15:
+		return itemType == 3 || itemType == 45
+	default:
+		return false
+	}
 }
 
 func inventoryKeyringAccountID(db *gorm.DB, characterID int) (int, error) {
@@ -1816,9 +1867,11 @@ func (i *InventoryKeyringController) writeAudit(c echo.Context, event string, pa
 	return id, nil
 }
 
-func (i *InventoryKeyringController) discardAudit(id uint) {
+func (i *InventoryKeyringController) discardAudit(c echo.Context, id uint) {
 	if id == 0 || i.db.GetSpireDb() == nil {
 		return
 	}
-	_ = i.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error
+	if err := i.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error; err != nil {
+		c.Logger().Errorf("Could not discard rolled-back Inventory & Keyring audit event %d: %v", id, err)
+	}
 }

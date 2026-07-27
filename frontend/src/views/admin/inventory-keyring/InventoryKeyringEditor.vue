@@ -427,9 +427,9 @@
                             v-for="slot in group.slots"
                             :key="slot.id"
                             :value="slot.id"
-                            :disabled="occupiedSlot(slot.id)"
+                            :disabled="slotUnavailable(slot)"
                           >
-                            {{ slot.label }} · #{{ slot.id }}{{ occupiedSlot(slot.id) ? ' · occupied' : '' }}
+                            {{ slot.label }} · #{{ slot.id }}{{ slotOptionStatus(slot) }}
                           </option>
                         </optgroup>
                       </select>
@@ -1218,8 +1218,7 @@
     },
     watch: {
       '$route.query.character' (value) {
-        const id = Number(value || 0)
-        if (id > 0 && id !== Number(this.selectedCharacterID)) this.loadDetail(id)
+        this.handleRouteCharacterChange(value)
       },
       '$route.query.mode' (value) {
         if (this.modes.some(mode => mode.value === value) && value !== this.activeMode) {
@@ -1296,6 +1295,21 @@
         if (page < 1 || page > this.totalPages) return
         this.currentPage = page
         this.loadDirectory()
+      },
+      async handleRouteCharacterChange (value) {
+        const id = Number(value || 0)
+        if (id <= 0 || id === Number(this.selectedCharacterID)) return
+        if (this.hasUnsavedChanges && !window.confirm('Discard unsaved inventory or keyring changes?')) {
+          const query = {
+            ...this.$route.query,
+            character: String(this.selectedCharacterID),
+            mode: this.activeMode
+          }
+          await this.$router.replace({ query }).catch(() => {})
+          return
+        }
+        this.cancelEditors()
+        await this.loadDetail(id)
       },
       async selectCharacter (id, replace = false) {
         if (this.hasUnsavedChanges && !window.confirm('Discard unsaved inventory or keyring changes?')) return
@@ -1451,6 +1465,19 @@
         if (!this.detail) return false
         const current = this.selectedInventory && !this.inventoryCopying ? Number(this.selectedInventory.slot_id) : null
         return this.detail.inventory.some(record => Number(record.slot_id) === Number(slotID) && Number(slotID) !== current)
+      },
+      slotCompatible (slot) {
+        if (!slot || slot.group !== 'Equipment' || !this.inventoryDraftItem) return true
+        const mask = Number(this.inventoryDraftItem.slots || 0)
+        return (mask & (2 ** Number(slot.id))) !== 0
+      },
+      slotUnavailable (slot) {
+        return this.occupiedSlot(slot.id) || !this.slotCompatible(slot)
+      },
+      slotOptionStatus (slot) {
+        if (this.occupiedSlot(slot.id)) return ' · occupied'
+        if (!this.slotCompatible(slot)) return ' · incompatible'
+        return ''
       },
       adjustCharges (amount) {
         if (!this.inventoryDraft) return
