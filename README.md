@@ -77,7 +77,7 @@ run the command for your system.
 #### Linux or WSL
 
 ```bash
-set -o pipefail && curl -fsSL https://raw.githubusercontent.com/Valorith/spire/master/scripts/upgrade-akkstack.sh | bash
+upgrade_script="$(curl -fsSL --retry 3 https://raw.githubusercontent.com/Valorith/spire/master/scripts/upgrade-akkstack.sh)" && bash -c "$upgrade_script"
 ```
 
 #### Windows PowerShell
@@ -99,7 +99,7 @@ AkkStack, and automatically restores the backup if the new Spire does not start.
 4. Make the replacement executable and restart AkkStack:
 
 ```bash
-docker compose run --rm --no-deps --entrypoint sh eqemu-server -c "chmod 0755 /home/eqemu/server/bin/spire"
+docker compose run -T --rm --no-deps --entrypoint sh eqemu-server -c "chmod 0755 /home/eqemu/server/bin/spire"
 docker compose up -d eqemu-server
 ```
 

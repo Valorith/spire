@@ -84,7 +84,7 @@ curl \
   --output "$download_zip"
 
 info "Preparing the release inside a temporary AkkStack container"
-"${compose[@]}" run --rm --no-deps --entrypoint sh eqemu-server -c "
+"${compose[@]}" run -T --rm --no-deps --entrypoint sh eqemu-server -c "
   set -eu
   rm -rf '$container_staging_dir'
   mkdir -p '$container_staging_dir'
@@ -92,7 +92,7 @@ info "Preparing the release inside a temporary AkkStack container"
   test -s '$container_staging_dir/$RELEASE_BINARY'
   chmod 0755 '$container_staging_dir/$RELEASE_BINARY'
   mv '$container_staging_dir/$RELEASE_BINARY' '$container_staged_spire'
-"
+" < /dev/null
 [[ -s "$staged_spire_path" ]] ||
   fail "The release did not produce a usable Spire binary."
 
@@ -113,7 +113,7 @@ container_ready=0
 for _ in {1..90}; do
   if "${compose[@]}" exec -T eqemu-server \
     sh -c 'curl --silent --show-error --max-time 2 --output /dev/null "http://127.0.0.1:${SPIRE_PORT:-3000}/api/v1/app/env"' \
-    >/dev/null 2>&1; then
+    </dev/null >/dev/null 2>&1; then
     container_ready=1
     break
   fi

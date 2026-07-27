@@ -126,6 +126,7 @@ mv '$ContainerStagingDirectory/$ReleaseBinary' '$ContainerStagedSpire'
 "@
     Invoke-Compose -Mode $ComposeMode -ComposeArguments @(
         "run",
+        "-T",
         "--rm",
         "--no-deps",
         "--entrypoint",
