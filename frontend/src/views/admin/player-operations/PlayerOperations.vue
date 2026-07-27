@@ -1535,6 +1535,7 @@ export default {
       const id = Number(value)
       if (id === this.selectedID) return
       if (!id) {
+        if (this.isCreating) return
         if (this.hasUnsavedChanges && !window.confirm('Discard unsaved player operations changes?')) {
           await this.syncRoute()
           return
@@ -1961,13 +1962,14 @@ export default {
         const path = this.memberDraft.editing
           ? `/player-operations/guild/${this.selectedID}/member/${this.memberDraft.character.id}`
           : `/player-operations/guild/${this.selectedID}/member`
+        const wasEditing = this.memberDraft.editing
         const response = this.memberDraft.editing
           ? await SpireApi.v1().patch(path, body)
           : await SpireApi.v1().post(path, body)
         this.applyDetail(response.data.detail)
         await this.loadDirectory()
         this.$refs.memberModal.hide()
-        this.showNotification(this.memberDraft.editing ? 'Guild member saved' : 'Guild member added')
+        this.showNotification(wasEditing ? 'Guild member saved' : 'Guild member added')
       } catch (error) {
         this.showNotification(this.errorMessage(error, 'Unable to save guild member'), 'error')
       } finally {

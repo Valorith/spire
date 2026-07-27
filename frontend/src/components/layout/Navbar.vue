@@ -463,7 +463,7 @@ export default {
         {
           label: "Player Operations",
           labelIcon: "ra ra-player mr-1",
-          routePrefixMatch: "admin/player-operations",
+          routePrefixMatches: ["admin/player-operations", "admin/mail-parcels"],
           navs: [
             {
               title: "Characters",
@@ -479,6 +479,13 @@ export default {
               title: "Guilds",
               to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=guilds",
               icon: "ra ra-double-team mr-1"
+            },
+            {
+              title: "Mail & Parcels",
+              to: ROUTE.ADMIN_MAIL_PARCELS,
+              icon: "ra ra-envelope mr-1",
+              isNew: true,
+              isAlpha: true
             },
           ]
         },

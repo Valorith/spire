@@ -362,6 +362,11 @@ const router = new Router({
           meta: {title: "Players Online"},
         },
         {
+          path: 'mail-parcels',
+          component: () => import('./views/admin/mail-parcels/MailParcelsEditor.vue'),
+          meta: {title: "Mail & Parcels"},
+        },
+        {
           path: 'player-operations',
           component: () => import('./views/admin/player-operations/PlayerOperations.vue'),
           meta: {title: "Player Operations"},

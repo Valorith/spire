@@ -2,6 +2,7 @@ export const ROUTE = {
   API_MODEL_RELATIONSHIP_EXPLORER: "/model-relationship-explorer",
   ADMIN_ROOT: "/admin",
   ADMIN_PLAYERS_ONLINE: "/admin/players-online",
+  ADMIN_MAIL_PARCELS: "/admin/mail-parcels",
   ADMIN_PLAYER_OPERATIONS: "/admin/player-operations",
   ADMIN_ZONE_SERVERS: "/admin/zones",
   ADMIN_CONFIGURATION: "/admin/configuration",
