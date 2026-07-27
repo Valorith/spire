@@ -740,7 +740,7 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 				return err
 			}
 			if duplicate > 0 {
-				return playerOperationsConflict("Cannot rename %s because that name is already in use", locked.Name)
+				return playerOperationsConflict("Cannot rename %s because that name is already in use", input.Name)
 			}
 		}
 		if err := tx.Table("character_data").Where("id = ?", id).Updates(updates).Error; err != nil {
@@ -1246,16 +1246,14 @@ func (p *PlayerOperationsController) sanctionAccount(c echo.Context) error {
 	if !playerOperationsTimesEqual(account.SuspendedUntil, request.ExpectedSuspendedAt) {
 		return c.JSON(http.StatusConflict, echo.Map{"error": "Account sanction changed; refresh before applying"})
 	}
+	if request.Mode == "suspend" && playerOperationsHasBanReason(account.BanReason) {
+		return c.JSON(http.StatusConflict, echo.Map{"error": "Clear the existing indefinite ban before applying a temporary suspension"})
+	}
 	until := request.Until
-	banReason := ""
-	suspendReason := ""
 	if request.Mode == "ban" {
 		farFuture := time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 		until = &farFuture
-		banReason = strings.TrimSpace(request.Reason)
-	} else if request.Mode == "suspend" {
-		suspendReason = strings.TrimSpace(request.Reason)
-	} else {
+	} else if request.Mode == "clear" {
 		until = nil
 	}
 	payload := map[string]interface{}{
@@ -1269,16 +1267,19 @@ func (p *PlayerOperationsController) sanctionAccount(c echo.Context) error {
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var current struct {
 			SuspendedUntil *time.Time `gorm:"column:suspendeduntil"`
+			BanReason      *string    `gorm:"column:ban_reason"`
 		}
-		if err := tx.Table("account").Clauses(clause.Locking{Strength: "UPDATE"}).Select("suspendeduntil").Where("id = ?", id).Take(&current).Error; err != nil {
+		if err := tx.Table("account").Clauses(clause.Locking{Strength: "UPDATE"}).Select("suspendeduntil, ban_reason").Where("id = ?", id).Take(&current).Error; err != nil {
 			return err
 		}
 		if !playerOperationsTimesEqual(current.SuspendedUntil, request.ExpectedSuspendedAt) {
 			return playerOperationsConflict("Account sanction changed; refresh before applying")
 		}
-		return tx.Table("account").Where("id = ?", id).Updates(map[string]interface{}{
-			"suspendeduntil": until, "ban_reason": banReason, "suspend_reason": suspendReason,
-		}).Error
+		if request.Mode == "suspend" && playerOperationsHasBanReason(current.BanReason) {
+			return playerOperationsConflict("Clear the existing indefinite ban before applying a temporary suspension")
+		}
+		return tx.Table("account").Where("id = ?", id).
+			Updates(playerOperationsSanctionUpdates(request.Mode, until, request.Reason)).Error
 	}); err != nil {
 		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Account", err)
@@ -1288,6 +1289,25 @@ func (p *PlayerOperationsController) sanctionAccount(c echo.Context) error {
 		return playerOperationsLoadError(c, "Account", err)
 	}
 	return c.JSON(http.StatusOK, echo.Map{"detail": detail, "audit_id": auditID})
+}
+
+func playerOperationsHasBanReason(reason *string) bool {
+	return strings.TrimSpace(stringValue(reason)) != ""
+}
+
+func playerOperationsSanctionUpdates(mode string, until *time.Time, reason string) map[string]interface{} {
+	updates := map[string]interface{}{"suspendeduntil": until}
+	switch mode {
+	case "ban":
+		updates["ban_reason"] = strings.TrimSpace(reason)
+		updates["suspend_reason"] = ""
+	case "suspend":
+		updates["suspend_reason"] = strings.TrimSpace(reason)
+	case "clear":
+		updates["ban_reason"] = ""
+		updates["suspend_reason"] = ""
+	}
+	return updates
 }
 
 func (p *PlayerOperationsController) deleteAccount(c echo.Context) error {
@@ -1471,31 +1491,33 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		if duplicate > 0 {
 			return playerOperationsConflict("A guild named %s already exists", strings.TrimSpace(input.Name))
 		}
-		leaderPlan := planPlayerOperationsGuildLeaderChange(locked.LeaderID, input.LeaderID)
-		if input.LeaderID > 0 {
-			if err := playerOperationsEnsureCharacter(tx, input.LeaderID); err != nil {
-				return err
-			}
-			var membership int64
-			if err := tx.Table("guild_members").Where("char_id = ? AND guild_id = ?", input.LeaderID, id).Count(&membership).Error; err != nil {
-				return err
-			}
-			if membership == 0 {
-				return playerOperationsConflict("Select a current guild member as leader")
-			}
-			if err := tx.Table("guild_members").
-				Where("guild_id = ? AND rank = 1 AND char_id <> ?", id, leaderPlan.PromoteCharacterID).
-				Update("rank", 2).Error; err != nil {
-				return err
-			}
-			if err := tx.Table("guild_members").Where("guild_id = ? AND char_id = ?", id, input.LeaderID).Update("rank", 1).Error; err != nil {
-				return err
-			}
-		} else if leaderPlan.DemoteCharacterID > 0 {
-			if err := tx.Table("guild_members").
-				Where("guild_id = ? AND char_id = ? AND rank = 1", id, leaderPlan.DemoteCharacterID).
-				Update("rank", 2).Error; err != nil {
-				return err
+		if playerOperationsGuildLeaderChanged(locked.LeaderID, input.LeaderID) {
+			leaderPlan := planPlayerOperationsGuildLeaderChange(locked.LeaderID, input.LeaderID)
+			if input.LeaderID > 0 {
+				if err := playerOperationsEnsureCharacter(tx, input.LeaderID); err != nil {
+					return err
+				}
+				var membership int64
+				if err := tx.Table("guild_members").Where("char_id = ? AND guild_id = ?", input.LeaderID, id).Count(&membership).Error; err != nil {
+					return err
+				}
+				if membership == 0 {
+					return playerOperationsConflict("Select a current guild member as leader")
+				}
+				if err := tx.Table("guild_members").
+					Where("guild_id = ? AND rank = 1 AND char_id <> ?", id, leaderPlan.PromoteCharacterID).
+					Update("rank", 2).Error; err != nil {
+					return err
+				}
+				if err := tx.Table("guild_members").Where("guild_id = ? AND char_id = ?", id, input.LeaderID).Update("rank", 1).Error; err != nil {
+					return err
+				}
+			} else if leaderPlan.DemoteCharacterID > 0 {
+				if err := tx.Table("guild_members").
+					Where("guild_id = ? AND char_id = ? AND rank = 1", id, leaderPlan.DemoteCharacterID).
+					Update("rank", 2).Error; err != nil {
+					return err
+				}
 			}
 		}
 		return tx.Table("guilds").Where("id = ?", id).Updates(map[string]interface{}{
@@ -1512,6 +1534,10 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		return playerOperationsLoadError(c, "Guild", err)
 	}
 	return c.JSON(http.StatusOK, echo.Map{"detail": detail, "audit_id": auditID})
+}
+
+func playerOperationsGuildLeaderChanged(currentLeaderID, requestedLeaderID int) bool {
+	return currentLeaderID != requestedLeaderID
 }
 
 func (p *PlayerOperationsController) deleteGuild(c echo.Context) error {

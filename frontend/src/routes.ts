@@ -48,6 +48,7 @@ export const ROUTE = {
   NPC_EMOTES_EDIT: "/npc-emotes",
   NPC_SPELLS_EDIT: "/npc-spells",
   NPC_SPELL_EDIT: "/npc-spell/%s",
+  MERCENARIES: "/mercenaries",
   SPAWN_EDITOR: "/spawns",
   SPAWN_EDITOR_NPC: "/spawns/:npcId",
   BOT_SPELLS_EDIT: "/bot-spells",

@@ -209,8 +209,8 @@ async function installPlayerOperationsMocks(page: Page, state: PlayerOperationsM
     }
     if (path === '/character/2' && request.method() === 'GET') {
       return fulfill({
-        character: { ...state.character, id: 2, name: 'Beryl' },
-        context: characterContext,
+        character: { ...state.character, id: 2, account_id: 0, name: 'Beryl' },
+        context: { ...characterContext, account: { id: 0, name: '', status: 0 } },
       });
     }
     if (path === '/character/1' && request.method() === 'PATCH') {
@@ -308,7 +308,6 @@ test.describe('Player Operations', () => {
     await expect(page.getByTestId('player-operations-inspector')).toBeVisible();
     await expect(page.locator('.spire-editor-directory .eq-window-simple')).toBeVisible();
     await expect(page.locator('.spire-editor-inspector .eq-window-simple')).toHaveCount(2);
-
     for (const viewport of [
       { width: 1440, height: 900 },
       { width: 760, height: 900 },
@@ -362,6 +361,9 @@ test.describe('Player Operations', () => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Beryl');
+    await page.getByRole('tab', { name: 'Connections', exact: true }).click();
+    await expect(page.getByText('This character is not linked to an account.')).toBeVisible();
+    await expect(page.getByTitle('Open this account')).toHaveCount(0);
     const activeCharacterNav = page.locator('a[href="/admin/player-operations?mode=characters"]');
     await expect(activeCharacterNav).toHaveAttribute('aria-current', 'page');
     await expect(activeCharacterNav).toHaveClass(/active/);
@@ -412,7 +414,15 @@ test.describe('Player Operations', () => {
     await installPlayerOperationsMocks(page, state);
     await page.goto('/admin/player-operations?mode=guilds&tab=Members&guild=201');
 
+    await page.getByTestId('player-operations-new-guild').click();
+    const guildTabs = page.getByRole('tablist', { name: 'Guild sections' });
+    await expect(guildTabs.getByRole('tab')).toHaveCount(1);
+    await expect(guildTabs.getByRole('tab', { name: 'Overview', exact: true })).toBeVisible();
+    await expect(guildTabs.getByRole('tab', { name: 'Members', exact: true })).toHaveCount(0);
+    await expect(guildTabs.getByRole('tab', { name: 'Ranks & Access', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: /Keepers of the Spire 1 members/ }).click();
     await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Keepers of the Spire');
+    await page.getByRole('tab', { name: 'Members', exact: true }).click();
     await expect(page.getByRole('row', { name: /Alder #1/ })).toContainText('Guild Leader');
   });
 
