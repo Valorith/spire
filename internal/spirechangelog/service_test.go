@@ -153,11 +153,76 @@ func TestBuildReleasePayloadFromTopSection(t *testing.T) {
 	if payload.TagName != "v4.23.6" {
 		t.Fatalf("expected tag v4.23.6, got %s", payload.TagName)
 	}
-	if payload.Title != "Spire v4.23.6" {
-		t.Fatalf("expected title Spire v4.23.6, got %s", payload.Title)
+	if payload.Title != "Spire v4.23.6 (Stable)" {
+		t.Fatalf("expected stable channel title, got %s", payload.Title)
+	}
+	if payload.Prerelease {
+		t.Fatalf("expected stable payload to set prerelease false")
 	}
 	if !strings.Contains(payload.Body, "## [4.23.6] 3/25/2026") {
 		t.Fatalf("expected payload body to include changelog heading, got %q", payload.Body)
+	}
+}
+
+func TestParseTopReleaseRecognizesBetaHeadingWithoutLeakingHistory(t *testing.T) {
+	svc := NewService(gocache.New(0, 0))
+	content := "## [6.0.0] (Beta) 7/27/2026\n\n* Beta notes\n\n" +
+		"## [5.4.1] 7/26/2026\n\n* Stable notes\n"
+
+	release := svc.ParseTopRelease(content)
+	if release.Version != "6.0.0" {
+		t.Fatalf("expected version 6.0.0, got %s", release.Version)
+	}
+	if release.ReleaseDate != "7/27/2026" {
+		t.Fatalf("expected beta heading date to round-trip, got %s", release.ReleaseDate)
+	}
+	if !release.IsBeta {
+		t.Fatalf("expected beta heading to set IsBeta")
+	}
+
+	stableWithHistoricalBeta := "## [6.0.0] 7/27/2026\n\n* Stable notes\n\n" +
+		"## [5.0.0] 7/10/2026\n\nRelease Type: **BETA**\n* Historical beta\n"
+	stable := svc.ParseTopRelease(stableWithHistoricalBeta)
+	if stable.IsBeta {
+		t.Fatalf("historical beta marker must not affect the top stable release")
+	}
+}
+
+func TestParseTopReleaseRecognizesLegacyBetaMarker(t *testing.T) {
+	svc := NewService(gocache.New(0, 0))
+	release := svc.ParseTopRelease("## [5.0.0] 7/10/2026\n\nRelease Type:  **BETA**\n* Legacy beta notes\n")
+
+	if !release.IsBeta {
+		t.Fatalf("expected legacy beta marker to remain supported")
+	}
+	if release.ReleaseDate != "7/10/2026" {
+		t.Fatalf("expected legacy release date to remain unchanged, got %s", release.ReleaseDate)
+	}
+}
+
+func TestBuildBetaReleasePayloadUsesCanonicalHeadingAndPrereleaseFlag(t *testing.T) {
+	svc := NewService(gocache.New(0, 0))
+	payload := svc.BuildReleasePayload(ReleaseSection{
+		Version:     "6.0.0",
+		ReleaseDate: "7/27/2026",
+		Body:        "Release Type: **BETA**\n\n* Beta notes",
+		IsBeta:      true,
+	})
+
+	if payload.TagName != "v6.0.0" {
+		t.Fatalf("expected beta tag semantics to remain v6.0.0, got %s", payload.TagName)
+	}
+	if payload.Title != "Spire v6.0.0 (Beta)" {
+		t.Fatalf("expected beta title, got %s", payload.Title)
+	}
+	if !payload.Prerelease {
+		t.Fatalf("expected beta payload to set prerelease true")
+	}
+	if !strings.HasPrefix(payload.Body, "## [6.0.0] (Beta) 7/27/2026") {
+		t.Fatalf("expected canonical beta heading, got %q", payload.Body)
+	}
+	if strings.Contains(payload.Body, "Release Type:") {
+		t.Fatalf("expected legacy marker to be normalized out of the payload body, got %q", payload.Body)
 	}
 }
 
@@ -424,6 +489,44 @@ func TestSaveContentWritesEntireChangelog(t *testing.T) {
 	}
 	if string(body) != updated+"\n" {
 		t.Fatalf("expected full changelog rewrite, got %q", string(body))
+	}
+}
+
+func TestSaveContentRoundTripsCanonicalBetaHeading(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "CHANGELOG.md"), "## [1.0.0] 1/1/2026\n\n* Existing entry\n")
+	mustWriteFile(t, filepath.Join(dir, "package.json"), `{"version":"1.0.1"}`)
+
+	oldWD, _ := os.Getwd()
+	defer os.Chdir(oldWD)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	t.Setenv("APP_ENV", "local")
+
+	svc := NewService(gocache.New(0, 0))
+	updated := "## [1.0.1] (Beta) 7/27/2026\n\n* Beta entry\n\n## [1.0.0] 1/1/2026\n\n* Existing entry"
+	state, err := svc.SaveContent(SaveContentRequest{Content: updated})
+	if err != nil {
+		t.Fatalf("SaveContent returned error: %v", err)
+	}
+
+	if !state.TopRelease.IsBeta || !state.ReleasePayload.Prerelease {
+		t.Fatalf("expected saved beta state and payload, got top=%+v payload=%+v", state.TopRelease, state.ReleasePayload)
+	}
+	if state.ReleasePayload.Title != "Spire v1.0.1 (Beta)" {
+		t.Fatalf("expected saved beta title, got %s", state.ReleasePayload.Title)
+	}
+
+	reloaded, err := svc.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState returned error: %v", err)
+	}
+	if reloaded.Content != updated+"\n" {
+		t.Fatalf("expected beta heading to survive save/reload, got %q", reloaded.Content)
+	}
+	if !reloaded.TopRelease.IsBeta || reloaded.TopRelease.ReleaseDate != "7/27/2026" {
+		t.Fatalf("expected reloaded beta metadata, got %+v", reloaded.TopRelease)
 	}
 }
 

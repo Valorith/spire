@@ -27,10 +27,21 @@
         <span class="navbar-toggler-icon"></span>
       </button>
 
-      <router-link class="ml-3 mt-3" to="/">
-        <h1 class="text-center eq-header small-mobile">
+      <router-link
+        class="spire-brand-link ml-3 mt-3"
+        data-testid="spire-brand"
+        to="/"
+        :aria-label="isBetaRelease ? 'Spire home, beta release' : 'Spire home'"
+      >
+        <h1 class="spire-brand-title text-center eq-header small-mobile">
           Spire
           <span style="font-size: 12px; color: #e8c56d; opacity: 0.6; vertical-align: super; margin-left: 4px;">v2.5</span>
+          <span
+            v-if="isBetaRelease"
+            class="spire-beta-stamp"
+            data-testid="spire-beta-stamp"
+            aria-label="Beta release"
+          >Beta</span>
           <!--          <h3 class="text-center eq-header small-mobile d-inline" style="font-size: 40px">-->
           <!--            [Admin]-->
           <!--          </h3>-->
@@ -296,6 +307,7 @@ export default {
       hideNavbar: false,
       appEnv: AppEnv.getEnv(),
       appVersion: AppEnv.getVersion(),
+      isBetaRelease: AppEnv.isBetaRelease(),
       latestAppVersion: LocalSettings.getLatestUpdateVersion(),
       appFeatures: AppEnv.getFeatures(),
       botNav: {
@@ -885,6 +897,7 @@ export default {
     handleAppEnvLoaded() {
       this.appEnv      = AppEnv.getEnv();
       this.appVersion  = AppEnv.getVersion();
+      this.isBetaRelease = AppEnv.isBetaRelease();
       this.appFeatures = AppEnv.getFeatures();
     },
     expandNavbar() {
@@ -921,6 +934,44 @@ export default {
 </script>
 
 <style scoped>
+.spire-brand-link {
+  display: inline-block;
+}
 
+.spire-brand-title {
+  position: relative;
+}
 
+.spire-beta-stamp {
+  bottom: 0;
+  color: #ff6f7d;
+  font-family: "Cerebri Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  line-height: 1;
+  pointer-events: none;
+  position: absolute;
+  right: -10px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .8);
+  text-transform: uppercase;
+  transform: rotate(-11deg);
+  transform-origin: center;
+  transition: opacity .16s ease, transform .16s ease;
+  user-select: none;
+  z-index: 1;
+}
+
+@media (max-width: 767.98px) {
+  .spire-beta-stamp {
+    bottom: 1px;
+    right: -8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spire-beta-stamp {
+    transition: none;
+  }
+}
 </style>

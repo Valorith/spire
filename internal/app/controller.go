@@ -97,6 +97,7 @@ type Features struct {
 type EnvResponse struct {
 	Env                       string           `json:"env"`
 	Version                   string           `json:"version"`
+	IsBetaRelease             bool             `json:"is_beta_release"`
 	ReleaseRepository         string           `json:"release_repository"`
 	OS                        string           `json:"os"`
 	Features                  Features         `json:"features"`
@@ -129,6 +130,7 @@ func (d *Controller) env(c echo.Context) error {
 		}
 
 		version := pkg.Version
+		isBetaRelease := false
 		configReleaseRepository := ""
 		if d.serverConfig != nil {
 			if config, err := d.serverConfig.Get(); err == nil {
@@ -147,6 +149,7 @@ func (d *Controller) env(c echo.Context) error {
 			if state.PackageVersion != "" {
 				version = state.PackageVersion
 			}
+			isBetaRelease = state.TopRelease.IsBeta
 			if state.ReleaseRepository != "" && !hasRuntimeReleaseRepositoryOverride {
 				releaseRepository = state.ReleaseRepository
 			}
@@ -156,6 +159,7 @@ func (d *Controller) env(c echo.Context) error {
 			Env:               env.Get("APP_ENV", "local"),
 			OS:                runtime.GOOS,
 			Version:           version,
+			IsBetaRelease:     isBetaRelease,
 			ReleaseRepository: releaseRepository,
 			Features: Features{
 				GithubAuthEnabled: len(os.Getenv("GITHUB_CLIENT_ID")) > 0,

@@ -34,6 +34,7 @@ type ReleaseStatus struct {
 	Repository          string                      `json:"repository"`
 	ReleaseBranch       string                      `json:"release_branch"`
 	ExpectedTag         string                      `json:"expected_tag"`
+	ExpectedPrerelease  bool                        `json:"expected_prerelease"`
 	Local               ReleaseStatusLocal          `json:"local"`
 	Workflow            *ReleaseStatusWorkflow      `json:"workflow,omitempty"`
 	LatestRelease       *ReleaseStatusLatestRelease `json:"latest_release,omitempty"`
@@ -131,6 +132,7 @@ func (s *Service) LoadReleaseStatus(ctx context.Context) (*ReleaseStatus, error)
 		Repository:          state.ReleaseRepository,
 		ReleaseBranch:       spireReleaseBranch,
 		ExpectedTag:         state.ReleasePayload.TagName,
+		ExpectedPrerelease:  state.ReleasePayload.Prerelease,
 		Local: ReleaseStatusLocal{
 			Source:                  state.Source,
 			Writable:                state.Writable,
@@ -149,7 +151,14 @@ func (s *Service) LoadReleaseStatus(ctx context.Context) (*ReleaseStatus, error)
 	if splitErr != nil {
 		status.Issues = append(status.Issues, splitErr.Error())
 	} else {
-		workflow, latestRelease, rate, githubError, githubAuth := s.fetchGitHubReleaseStatus(ctx, owner, repo, spireReleaseBranch)
+		workflow, latestRelease, rate, githubError, githubAuth := s.fetchGitHubReleaseStatus(
+			ctx,
+			owner,
+			repo,
+			spireReleaseBranch,
+			status.ExpectedTag,
+			status.ExpectedPrerelease,
+		)
 		status.Workflow = workflow
 		status.LatestRelease = latestRelease
 		status.GitHubRate = rate
@@ -445,7 +454,14 @@ func releaseStatusValidateGitHubToken(ctx context.Context, token string) error {
 	return err
 }
 
-func (s *Service) fetchGitHubReleaseStatus(ctx context.Context, owner string, repo string, branch string) (*ReleaseStatusWorkflow, *ReleaseStatusLatestRelease, *ReleaseStatusGitHubRate, string, ReleaseStatusGitHubAuth) {
+func (s *Service) fetchGitHubReleaseStatus(
+	ctx context.Context,
+	owner string,
+	repo string,
+	branch string,
+	expectedTag string,
+	expectedPrerelease bool,
+) (*ReleaseStatusWorkflow, *ReleaseStatusLatestRelease, *ReleaseStatusGitHubRate, string, ReleaseStatusGitHubAuth) {
 	client, auth := s.releaseStatusGitHubClient(ctx)
 	var rate *ReleaseStatusGitHubRate
 	var errors []string
@@ -469,13 +485,22 @@ func (s *Service) fetchGitHubReleaseStatus(ctx context.Context, owner string, re
 		workflow = releaseStatusWorkflowFromGitHub(runs.WorkflowRuns[0])
 	}
 
-	latest, releaseResp, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
+	var latest *github.RepositoryRelease
+	var releaseResp *github.Response
+	var releaseLookupLabel string
+	if expectedPrerelease && strings.TrimSpace(expectedTag) != "" {
+		releaseLookupLabel = fmt.Sprintf("GitHub prerelease %s", expectedTag)
+		latest, releaseResp, err = client.Repositories.GetReleaseByTag(ctx, owner, repo, expectedTag)
+	} else {
+		releaseLookupLabel = "Latest GitHub release"
+		latest, releaseResp, err = client.Repositories.GetLatestRelease(ctx, owner, repo)
+	}
 	if releaseResp != nil {
 		rate = releaseStatusRate(releaseResp)
 	}
 	if err != nil {
 		if releaseResp == nil || releaseResp.StatusCode != http.StatusNotFound {
-			errors = append(errors, fmt.Sprintf("Latest GitHub release unavailable: %v", err))
+			errors = append(errors, fmt.Sprintf("%s unavailable: %v", releaseLookupLabel, err))
 		}
 	}
 

@@ -22,8 +22,10 @@ if [ -z "$TOKEN" ]; then
   exit 1
 fi
 
-RELEASE_TAG=$("$ROOT_DIR/scripts/export-release-notes.sh" --field tag)
-RELEASE_TITLE=$("$ROOT_DIR/scripts/export-release-notes.sh" --field title)
+RELEASE_METADATA=$("$ROOT_DIR/scripts/export-release-notes.sh" --field metadata)
+RELEASE_TAG=$(printf '%s' "$RELEASE_METADATA" | jq -r '.tag_name')
+RELEASE_TITLE=$(printf '%s' "$RELEASE_METADATA" | jq -r '.title')
+RELEASE_PRERELEASE=$(printf '%s' "$RELEASE_METADATA" | jq -r '.prerelease')
 NOTES_FILE=$(mktemp "${TMPDIR:-/tmp}/spire-release-notes.XXXXXX")
 PAYLOAD_FILE=$(mktemp "${TMPDIR:-/tmp}/spire-release-payload.XXXXXX")
 trap 'rm -f "$NOTES_FILE" "$PAYLOAD_FILE"' EXIT
@@ -44,8 +46,9 @@ fi
 jq -n \
   --arg tag_name "$RELEASE_TAG" \
   --arg name "$RELEASE_TITLE" \
+  --argjson prerelease "$RELEASE_PRERELEASE" \
   --rawfile body "$NOTES_FILE" \
-  '{tag_name: $tag_name, name: $name, body: $body}' > "$PAYLOAD_FILE"
+  '{tag_name: $tag_name, name: $name, body: $body, prerelease: $prerelease}' > "$PAYLOAD_FILE"
 
 curl -fsSL \
   -X PATCH \

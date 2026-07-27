@@ -87,6 +87,14 @@ export class AppEnv {
     this._version = value;
   }
 
+  static isBetaRelease() {
+    return this._is_beta_release === true;
+  }
+
+  static setIsBetaRelease(value) {
+    this._is_beta_release = value === true;
+  }
+
   static getReleaseRepository() {
     return this._release_repository;
   }
@@ -132,6 +140,7 @@ export class AppEnv {
   private static _os;
   private static _env;
   private static _version;
+  private static _is_beta_release;
   private static _release_repository;
   private static _features;
   private static _settings;
@@ -145,6 +154,7 @@ export class AppEnv {
       this.setOS(data.os)
       this.setEnv(data.env)
       this.setVersion(data.version)
+      this.setIsBetaRelease(data.is_beta_release)
       this.setReleaseRepository(data.release_repository)
       this.setFeatures(data.features)
       this.setSettings(data.settings)

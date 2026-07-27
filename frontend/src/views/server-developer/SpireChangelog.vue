@@ -320,6 +320,32 @@
               <span>Repo Source</span>
               <strong>{{ releaseRepositorySourceLabel }}</strong>
             </div>
+            <div :class="['release-channel-control', topRelease.isBeta ? 'release-channel-beta' : 'release-channel-stable']">
+              <div class="release-channel-copy">
+                <span>Release channel</span>
+                <strong>{{ topRelease.isBeta ? "Beta" : "Stable" }}</strong>
+                <small>
+                  {{ topRelease.isBeta
+                    ? "Manual Release will publish a GitHub prerelease and stamp the Spire logo."
+                    : "Manual Release will publish through the established stable release path." }}
+                </small>
+              </div>
+              <button
+                type="button"
+                class="release-channel-toggle"
+                data-testid="beta-release-toggle"
+                :class="{ active: topRelease.isBeta }"
+                :aria-pressed="topRelease.isBeta ? 'true' : 'false'"
+                :aria-label="topRelease.isBeta ? 'Mark top release as stable' : 'Mark top release as beta'"
+                :disabled="!canEdit || !topRelease.version"
+                @click="toggleTopReleaseBeta"
+              >
+                <span class="release-channel-toggle-track" aria-hidden="true">
+                  <span class="release-channel-toggle-knob"></span>
+                </span>
+                <span>{{ topRelease.isBeta ? "Beta on" : "Beta off" }}</span>
+              </button>
+            </div>
           </eq-window-simple>
 
           <eq-window-simple class="p-3">
@@ -359,18 +385,55 @@ import {SpireApi} from "@/app/api/spire-api";
 import Clipboard from "@/app/clipboard/clipboard";
 import {decorateChangelogDom, renderChangelogMarkdown} from "@/app/changelog/changelog-renderer";
 import {Notify} from "@/app/Notify";
+import {AppEnv} from "@/app/env/app-env";
+import {EventBus} from "@/app/event-bus/event-bus";
 
 function todaysDate() {
   const now = new Date();
   return `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
 }
 
+const betaReleaseMarkerLineRegexp = /^[ \t]*Release[ \t]+Type:[ \t]*(?:\*\*)?BETA(?:\*\*)?[ \t]*$/i;
+
+function releaseHeadingMatches(content) {
+  return Array.from((content || "").matchAll(/^## \[([^\]]+)](?:[ \t]+(\(Beta\)))?[ \t]+([^\n]+)$/gim));
+}
+
 function parseTopRelease(content) {
-  const match = (content || "").match(/^## \[([^\]]+)] ([^\n]+)/m);
+  const matches = releaseHeadingMatches(content);
+  const match = matches[0];
   if (!match) {
-    return {version: "", releaseDate: ""};
+    return {version: "", releaseDate: "", isBeta: false};
   }
-  return {version: match[1].trim(), releaseDate: match[2].trim()};
+  const bodyStart = match.index + match[0].length;
+  const bodyEnd = matches.length > 1 ? matches[1].index : (content || "").length;
+  const body = (content || "").slice(bodyStart, bodyEnd);
+  return {
+    version: match[1].trim(),
+    releaseDate: match[3].trim(),
+    isBeta: !!match[2] || body.split(/\r?\n/).some(line => betaReleaseMarkerLineRegexp.test(line))
+  };
+}
+
+function setTopReleaseBeta(content, enabled) {
+  const value = content || "";
+  const matches = releaseHeadingMatches(value);
+  const match = matches[0];
+  if (!match) {
+    return value;
+  }
+
+  const bodyStart = match.index + match[0].length;
+  const bodyEnd = matches.length > 1 ? matches[1].index : value.length;
+  const body = value.slice(bodyStart, bodyEnd);
+  const bodyLines = body.split(/\r?\n/);
+  const withoutMarker = bodyLines
+    .filter(line => !betaReleaseMarkerLineRegexp.test(line))
+    .join("\n");
+  const nextBody = withoutMarker.replace(/^(?:\n){3,}/, "\n\n");
+  const nextHeading = `## [${match[1].trim()}]${enabled ? " (Beta)" : ""} ${match[3].trim()}`;
+
+  return value.slice(0, match.index) + nextHeading + nextBody + value.slice(bodyEnd);
 }
 
 function isUnreleasedVersion(version) {
@@ -492,7 +555,8 @@ export default {
       if (!this.topRelease.version) {
         return "-";
       }
-      return `${this.topRelease.version} (${this.topRelease.releaseDate || "no date"})`;
+      const channel = this.topRelease.isBeta ? " · Beta" : "";
+      return `${this.topRelease.version} (${this.topRelease.releaseDate || "no date"})${channel}`;
     },
     previewHtml() {
       return renderChangelogMarkdown(this.content);
@@ -762,6 +826,13 @@ export default {
     applyState(state) {
       this.content = state.content || "";
       this.originalContent = this.content;
+      const savedReleaseIsBeta = state.top_release && typeof state.top_release.is_beta === "boolean"
+        ? state.top_release.is_beta
+        : parseTopRelease(this.content).isBeta;
+      if (AppEnv.isBetaRelease() !== savedReleaseIsBeta) {
+        AppEnv.setIsBetaRelease(savedReleaseIsBeta);
+        EventBus.$emit("APP_ENV_LOADED", true);
+      }
       this.packageVersion = state.package_version || "";
       this.releaseRepository = state.release_repository || "";
       this.releaseRepositorySource = state.release_repository_source || "";
@@ -907,6 +978,25 @@ export default {
     },
     markDirty() {
       this.isDirty = this.content !== this.originalContent;
+    },
+    toggleTopReleaseBeta() {
+      if (!this.canEdit || !this.topRelease.version) {
+        return;
+      }
+
+      const updated = setTopReleaseBeta(this.content, !this.topRelease.isBeta);
+      if (updated === this.content) {
+        return;
+      }
+
+      this.content = updated;
+      this.markDirty();
+      this.$nextTick(() => {
+        const editor = this.$refs.editor;
+        if (editor) {
+          editor.focus({preventScroll: true});
+        }
+      });
     },
     async saveContent() {
       if (!this.canSave) {
@@ -1102,6 +1192,136 @@ export default {
   align-items: center;
   display: flex;
   gap: 8px;
+}
+
+.release-channel-control {
+  align-items: center;
+  background: rgba(18, 38, 63, .36);
+  border: 1px solid rgba(149, 170, 201, .2);
+  border-radius: 4px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 12px;
+  transition: background-color .16s ease, border-color .16s ease;
+}
+
+.release-channel-beta {
+  background: rgba(110, 25, 37, .2);
+  border-color: rgba(238, 86, 102, .42);
+}
+
+.release-channel-copy {
+  min-width: 0;
+}
+
+.release-channel-copy > span {
+  color: #95aac9;
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  line-height: 1;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.release-channel-copy strong {
+  color: #edf2f9;
+  display: block;
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.release-channel-copy small {
+  color: #aebed2;
+  display: block;
+  line-height: 1.35;
+  margin-top: 5px;
+}
+
+.release-channel-toggle {
+  align-items: center;
+  background: rgba(8, 17, 29, .58);
+  border: 1px solid rgba(149, 170, 201, .3);
+  border-radius: 3px;
+  color: #c8d4e4;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 7px;
+  min-height: 32px;
+  padding: 5px 8px;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.release-channel-toggle:hover:not(:disabled),
+.release-channel-toggle:focus:not(:disabled) {
+  border-color: rgba(246, 195, 67, .62);
+  color: #f6c343;
+}
+
+.release-channel-toggle.active {
+  border-color: rgba(238, 86, 102, .65);
+  color: #ff8d99;
+}
+
+.release-channel-toggle:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.release-channel-toggle-track {
+  background: #3b506c;
+  border-radius: 8px;
+  display: inline-block;
+  height: 14px;
+  position: relative;
+  transition: background-color .16s ease;
+  width: 25px;
+}
+
+.release-channel-toggle-knob {
+  background: #edf2f9;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .42);
+  height: 10px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform .16s ease;
+  width: 10px;
+}
+
+.release-channel-toggle.active .release-channel-toggle-track {
+  background: #c43f55;
+}
+
+.release-channel-toggle.active .release-channel-toggle-knob {
+  transform: translateX(11px);
+}
+
+@media (max-width: 575.98px) {
+  .release-channel-control {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .release-channel-toggle {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .release-channel-control,
+  .release-channel-toggle,
+  .release-channel-toggle-track,
+  .release-channel-toggle-knob {
+    transition: none;
+  }
 }
 
 .release-info-button {

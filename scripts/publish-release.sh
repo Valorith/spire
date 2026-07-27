@@ -23,8 +23,10 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-RELEASE_TAG=$("$ROOT_DIR/scripts/export-release-notes.sh" --field tag)
-RELEASE_TITLE=$("$ROOT_DIR/scripts/export-release-notes.sh" --field title)
+RELEASE_METADATA=$("$ROOT_DIR/scripts/export-release-notes.sh" --field metadata)
+RELEASE_TAG=$(printf '%s' "$RELEASE_METADATA" | jq -r '.tag_name')
+RELEASE_TITLE=$(printf '%s' "$RELEASE_METADATA" | jq -r '.title')
+RELEASE_PRERELEASE=$(printf '%s' "$RELEASE_METADATA" | jq -r '.prerelease')
 NOTES_FILE=$(mktemp "${TMPDIR:-/tmp}/spire-release-notes.XXXXXX")
 PAYLOAD_FILE=$(mktemp "${TMPDIR:-/tmp}/spire-release-payload.XXXXXX")
 RESPONSE_FILE=$(mktemp "${TMPDIR:-/tmp}/spire-release-response.XXXXXX")
@@ -43,8 +45,9 @@ jq -n \
   --arg tag_name "$RELEASE_TAG" \
   --arg name "$RELEASE_TITLE" \
   --arg target_commitish "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+  --argjson prerelease "$RELEASE_PRERELEASE" \
   --rawfile body "$NOTES_FILE" \
-  '{tag_name: $tag_name, name: $name, body: $body, target_commitish: $target_commitish, draft: false, prerelease: false}' > "$PAYLOAD_FILE"
+  '{tag_name: $tag_name, name: $name, body: $body, target_commitish: $target_commitish, draft: false, prerelease: $prerelease}' > "$PAYLOAD_FILE"
 
 http_code=$(curl -sS -o "$RESPONSE_FILE" -w "%{http_code}" \
   -H "Accept: application/vnd.github+json" \

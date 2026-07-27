@@ -3,8 +3,8 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-CHANGELOG_FILE="$ROOT_DIR/CHANGELOG.md"
-PACKAGE_FILE="$ROOT_DIR/package.json"
+CHANGELOG_FILE="${SPIRE_CHANGELOG_FILE:-$ROOT_DIR/CHANGELOG.md}"
+PACKAGE_FILE="${SPIRE_PACKAGE_FILE:-$ROOT_DIR/package.json}"
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq is required to validate CHANGELOG.md"

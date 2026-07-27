@@ -88,6 +88,7 @@ jobs:
 
       - name: Build release assets
         run: |
+          ./scripts/test-release-metadata.sh
           ./scripts/validate-changelog.sh
           ./scripts/export-release-notes.sh >/dev/null
           cd frontend
@@ -111,9 +112,22 @@ jobs:
       - name: Verify updater release source
         run: |
           release_repo="$(./scripts/resolve-release-repo.sh)"
-          latest_tag="$(curl -fsSL "https://api.github.com/repos/${release_repo}/releases/latest" | jq -r '.tag_name')"
-          if [ "$latest_tag" != "${{ steps.prepare.outputs.tag }}" ]; then
-            echo "Latest release for ${release_repo} is ${latest_tag}, expected ${{ steps.prepare.outputs.tag }}" >&2
-            exit 1
+          if [ "${{ steps.prepare.outputs.prerelease }}" = "true" ]; then
+            release_json="$(curl -fsSL "https://api.github.com/repos/${release_repo}/releases/tags/${{ steps.prepare.outputs.tag }}")"
+            release_tag="$(printf '%s' "$release_json" | jq -r '.tag_name')"
+            release_prerelease="$(printf '%s' "$release_json" | jq -r '.prerelease')"
+            if [ "$release_tag" != "${{ steps.prepare.outputs.tag }}" ] || [ "$release_prerelease" != "true" ]; then
+              echo "Beta release verification failed for ${release_repo}: tag=${release_tag}, prerelease=${release_prerelease}" >&2
+              exit 1
+            fi
+            echo "Verified beta release ${release_tag}; stable update checks remain on the latest non-prerelease."
+          else
+            latest_json="$(curl -fsSL "https://api.github.com/repos/${release_repo}/releases/latest")"
+            latest_tag="$(printf '%s' "$latest_json" | jq -r '.tag_name')"
+            latest_prerelease="$(printf '%s' "$latest_json" | jq -r '.prerelease')"
+            if [ "$latest_tag" != "${{ steps.prepare.outputs.tag }}" ] || [ "$latest_prerelease" != "false" ]; then
+              echo "Latest stable release for ${release_repo} is ${latest_tag} (prerelease=${latest_prerelease}), expected ${{ steps.prepare.outputs.tag }}" >&2
+              exit 1
+            fi
+            echo "Spire stable update checks will see ${latest_tag} from ${release_repo}."
           fi
-          echo "Spire update checks will see ${latest_tag} from ${release_repo}."

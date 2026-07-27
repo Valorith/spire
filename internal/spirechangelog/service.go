@@ -15,7 +15,8 @@ import (
 	"strings"
 )
 
-var releaseHeadingRegexp = regexp.MustCompile(`(?m)^## \[([^\]]+)\] ([^\n]+)$`)
+var releaseHeadingRegexp = regexp.MustCompile(`(?im)^## \[([^\]]+)\](?:[ \t]+(\(Beta\)))?[ \t]+([^\n]+)$`)
+var betaReleaseMarkerRegexp = regexp.MustCompile(`(?im)^[ \t]*Release[ \t]+Type:[ \t]*\*{0,2}BETA\*{0,2}[ \t]*$`)
 var packageVersionRegexp = regexp.MustCompile(`(?m)("version"\s*:\s*")([^"]+)(")`)
 var packageSpireReleaseRepositoryRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*\{[^}]*"release_repository"\s*:\s*")([^"]+)(")`)
 var packageSpireEmptyObjectRegexp = regexp.MustCompile(`(?s)("spire"\s*:\s*)\{\s*\}`)
@@ -33,6 +34,7 @@ type ReleaseSection struct {
 	Version     string `json:"version"`
 	ReleaseDate string `json:"release_date"`
 	Body        string `json:"body"`
+	IsBeta      bool   `json:"is_beta"`
 }
 
 type ReleasePayload struct {
@@ -41,6 +43,7 @@ type ReleasePayload struct {
 	Title       string `json:"title"`
 	Body        string `json:"body"`
 	ReleaseDate string `json:"release_date"`
+	Prerelease  bool   `json:"prerelease"`
 }
 
 type LoadState struct {
@@ -70,6 +73,7 @@ type SaveRequest struct {
 	Version     string `json:"version"`
 	ReleaseDate string `json:"release_date"`
 	Body        string `json:"body"`
+	IsBeta      bool   `json:"is_beta"`
 }
 
 type SaveContentRequest struct {
@@ -343,7 +347,7 @@ func (s *Service) SaveRelease(req SaveRequest) (*LoadState, error) {
 		return nil, errors.New(strings.Join(validationErrors, "\n"))
 	}
 
-	newSection := BuildReleaseSection(req.Version, req.ReleaseDate, req.Body)
+	newSection := BuildReleaseSection(req.Version, req.ReleaseDate, req.Body, req.IsBeta)
 	updatedContent := strings.TrimSpace(newSection)
 	if strings.TrimSpace(currentContent) != "" {
 		updatedContent += "\n\n" + strings.TrimLeft(currentContent, "\n")
@@ -477,10 +481,14 @@ func (s *Service) ParseTopRelease(content string) ReleaseSection {
 		nextStart = matches[1][0]
 	}
 
+	body := strings.TrimSpace(content[first[1]:nextStart])
+	isBetaHeading := first[4] >= 0 && first[5] >= 0
+
 	return ReleaseSection{
 		Version:     content[first[2]:first[3]],
-		ReleaseDate: strings.TrimSpace(content[first[4]:first[5]]),
-		Body:        strings.TrimSpace(content[first[1]:nextStart]),
+		ReleaseDate: strings.TrimSpace(content[first[6]:first[7]]),
+		Body:        body,
+		IsBeta:      isBetaHeading || betaReleaseMarkerRegexp.MatchString(body),
 	}
 }
 
@@ -491,14 +499,21 @@ func (s *Service) BuildReleasePayload(release ReleaseSection) ReleasePayload {
 	}
 
 	releaseDate := strings.TrimSpace(release.ReleaseDate)
-	body := BuildReleaseSection(version, releaseDate, release.Body)
+	releaseBody := betaReleaseMarkerRegexp.ReplaceAllString(release.Body, "")
+	releaseBody = strings.TrimSpace(releaseBody)
+	body := BuildReleaseSection(version, releaseDate, releaseBody, release.IsBeta)
+	title := fmt.Sprintf("Spire v%s (Stable)", version)
+	if release.IsBeta {
+		title = fmt.Sprintf("Spire v%s (Beta)", version)
+	}
 
 	return ReleasePayload{
 		Version:     version,
 		TagName:     fmt.Sprintf("v%s", version),
-		Title:       fmt.Sprintf("Spire v%s", version),
+		Title:       title,
 		Body:        body,
 		ReleaseDate: releaseDate,
+		Prerelease:  release.IsBeta,
 	}
 }
 
@@ -513,8 +528,18 @@ func (s *Service) ListVersions(content string) []string {
 	return versions
 }
 
-func BuildReleaseSection(version string, releaseDate string, body string) string {
-	return fmt.Sprintf("## [%s] %s\n\n%s", strings.TrimSpace(version), strings.TrimSpace(releaseDate), strings.TrimSpace(body))
+func BuildReleaseSection(version string, releaseDate string, body string, isBeta bool) string {
+	channel := ""
+	if isBeta {
+		channel = " (Beta)"
+	}
+	return fmt.Sprintf(
+		"## [%s]%s %s\n\n%s",
+		strings.TrimSpace(version),
+		channel,
+		strings.TrimSpace(releaseDate),
+		strings.TrimSpace(body),
+	)
 }
 
 func containsTokenLikeSecret(value string) bool {
