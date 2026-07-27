@@ -23,6 +23,12 @@ func TestValidatePlayerOperationsCharacter(t *testing.T) {
 	if err := validatePlayerOperationsCharacter(valid); err != nil {
 		t.Fatalf("validatePlayerOperationsCharacter(valid) error = %v", err)
 	}
+	padded := valid
+	padded.Name = "  Alder  "
+	normalized := normalizePlayerOperationsCharacterInput(padded)
+	if normalized.Name != "Alder" {
+		t.Fatalf("normalizePlayerOperationsCharacterInput() name = %q, want Alder", normalized.Name)
+	}
 
 	for _, test := range []struct {
 		name  string
@@ -187,12 +193,15 @@ func TestPlayerOperationsCurrencyWithinBounds(t *testing.T) {
 
 func TestPlayerOperationsPagination(t *testing.T) {
 	for _, test := range []struct {
-		name     string
-		target   string
-		wantPage int
+		name      string
+		target    string
+		wantPage  int
+		wantLimit int
 	}{
-		{name: "minimum page", target: "/?page=0&limit=500", wantPage: 1},
-		{name: "maximum page", target: "/?page=5000&limit=500", wantPage: playerOperationsMaxPage},
+		{name: "defaults", target: "/", wantPage: 1, wantLimit: playerOperationsDefaultPageSize},
+		{name: "in range", target: "/?page=3&limit=10", wantPage: 3, wantLimit: 10},
+		{name: "minimum page", target: "/?page=0&limit=500", wantPage: 1, wantLimit: playerOperationsMaxPageSize},
+		{name: "maximum page", target: "/?page=5000&limit=500", wantPage: playerOperationsMaxPage, wantLimit: playerOperationsMaxPageSize},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			e := echo.New()
@@ -200,14 +209,34 @@ func TestPlayerOperationsPagination(t *testing.T) {
 			context := e.NewContext(request, nil)
 
 			page, limit := playerOperationsPagination(context)
-			if page != test.wantPage || limit != playerOperationsMaxPageSize {
+			if page != test.wantPage || limit != test.wantLimit {
 				t.Fatalf(
 					"playerOperationsPagination() = (%d, %d), want (%d, %d)",
 					page,
 					limit,
 					test.wantPage,
-					playerOperationsMaxPageSize,
+					test.wantLimit,
 				)
+			}
+		})
+	}
+}
+
+func TestPlanPlayerOperationsGuildLeaderChange(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		current int
+		next    int
+		want    playerOperationsGuildLeaderPlan
+	}{
+		{name: "assign leader", next: 22, want: playerOperationsGuildLeaderPlan{PromoteCharacterID: 22}},
+		{name: "replace leader", current: 11, next: 22, want: playerOperationsGuildLeaderPlan{PromoteCharacterID: 22}},
+		{name: "clear leader", current: 11, want: playerOperationsGuildLeaderPlan{DemoteCharacterID: 11}},
+		{name: "save leaderless guild", want: playerOperationsGuildLeaderPlan{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := planPlayerOperationsGuildLeaderChange(test.current, test.next); got != test.want {
+				t.Fatalf("planPlayerOperationsGuildLeaderChange() = %#v, want %#v", got, test.want)
 			}
 		})
 	}

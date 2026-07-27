@@ -690,6 +690,7 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid character payload"})
 	}
+	input = normalizePlayerOperationsCharacterInput(input)
 	if err := validatePlayerOperationsCharacter(input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
@@ -747,7 +748,7 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 		}
 		return nil
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
 	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -819,7 +820,7 @@ func (p *PlayerOperationsController) transferCharacter(c echo.Context) error {
 		}
 		return tx.Table("character_data").Where("id = ?", id).Update("account_id", request.AccountID).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
 	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -894,7 +895,7 @@ func (p *PlayerOperationsController) relocateCharacter(c echo.Context) error {
 			"x": x, "y": y, "z": z, "heading": heading,
 		}).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
 	detail, err := loadPlayerOperationsCharacterDetail(db, zoneDB, id)
@@ -1004,7 +1005,7 @@ func (p *PlayerOperationsController) updateCharacterGuild(c echo.Context) error 
 		}
 		return tx.Table("guild_members").Where("char_id = ?", id).Updates(values).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Guild membership", err)
 	}
 	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -1056,7 +1057,7 @@ func (p *PlayerOperationsController) updateCharacterCurrency(c echo.Context) err
 		}
 		return tx.Table("character_currency").Where("id = ?", id).Updates(values).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Character currency", err)
 	}
 	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -1153,7 +1154,7 @@ func (p *PlayerOperationsController) changeCharacterLifecycle(c echo.Context, re
 			"name": restoredName, "deleted_at": nil,
 		}).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Character", err)
 	}
 	detail, err := loadPlayerOperationsCharacterDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -1203,7 +1204,7 @@ func (p *PlayerOperationsController) updateAccount(c echo.Context) error {
 			"rulesflag": boolInt(input.RulesAccepted),
 		}).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Account", err)
 	}
 	detail, err := loadPlayerOperationsAccountDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -1279,7 +1280,7 @@ func (p *PlayerOperationsController) sanctionAccount(c echo.Context) error {
 			"suspendeduntil": until, "ban_reason": banReason, "suspend_reason": suspendReason,
 		}).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Account", err)
 	}
 	detail, err := loadPlayerOperationsAccountDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -1347,7 +1348,7 @@ func (p *PlayerOperationsController) deleteAccount(c echo.Context) error {
 		}
 		return tx.Table("account").Where("id = ?", id).Delete(nil).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Account", err)
 	}
 	return c.JSON(http.StatusOK, echo.Map{"deleted_id": id, "audit_id": auditID})
@@ -1419,7 +1420,7 @@ func (p *PlayerOperationsController) createGuild(c echo.Context) error {
 		}
 		return nil
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Guild", err)
 	}
 	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), guildID)
@@ -1455,8 +1456,12 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		return playerOperationsAuditError(c, err)
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		var locked struct{ ID int }
-		if err := tx.Table("guilds").Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", id).Take(&locked).Error; err != nil {
+		var locked struct {
+			ID       int
+			LeaderID int `gorm:"column:leader_id"`
+		}
+		if err := tx.Table("guilds").Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id, leader AS leader_id").Where("id = ?", id).Take(&locked).Error; err != nil {
 			return err
 		}
 		var duplicate int64
@@ -1466,9 +1471,7 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 		if duplicate > 0 {
 			return playerOperationsConflict("A guild named %s already exists", strings.TrimSpace(input.Name))
 		}
-		if err := tx.Table("guild_members").Where("guild_id = ? AND rank = 1", id).Update("rank", 2).Error; err != nil {
-			return err
-		}
+		leaderPlan := planPlayerOperationsGuildLeaderChange(locked.LeaderID, input.LeaderID)
 		if input.LeaderID > 0 {
 			if err := playerOperationsEnsureCharacter(tx, input.LeaderID); err != nil {
 				return err
@@ -1480,7 +1483,18 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 			if membership == 0 {
 				return playerOperationsConflict("Select a current guild member as leader")
 			}
+			if err := tx.Table("guild_members").
+				Where("guild_id = ? AND rank = 1 AND char_id <> ?", id, leaderPlan.PromoteCharacterID).
+				Update("rank", 2).Error; err != nil {
+				return err
+			}
 			if err := tx.Table("guild_members").Where("guild_id = ? AND char_id = ?", id, input.LeaderID).Update("rank", 1).Error; err != nil {
+				return err
+			}
+		} else if leaderPlan.DemoteCharacterID > 0 {
+			if err := tx.Table("guild_members").
+				Where("guild_id = ? AND char_id = ? AND rank = 1", id, leaderPlan.DemoteCharacterID).
+				Update("rank", 2).Error; err != nil {
 				return err
 			}
 		}
@@ -1490,7 +1504,7 @@ func (p *PlayerOperationsController) updateGuild(c echo.Context) error {
 			"tribute": input.Tribute, "favor": input.Favor,
 		}).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Guild", err)
 	}
 	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), id)
@@ -1559,7 +1573,7 @@ func (p *PlayerOperationsController) deleteGuild(c echo.Context) error {
 		}
 		return tx.Table("guilds").Where("id = ?", id).Delete(nil).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Guild", err)
 	}
 	return c.JSON(http.StatusOK, echo.Map{"deleted_id": id, "audit_id": auditID})
@@ -1690,7 +1704,7 @@ func (p *PlayerOperationsController) changeGuildMember(c echo.Context, action st
 			"tribute_enable": boolInt(input.TributeEnabled), "public_note": input.PublicNote,
 		}).Error
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Guild member", err)
 	}
 	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), guildID)
@@ -1775,7 +1789,7 @@ func (p *PlayerOperationsController) updateGuildAccess(c echo.Context) error {
 		}
 		return nil
 	}); err != nil {
-		p.discardAudit(auditID)
+		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Guild access", err)
 	}
 	detail, err := loadPlayerOperationsGuildDetail(db, p.db.Get(models.Zone{}, c), guildID)
@@ -2247,6 +2261,11 @@ func validatePlayerOperationsCharacter(input playerOperationsCharacterInput) err
 	return nil
 }
 
+func normalizePlayerOperationsCharacterInput(input playerOperationsCharacterInput) playerOperationsCharacterInput {
+	input.Name = strings.TrimSpace(input.Name)
+	return input
+}
+
 func validatePlayerOperationsAccount(input playerOperationsAccountInput) error {
 	if len(input.CharacterName) > 64 || len(input.AutoLoginName) > 64 || len(input.MiniLoginIP) > 32 {
 		return errors.New("Account text exceeds the live schema limit")
@@ -2272,6 +2291,21 @@ func validatePlayerOperationsGuild(input playerOperationsGuildInput) error {
 		return errors.New("Guild leader or minimum status is invalid")
 	}
 	return nil
+}
+
+type playerOperationsGuildLeaderPlan struct {
+	DemoteCharacterID  int
+	PromoteCharacterID int
+}
+
+func planPlayerOperationsGuildLeaderChange(currentLeaderID int, nextLeaderID int) playerOperationsGuildLeaderPlan {
+	if nextLeaderID > 0 {
+		return playerOperationsGuildLeaderPlan{PromoteCharacterID: nextLeaderID}
+	}
+	if currentLeaderID > 0 {
+		return playerOperationsGuildLeaderPlan{DemoteCharacterID: currentLeaderID}
+	}
+	return playerOperationsGuildLeaderPlan{}
 }
 
 func validatePlayerOperationsGuildMembership(guildID int, rank int) error {
@@ -2461,11 +2495,13 @@ func (p *PlayerOperationsController) writeAudit(c echo.Context, event string, pa
 	return id, nil
 }
 
-func (p *PlayerOperationsController) discardAudit(id uint) {
+func (p *PlayerOperationsController) discardAudit(c echo.Context, id uint) {
 	if id == 0 || p.db.GetSpireDb() == nil {
 		return
 	}
-	_ = p.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error
+	if err := p.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error; err != nil {
+		c.Logger().Errorf("Could not discard rolled-back Player Operations audit event %d: %v", id, err)
+	}
 }
 
 func boolInt(value bool) int {

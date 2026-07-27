@@ -232,6 +232,8 @@ async function installMailParcelsMocks(page: Page, state: MailParcelsMockState) 
 }
 
 test.describe('Mail & Parcels Editor', () => {
+  test.use({ timezoneId: 'UTC' });
+
   test('loads a native responsive workspace with authoritative status and no false dirty state', async ({ page }) => {
     const state: MailParcelsMockState = {};
     await installMailParcelsMocks(page, state);
@@ -285,7 +287,7 @@ test.describe('Mail & Parcels Editor', () => {
     await expect(page.getByText('Use 0 to choose the first free slot automatically.')).toBeVisible();
     await expect(page.getByLabel('Evolve progress')).toHaveCount(0);
     await page.getByRole('tab', { name: 'Delivery', exact: true }).click();
-    await expect(page.locator('#mail-parcels-sent-date')).toHaveValue('2026-07-26T18:05');
+    await expect(page.locator('#mail-parcels-sent-date')).toHaveValue('2026-07-26T22:05');
   });
 
   test('sends direct and server-wide mail through the single tool authorization boundary', async ({ page }) => {

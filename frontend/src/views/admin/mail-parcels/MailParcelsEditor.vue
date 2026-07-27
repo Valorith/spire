@@ -1912,6 +1912,7 @@
     },
     beforeRouteLeave (to, from, next) {
       if (!this.hasUnsavedChanges || window.confirm('Discard unsaved Mail & Parcels changes?')) next()
+      else next(false)
     },
     methods: {
       apiError (error, fallback) {
@@ -2308,8 +2309,9 @@
           query[this.mode === 'mail' ? 'mail' : 'parcel'] = String(this.selectedId)
         }
         this.routeSyncing = true
-        this.$router.replace({ path: this.$route.path, query }).catch(() => {})
-        this.$nextTick(() => { this.routeSyncing = false })
+        this.$router.replace({ path: this.$route.path, query })
+          .catch(() => {})
+          .then(() => this.$nextTick(() => { this.routeSyncing = false }))
       },
       focusCharacterSearch () {
         const id = this.mode === 'mail' ? 'mail-parcels-mail-recipient-search' : 'mail-parcels-parcel-recipient-search'

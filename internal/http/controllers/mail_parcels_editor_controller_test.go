@@ -43,6 +43,18 @@ func TestValidateMailInput(t *testing.T) {
 	if err := validateMailInput(legacy, &currentStatus); err != nil {
 		t.Fatalf("validateMailInput(unchanged legacy status) error = %v", err)
 	}
+
+	update := valid
+	update.Timestamp = 0
+	preserveMailUpdateTimestamp(&update, 123456789)
+	if update.Timestamp != 123456789 {
+		t.Fatalf("preserveMailUpdateTimestamp() = %d, want 123456789", update.Timestamp)
+	}
+	update.Timestamp = 987654321
+	preserveMailUpdateTimestamp(&update, 123456789)
+	if update.Timestamp != 987654321 {
+		t.Fatalf("preserveMailUpdateTimestamp(explicit) = %d, want 987654321", update.Timestamp)
+	}
 }
 
 func TestValidateParcelInput(t *testing.T) {
@@ -116,6 +128,12 @@ func TestMailAndParcelSemanticConstants(t *testing.T) {
 	if mailParcelsDefaultCapacity < 1 {
 		t.Fatal("default parcel capacity must be positive")
 	}
+	if got := availableParcelSlotCapacity(2, 3); got != 0 {
+		t.Fatalf("availableParcelSlotCapacity(over capacity) = %d, want 0", got)
+	}
+	if got := availableParcelSlotCapacity(5, 2); got != 3 {
+		t.Fatalf("availableParcelSlotCapacity() = %d, want 3", got)
+	}
 }
 
 func TestParcelAugmentMapping(t *testing.T) {
@@ -183,6 +201,16 @@ func TestGMParcelValidationAndConfiguration(t *testing.T) {
 	}
 	if err := validateGMParcelSendInput(valid); err != nil {
 		t.Fatalf("validateGMParcelSendInput(valid) error = %v", err)
+	}
+	empty := valid
+	empty.Items = nil
+	if err := validateGMParcelSendInput(empty); err == nil {
+		t.Fatal("validateGMParcelSendInput(empty items) expected an error")
+	}
+	oversized := valid
+	oversized.Items = make([]gmParcelSendItem, mailParcelsMaxBatchItems+1)
+	if err := validateGMParcelSendInput(oversized); err == nil {
+		t.Fatal("validateGMParcelSendInput(over max items) expected an error")
 	}
 	if got := gmParcelConfirmation(2, "Alder"); got != "SEND 2 PARCELS TO Alder" {
 		t.Fatalf("parcel confirmation = %q", got)

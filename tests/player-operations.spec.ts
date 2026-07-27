@@ -294,7 +294,7 @@ async function installPlayerOperationsMocks(page: Page, state: PlayerOperationsM
 }
 
 test.describe('Player Operations', () => {
-  test('keeps the mode surface distinct and responsive across all workspaces', async ({ page }) => {
+  test('keeps the record-type surface responsive', async ({ page }) => {
     const state: PlayerOperationsMockState = {
       character: characterRecord(),
       account: accountRecord(),
@@ -308,16 +308,6 @@ test.describe('Player Operations', () => {
     await expect(page.getByTestId('player-operations-inspector')).toBeVisible();
     await expect(page.locator('.spire-editor-directory .eq-window-simple')).toBeVisible();
     await expect(page.locator('.spire-editor-inspector .eq-window-simple')).toHaveCount(2);
-    await page.evaluate(() => {
-      const url = new URL(window.location.href);
-      url.searchParams.set('character', '2');
-      window.history.pushState({ playerOperationsTest: true }, '', url);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    });
-    await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Beryl');
-    const activeCharacterNav = page.locator('a[href="/admin/player-operations?mode=characters"]');
-    await expect(activeCharacterNav).toHaveAttribute('aria-current', 'page');
-    await expect(activeCharacterNav).toHaveClass(/active/);
 
     for (const viewport of [
       { width: 1440, height: 900 },
@@ -354,10 +344,38 @@ test.describe('Player Operations', () => {
       expect(geometry.tabs[0].right).toBeLessThanOrEqual(geometry.tabs[1].left + 1);
       expect(geometry.tabs[1].right).toBeLessThanOrEqual(geometry.tabs[2].left + 1);
     }
+  });
 
-    await page.getByRole('tab', { name: /Accounts/ }).click();
-    await expect(page).toHaveURL(/mode=accounts/);
-    await page.getByRole('button', { name: /CodexAlder Player/ }).click();
+  test('synchronizes browser history and query-aware navigation', async ({ page }) => {
+    const state: PlayerOperationsMockState = {
+      character: characterRecord(),
+      account: accountRecord(),
+      guild: guildRecord(),
+    };
+    await installPlayerOperationsMocks(page, state);
+    await page.goto('/admin/player-operations?mode=characters&tab=Overview&character=1');
+
+    await page.evaluate(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('character', '2');
+      window.history.pushState({ playerOperationsTest: true }, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Beryl');
+    const activeCharacterNav = page.locator('a[href="/admin/player-operations?mode=characters"]');
+    await expect(activeCharacterNav).toHaveAttribute('aria-current', 'page');
+    await expect(activeCharacterNav).toHaveClass(/active/);
+  });
+
+  test('submits an account sanction independently', async ({ page }) => {
+    const state: PlayerOperationsMockState = {
+      character: characterRecord(),
+      account: accountRecord(),
+      guild: guildRecord(),
+    };
+    await installPlayerOperationsMocks(page, state);
+    await page.goto('/admin/player-operations?mode=accounts&tab=Overview&account=101');
+
     await expect(page.getByRole('heading', { name: 'CodexAlder' })).toBeVisible();
     await expect(page.getByTestId('player-operations-account-delete')).toBeDisabled();
     await page.locator('#player-operations-account-shared-plat').fill('1251');
@@ -383,12 +401,18 @@ test.describe('Player Operations', () => {
     await Promise.all([sanctionRequest, applyRestriction]);
     expect(state.sanctionUpdate).toBeDefined();
     expect(new Date(String(state.sanctionUpdate?.until)).toISOString()).toBe(new Date(localSuspension).toISOString());
+  });
 
-    await page.getByRole('tab', { name: /Guilds/ }).click();
-    await expect(page).toHaveURL(/mode=guilds/);
-    await page.getByRole('button', { name: /Keepers of the Spire 1 members/ }).click();
+  test('renders guild roster ranks independently', async ({ page }) => {
+    const state: PlayerOperationsMockState = {
+      character: characterRecord(),
+      account: accountRecord(),
+      guild: guildRecord(),
+    };
+    await installPlayerOperationsMocks(page, state);
+    await page.goto('/admin/player-operations?mode=guilds&tab=Members&guild=201');
+
     await expect(page.getByTestId('player-operations-inspector').locator('h2')).toHaveText('Keepers of the Spire');
-    await page.getByRole('tab', { name: 'Members', exact: true }).click();
     await expect(page.getByRole('row', { name: /Alder #1/ })).toContainText('Guild Leader');
   });
 

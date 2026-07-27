@@ -517,7 +517,7 @@ func (m *MailParcelsEditorController) createMail(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Mail message")
 	}
 	return c.JSON(http.StatusCreated, result)
@@ -563,14 +563,14 @@ func (m *MailParcelsEditorController) sendDirectMail(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "GM direct message")
 	}
 	return c.JSON(http.StatusCreated, result)
 }
 
 func (m *MailParcelsEditorController) broadcastAudience(c echo.Context) error {
-	recipients, err := loadGMBroadcastRecipients(m.db.Get(models.Mail{}, c), false)
+	recipients, err := loadGMBroadcastRecipients(m.db.Get(models.Mail{}, c))
 	if err != nil {
 		return mailParcelsDatabaseError(c, err)
 	}
@@ -598,7 +598,7 @@ func (m *MailParcelsEditorController) sendBroadcastMail(c echo.Context) error {
 	result := gmMailSendResult{Audience: "broadcast", Recipients: []mailParcelsCharacterReference{}}
 	var auditID uint
 	err := db.Transaction(func(tx *gorm.DB) error {
-		recipients, err := loadGMBroadcastRecipients(tx, true)
+		recipients, err := loadGMBroadcastRecipients(tx)
 		if err != nil {
 			return err
 		}
@@ -619,7 +619,7 @@ func (m *MailParcelsEditorController) sendBroadcastMail(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "GM server-wide message")
 	}
 	return c.JSON(http.StatusCreated, result)
@@ -642,6 +642,7 @@ func (m *MailParcelsEditorController) updateMail(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		preserveMailUpdateTimestamp(&input, current.Timestamp)
 		if err := validateMailInput(input, &current.Status); err != nil {
 			return mailParcelsConflict("%s", err.Error())
 		}
@@ -666,7 +667,7 @@ func (m *MailParcelsEditorController) updateMail(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Mail message")
 	}
 	return c.JSON(http.StatusOK, result)
@@ -706,7 +707,7 @@ func (m *MailParcelsEditorController) deleteMail(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Mail message")
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -793,13 +794,14 @@ func (m *MailParcelsEditorController) createParcel(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		capacity := m.parcelCapacity(tx)
 		if input.SlotID == 0 {
-			input.SlotID, err = nextParcelSlot(tx, input.CharacterID, 0, m.parcelCapacity(tx))
+			input.SlotID, err = nextParcelSlot(tx, input.CharacterID, 0, capacity)
 			if err != nil {
 				return err
 			}
 		}
-		if err := ensureParcelSlotAvailable(tx, input.CharacterID, input.SlotID, 0, m.parcelCapacity(tx)); err != nil {
+		if err := ensureParcelSlotAvailable(tx, input.CharacterID, input.SlotID, 0, capacity); err != nil {
 			return err
 		}
 		if input.SentDate == "" {
@@ -838,7 +840,7 @@ func (m *MailParcelsEditorController) createParcel(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Parcel")
 	}
 	return c.JSON(http.StatusCreated, detail)
@@ -968,7 +970,7 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "GM parcel batch")
 	}
 	return c.JSON(http.StatusCreated, result)
@@ -1011,13 +1013,14 @@ func (m *MailParcelsEditorController) updateParcel(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		capacity := m.parcelCapacity(tx)
 		if input.SlotID == 0 {
-			input.SlotID, err = nextParcelSlot(tx, input.CharacterID, id, m.parcelCapacity(tx))
+			input.SlotID, err = nextParcelSlot(tx, input.CharacterID, id, capacity)
 			if err != nil {
 				return err
 			}
 		}
-		if err := ensureParcelSlotAvailable(tx, input.CharacterID, input.SlotID, id, m.parcelCapacity(tx)); err != nil {
+		if err := ensureParcelSlotAvailable(tx, input.CharacterID, input.SlotID, id, capacity); err != nil {
 			return err
 		}
 		if err := tx.Table("character_parcels").Where("id = ?", id).Updates(parcelInputColumns(input)).Error; err != nil {
@@ -1036,7 +1039,7 @@ func (m *MailParcelsEditorController) updateParcel(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Parcel")
 	}
 	return c.JSON(http.StatusOK, detail)
@@ -1081,7 +1084,7 @@ func (m *MailParcelsEditorController) deleteParcel(c echo.Context) error {
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Parcel")
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -1141,7 +1144,7 @@ func (m *MailParcelsEditorController) createParcelContent(c echo.Context) error 
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Parcel content")
 	}
 	return c.JSON(http.StatusCreated, result)
@@ -1206,7 +1209,7 @@ func (m *MailParcelsEditorController) updateParcelContent(c echo.Context) error 
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Parcel content")
 	}
 	return c.JSON(http.StatusOK, result)
@@ -1257,7 +1260,7 @@ func (m *MailParcelsEditorController) deleteParcelContent(c echo.Context) error 
 		return err
 	})
 	if err != nil {
-		m.discardAudit(auditID)
+		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Parcel content")
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -1570,15 +1573,13 @@ func loadGMDirectRecipients(db *gorm.DB, ids []uint) ([]mailParcelsCharacterRefe
 	return ordered, nil
 }
 
-func loadGMBroadcastRecipients(db *gorm.DB, lock bool) ([]mailParcelsCharacterReference, error) {
+func loadGMBroadcastRecipients(db *gorm.DB) ([]mailParcelsCharacterReference, error) {
 	recipients := make([]mailParcelsCharacterReference, 0)
-	query := db.Table("character_data").
+	if err := db.Table("character_data").
 		Select("id, name, account_id, level, class, race").
-		Where("deleted_at IS NULL")
-	if lock {
-		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
-	}
-	if err := query.Order("name, id").Find(&recipients).Error; err != nil {
+		Where("deleted_at IS NULL").
+		Order("name, id").
+		Find(&recipients).Error; err != nil {
 		return nil, err
 	}
 	return recipients, nil
@@ -1713,7 +1714,7 @@ func availableParcelSlots(db *gorm.DB, characterID uint, capacity int) ([]uint, 
 	for _, slot := range occupiedSlots {
 		occupied[slot] = true
 	}
-	available := make([]uint, 0, capacity-len(occupiedSlots))
+	available := make([]uint, 0, availableParcelSlotCapacity(capacity, len(occupiedSlots)))
 	for slot := 1; slot <= capacity; slot++ {
 		if !occupied[uint(slot)] {
 			available = append(available, uint(slot))
@@ -1996,6 +1997,20 @@ func mailInputColumns(input mailEditorInput) map[string]interface{} {
 		"subject": strings.TrimSpace(input.Subject), "body": input.Body, "to": strings.TrimSpace(input.To),
 		"status": input.Status,
 	}
+}
+
+func preserveMailUpdateTimestamp(input *mailEditorInput, currentTimestamp int64) {
+	if input.Timestamp <= 0 {
+		input.Timestamp = currentTimestamp
+	}
+}
+
+func availableParcelSlotCapacity(capacity int, occupied int) int {
+	remaining := capacity - occupied
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 func parcelInputColumns(input parcelEditorInput) map[string]interface{} {
@@ -2314,9 +2329,11 @@ func (m *MailParcelsEditorController) writeAudit(
 	return id, nil
 }
 
-func (m *MailParcelsEditorController) discardAudit(id uint) {
+func (m *MailParcelsEditorController) discardAudit(c echo.Context, id uint) {
 	if id == 0 || m.db.GetSpireDb() == nil {
 		return
 	}
-	_ = m.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error
+	if err := m.db.GetSpireDb().Table("spire_user_event_log").Where("id = ?", id).Delete(nil).Error; err != nil {
+		c.Logger().Errorf("Could not discard rolled-back Mail and Parcels audit event %d: %v", id, err)
+	}
 }
