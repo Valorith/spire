@@ -308,13 +308,61 @@ test.describe('Inventory & Keyring Editor', () => {
     await lookup.getByPlaceholder(/Search item name/).fill('Celestial');
     await lookup.getByRole('button', { name: /Distillate of Celestial Healing/ }).click();
 
+    const editor = page.getByTestId('inventory-item-editor');
+    const instanceNoDrop = editor.getByRole('switch', { name: 'Instance no-drop' });
+    await expect(instanceNoDrop).toHaveAttribute('aria-checked', 'false');
+    await instanceNoDrop.click();
+    await expect(instanceNoDrop).toHaveAttribute('aria-checked', 'true');
+    await instanceNoDrop.click();
+
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 760, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const controlGeometry = await editor.evaluate(element => {
+        const centerOffset = (control: Element, icon: Element) => {
+          const controlBounds = control.getBoundingClientRect();
+          const iconBounds = icon.getBoundingClientRect();
+          return {
+            x: Math.abs((controlBounds.left + controlBounds.width / 2) - (iconBounds.left + iconBounds.width / 2)),
+            y: Math.abs((controlBounds.top + controlBounds.height / 2) - (iconBounds.top + iconBounds.height / 2)),
+          };
+        };
+        const closeButton = element.querySelector('button[aria-label="Close item editor"]')!;
+        const closeIcon = closeButton.querySelector('i')!;
+        const toggle = element.querySelector('button[role="switch"]')!;
+        const toggleKnob = toggle.querySelector('span')!;
+        const tintControls = Array.from(element.querySelector('.inventory-color-control')!.children);
+        return {
+          closeCenter: centerOffset(closeButton, closeIcon),
+          closePadding: getComputedStyle(closeButton).padding,
+          tintHeights: tintControls.map(control => Math.round(control.getBoundingClientRect().height)),
+          tintOverflow: element.querySelector('.inventory-color-control')!.scrollWidth -
+            element.querySelector('.inventory-color-control')!.clientWidth,
+          toggleCenter: centerOffset(toggle, toggleKnob),
+          toggleDisplay: getComputedStyle(toggle).display,
+          togglePadding: getComputedStyle(toggle).padding,
+        };
+      });
+      expect(controlGeometry.closeCenter.x, `${viewport.width}px close icon horizontal centering`).toBeLessThanOrEqual(1);
+      expect(controlGeometry.closeCenter.y, `${viewport.width}px close icon vertical centering`).toBeLessThanOrEqual(1);
+      expect(controlGeometry.closePadding).toBe('0px');
+      expect(new Set(controlGeometry.tintHeights).size, `${viewport.width}px tint control height consistency`).toBe(1);
+      expect(controlGeometry.tintHeights[0], `${viewport.width}px tint control usable height`).toBeGreaterThanOrEqual(24);
+      expect(controlGeometry.tintOverflow).toBeLessThanOrEqual(1);
+      expect(controlGeometry.toggleCenter.y, `${viewport.width}px switch vertical centering`).toBeLessThanOrEqual(1);
+      expect(controlGeometry.toggleDisplay).toBe('flex');
+      expect(controlGeometry.togglePadding).toBe('2px');
+    }
+
     const destination = page.locator('#inventory-keyring-slot');
     await expect(destination.locator('option[value="13"]')).toBeDisabled();
     await expect(destination).toHaveValue('23');
     await page.locator('#inventory-keyring-charges').fill('5');
     await page.getByLabel('Choose item tint').fill('#112233');
     await expect(page.locator('#inventory-keyring-color')).toHaveValue('4279312947');
-    await expect(page.locator('.inventory-color-control + small')).toHaveText('Stored ARGB #FF112233');
+    await expect(page.locator('.inventory-color-summary')).toHaveText('Stored ARGB #FF112233');
     await page.locator('#inventory-keyring-inventory-reason').fill('Restoring an item verified from server records');
     await page.getByTestId('inventory-item-editor').getByRole('button', { name: 'Add item' }).click();
 

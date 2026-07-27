@@ -470,13 +470,17 @@
                           <button type="button" aria-label="Increase quantity" @click="adjustCharges(1)">+</button>
                         </div>
                       </div>
-                      <div class="spire-editor-field">
-                        <label for="inventory-keyring-color">Tint (ARGB)</label>
+                      <div class="spire-editor-field inventory-tint-field">
+                        <div class="inventory-tint-heading">
+                          <label for="inventory-keyring-color">Item tint</label>
+                          <span>ARGB</span>
+                        </div>
                         <div class="inventory-color-control">
                           <input
                             :value="inventoryColorHex"
                             type="color"
                             aria-label="Choose item tint"
+                            title="Choose item tint"
                             @input="setInventoryColorHex($event.target.value)"
                           >
                           <input
@@ -486,6 +490,7 @@
                             min="0"
                             max="4294967295"
                             class="form-control form-control-sm"
+                            aria-label="Item tint ARGB value"
                           >
                           <button
                             type="button"
@@ -497,19 +502,29 @@
                             <i class="fa fa-times"></i>
                           </button>
                         </div>
-                        <small>{{ inventoryColorSummary }}</small>
+                        <small class="inventory-color-summary" :class="{ 'is-empty': !inventoryDraft.color }">
+                          <span class="inventory-color-summary__swatch" :style="{ backgroundColor: inventoryColorHex }"></span>
+                          <span>{{ inventoryColorSummary }}</span>
+                        </small>
                       </div>
                     </div>
 
-                    <div v-if="selectedDraftSlot && !selectedDraftSlot.label.includes('Shared Bank')" class="instance-toggle-row">
+                    <div
+                      v-if="selectedDraftSlot && !selectedDraftSlot.label.includes('Shared Bank')"
+                      class="instance-toggle-row"
+                    >
                       <div>
                         <strong>Instance no-drop</strong>
-                        <span>Locks only this item instance to the character.</span>
+                        <span id="inventory-keyring-instance-no-drop-description">
+                          Locks only this item instance to the character.
+                        </span>
                       </div>
                       <button
                         type="button"
                         role="switch"
-                        class="eq-switch"
+                        class="inventory-instance-switch"
+                        aria-label="Instance no-drop"
+                        aria-describedby="inventory-keyring-instance-no-drop-description"
                         :aria-checked="inventoryDraft.instance_no_drop ? 'true' : 'false'"
                         :class="{ active: inventoryDraft.instance_no_drop }"
                         @click="inventoryDraft.instance_no_drop = !inventoryDraft.instance_no_drop"
@@ -2111,13 +2126,27 @@
 .icon-button {
   width: 30px;
   height: 30px;
+  flex: 0 0 30px;
   border: 1px solid rgba(153, 165, 176, .3);
   border-radius: 3px;
   background: rgba(7, 12, 17, .7);
   color: #aeb8c0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  font-size: 11px;
+  line-height: 1 !important;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+  border-color: rgba(220, 185, 92, .62);
+  background: rgba(73, 57, 25, .52);
+  color: #efcf72;
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(220, 185, 92, .18);
 }
 
 .icon-button--danger {
@@ -2279,33 +2308,99 @@
 
 .inventory-color-control {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 31px;
+  grid-template-columns: 38px minmax(0, 1fr) 31px;
+  align-items: stretch;
+}
+
+.inventory-tint-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inventory-tint-heading label {
+  margin-bottom: 3px;
+}
+
+.inventory-tint-heading span {
+  margin-bottom: 3px;
+  padding: 1px 5px;
+  border: 1px solid rgba(190, 157, 65, .3);
+  background: rgba(111, 83, 20, .16);
+  color: #c5a950;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: .08em;
 }
 
 .inventory-color-control input[type="color"] {
-  width: 34px;
+  width: 38px;
   height: 31px;
-  padding: 3px;
+  padding: 3px !important;
   border: 1px solid #59616b;
   border-right: 0;
   border-radius: 2px 0 0 2px;
   background: rgba(6, 10, 14, .9);
+  cursor: pointer;
 }
 
 .inventory-color-control input[type="number"] {
+  min-width: 0;
+  height: 31px;
+  padding: 5px 8px !important;
   border-radius: 0;
+  font-family: "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .inventory-color-control button {
+  width: 31px;
+  height: 31px;
   border: 1px solid #59616b;
   border-left: 0;
   border-radius: 0 2px 2px 0;
   background: rgba(17, 22, 29, .94);
   color: #aab3bc;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+}
+
+.inventory-color-control input[type="color"]:hover,
+.inventory-color-control input[type="color"]:focus-visible,
+.inventory-color-control button:hover:not(:disabled),
+.inventory-color-control button:focus-visible {
+  border-color: #b49136;
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(180, 145, 54, .2);
 }
 
 .inventory-color-control button:disabled {
   color: #56616a;
+}
+
+.inventory-color-summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 15px;
+}
+
+.inventory-color-summary__swatch {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border: 1px solid rgba(209, 218, 224, .42);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .54);
+}
+
+.inventory-color-summary.is-empty .inventory-color-summary__swatch {
+  background:
+    linear-gradient(45deg, transparent 43%, #8f5d5d 44%, #8f5d5d 56%, transparent 57%),
+    #111820 !important;
 }
 
 .instance-toggle-row {
@@ -2407,31 +2502,53 @@
   font-size: 9px;
 }
 
-.eq-switch {
-  width: 39px;
-  height: 20px;
-  padding: 2px;
+.inventory-instance-switch {
+  width: 42px;
+  height: 22px;
+  flex: 0 0 42px;
+  padding: 2px !important;
   border: 1px solid #6f7881;
   border-radius: 2px;
   background: #12171d;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  line-height: 1 !important;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
 
-.eq-switch span {
-  width: 14px;
-  height: 14px;
+.inventory-instance-switch span {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   display: block;
   background: #66717a;
   transition: transform .15s ease, background .15s ease;
 }
 
-.eq-switch.active {
+.inventory-instance-switch:hover,
+.inventory-instance-switch:focus-visible {
+  border-color: #b49136;
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(180, 145, 54, .2);
+}
+
+.inventory-instance-switch.active {
   border-color: #b49136;
   background: rgba(123, 91, 17, .2);
 }
 
-.eq-switch.active span {
-  transform: translateX(17px);
+.inventory-instance-switch.active span {
+  transform: translateX(18px);
   background: #d6aa38;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-button,
+  .inventory-instance-switch,
+  .inventory-instance-switch span {
+    transition: none;
+  }
 }
 
 .augment-editor {
