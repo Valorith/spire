@@ -372,7 +372,7 @@ test.describe('Inventory & Keyring Editor', () => {
     await page.getByLabel('Choose item tint').fill('#112233');
     await expect(page.locator('#inventory-keyring-color')).toHaveValue('4279312947');
     await expect(page.locator('.inventory-color-summary')).toHaveText('Stored ARGB #FF112233');
-    await page.locator('#inventory-keyring-inventory-reason').fill('Restoring an item verified from server records');
+    await page.locator('#inventory-keyring-inventory-reason').fill('QA');
     await page.getByTestId('inventory-item-editor').getByRole('button', { name: 'Add item' }).click();
 
     await expect.poll(() => state.inventoryCreate).toBeDefined();
@@ -382,7 +382,7 @@ test.describe('Inventory & Keyring Editor', () => {
       target_slot_id: 23,
       charges: 5,
       color: 4279312947,
-      reason: 'Restoring an item verified from server records',
+      reason: 'QA',
     });
   });
 
@@ -450,13 +450,18 @@ test.describe('Inventory & Keyring Editor', () => {
     await page.getByRole('button', { name: 'Remove' }).click();
     const removal = page.getByRole('dialog', { name: 'Remove inventory item' });
     await expect(removal.getByRole('button', { name: 'Remove' })).toBeDisabled();
-    await page.locator('#inventory-keyring-delete-confirmation').fill('REMOVE Guard Captain Sword');
-    await page.locator('#inventory-keyring-delete-reason').fill('Removing a verified duplicate item record');
+    await page.locator('#inventory-keyring-delete-reason').fill('QA');
+    const confirmationSlider = page.locator('#inventory-keyring-delete-confirmation');
+    await expect(confirmationSlider).toHaveValue('0');
+    await confirmationSlider.fill('99');
+    await expect(removal.getByRole('button', { name: 'Remove' })).toBeDisabled();
+    await confirmationSlider.fill('100');
+    await expect(removal).toContainText('Removal armed');
     await removal.getByRole('button', { name: 'Remove' }).click();
     await expect.poll(() => state.inventoryDelete).toBeDefined();
     expect(state.inventoryDelete).toEqual({
       confirmation: 'REMOVE Guard Captain Sword',
-      reason: 'Removing a verified duplicate item record',
+      reason: 'QA',
     });
 
     state.online = true;

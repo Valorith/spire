@@ -483,14 +483,14 @@ export default {
             {
               title: "Mail & Parcels",
               to: ROUTE.ADMIN_MAIL_PARCELS,
-              icon: "ra ra-envelope mr-1",
+              icon: "fa fa-envelope mr-1",
               isNew: true,
               isAlpha: true
             },
             {
               title: "Inventory & Keyring",
               to: ROUTE.ADMIN_INVENTORY_KEYRING,
-              icon: "ra ra-backpack mr-1",
+              icon: "ra ra-three-keys mr-1",
               isNew: true,
               isAlpha: true
             },

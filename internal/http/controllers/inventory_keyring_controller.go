@@ -22,7 +22,6 @@ import (
 const (
 	inventoryKeyringDefaultPageSize = 30
 	inventoryKeyringMaxPageSize     = 100
-	inventoryKeyringReasonMinLength = 8
 	inventoryKeyringReasonMaxLength = 240
 	inventoryStorageCharacter       = "character"
 	inventoryStorageSharedBank      = "shared_bank"
@@ -554,7 +553,7 @@ func (i *InventoryKeyringController) deleteInventory(c echo.Context) error {
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid deletion payload"})
 	}
-	if err := validateInventoryKeyringReason(request.Reason); err != nil {
+	if err := validateInventoryKeyringDeletionReason(request.Reason); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := i.db.Get(models.Inventory{}, c)
@@ -640,7 +639,11 @@ func (i *InventoryKeyringController) mutateKey(c echo.Context, action string) er
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid keyring payload"})
 	}
-	if err := validateInventoryKeyringReason(request.Reason); err != nil {
+	reasonValidator := validateInventoryKeyringReason
+	if action == "delete" {
+		reasonValidator = validateInventoryKeyringDeletionReason
+	}
+	if err := reasonValidator(request.Reason); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := i.db.Get(models.Keyring{}, c)
@@ -1302,13 +1305,17 @@ func validateInventoryKeyringMutationRequest(request inventoryKeyringMutationReq
 
 func validateInventoryKeyringReason(reason string) error {
 	reason = strings.TrimSpace(reason)
-	if len(reason) < inventoryKeyringReasonMinLength {
-		return fmt.Errorf("audit reason must be at least %d characters", inventoryKeyringReasonMinLength)
+	if reason == "" {
+		return errors.New("audit reason is required")
 	}
 	if len(reason) > inventoryKeyringReasonMaxLength {
 		return fmt.Errorf("audit reason cannot exceed %d characters", inventoryKeyringReasonMaxLength)
 	}
 	return nil
+}
+
+func validateInventoryKeyringDeletionReason(reason string) error {
+	return validateInventoryKeyringReason(reason)
 }
 
 func validateInventoryKeyringDestination(

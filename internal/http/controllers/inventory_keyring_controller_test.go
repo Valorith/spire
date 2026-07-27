@@ -68,7 +68,7 @@ func TestInventoryKeyringChildRanges(t *testing.T) {
 func TestValidateInventoryKeyringMutationRequest(t *testing.T) {
 	valid := inventoryKeyringMutationRequest{
 		ItemID: 1001, SlotID: 23, Charges: 1,
-		Reason:   "Restoring a verified missing player item",
+		Reason:   "QA",
 		Augments: []int{0, 0, 0, 0, 0, 0},
 	}
 	if err := validateInventoryKeyringMutationRequest(valid, false); err != nil {
@@ -84,7 +84,7 @@ func TestValidateInventoryKeyringMutationRequest(t *testing.T) {
 		{name: "charges", edit: func(v *inventoryKeyringMutationRequest) { v.Charges = 65536 }, want: "charges"},
 		{name: "augments", edit: func(v *inventoryKeyringMutationRequest) { v.Augments = make([]int, 7) }, want: "six"},
 		{name: "custom data", edit: func(v *inventoryKeyringMutationRequest) { v.CustomData = strings.Repeat("x", 4097) }, want: "custom"},
-		{name: "reason", edit: func(v *inventoryKeyringMutationRequest) { v.Reason = "short" }, want: "reason"},
+		{name: "reason", edit: func(v *inventoryKeyringMutationRequest) { v.Reason = " " }, want: "reason"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -96,6 +96,20 @@ func TestValidateInventoryKeyringMutationRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateInventoryKeyringDeletionReason(t *testing.T) {
+	t.Run("accepts a short non-empty audit reason", func(t *testing.T) {
+		if err := validateInventoryKeyringDeletionReason("QA"); err != nil {
+			t.Fatalf("expected short audit reason to be accepted, got %v", err)
+		}
+	})
+
+	t.Run("rejects an empty audit reason", func(t *testing.T) {
+		if err := validateInventoryKeyringDeletionReason("   "); err == nil {
+			t.Fatal("expected blank audit reason to be rejected")
+		}
+	})
 }
 
 func TestValidateInventoryKeyringItemPlacement(t *testing.T) {

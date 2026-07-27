@@ -615,7 +615,6 @@
                         class="form-control form-control-sm"
                         placeholder="Explain why this player inventory is changing…"
                       ></textarea>
-                      <small>{{ inventoryDraft.reason.length }}/240 · minimum 8 characters</small>
                     </div>
                   </div>
 
@@ -756,7 +755,6 @@
                       class="form-control form-control-sm"
                       placeholder="Explain why key access is changing…"
                     ></textarea>
-                    <small>{{ keyDraft.reason.length }}/240 · minimum 8 characters</small>
                   </div>
                   <div class="inventory-editor-actions">
                     <button
@@ -931,9 +929,35 @@
             <span v-else>The mutation is transactional and written to Spire's immutable audit trail.</span>
           </div>
         </div>
-        <div class="spire-editor-field">
-          <label for="inventory-keyring-delete-confirmation">Type <code>{{ deletePhrase }}</code> to confirm</label>
-          <input id="inventory-keyring-delete-confirmation" v-model="deleteConfirmation" class="form-control form-control-sm" autocomplete="off">
+        <div
+          class="guarded-delete-slider"
+          :class="{ 'guarded-delete-slider--confirmed': deleteConfirmed }"
+        >
+          <div class="guarded-delete-slider__heading">
+            <label for="inventory-keyring-delete-confirmation">
+              {{ deleteConfirmed ? 'Removal armed' : 'Slide to confirm' }}
+            </label>
+            <span>{{ deleteConfirmed ? 'Ready' : deleteSlider + '%' }}</span>
+          </div>
+          <input
+            id="inventory-keyring-delete-confirmation"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            :value="deleteSlider"
+            :style="{ '--delete-progress': deleteSlider + '%' }"
+            :aria-label="'Slide to confirm removal of ' + deleteItemName"
+            :aria-valuetext="deleteConfirmed ? 'Removal armed' : deleteSlider + ' percent'"
+            aria-describedby="inventory-keyring-delete-confirmation-help"
+            :disabled="saving || (deleteTarget === 'inventory' && selectedInventory && selectedInventory.container_contents > 0)"
+            @input="updateDeleteConfirmation"
+          >
+          <div id="inventory-keyring-delete-confirmation-help" class="guarded-delete-slider__help">
+            <span><i class="fa fa-lock mr-1"></i>Safe</span>
+            <strong>{{ deleteConfirmed ? 'Removal is armed. Slide back to disarm.' : 'Move the handle fully right to arm removal.' }}</strong>
+            <span><i class="fa fa-unlock-alt mr-1"></i>Confirm</span>
+          </div>
         </div>
         <div class="spire-editor-field">
           <label for="inventory-keyring-delete-reason">Required audit reason</label>
@@ -951,7 +975,7 @@
           <button
             type="button"
             class="btn btn-sm btn-outline-danger"
-            :disabled="deleteConfirmation !== deletePhrase || deleteReason.length < 8 || saving || (deleteTarget === 'inventory' && selectedInventory && selectedInventory.container_contents > 0)"
+            :disabled="!deleteConfirmed || !deleteReason.trim() || saving || (deleteTarget === 'inventory' && selectedInventory && selectedInventory.container_contents > 0)"
             @click="confirmDelete"
           >
             <i class="fa mr-1" :class="saving ? 'fa-spinner fa-spin' : 'fa-trash'"></i>Remove
@@ -1022,6 +1046,7 @@
         itemLookupTimer: null,
         deleteTarget: '',
         deleteConfirmation: '',
+        deleteSlider: 0,
         deleteReason: '',
         modes: [
           { value: 'inventory', label: 'Inventory', icon: 'ra ra-backpack' },
@@ -1151,7 +1176,7 @@
         return Boolean(
           this.inventoryDraft &&
             this.inventoryDraftItem &&
-            this.inventoryDraft.reason.length >= 8 &&
+            Boolean(this.inventoryDraft.reason.trim()) &&
             this.inventoryDraft.target_slot_id !== null &&
             !this.blockedCrossScopeContainerMove &&
             !this.saving &&
@@ -1196,7 +1221,7 @@
         return Boolean(
           this.keyDraft &&
             this.keyDraftItem &&
-            this.keyDraft.reason.length >= 8 &&
+            Boolean(this.keyDraft.reason.trim()) &&
             !this.saving &&
             !this.detail.character.online
         )
@@ -1214,6 +1239,14 @@
         if (this.deleteTarget === 'inventory' && this.selectedInventory) return `REMOVE ${this.selectedInventory.item.name}`
         if (this.deleteTarget === 'key' && this.selectedKey) return `REMOVE ${this.selectedKey.item.name}`
         return ''
+      },
+      deleteItemName () {
+        if (this.deleteTarget === 'inventory' && this.selectedInventory) return this.selectedInventory.item.name
+        if (this.deleteTarget === 'key' && this.selectedKey) return this.selectedKey.item.name
+        return 'player data'
+      },
+      deleteConfirmed () {
+        return this.deleteSlider === 100 && this.deleteConfirmation === this.deletePhrase
       }
     },
     watch: {
@@ -1656,10 +1689,15 @@
         this.deleteTarget = target
         this.deleteReason = target === 'inventory' && this.inventoryDraft ? this.inventoryDraft.reason : (this.keyDraft ? this.keyDraft.reason : '')
         this.deleteConfirmation = ''
+        this.deleteSlider = 0
         this.$refs.deleteModal.show()
       },
+      updateDeleteConfirmation (event) {
+        this.deleteSlider = Number(event.target.value)
+        this.deleteConfirmation = this.deleteSlider === 100 ? this.deletePhrase : ''
+      },
       async confirmDelete () {
-        if (this.deleteConfirmation !== this.deletePhrase || this.deleteReason.length < 8) return
+        if (!this.deleteConfirmed || !this.deleteReason.trim()) return
         this.saving = true
         try {
           let response
@@ -1689,6 +1727,7 @@
       resetDelete () {
         this.deleteTarget = ''
         this.deleteConfirmation = ''
+        this.deleteSlider = 0
         this.deleteReason = ''
       },
       async loadSnapshot (timeIndex) {
@@ -2966,6 +3005,122 @@
 .guarded-delete-warning span {
   color: #bfa7a7;
   font-size: 11px;
+}
+
+.guarded-delete-slider {
+  padding: 10px 12px 8px;
+  border: 1px solid rgba(199, 66, 66, .3);
+  background: linear-gradient(180deg, rgba(56, 16, 16, .23), rgba(6, 10, 14, .72));
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.guarded-delete-slider--confirmed {
+  border-color: rgba(221, 180, 68, .7);
+  box-shadow: inset 0 0 16px rgba(207, 151, 39, .08), 0 0 0 1px rgba(207, 151, 39, .08);
+}
+
+.guarded-delete-slider__heading,
+.guarded-delete-slider__help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.guarded-delete-slider__heading label {
+  margin: 0;
+  color: #e4e8eb;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.guarded-delete-slider__heading span {
+  color: #dbbe67;
+  font-family: "Roboto Mono", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.guarded-delete-slider input[type="range"] {
+  width: 100%;
+  height: 26px;
+  margin: 4px 0 2px;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.guarded-delete-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border: 1px solid rgba(174, 149, 85, .52);
+  background:
+    linear-gradient(90deg, rgba(183, 59, 59, .9) 0 var(--delete-progress), rgba(10, 15, 20, .96) var(--delete-progress) 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .85);
+}
+
+.guarded-delete-slider input[type="range"]::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border: 1px solid #e2c463;
+  border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: radial-gradient(circle at 35% 30%, #f0d77e, #9c7221 68%, #3d2a0a);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .82), 0 0 8px rgba(220, 179, 65, .24);
+}
+
+.guarded-delete-slider input[type="range"]::-moz-range-track {
+  height: 8px;
+  border: 1px solid rgba(174, 149, 85, .52);
+  background: rgba(10, 15, 20, .96);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .85);
+}
+
+.guarded-delete-slider input[type="range"]::-moz-range-progress {
+  height: 8px;
+  background: rgba(183, 59, 59, .9);
+}
+
+.guarded-delete-slider input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #e2c463;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f0d77e, #9c7221 68%, #3d2a0a);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .82), 0 0 8px rgba(220, 179, 65, .24);
+}
+
+.guarded-delete-slider input[type="range"]:focus-visible {
+  outline: 1px solid #e2c463;
+  outline-offset: 3px;
+}
+
+.guarded-delete-slider input[type="range"]:disabled {
+  cursor: not-allowed;
+  filter: grayscale(.65);
+  opacity: .5;
+}
+
+.guarded-delete-slider__help {
+  color: #82909a;
+  font-size: 8px;
+}
+
+.guarded-delete-slider__help strong {
+  color: #adb7be;
+  font-size: 9px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.guarded-delete-slider--confirmed .guarded-delete-slider__help strong {
+  color: #ddc473;
 }
 
 .guarded-delete-actions {

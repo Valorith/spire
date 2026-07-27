@@ -221,7 +221,7 @@
         @dismiss-notification="notification = ''"
       />
 
-      <div class="alert alert-warning mt-3 mb-0" v-if="!writable">
+      <div class="alert alert-warning mt-3 mb-0" v-if="source === 'embedded'">
         This page is showing embedded changelog data. Open Spire from a local or dev checkout to save edits.
       </div>
 
@@ -380,6 +380,8 @@ function isUnreleasedVersion(version) {
 function containsTokenLikeSecret(value) {
   return /(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|Authorization:\s*Bearer\s+[A-Za-z0-9._-]{20,})/i.test(value || "");
 }
+
+const stateLoadRetryDelaysMs = [500, 1000, 2000, 3000, 3000, 3000];
 
 const fallbackReleaseProcessSteps = [
   {
@@ -662,6 +664,9 @@ export default {
       const text = this.content || "";
       const top = this.topRelease;
 
+      if (!this.source) {
+        return issues;
+      }
       if (!text.trim()) {
         issues.push("CHANGELOG.md cannot be empty.");
         return issues;
@@ -702,8 +707,10 @@ export default {
     }
   },
   mounted() {
-    this.fetchState().then(() => {
-      this.fetchReleaseStatus(false);
+    this.fetchState().then((loaded) => {
+      if (loaded) {
+        this.fetchReleaseStatus(false);
+      }
     });
     window.addEventListener("beforeunload", this.handleBeforeUnload);
   },
@@ -722,14 +729,35 @@ export default {
     async fetchState() {
       this.loading = true;
       this.error = "";
+      let lastError = null;
       try {
-        const response = await SpireApi.v1().get("spirechangelog");
-        this.applyState(response.data.data);
-      } catch (e) {
-        this.error = e.response?.data?.error || "Failed to load Spire changelog state.";
+        for (let attempt = 0; attempt <= stateLoadRetryDelaysMs.length; attempt++) {
+          try {
+            const response = await SpireApi.v1().get("spirechangelog");
+            this.applyState(response.data.data);
+            return true;
+          } catch (e) {
+            lastError = e;
+            const retryDelay = stateLoadRetryDelaysMs[attempt];
+            if (!this.shouldRetryStateLoad(e) || retryDelay === undefined) {
+              break;
+            }
+            await this.waitForStateRetry(retryDelay);
+          }
+        }
+
+        this.error = lastError?.response?.data?.error || "Failed to load Spire changelog state.";
+        return false;
       } finally {
         this.loading = false;
       }
+    },
+    shouldRetryStateLoad(error) {
+      const status = error?.response?.status;
+      return !status || status >= 500;
+    },
+    waitForStateRetry(delayMs) {
+      return new Promise(resolve => window.setTimeout(resolve, delayMs));
     },
     applyState(state) {
       this.content = state.content || "";

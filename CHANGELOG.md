@@ -1,3 +1,10 @@
+## [Unreleased] 7/27/2026
+
+* Added Player Operations for managing characters, accounts, and guilds with guarded actions and audit history.
+* Added a Mercenary Editor for managing player-owned mercenaries, stances, appearance, ownership, and buffs.
+* Added Mail & Parcels administration with direct and server-wide mail plus GM parcel delivery.
+* Added Inventory & Keyring management for inventories, shared banks, keyrings, snapshots, and guarded item operations.
+
 ## [5.4.1] 7/26/2026
 
 * Fix for eq progress bar control appearance issues with some resolutions.

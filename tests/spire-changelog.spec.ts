@@ -7,7 +7,9 @@ const longChangelog = [
   '',
 ].join('\n');
 
-async function installChangelogMocks(page: Page) {
+async function installChangelogMocks(page: Page, stateFailures = 0) {
+  let stateAttempts = 0;
+
   // Register broad handlers first because Playwright resolves matching routes LIFO.
   await page.route('**/api/v1/**', route => {
     if (!route.request().isNavigationRequest()) {
@@ -42,8 +44,17 @@ async function installChangelogMocks(page: Page) {
     })
   );
 
-  await page.route('**/api/v1/spirechangelog', route =>
-    route.fulfill({
+  await page.route('**/api/v1/spirechangelog', route => {
+    stateAttempts += 1;
+    if (stateAttempts <= stateFailures) {
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Spire API is restarting.' }),
+      });
+    }
+
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
@@ -59,8 +70,12 @@ async function installChangelogMocks(page: Page) {
           source: 'live',
         },
       }),
-    })
-  );
+    });
+  });
+
+  return {
+    stateAttempts: () => stateAttempts,
+  };
 }
 
 test('keeps the changelog editor at the new release heading', async ({ page }) => {
@@ -85,4 +100,15 @@ test('keeps the changelog editor at the new release heading', async ({ page }) =
   const selectionStart = await editor.evaluate(element => (element as HTMLTextAreaElement).selectionStart);
   expect(selectionStart).toBeGreaterThan(0);
   expect(selectionStart).toBeLessThan(40);
+});
+
+test('recovers when the local API briefly restarts', async ({ page }) => {
+  const requests = await installChangelogMocks(page, 2);
+  await page.goto('/dev/spirechangelog');
+
+  const editor = page.locator('textarea.changelog-editor');
+  await expect(editor).toHaveValue(/^## \[5\.3\.0]/);
+  expect(requests.stateAttempts()).toBe(3);
+  await expect(page.getByText('This page is showing embedded changelog data.')).toHaveCount(0);
+  await expect(page.getByText('CHANGELOG.md cannot be empty.')).toHaveCount(0);
 });

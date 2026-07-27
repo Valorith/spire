@@ -32,7 +32,9 @@ exclude_dir = [
 	"public",
 	"_data",
 	"data",
-	"containers"
+	"containers",
+	"test-results",
+	"playwright-report"
 ]
 # Watch these directories if you specified.
 include_dir = []
