@@ -1902,9 +1902,9 @@
   transform: translateY(-50%);
 }
 
-.inventory-search-control input {
-  padding-right: 34px;
-  padding-left: 31px;
+.inventory-search-control > input#inventory-keyring-item-search {
+  padding-right: 34px !important;
+  padding-left: 36px !important;
 }
 
 .inventory-search-control > button.inventory-search-clear {

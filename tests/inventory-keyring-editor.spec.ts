@@ -230,6 +230,25 @@ test.describe('Inventory & Keyring Editor', () => {
     await expect(inventorySearch).toHaveValue('');
     await expect(page.getByTestId('inventory-keyring-items')).toContainText('Guard Captain Sword');
 
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 760, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const searchSpacing = await inventorySearch.evaluate(input => {
+        const icon = input.parentElement?.querySelector(':scope > i');
+        const inputBounds = input.getBoundingClientRect();
+        const iconBounds = icon?.getBoundingClientRect();
+        const paddingLeft = Number(String(getComputedStyle(input).paddingLeft).replace('px', ''));
+        return {
+          clearance: iconBounds ? inputBounds.left + paddingLeft - iconBounds.right : 0,
+          paddingLeft,
+        };
+      });
+      expect(searchSpacing.paddingLeft, `${viewport.width}px search input left padding`).toBeGreaterThanOrEqual(36);
+      expect(searchSpacing.clearance, `${viewport.width}px placeholder/icon clearance`).toBeGreaterThanOrEqual(10);
+    }
+
     const tabs = page.getByRole('tablist', { name: 'Player storage area' });
     const inventoryTab = tabs.getByRole('tab', { name: /Inventory/ });
     await inventoryTab.focus();
