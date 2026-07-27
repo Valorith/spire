@@ -250,6 +250,35 @@
                 </div>
               </div>
 
+              <div class="inventory-search-toolbar">
+                <label class="inventory-search-control" for="inventory-keyring-item-search">
+                  <span class="sr-only">Search this character's inventory</span>
+                  <i class="fa fa-search" aria-hidden="true"></i>
+                  <input
+                    id="inventory-keyring-item-search"
+                    v-model="inventorySearch"
+                    type="search"
+                    class="form-control form-control-sm"
+                    placeholder="Search items, IDs, slots, storage, or augments…"
+                    autocomplete="off"
+                    data-testid="inventory-keyring-inventory-search"
+                    @keydown.esc.prevent="inventorySearch = ''"
+                  />
+                  <button
+                    v-if="inventorySearch"
+                    type="button"
+                    class="inventory-search-clear"
+                    aria-label="Clear inventory search"
+                    @click="inventorySearch = ''"
+                  >
+                    <i class="fa fa-times" aria-hidden="true"></i>
+                  </button>
+                </label>
+                <span class="inventory-search-count" aria-live="polite">
+                  {{ inventorySearchSummary }}
+                </span>
+              </div>
+
               <div class="inventory-layout" :class="{ 'inventory-layout--editing': inventoryDraft }">
                 <div class="inventory-browser">
                   <div class="inventory-grid" data-testid="inventory-keyring-items">
@@ -278,9 +307,20 @@
                     </button>
 
                     <div v-if="!visibleInventory.length" class="inventory-empty">
-                      <i class="ra ra-backpack"></i>
-                      <strong>No items in this area</strong>
-                      <span>Choose another area or add an item to an available slot.</span>
+                      <i :class="inventorySearch ? 'fa fa-search' : 'ra ra-backpack'"></i>
+                      <strong>{{ inventorySearch ? 'No items match this search' : 'No items in this area' }}</strong>
+                      <span v-if="inventorySearch">
+                        Search by item name, exact ID, slot, storage area, or installed augment.
+                      </span>
+                      <span v-else>Choose another area or add an item to an available slot.</span>
+                      <button
+                        v-if="inventorySearch"
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary mt-2"
+                        @click="inventorySearch = ''"
+                      >
+                        Clear search
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -939,6 +979,7 @@
         detail: null,
         activeMode: 'inventory',
         inventoryScope: 'all',
+        inventorySearch: '',
         selectedInventory: null,
         inventoryDraft: null,
         inventoryOriginal: null,
@@ -993,7 +1034,7 @@
       totalPages () {
         return Math.max(1, Math.ceil(this.totalRecords / this.pageSize))
       },
-      visibleInventory () {
+      scopedInventory () {
         if (!this.detail) return []
         const records = this.detail.inventory || []
         if (this.inventoryScope === 'all') return records
@@ -1007,6 +1048,34 @@
           legacy: 'Legacy'
         }[this.inventoryScope]
         return records.filter(record => record.slot.group === group)
+      },
+      visibleInventory () {
+        const records = this.scopedInventory
+        const tokens = this.inventorySearch.trim().toLowerCase().split(/\s+/).filter(Boolean)
+        if (!tokens.length) return records
+        return records.filter(record => {
+          const augmentContext = (record.augments || []).flatMap(augment => [
+            augment.item_id,
+            augment.item && augment.item.name
+          ])
+          const context = [
+            record.item && record.item.name,
+            record.item_id,
+            record.slot && record.slot.label,
+            record.slot && record.slot.group,
+            record.storage_kind === 'shared_bank' ? 'shared bank account shared' : 'character inventory',
+            record.evolving && record.evolving.final_item_name,
+            ...augmentContext
+          ].filter(value => value !== null && value !== undefined).join(' ').toLowerCase()
+          return tokens.every(token => context.includes(token))
+        })
+      },
+      inventorySearchSummary () {
+        const count = this.visibleInventory.length
+        if (this.inventorySearch.trim()) {
+          return `${this.number(count)} of ${this.number(this.scopedInventory.length)} items`
+        }
+        return `${this.number(count)} ${count === 1 ? 'item' : 'items'} in view`
       },
       groupedAvailableSlots () {
         if (!this.detail) return []
@@ -1803,6 +1872,68 @@
 .storage-safety-banner span {
   color: #c6bda8;
   font-size: 11px;
+}
+
+.inventory-search-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 7px 8px;
+  border: 1px solid rgba(132, 151, 164, .2);
+  background: rgba(4, 10, 16, .48);
+}
+
+.inventory-search-control {
+  position: relative;
+  flex: 1 1 360px;
+  max-width: 520px;
+  margin: 0;
+}
+
+.inventory-search-control > i {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 10px;
+  color: #8e9ba5;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.inventory-search-control input {
+  padding-right: 34px;
+  padding-left: 31px;
+}
+
+.inventory-search-control > button.inventory-search-clear {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 4px;
+  width: 25px;
+  height: 25px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8e9ba5;
+  line-height: 25px;
+  text-align: center;
+  transform: translateY(-50%);
+}
+
+.inventory-search-control > button.inventory-search-clear:hover,
+.inventory-search-control > button.inventory-search-clear:focus-visible {
+  color: #e0b84d;
+}
+
+.inventory-search-count {
+  color: #8e9ba5;
+  font-size: 10px;
+  letter-spacing: .04em;
+  white-space: nowrap;
 }
 
 .inventory-layout,
@@ -2769,6 +2900,20 @@
   .inventory-scope-filter button {
     flex: 1;
     padding-inline: 7px;
+  }
+
+  .inventory-search-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-search-control {
+    flex-basis: auto;
+    max-width: none;
+  }
+
+  .inventory-search-count {
+    align-self: flex-end;
   }
 
   .item-recognition,

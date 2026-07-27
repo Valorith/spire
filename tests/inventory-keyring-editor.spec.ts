@@ -220,6 +220,16 @@ test.describe('Inventory & Keyring Editor', () => {
     await expect(page.getByTestId('inventory-keyring-items')).toContainText('Primary');
     await expect(page.locator('a[href="/admin/inventory-keyring"]')).toBeVisible();
 
+    const inventorySearch = page.getByTestId('inventory-keyring-inventory-search');
+    await inventorySearch.fill('Primary');
+    await expect(page.getByTestId('inventory-keyring-items')).toContainText('Guard Captain Sword');
+    await inventorySearch.fill('999999');
+    await expect(page.getByTestId('inventory-keyring-items')).toContainText('No items match this search');
+    await expect(page.getByTestId('inventory-keyring-items')).not.toContainText('Guard Captain Sword');
+    await inventorySearch.press('Escape');
+    await expect(inventorySearch).toHaveValue('');
+    await expect(page.getByTestId('inventory-keyring-items')).toContainText('Guard Captain Sword');
+
     const tabs = page.getByRole('tablist', { name: 'Player storage area' });
     const inventoryTab = tabs.getByRole('tab', { name: /Inventory/ });
     await inventoryTab.focus();
