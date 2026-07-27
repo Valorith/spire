@@ -625,7 +625,7 @@ func (p *PlayerOperationsController) listGuilds(c echo.Context) error {
 		g.leader AS leader_id,
 		COALESCE(leader.name, '') AS leader_name,
 		(SELECT COUNT(*) FROM guild_members gm WHERE gm.guild_id = g.id) AS member_count,
-		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guildid = g.id) AS bank_items,
+		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guild_id = g.id) AS bank_items,
 		g.favor
 	`).Order("g.name, g.id").Limit(limit).Offset((page - 1) * limit).Scan(&results).Error; err != nil {
 		return playerOperationsDatabaseError(c, err)
@@ -1576,7 +1576,7 @@ func (p *PlayerOperationsController) deleteGuild(c echo.Context) error {
 			return err
 		}
 		var bankCount int64
-		if err := tx.Table("guild_bank").Where("guildid = ?", id).Count(&bankCount).Error; err != nil {
+		if err := tx.Table("guild_bank").Where("guild_id = ?", id).Count(&bankCount).Error; err != nil {
 			return err
 		}
 		if bankCount > 0 {
@@ -1894,7 +1894,7 @@ func (p *PlayerOperationsController) lookupGuilds(c echo.Context) error {
 	if err := query.Select(`
 		g.id, g.name, g.leader AS leader_id, COALESCE(leader.name, '') AS leader_name,
 		(SELECT COUNT(*) FROM guild_members gm WHERE gm.guild_id = g.id) AS member_count,
-		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guildid = g.id) AS bank_items, g.favor
+		(SELECT COUNT(*) FROM guild_bank gb WHERE gb.guild_id = g.id) AS bank_items, g.favor
 	`).Order("g.name, g.id").Limit(playerOperationsLookupLimit).Scan(&results).Error; err != nil {
 		return playerOperationsDatabaseError(c, err)
 	}
@@ -2212,7 +2212,7 @@ func loadPlayerOperationsGuildDetail(db *gorm.DB, zoneDB *gorm.DB, id int) (play
 		return detail, err
 	}
 	if err := db.Table("guild_bank").Select("COUNT(*) AS item_count, COUNT(DISTINCT CONCAT(area, ':', slot)) AS slots_used").
-		Where("guildid = ?", id).Scan(&detail.Bank).Error; err != nil {
+		Where("guild_id = ?", id).Scan(&detail.Bank).Error; err != nil {
 		return detail, err
 	}
 	detail.Relations = make([]playerOperationsGuildRelation, 0)
