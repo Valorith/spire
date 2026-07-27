@@ -1,4 +1,4 @@
-## [Unreleased] (Beta) 7/27/2026
+## [5.5.0] (Beta) 7/27/2026
 
 * Added Player Operations for managing characters, accounts, and guilds with guarded actions and audit history.
 * Added a Mercenary Editor for managing player-owned mercenaries, stances, appearance, ownership, and buffs.
