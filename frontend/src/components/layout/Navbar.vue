@@ -34,14 +34,19 @@
         :aria-label="isBetaRelease ? 'Spire home, beta release' : 'Spire home'"
       >
         <h1 class="spire-brand-title text-center eq-header small-mobile">
-          Spire
-          <span style="font-size: 12px; color: #e8c56d; opacity: 0.6; vertical-align: super; margin-left: 4px;">v2.5</span>
+          <span class="spire-logo-mark" data-testid="spire-logo-mark">
+            Spire
+            <span
+              v-if="isBetaRelease"
+              class="spire-beta-stamp"
+              data-testid="spire-beta-stamp"
+              aria-label="Beta release"
+            >Beta</span>
+          </span>
           <span
-            v-if="isBetaRelease"
-            class="spire-beta-stamp"
-            data-testid="spire-beta-stamp"
-            aria-label="Beta release"
-          >Beta</span>
+            data-testid="spire-logo-version"
+            style="font-size: 12px; color: #e8c56d; opacity: 0.6; vertical-align: super; margin-left: 4px;"
+          >v2.5</span>
           <!--          <h3 class="text-center eq-header small-mobile d-inline" style="font-size: 40px">-->
           <!--            [Admin]-->
           <!--          </h3>-->
@@ -689,11 +694,13 @@ export default {
   created() {
     EventBus.$on("HIDE_NAVBAR", this.toggleNavbarCollapse);
     EventBus.$on("APP_ENV_LOADED", this.handleAppEnvLoaded);
+    EventBus.$on("APP_BETA_RELEASE_CHANGED", this.handleBetaReleaseChanged);
     EventBus.$on("ROUTE_CHANGE", this.handleRouteChange);
   },
   destroyed() {
     EventBus.$off("HIDE_NAVBAR", this.toggleNavbarCollapse);
     EventBus.$off("APP_ENV_LOADED", this.handleAppEnvLoaded);
+    EventBus.$off("APP_BETA_RELEASE_CHANGED", this.handleBetaReleaseChanged);
     EventBus.$off("ROUTE_CHANGE", this.handleRouteChange);
   },
 
@@ -900,6 +907,9 @@ export default {
       this.isBetaRelease = AppEnv.isBetaRelease();
       this.appFeatures = AppEnv.getFeatures();
     },
+    handleBetaReleaseChanged(isBetaRelease) {
+      this.isBetaRelease = isBetaRelease === true;
+    },
     expandNavbar() {
       Navbar.expand()
     },
@@ -939,11 +949,16 @@ export default {
 }
 
 .spire-brand-title {
+  white-space: nowrap;
+}
+
+.spire-logo-mark {
+  display: inline-block;
   position: relative;
 }
 
 .spire-beta-stamp {
-  bottom: 0;
+  bottom: .04em;
   color: #ff6f7d;
   font-family: "Cerebri Sans", sans-serif;
   font-size: 11px;
@@ -952,7 +967,7 @@ export default {
   line-height: 1;
   pointer-events: none;
   position: absolute;
-  right: -10px;
+  right: 0;
   text-shadow: 0 1px 1px rgba(0, 0, 0, .8);
   text-transform: uppercase;
   transform: rotate(-11deg);
@@ -960,13 +975,6 @@ export default {
   transition: opacity .16s ease, transform .16s ease;
   user-select: none;
   z-index: 1;
-}
-
-@media (max-width: 767.98px) {
-  .spire-beta-stamp {
-    bottom: 1px;
-    right: -8px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

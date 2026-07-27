@@ -165,7 +165,9 @@ test('flags, saves, and reloads a beta release with the canonical heading', asyn
 
   await page.getByRole('button', { name: 'Save' }).click();
   await expect.poll(requests.savedContent).toMatch(/^## \[5\.3\.0] \(Beta\) 7\/26\/2026/);
-  await expect(page.getByTestId('spire-beta-stamp')).toBeVisible();
+  const sharedBrand = page.getByTestId('spire-brand');
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home, beta release');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toBeVisible();
 
   await page.getByRole('button', { name: 'Reload' }).click();
   await expect(editor).toHaveValue(/^## \[5\.3\.0] \(Beta\) 7\/26\/2026/);
@@ -174,6 +176,14 @@ test('flags, saves, and reloads a beta release with the canonical heading', asyn
   await betaToggle.click();
   await expect(editor).toHaveValue(/^## \[5\.3\.0] 7\/26\/2026/);
   await expect(editor).not.toHaveValue(/^## \[5\.3\.0] \(Stable\)/);
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(requests.savedContent).toMatch(/^## \[5\.3\.0] 7\/26\/2026/);
+  await expect(sharedBrand).toHaveAttribute('aria-label', 'Spire home');
+  await expect(sharedBrand.getByTestId('spire-beta-stamp')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Reload' }).click();
+  await expect(editor).toHaveValue(/^## \[5\.3\.0] 7\/26\/2026/);
+  await expect(betaToggle).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('shows the beta stamp without moving the Spire brand at desktop and compact widths', async ({ page }) => {
@@ -182,6 +192,7 @@ test('shows the beta stamp without moving the Spire brand at desktop and compact
   await page.goto('/dev/spirechangelog');
 
   const brandTitle = page.locator('.spire-brand-title');
+  const logoMark = page.getByTestId('spire-logo-mark');
   const stableBox = await brandTitle.boundingBox();
   expect(stableBox).not.toBeNull();
   await expect(page.getByTestId('spire-beta-stamp')).toHaveCount(0);
@@ -214,16 +225,36 @@ test('shows the beta stamp without moving the Spire brand at desktop and compact
   expect(Math.abs(betaBrandBox!.width - stableBox!.width)).toBeLessThan(1);
   expect(Math.abs(betaBrandBox!.height - stableBox!.height)).toBeLessThan(1);
 
-  const desktopStampBox = await betaStamp.boundingBox();
-  expect(desktopStampBox).not.toBeNull();
-  expect(desktopStampBox!.x).toBeGreaterThan(betaBrandBox!.x + betaBrandBox!.width * 0.55);
-  expect(desktopStampBox!.y).toBeGreaterThan(betaBrandBox!.y + betaBrandBox!.height * 0.45);
+  for (const viewport of [
+    { width: 1600, height: 900 },
+    { width: 1024, height: 900 },
+    { width: 760, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(350);
+    await expect(betaStamp).toBeVisible();
 
-  await page.setViewportSize({ width: 760, height: 900 });
-  await expect(betaStamp).toBeVisible();
-  const compactStampBox = await betaStamp.boundingBox();
-  const compactNavBox = await page.locator('#sidebar').boundingBox();
-  expect(compactStampBox).not.toBeNull();
-  expect(compactNavBox).not.toBeNull();
-  expect(compactStampBox!.x + compactStampBox!.width).toBeLessThanOrEqual(compactNavBox!.x + compactNavBox!.width);
+    const stampBox = await betaStamp.boundingBox();
+    const logoBox = await logoMark.boundingBox();
+    const navBox = await page.locator('#sidebar').boundingBox();
+    const versionBox = await page.getByTestId('spire-logo-version').boundingBox();
+    expect(stampBox).not.toBeNull();
+    expect(logoBox).not.toBeNull();
+    expect(navBox).not.toBeNull();
+    expect(versionBox).not.toBeNull();
+
+    // The stamp is anchored to and overlaps the wordmark's bottom-right quadrant.
+    expect(stampBox!.x).toBeGreaterThan(logoBox!.x + logoBox!.width * 0.5);
+    expect(stampBox!.x).toBeLessThan(logoBox!.x + logoBox!.width);
+    expect(stampBox!.y).toBeGreaterThan(logoBox!.y + logoBox!.height * 0.45);
+    expect(stampBox!.y).toBeLessThan(logoBox!.y + logoBox!.height);
+
+    // Rotation remains visible without clipping or colliding with the version label.
+    expect(stampBox!.x).toBeGreaterThanOrEqual(navBox!.x);
+    expect(stampBox!.x + stampBox!.width).toBeLessThanOrEqual(navBox!.x + navBox!.width);
+    expect(stampBox!.y).toBeGreaterThanOrEqual(navBox!.y);
+    expect(stampBox!.y + stampBox!.height).toBeLessThanOrEqual(navBox!.y + navBox!.height);
+    expect(stampBox!.x + stampBox!.width).toBeLessThanOrEqual(versionBox!.x);
+  }
 });

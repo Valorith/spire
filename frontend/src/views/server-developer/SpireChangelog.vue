@@ -829,10 +829,8 @@ export default {
       const savedReleaseIsBeta = state.top_release && typeof state.top_release.is_beta === "boolean"
         ? state.top_release.is_beta
         : parseTopRelease(this.content).isBeta;
-      if (AppEnv.isBetaRelease() !== savedReleaseIsBeta) {
-        AppEnv.setIsBetaRelease(savedReleaseIsBeta);
-        EventBus.$emit("APP_ENV_LOADED", true);
-      }
+      AppEnv.setIsBetaRelease(savedReleaseIsBeta);
+      EventBus.$emit("APP_BETA_RELEASE_CHANGED", savedReleaseIsBeta);
       this.packageVersion = state.package_version || "";
       this.releaseRepository = state.release_repository || "";
       this.releaseRepositorySource = state.release_repository_source || "";
