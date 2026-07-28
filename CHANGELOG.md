@@ -1,3 +1,7 @@
+## [Unreleased] (Beta) 7/27/2026
+
+* Enable Beta updates via Spire Updater. Can be turned off in Settings.
+
 ## [5.5.0] (Beta) 7/27/2026
 
 * Added Player Operations for managing characters, accounts, and guilds with guarded actions and audit history.
