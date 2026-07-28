@@ -7,43 +7,13 @@
     <template #body>
       <div v-if="!reloading">
         <section class="update-channel-panel" data-testid="spire-update-channel-panel">
-          <div class="d-flex flex-wrap align-items-start justify-content-between">
-            <div class="pr-3">
-              <div class="update-kicker">Update channel</div>
-              <h4 class="mb-1">{{ channelLabel }} channel</h4>
-              <p class="mb-0 text-muted">
-                Stable ignores GitHub prereleases. Beta considers compatible Beta and Stable releases.
-              </p>
-            </div>
-            <div
-              class="update-channel-selector"
-              role="group"
-              aria-label="Spire update channel"
-              data-testid="update-channel-selector"
-            >
-              <button
-                type="button"
-                class="eq-button-fancy"
-                :class="{ active: updateChannel === 'stable' }"
-                :aria-pressed="updateChannel === 'stable' ? 'true' : 'false'"
-                :disabled="!canManageChannel || savingChannel"
-                data-testid="update-channel-stable"
-                @click="$emit('channel-change', 'stable')"
-              >
-                Stable
-              </button>
-              <button
-                type="button"
-                class="eq-button-fancy"
-                :class="{ active: updateChannel === 'beta' }"
-                :aria-pressed="updateChannel === 'beta' ? 'true' : 'false'"
-                :disabled="!canManageChannel || savingChannel"
-                data-testid="update-channel-beta"
-                @click="$emit('channel-change', 'beta')"
-              >
-                Beta
-              </button>
-            </div>
+          <div>
+            <div class="update-kicker">Update channel</div>
+            <h4 class="mb-1">{{ channelLabel }} channel</h4>
+            <p class="mb-0 text-muted">
+              Stable ignores GitHub prereleases. Beta considers compatible Beta and Stable releases.
+              Change the channel from Settings.
+            </p>
           </div>
 
           <div v-if="updateChannel === 'beta'" class="beta-channel-warning mt-3" role="alert">
@@ -52,11 +22,8 @@
           </div>
           <div v-else class="stable-channel-note mt-3">
             <i class="fe fe-shield mr-2"></i>
-            Stable is the default and will never offer a GitHub prerelease.
+            Stable will never offer a GitHub prerelease.
           </div>
-          <p v-if="!canManageChannel" class="small text-muted mt-2 mb-0">
-            Update channels can only be changed from a local Spire installation.
-          </p>
         </section>
 
         <div class="update-summary-grid mt-3">
@@ -75,9 +42,9 @@
           </div>
         </div>
 
-        <div v-if="checking || savingChannel" class="update-state mt-3" data-testid="update-checking">
+        <div v-if="checking" class="update-state mt-3" data-testid="update-checking">
           <i class="fe fe-loader mr-2"></i>
-          {{ savingChannel ? "Saving update channel…" : "Checking GitHub releases…" }}
+          Checking GitHub releases…
         </div>
 
         <div
@@ -201,7 +168,7 @@
           @click="updateSpire"
           class="btn btn-sm mr-3"
           :class="releaseType === 'Beta' ? 'btn-warning' : 'btn-success'"
-          :disabled="updating || checking || savingChannel"
+          :disabled="updating || checking"
           v-if="!reloading && hasRelease"
           data-testid="install-spire-update"
         >
@@ -256,14 +223,6 @@ export default {
     statusError: {
       type: String,
       default: ""
-    },
-    canManageChannel: {
-      type: Boolean,
-      default: false
-    },
-    savingChannel: {
-      type: Boolean,
-      default: false
     }
   },
   data() {
@@ -351,16 +310,6 @@ export default {
   padding: 16px;
 }
 
-.update-channel-selector {
-  display: inline-flex;
-  gap: 8px;
-}
-
-.update-channel-selector .eq-button-fancy.active {
-  box-shadow: 0 0 0 1px #e8c56d, 0 0 12px rgba(232, 197, 109, .22);
-  color: #fff2bd;
-}
-
 .update-kicker {
   color: #a69b78;
   display: block;
@@ -420,15 +369,6 @@ export default {
 }
 
 @media (max-width: 767px) {
-  .update-channel-selector {
-    margin-top: 12px;
-    width: 100%;
-  }
-
-  .update-channel-selector button {
-    flex: 1 1 0;
-  }
-
   .update-summary-grid {
     grid-template-columns: 1fr;
   }

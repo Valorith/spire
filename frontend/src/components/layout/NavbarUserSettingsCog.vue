@@ -1,6 +1,13 @@
 <template>
   <div>
-    <a href="#sidebarModalActivity" class="navbar-user-link" data-toggle="modal" v-b-modal.user-settings-modal>
+    <a
+      href="#sidebarModalActivity"
+      class="navbar-user-link"
+      data-toggle="modal"
+      data-testid="open-user-settings"
+      aria-label="Open Spire settings"
+      v-b-modal.user-settings-modal
+    >
       <span class="icon">
         <i class="fe fe-settings"></i>
       </span>
@@ -46,6 +53,39 @@
         </div>
       </div>
 
+      <!-- Beta Updates -->
+      <div v-if="isLocalApp" class="row mb-4" data-testid="beta-updates-setting">
+        <div class="col-4 text-right">
+          <label
+            for="beta-updates-toggle-control"
+            class="mb-0"
+            data-testid="beta-updates-label"
+          >Beta Updates</label>
+          <b-form-checkbox
+            id="beta-updates-toggle-control"
+            v-model="betaUpdatesEnabled"
+            name="beta-updates"
+            switch
+            class="d-inline-block ml-3"
+            data-testid="beta-updates-toggle"
+            aria-label="Enable Beta updates"
+            :disabled="updateChannelSaving"
+            @change="betaUpdatesUpdate"
+          />
+        </div>
+        <div class="col-8">
+          <small class="text-muted">
+            Includes eligible GitHub prereleases. Beta builds may be unstable.
+          </small>
+          <small v-if="updateChannelSaving" class="d-block text-info mt-1" role="status">
+            Saving update channel…
+          </small>
+          <small v-if="updateChannelError" class="d-block text-danger mt-1" role="alert">
+            {{ updateChannelError }}
+          </small>
+        </div>
+      </div>
+
       <!-- Spell Legacy Icons -->
       <div class="row mb-4">
         <div class="col-4 text-right">
@@ -79,6 +119,7 @@
 import {LocalSettings, Setting} from "@/app/local-settings/localsettings";
 import {App}                    from "@/constants/app";
 import {EventBus}               from "@/app/event-bus/event-bus";
+import {AppEnv}                 from "@/app/env/app-env";
 
 export default {
   name: "NavbarUserSettingsCog",
@@ -87,7 +128,21 @@ export default {
       debugEnabled: LocalSettings.isDebugEnabled(),
       tabHoverModeEnabled: LocalSettings.isTabHoverEnabled(),
       spellLegacyIcons: LocalSettings.isSpellLegacyIconsEnabled(),
+      betaUpdatesEnabled: AppEnv.getUpdateChannel() === "beta",
+      isLocalApp: AppEnv.isAppLocal(),
+      updateChannelSaving: false,
+      updateChannelError: "",
     }
+  },
+  created() {
+    EventBus.$on("APP_ENV_LOADED", this.syncUpdateChannel);
+    EventBus.$on("APP_UPDATE_CHANNEL_CHANGED", this.handleUpdateChannelChanged);
+    EventBus.$on("APP_UPDATE_CHANNEL_CHANGE_FAILED", this.handleUpdateChannelChangeFailed);
+  },
+  destroyed() {
+    EventBus.$off("APP_ENV_LOADED", this.syncUpdateChannel);
+    EventBus.$off("APP_UPDATE_CHANNEL_CHANGED", this.handleUpdateChannelChanged);
+    EventBus.$off("APP_UPDATE_CHANNEL_CHANGE_FAILED", this.handleUpdateChannelChangeFailed);
   },
   methods: {
     debugUpdate() {
@@ -108,6 +163,29 @@ export default {
     },
     updateSetting(name, value) {
       LocalSettings.set(name, value)
+    },
+    syncUpdateChannel() {
+      this.isLocalApp = AppEnv.isAppLocal()
+      this.betaUpdatesEnabled = AppEnv.getUpdateChannel() === "beta"
+    },
+    betaUpdatesUpdate(enabled) {
+      this.betaUpdatesEnabled = enabled === true
+      this.updateChannelSaving = true
+      this.updateChannelError = ""
+      EventBus.$emit(
+        "APP_UPDATE_CHANNEL_CHANGE_REQUESTED",
+        this.betaUpdatesEnabled ? "beta" : "stable"
+      )
+    },
+    handleUpdateChannelChanged(channel) {
+      this.betaUpdatesEnabled = channel === "beta"
+      this.updateChannelSaving = false
+      this.updateChannelError = ""
+    },
+    handleUpdateChannelChangeFailed(payload) {
+      this.betaUpdatesEnabled = payload?.channel === "beta"
+      this.updateChannelSaving = false
+      this.updateChannelError = payload?.error || "Could not save the Spire update channel."
     }
   }
 

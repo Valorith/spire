@@ -121,7 +121,7 @@ func TestSavePersistsOptionalSpireUpdateChannel(t *testing.T) {
 		t.Fatalf("load legacy config: %v", err)
 	}
 	if loaded.Spire.UpdateChannel != "" {
-		t.Fatalf("legacy update channel = %q, want empty stable-compatible default", loaded.Spire.UpdateChannel)
+		t.Fatalf("legacy update channel = %q, want empty beta-default value", loaded.Spire.UpdateChannel)
 	}
 
 	loaded.Spire.UpdateChannel = "beta"
@@ -139,5 +139,20 @@ func TestSavePersistsOptionalSpireUpdateChannel(t *testing.T) {
 	}
 	if persisted.Spire.UpdateChannel != "beta" {
 		t.Fatalf("persisted update channel = %q, want beta", persisted.Spire.UpdateChannel)
+	}
+
+	persisted.Spire.UpdateChannel = "stable"
+	if err = serverConfig.Save(persisted); err != nil {
+		t.Fatalf("save stable update channel: %v", err)
+	}
+	stableBytes, err := os.ReadFile(filepath.Join(serverPath, "eqemu_config.json"))
+	if err != nil {
+		t.Fatalf("read stable config: %v", err)
+	}
+	if err = json.Unmarshal(stableBytes, &persisted); err != nil {
+		t.Fatalf("decode stable config: %v", err)
+	}
+	if persisted.Spire.UpdateChannel != "stable" {
+		t.Fatalf("persisted update channel = %q, want stable", persisted.Spire.UpdateChannel)
 	}
 }

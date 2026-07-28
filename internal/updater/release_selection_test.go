@@ -24,14 +24,16 @@ func releaseFixture(tag string, prerelease bool, draft bool, assetName string) *
 	return release
 }
 
-func TestNormalizeUpdateChannelDefaultsToStable(t *testing.T) {
-	for _, input := range []string{"", "stable", "STABLE", "legacy", " beta-ish "} {
+func TestNormalizeUpdateChannelDefaultsToBeta(t *testing.T) {
+	for _, input := range []string{"", "beta", "BETA", " beta "} {
+		if got := NormalizeUpdateChannel(input); got != UpdateChannelBeta {
+			t.Fatalf("NormalizeUpdateChannel(%q) = %q, want beta", input, got)
+		}
+	}
+	for _, input := range []string{"stable", "STABLE", "legacy", " beta-ish "} {
 		if got := NormalizeUpdateChannel(input); got != UpdateChannelStable {
 			t.Fatalf("NormalizeUpdateChannel(%q) = %q, want stable", input, got)
 		}
-	}
-	if got := NormalizeUpdateChannel(" BETA "); got != UpdateChannelBeta {
-		t.Fatalf("NormalizeUpdateChannel(beta) = %q, want beta", got)
 	}
 }
 

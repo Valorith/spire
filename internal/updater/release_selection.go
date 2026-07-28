@@ -20,11 +20,14 @@ const (
 )
 
 func NormalizeUpdateChannel(value string) UpdateChannel {
-	if strings.EqualFold(strings.TrimSpace(value), string(UpdateChannelBeta)) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", string(UpdateChannelBeta):
 		return UpdateChannelBeta
+	case string(UpdateChannelStable):
+		return UpdateChannelStable
+	default:
+		return UpdateChannelStable
 	}
-
-	return UpdateChannelStable
 }
 
 func ParseUpdateChannel(value string) (UpdateChannel, error) {
@@ -134,7 +137,7 @@ func (s *Updater) resolveUpdate(ctx context.Context) (UpdateStatus, *selectedRel
 
 	config, configErr := s.serverconfig.Get()
 	configReleaseRepository := ""
-	channel := UpdateChannelStable
+	channel := UpdateChannelBeta
 	if configErr == nil {
 		configReleaseRepository = config.Spire.ReleaseRepository
 		channel = NormalizeUpdateChannel(config.Spire.UpdateChannel)

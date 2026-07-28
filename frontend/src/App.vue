@@ -14,13 +14,10 @@
       :checking="updateChecking"
       :status-error="updateError"
       :update-channel="currentUpdateChannel"
-      :can-manage-channel="canManageUpdateChannel"
-      :saving-channel="updateChannelSaving"
       :installed-release-type="AppEnv.isBetaRelease() ? 'Beta' : 'Stable'"
       @close="showUpdateModal = false"
       @ignore="ignoreUpdate"
       @retry="checkForSpireUpdate(true)"
-      @channel-change="changeUpdateChannel"
       :current-version="currentVersion"
     />
   </div>
@@ -71,9 +68,6 @@ export default {
     currentUpdateChannel() {
       return this.updateStatus?.channel || AppEnv.getUpdateChannel()
     },
-    canManageUpdateChannel() {
-      return AppEnv.isAppLocal()
-    },
     AppEnv() {
       return AppEnv
     },
@@ -123,12 +117,14 @@ export default {
     SpireWebsocket.connect()
     EventBus.$on("SPELL_LEGACY_ICONS_ENABLED", this.loadSpellIconSettings);
     EventBus.$on("CHECK_SPIRE_UPDATE", this.checkSpireUpdate);
+    EventBus.$on("APP_UPDATE_CHANNEL_CHANGE_REQUESTED", this.changeUpdateChannel);
     SpireWebsocket.addEventListener('message', this.handleWebsocketMessage);
   },
   destroyed() {
     window.removeEventListener('resize', this.applyResponsiveZoom)
     EventBus.$off("SPELL_LEGACY_ICONS_ENABLED", this.loadSpellIconSettings);
     EventBus.$off("CHECK_SPIRE_UPDATE", this.checkSpireUpdate);
+    EventBus.$off("APP_UPDATE_CHANNEL_CHANGE_REQUESTED", this.changeUpdateChannel);
     SpireWebsocket.removeEventListener('message', this.handleWebsocketMessage);
   },
 
@@ -355,7 +351,7 @@ export default {
       this.checkForSpireUpdate(true)
     },
 
-    async checkForSpireUpdate(force = false) {
+    async checkForSpireUpdate(force = false, suppressModal = false) {
       if (!AppEnv.isAppLocal()) {
         console.log("skipping update check, not local app")
         return
@@ -368,7 +364,7 @@ export default {
       const lastCheckedChannel = LocalSettings.getLastCheckedUpdateChannel()
       const now = new Date().getTime() / 1000
 
-      if (force) {
+      if (force && !suppressModal) {
         this.showUpdateModal = true
       }
 
@@ -412,7 +408,9 @@ export default {
         const ignoredUpdateVersion = LocalSettings.getIgnoredUpdateVersion()
         if (status.available && ignoredUpdateVersion !== latest) {
           console.log("update available")
-          this.showUpdateModal = true
+          if (!suppressModal) {
+            this.showUpdateModal = true
+          }
         } else if (status.available) {
           console.log("update [%s] ignored", latest)
         } else if (force) {
@@ -435,6 +433,7 @@ export default {
     async changeUpdateChannel(channel) {
       const normalized = channel === "beta" ? "beta" : "stable"
       if (normalized === AppEnv.getUpdateChannel()) {
+        EventBus.$emit("APP_UPDATE_CHANNEL_CHANGED", normalized)
         return
       }
 
@@ -447,9 +446,13 @@ export default {
         this.updateStatus = {channel: normalized}
         this.release = {}
         EventBus.$emit("APP_UPDATE_CHANNEL_CHANGED", normalized)
-        await this.checkForSpireUpdate(true)
+        await this.checkForSpireUpdate(true, true)
       } catch (err) {
         this.updateError = err.response?.data?.error || "Could not save the Spire update channel."
+        EventBus.$emit("APP_UPDATE_CHANNEL_CHANGE_FAILED", {
+          channel: AppEnv.getUpdateChannel(),
+          error: this.updateError,
+        })
       } finally {
         this.updateChannelSaving = false
       }

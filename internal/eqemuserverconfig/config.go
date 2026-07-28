@@ -194,7 +194,7 @@ type EQEmuConfigJson struct {
 		LauncherStart      bool   `json:"launcher_start"`                 // starts server launcher
 		DisableAutoUpdates bool   `json:"disable_auto_updates,omitempty"` // disable auto updates
 		ReleaseRepository  string `json:"release_repository,omitempty"`   // GitHub owner/repo used for Spire app update checks
-		UpdateChannel      string `json:"update_channel,omitempty"`       // stable (default) or beta Spire releases
+		UpdateChannel      string `json:"update_channel,omitempty"`       // beta (default) or stable Spire releases
 	} `json:"spire,omitempty"`
 }
 

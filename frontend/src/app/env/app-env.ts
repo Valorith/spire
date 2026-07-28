@@ -104,11 +104,11 @@ export class AppEnv {
   }
 
   static getUpdateChannel() {
-    return this._update_channel === "beta" ? "beta" : "stable";
+    return this._update_channel === "stable" ? "stable" : "beta";
   }
 
   static setUpdateChannel(value) {
-    this._update_channel = value === "beta" ? "beta" : "stable";
+    this._update_channel = value === "stable" ? "stable" : "beta";
   }
 
   static isHostedReadOnlyModeEnabled() {

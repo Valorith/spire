@@ -135,7 +135,7 @@ func (d *Controller) env(c echo.Context) error {
 		version := pkg.Version
 		isBetaRelease := false
 		configReleaseRepository := ""
-		updateChannel := updater.UpdateChannelStable
+		updateChannel := updater.UpdateChannelBeta
 		if d.serverConfig != nil {
 			if config, err := d.serverConfig.Get(); err == nil {
 				configReleaseRepository = config.Spire.ReleaseRepository

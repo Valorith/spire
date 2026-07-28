@@ -177,11 +177,6 @@
 
         <h6 class="navbar-heading" v-if="appVersion">
           Version ({{ appEnv }}) {{ appVersion }}
-          <span
-            class="update-channel-label"
-            :class="{ beta: updateChannel === 'beta' }"
-            data-testid="navbar-update-channel"
-          >{{ updateChannelLabel }} updates</span>
         </h6>
 
         <ul class="navbar-nav mb-md-3">
@@ -1016,19 +1011,6 @@ export default {
   transition: opacity .16s ease, transform .16s ease;
   user-select: none;
   z-index: 1;
-}
-
-.update-channel-label {
-  color: #91d8b2;
-  display: block;
-  font-size: 10px;
-  letter-spacing: .04em;
-  margin-top: 3px;
-  text-transform: none;
-}
-
-.update-channel-label.beta {
-  color: #ff8c98;
 }
 
 @media (prefers-reduced-motion: reduce) {
