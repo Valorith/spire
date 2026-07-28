@@ -177,6 +177,11 @@
 
         <h6 class="navbar-heading" v-if="appVersion">
           Version ({{ appEnv }}) {{ appVersion }}
+          <span
+            class="update-channel-label"
+            :class="{ beta: updateChannel === 'beta' }"
+            data-testid="navbar-update-channel"
+          >{{ updateChannelLabel }} updates</span>
         </h6>
 
         <ul class="navbar-nav mb-md-3">
@@ -190,7 +195,7 @@
               @click="checkForSpireUpdate()"
             >
               <i class="fe fe-check-circle mr-2"></i>
-              Spire Update Available
+              Spire {{ offeredUpdateType }} Update Available
             </a>
             <b-tooltip
               target="spire-update-available"
@@ -198,13 +203,13 @@
               placement="right"
               variant="dark"
             >
-              Spire v{{ latestAppVersion }} is available
+              Spire v{{ latestAppVersion }} ({{ offeredUpdateType }}) is available on the {{ updateChannelLabel }} channel
             </b-tooltip>
           </li>
           <li class="nav-item" v-if="!hasUpdate">
             <a href="#" class="nav-link" data-toggle="modal" @click="checkForSpireUpdate()">
               <i class="fe fe-check-circle mr-2"></i>
-              Spire Update Check
+              Spire Update Check ({{ updateChannelLabel }})
             </a>
           </li>
           <li class="nav-item">
@@ -307,6 +312,17 @@ export default {
       }
 
       return semver.gt(this.latestAppVersion, this.appVersion)
+    },
+    updateChannelLabel() {
+      return this.updateChannel === "beta" ? "Beta" : "Stable"
+    },
+    offeredUpdateType() {
+      try {
+        const release = JSON.parse(LocalSettings.getLatestReleasePayload() || "{}")
+        return release.prerelease === true ? "Beta" : "Stable"
+      } catch (e) {
+        return "Stable"
+      }
     }
   },
   components: { DbConnectionStatusPill, NavSectionComponent, NavbarDropdownMenu, NavbarUserSettingsCog },
@@ -323,6 +339,7 @@ export default {
       appVersion: AppEnv.getVersion(),
       isBetaRelease: AppEnv.isBetaRelease(),
       betaReleasePreview: null,
+      updateChannel: AppEnv.getUpdateChannel(),
       latestAppVersion: LocalSettings.getLatestUpdateVersion(),
       appFeatures: AppEnv.getFeatures(),
       botNav: {
@@ -706,6 +723,7 @@ export default {
     EventBus.$on("APP_ENV_LOADED", this.handleAppEnvLoaded);
     EventBus.$on("APP_BETA_RELEASE_CHANGED", this.handleBetaReleaseChanged);
     EventBus.$on("APP_BETA_RELEASE_PREVIEW_CHANGED", this.handleBetaReleasePreviewChanged);
+    EventBus.$on("APP_UPDATE_CHANNEL_CHANGED", this.handleUpdateChannelChanged);
     EventBus.$on("ROUTE_CHANGE", this.handleRouteChange);
   },
   destroyed() {
@@ -713,6 +731,7 @@ export default {
     EventBus.$off("APP_ENV_LOADED", this.handleAppEnvLoaded);
     EventBus.$off("APP_BETA_RELEASE_CHANGED", this.handleBetaReleaseChanged);
     EventBus.$off("APP_BETA_RELEASE_PREVIEW_CHANGED", this.handleBetaReleasePreviewChanged);
+    EventBus.$off("APP_UPDATE_CHANNEL_CHANGED", this.handleUpdateChannelChanged);
     EventBus.$off("ROUTE_CHANGE", this.handleRouteChange);
   },
 
@@ -917,6 +936,7 @@ export default {
       this.appEnv      = AppEnv.getEnv();
       this.appVersion  = AppEnv.getVersion();
       this.isBetaRelease = AppEnv.isBetaRelease();
+      this.updateChannel = AppEnv.getUpdateChannel();
       this.appFeatures = AppEnv.getFeatures();
     },
     handleBetaReleaseChanged(isBetaRelease) {
@@ -949,6 +969,11 @@ export default {
     },
     checkForSpireUpdate() {
       EventBus.$emit("CHECK_SPIRE_UPDATE", true)
+    },
+    handleUpdateChannelChanged(channel) {
+      this.updateChannel = channel === "beta" ? "beta" : "stable"
+      this.latestAppVersion = LocalSettings.getLatestUpdateVersion()
+      this.$forceUpdate()
     }
   },
   watch: {
@@ -991,6 +1016,19 @@ export default {
   transition: opacity .16s ease, transform .16s ease;
   user-select: none;
   z-index: 1;
+}
+
+.update-channel-label {
+  color: #91d8b2;
+  display: block;
+  font-size: 10px;
+  letter-spacing: .04em;
+  margin-top: 3px;
+  text-transform: none;
+}
+
+.update-channel-label.beta {
+  color: #ff8c98;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -95,3 +95,49 @@ func TestSaveLauncherConfigPersistsOpcodeRepository(t *testing.T) {
 		t.Fatalf("opcodeSource after invalid save = %q", got)
 	}
 }
+
+func TestSavePersistsOptionalSpireUpdateChannel(t *testing.T) {
+	resetConfigCache := func() {
+		mutex.Lock()
+		cachedConfig = nil
+		lastModifiedTime = time.Time{}
+		mutex.Unlock()
+	}
+	resetConfigCache()
+	t.Cleanup(resetConfigCache)
+
+	serverPath := t.TempDir()
+	appLogger := logger.NewAppLogger()
+	paths := pathmgmt.NewPathManagement(appLogger)
+	paths.SetServerPath(serverPath)
+	serverConfig := NewConfig(appLogger, paths)
+
+	legacy := EQEmuConfigJson{}
+	if err := serverConfig.Save(legacy); err != nil {
+		t.Fatalf("save legacy config: %v", err)
+	}
+	loaded, err := serverConfig.Get()
+	if err != nil {
+		t.Fatalf("load legacy config: %v", err)
+	}
+	if loaded.Spire.UpdateChannel != "" {
+		t.Fatalf("legacy update channel = %q, want empty stable-compatible default", loaded.Spire.UpdateChannel)
+	}
+
+	loaded.Spire.UpdateChannel = "beta"
+	if err = serverConfig.Save(loaded); err != nil {
+		t.Fatalf("save beta update channel: %v", err)
+	}
+
+	persistedBytes, err := os.ReadFile(filepath.Join(serverPath, "eqemu_config.json"))
+	if err != nil {
+		t.Fatalf("read persisted config: %v", err)
+	}
+	var persisted EQEmuConfigJson
+	if err = json.Unmarshal(persistedBytes, &persisted); err != nil {
+		t.Fatalf("decode persisted config: %v", err)
+	}
+	if persisted.Spire.UpdateChannel != "beta" {
+		t.Fatalf("persisted update channel = %q, want beta", persisted.Spire.UpdateChannel)
+	}
+}

@@ -11,27 +11,27 @@ import (
 	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
-	"github.com/EQEmuTools/spire/internal/release"
 	"github.com/EQEmuTools/spire/internal/unzip"
 	"github.com/google/go-github/v41/github"
 	"github.com/mattn/go-isatty"
-	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
-	"time"
 )
 
 // Updater is a service that checks for updates to the app
 type Updater struct {
 	// this is the package.json embedded in the binary which contains the app version
-	packageJson  []byte
-	logger       *logger.AppLogger
-	serverconfig *eqemuserverconfig.Config
-	unzipper     *unzip.Unzipper
+	packageJson               []byte
+	logger                    *logger.AppLogger
+	serverconfig              *eqemuserverconfig.Config
+	unzipper                  *unzip.Unzipper
+	githubClient              *github.Client
+	goos                      string
+	goarch                    string
+	releaseRepositoryOverride string
 }
 
 // NewUpdater creates a new updater service
@@ -45,7 +45,11 @@ func NewUpdater(packageJson []byte) *Updater {
 			appLogger,
 			pathmgr,
 		),
-		unzipper: unzip.NewUnzipper(appLogger),
+		unzipper:                  unzip.NewUnzipper(appLogger),
+		githubClient:              newDefaultGitHubClient(),
+		goos:                      runtime.GOOS,
+		goarch:                    runtime.GOARCH,
+		releaseRepositoryOverride: os.Getenv("SPIRE_RELEASE_REPO"),
 	}
 }
 
@@ -118,52 +122,20 @@ func (s *Updater) CheckForUpdates(interactive bool) bool {
 		return false
 	}
 
-	// internet connection check
-	if !isconnected() {
-		s.logger.Info().Msgf("Not connected to the internet")
-		return false
-	}
-
 	s.logger.Info().Msg("Checking for updates")
 	s.logger.Info().Any("executableName", executableName).Msg("Running as binary")
 	s.logger.Debug().Any("executableName", executableName).Msg("Checking for updates")
 
-	configReleaseRepository := ""
-	if configErr == nil {
-		configReleaseRepository = config.Spire.ReleaseRepository
-	}
-	releaseRepo := release.ResolveRepositoryDetailsWithConfig(
-		os.Getenv("SPIRE_RELEASE_REPO"),
-		configReleaseRepository,
-		s.packageJson,
-		nil,
-	).Repository
-	repoParts := strings.SplitN(releaseRepo, "/", 2)
-	if len(repoParts) != 2 {
-		s.logger.Info().Any("repository", releaseRepo).Msg("Failed to resolve release repository")
+	status, selected, err := s.resolveUpdate(context.Background())
+	if err != nil {
+		s.logger.Info().Err(err).Msg("Failed to resolve an eligible Spire release")
 		return false
 	}
-
-	// get releases
-	client := github.NewClient(&http.Client{Timeout: 5 * time.Second})
-	release, _, err := client.Repositories.GetLatestRelease(context.Background(), repoParts[0], repoParts[1])
-	if err != nil {
-		s.logger.Info().Err(err).Msg("Failed to get latest release")
-		return false
-	}
-
-	// get app version
-	err, e := s.getAppVersion()
-	if err != nil {
-		s.logger.Info().Err(err).Msg("Failed to get app version")
-	}
-
-	localVersion := fmt.Sprintf("v%v", e.Version)
-	releaseVersion := *release.TagName
-
-	// already up to date
-	if releaseVersion == localVersion {
-		s.logger.Info().Any("version", localVersion).Msgf("Spire is already up to date")
+	if !status.Available || selected == nil {
+		s.logger.Info().
+			Any("version", status.CurrentVersion).
+			Any("channel", status.Channel).
+			Msg("Spire is already up to date")
 		return false
 	}
 
@@ -177,88 +149,77 @@ func (s *Updater) CheckForUpdates(interactive bool) bool {
 	}
 
 	s.logger.Info().
-		Any("local", localVersion).
-		Any("latest", releaseVersion).
+		Any("local", status.CurrentVersion).
+		Any("latest", selected.release.GetTagName()).
+		Any("channel", status.Channel).
+		Any("release_type", status.Release.ReleaseType).
 		Msg("Comparing local version to latest version")
 
-	for _, asset := range release.Assets {
-		assetName := *asset.Name
-		downloadUrl := *asset.BrowserDownloadURL
-		targetFileNameZipped := fmt.Sprintf("spire-%s-%s.zip", runtime.GOOS, runtime.GOARCH)
-		if runtime.GOOS == "windows" {
-			targetFileNameZipped = fmt.Sprintf("spire-%s-%s.exe.zip", runtime.GOOS, runtime.GOARCH)
-		}
-		targetFileName := fmt.Sprintf("spire-%s-%s", runtime.GOOS, runtime.GOARCH)
+	assetName := selected.asset.GetName()
+	downloadURL := selected.asset.GetBrowserDownloadURL()
+	targetFileNameZipped := targetReleaseAssetName(s.goos, s.goarch)
+	targetFileName := fmt.Sprintf("spire-%s-%s", s.goos, s.goarch)
 
-		s.logger.Debug().
-			Any("assetName", assetName).
-			Any("targetFileNameZipped", targetFileNameZipped).
-			Msg("Checking asset")
+	s.logger.Debug().
+		Any("assetName", assetName).
+		Any("targetFileNameZipped", targetFileNameZipped).
+		Msg("Checking asset")
 
-		if assetName == targetFileNameZipped {
-			hash := fmt.Sprintf("%x", md5.Sum([]byte(downloadUrl)))
-			tmpdir := filepath.Join(os.TempDir(), "spire-update", hash)
-			_ = os.MkdirAll(tmpdir, os.ModePerm)
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(downloadURL)))
+	tmpdir := filepath.Join(os.TempDir(), "spire-update", hash)
+	_ = os.MkdirAll(tmpdir, os.ModePerm)
 
-			s.logger.Info().Any("assetName", assetName).Msg("Found matching release")
+	s.logger.Info().Any("assetName", assetName).Msg("Found matching release")
 
-			// download
-			file := path.Base(downloadUrl)
-			downloadPath := filepath.Join(tmpdir, file)
-			err := download.WithProgress(downloadPath, downloadUrl)
-			if err != nil {
-				s.logger.Fatal().Err(err).Msg("Failed to download asset")
-			}
-
-			// unzip
-			tempFileZipped := filepath.Join(tmpdir, targetFileNameZipped)
-			err = s.unzipper.Extract(tempFileZipped, tmpdir)
-			if err != nil {
-				s.logger.Fatal().Err(err).Msg("Failed to extract zip")
-			}
-
-			// rename running process to .old
-			err = os.Rename(
-				filepath.Join(executablePath, executableName),
-				filepath.Join(executablePath, fmt.Sprintf("%s.old", executableName)),
-			)
-			if err != nil {
-				s.logger.Fatal().Err(err).Msg("Failed to rename executable")
-			}
-
-			// relink
-			lookTempFile := filepath.Join(tmpdir, targetFileName)
-			tempFile, err := exec.LookPath(lookTempFile)
-			if err != nil {
-				s.logger.Fatal().Err(err).Msg("Failed to find executable")
-			}
-
-			newExecutable := fmt.Sprintf("%s%s%s", executablePath, string(filepath.Separator), executableName)
-			err = moveFile(tempFile, newExecutable)
-			if err != nil {
-				s.logger.Fatal().Err(err).Msg("Failed to move executable")
-			}
-
-			err = os.Chmod(newExecutable, 0755)
-			if err != nil {
-				s.logger.Fatal().Err(err).Msg("Failed to chmod executable")
-			}
-
-			// if terminal, wait for user input
-			if isatty.IsTerminal(os.Stdout.Fd()) && interactive {
-				s.logger.Info().
-					Any("version", releaseVersion).
-					Msgf("Spire successfully updated, you must relaunch Spire manually")
-				s.logger.Info().Msg("Press any key to continue...")
-				bufio.NewReader(os.Stdin).ReadBytes('\n')
-				return true
-			} else {
-				s.logger.Info().
-					Any("version", releaseVersion).
-					Msgf("Spire successfully updated, you must relaunch Spire manually")
-				return true
-			}
-		}
+	file := path.Base(downloadURL)
+	downloadPath := filepath.Join(tmpdir, file)
+	err = download.WithProgress(downloadPath, downloadURL)
+	if err != nil {
+		s.logger.Fatal().Err(err).Msg("Failed to download asset")
 	}
-	return false
+
+	tempFileZipped := filepath.Join(tmpdir, targetFileNameZipped)
+	err = s.unzipper.Extract(tempFileZipped, tmpdir)
+	if err != nil {
+		s.logger.Fatal().Err(err).Msg("Failed to extract zip")
+	}
+
+	err = os.Rename(
+		filepath.Join(executablePath, executableName),
+		filepath.Join(executablePath, fmt.Sprintf("%s.old", executableName)),
+	)
+	if err != nil {
+		s.logger.Fatal().Err(err).Msg("Failed to rename executable")
+	}
+
+	lookTempFile := filepath.Join(tmpdir, targetFileName)
+	tempFile, err := exec.LookPath(lookTempFile)
+	if err != nil {
+		s.logger.Fatal().Err(err).Msg("Failed to find executable")
+	}
+
+	newExecutable := fmt.Sprintf("%s%s%s", executablePath, string(filepath.Separator), executableName)
+	err = moveFile(tempFile, newExecutable)
+	if err != nil {
+		s.logger.Fatal().Err(err).Msg("Failed to move executable")
+	}
+
+	err = os.Chmod(newExecutable, 0755)
+	if err != nil {
+		s.logger.Fatal().Err(err).Msg("Failed to chmod executable")
+	}
+
+	if isatty.IsTerminal(os.Stdout.Fd()) && interactive {
+		s.logger.Info().
+			Any("version", selected.release.GetTagName()).
+			Msgf("Spire successfully updated, you must relaunch Spire manually")
+		s.logger.Info().Msg("Press any key to continue...")
+		bufio.NewReader(os.Stdin).ReadBytes('\n')
+		return true
+	}
+
+	s.logger.Info().
+		Any("version", selected.release.GetTagName()).
+		Msgf("Spire successfully updated, you must relaunch Spire manually")
+	return true
 }

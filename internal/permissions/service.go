@@ -57,8 +57,9 @@ func (s *Service) RegisterManualResources() map[string][]string {
 		"Inventory & Keyring":       {"inventory-keyring"},
 
 		// admin server
-		"Server Configuration":    {"admin/serverconfig"},
-		"Server System Resources": {"admin/system", "eqemuserver/system-all", "eqemuserver/get-websocket-auth"},
+		"Server Configuration":     {"admin/serverconfig"},
+		"Spire Application Update": {"app/update"},
+		"Server System Resources":  {"admin/system", "eqemuserver/system-all", "eqemuserver/get-websocket-auth"},
 		"Server Update / Build": {
 			"eqemuserver/build",
 			"eqemuserver/install-release",

@@ -10,6 +10,7 @@ export class Setting {
   static LATEST_UPDATE_VERSION       = "latest-update-version";
   static LATEST_RELEASE_PAYLOAD      = "latest-release-payload";
   static IGNORED_UPDATE_VERSION      = "ignored-update-version";
+  static LAST_CHECKED_UPDATE_CHANNEL = "last-checked-update-channel";
 }
 
 export class LocalSettings {
@@ -41,6 +42,14 @@ export class LocalSettings {
 
   static setLatestUpdateVersion(version: string) {
     this.set(Setting.LATEST_UPDATE_VERSION, version)
+  }
+
+  static setLastCheckedUpdateChannel(channel: string) {
+    this.set(Setting.LAST_CHECKED_UPDATE_CHANNEL, channel)
+  }
+
+  static getLastCheckedUpdateChannel() {
+    return this.get(Setting.LAST_CHECKED_UPDATE_CHANNEL) || ""
   }
 
   static getLatestUpdateVersion() {
@@ -89,5 +98,6 @@ export class LocalSettings {
     localStorage.removeItem(Setting.LATEST_UPDATE_VERSION)
     localStorage.removeItem(Setting.LATEST_RELEASE_PAYLOAD)
     localStorage.removeItem(Setting.IGNORED_UPDATE_VERSION)
+    localStorage.removeItem(Setting.LAST_CHECKED_UPDATE_CHANNEL)
   }
 }

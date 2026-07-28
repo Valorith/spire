@@ -67,6 +67,8 @@ func (d *Controller) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodPost, "app/onboard-initialize", d.initializeApp, nil),
 		routes.RegisterRoute(http.MethodGet, "app/changelog", d.changelog, nil),
 		routes.RegisterRoute(http.MethodGet, "app/env", d.env, nil),
+		routes.RegisterRoute(http.MethodGet, "app/update-status", d.updateStatus, nil),
+		routes.RegisterRoute(http.MethodPost, "app/update-channel", d.updateChannel, nil),
 		routes.RegisterRoute(http.MethodPost, "app/update", d.update, nil),
 		routes.RegisterRoute(http.MethodPost, "app/sync", d.sync, nil),
 		routes.RegisterRoute(http.MethodPost, "app/sage-fs/select-directory", d.sageFsSelectDirectory, nil),
@@ -95,15 +97,16 @@ type Features struct {
 
 // EnvResponse is a struct to hold the response for the env endpoint
 type EnvResponse struct {
-	Env                       string           `json:"env"`
-	Version                   string           `json:"version"`
-	IsBetaRelease             bool             `json:"is_beta_release"`
-	ReleaseRepository         string           `json:"release_repository"`
-	OS                        string           `json:"os"`
-	Features                  Features         `json:"features"`
-	Settings                  []models.Setting `json:"settings"`
-	SpireInitialized          bool             `json:"is_spire_initialized"`
-	HostedReadOnlyModeEnabled bool             `json:"is_hosted_read_only_mode_enabled"`
+	Env                       string                `json:"env"`
+	Version                   string                `json:"version"`
+	IsBetaRelease             bool                  `json:"is_beta_release"`
+	ReleaseRepository         string                `json:"release_repository"`
+	UpdateChannel             updater.UpdateChannel `json:"update_channel"`
+	OS                        string                `json:"os"`
+	Features                  Features              `json:"features"`
+	Settings                  []models.Setting      `json:"settings"`
+	SpireInitialized          bool                  `json:"is_spire_initialized"`
+	HostedReadOnlyModeEnabled bool                  `json:"is_hosted_read_only_mode_enabled"`
 }
 
 // PackageJson is a struct to hold the package.json file
@@ -132,9 +135,11 @@ func (d *Controller) env(c echo.Context) error {
 		version := pkg.Version
 		isBetaRelease := false
 		configReleaseRepository := ""
+		updateChannel := updater.UpdateChannelStable
 		if d.serverConfig != nil {
 			if config, err := d.serverConfig.Get(); err == nil {
 				configReleaseRepository = config.Spire.ReleaseRepository
+				updateChannel = updater.NormalizeUpdateChannel(config.Spire.UpdateChannel)
 			}
 		}
 		releaseRepository := release.ResolveRepositoryDetailsWithConfig(
@@ -161,6 +166,7 @@ func (d *Controller) env(c echo.Context) error {
 			Version:           version,
 			IsBetaRelease:     isBetaRelease,
 			ReleaseRepository: releaseRepository,
+			UpdateChannel:     updateChannel,
 			Features: Features{
 				GithubAuthEnabled: len(os.Getenv("GITHUB_CLIENT_ID")) > 0,
 			},
@@ -217,6 +223,61 @@ func (d *Controller) sync(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"data": "Ok"})
 }
 
+func (d *Controller) updateStatus(c echo.Context) error {
+	if !env.IsAppEnvLocal() {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Cannot check for app updates in non-local environment"})
+	}
+
+	data, _ := d.cache.Get("packageJson")
+	pJson, ok := data.([]byte)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Spire version metadata is unavailable"})
+	}
+
+	status, err := updater.NewUpdater(pJson).ResolveUpdateStatus(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusServiceUnavailable, echo.Map{
+			"error": "GitHub release metadata is unavailable. No update will be installed.",
+		})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"data": status})
+}
+
+type updateChannelRequest struct {
+	Channel string `json:"channel"`
+}
+
+func (d *Controller) updateChannel(c echo.Context) error {
+	if !env.IsAppEnvLocal() {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Cannot change the app update channel in non-local environment"})
+	}
+	if d.serverConfig == nil || !d.serverConfig.Exists() {
+		return c.JSON(http.StatusConflict, echo.Map{"error": "eqemu_config.json is required to persist the update channel"})
+	}
+
+	request := new(updateChannelRequest)
+	if err := c.Bind(request); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid update channel request"})
+	}
+
+	channel, err := updater.ParseUpdateChannel(request.Channel)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+
+	config, err := d.serverConfig.Get()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Could not read eqemu_config.json"})
+	}
+	config.Spire.UpdateChannel = string(channel)
+	if err = d.serverConfig.Save(config); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Could not persist the Spire update channel"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"data": echo.Map{"channel": channel}})
+}
+
 // spire update
 func (d *Controller) update(c echo.Context) error {
 	if !env.IsAppEnvLocal() {
@@ -232,11 +293,11 @@ func (d *Controller) update(c echo.Context) error {
 				time.Sleep(1 * time.Second)
 				os.Exit(0)
 			}()
-			return c.JSON(http.StatusOK, echo.Map{"data": "Ok"})
+			return c.JSON(http.StatusOK, echo.Map{"data": echo.Map{"updated": true}})
 		}
 	}
 
-	return c.JSON(http.StatusOK, echo.Map{"data": "Ok"})
+	return c.JSON(http.StatusOK, echo.Map{"data": echo.Map{"updated": false}})
 }
 
 type sageFsValidateRequest struct {

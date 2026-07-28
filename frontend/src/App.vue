@@ -10,7 +10,17 @@
     <app-update-modal
       v-if="showUpdateModal && !isSageRoute"
       :release="release"
+      :status="updateStatus"
+      :checking="updateChecking"
+      :status-error="updateError"
+      :update-channel="currentUpdateChannel"
+      :can-manage-channel="canManageUpdateChannel"
+      :saving-channel="updateChannelSaving"
+      :installed-release-type="AppEnv.isBetaRelease() ? 'Beta' : 'Stable'"
       @close="showUpdateModal = false"
+      @ignore="ignoreUpdate"
+      @retry="checkForSpireUpdate(true)"
+      @channel-change="changeUpdateChannel"
       :current-version="currentVersion"
     />
   </div>
@@ -32,6 +42,7 @@ import AppUpdateModal from "@/components/modals/AppUpdateModal.vue";
 import {SpireWebsocket} from "@/app/api/spire-websocket";
 import {Notify} from "@/app/Notify";
 import {WindowManager} from "@/app/window";
+import {SpireApi} from "@/app/api/spire-api";
 
 export default {
   name: "App",
@@ -43,8 +54,12 @@ export default {
   data() {
     return {
       release: {},
+      updateStatus: {},
       currentVersion: "",
-
+      updateChecking: false,
+      updateError: "",
+      updateChannelSaving: false,
+      user: null,
       showUpdateModal: false,
     }
   },
@@ -52,6 +67,15 @@ export default {
   computed: {
     isSageRoute() {
       return this.isCurrentSageRoute()
+    },
+    currentUpdateChannel() {
+      return this.updateStatus?.channel || AppEnv.getUpdateChannel()
+    },
+    canManageUpdateChannel() {
+      return AppEnv.isAppLocal()
+    },
+    AppEnv() {
+      return AppEnv
     },
   },
 
@@ -331,7 +355,7 @@ export default {
       this.checkForSpireUpdate(true)
     },
 
-    checkForSpireUpdate(force = false) {
+    async checkForSpireUpdate(force = false) {
       if (!AppEnv.isAppLocal()) {
         console.log("skipping update check, not local app")
         return
@@ -340,67 +364,102 @@ export default {
       const current = AppEnv.getVersion()
       this.currentVersion = current
       const last_checked = LocalSettings.getLastCheckedUpdateTime()
+      const updateChannel = AppEnv.getUpdateChannel()
+      const lastCheckedChannel = LocalSettings.getLastCheckedUpdateChannel()
       const now = new Date().getTime() / 1000
 
+      if (force) {
+        this.showUpdateModal = true
+      }
+
       // check if we've checked in the last 1 hour
-      if (now - last_checked < 3600 && !force) {
+      if (now - last_checked < 3600 && lastCheckedChannel === updateChannel && !force) {
         console.log("skipping update check, checked in last hour")
-        this.release = JSON.parse(LocalSettings.getLatestReleasePayload())
+        try {
+          this.release = JSON.parse(LocalSettings.getLatestReleasePayload() || "{}")
+        } catch (e) {
+          this.release = {}
+        }
+        const cachedVersion = this.release?.tag_name?.replace(/^v/, "") || ""
+        const available = !!cachedVersion && semver.valid(cachedVersion) && semver.gt(cachedVersion, current)
+        this.updateStatus = {
+          channel: updateChannel,
+          current_version: current,
+          available,
+          release: available ? this.release : null,
+        }
+        EventBus.$emit("APP_UPDATE_CHANNEL_CHANGED", updateChannel)
         return
       }
 
-      let latest = "0.0.0";
-      const releaseRepository = AppEnv.getReleaseRepository() || "Valorith/spire"
+      this.updateChecking = true
+      this.updateError = ""
+      this.updateStatus = {
+        channel: updateChannel,
+        current_version: current,
+        available: false,
+      }
+      this.release = {}
+      try {
+        const response = await SpireApi.v1().get("app/update-status")
+        const status = response?.data?.data || {}
+        const channel = status.channel === "beta" ? "beta" : "stable"
+        AppEnv.setUpdateChannel(channel)
+        this.updateStatus = status
+        this.release = status.release || {}
 
-      const url = `https://api.github.com/repos/${releaseRepository}/releases?per_page=10`
-      fetch(url)
-        .then(async response => {
-          if (!response.ok) {
-            throw new Error(`Failed to fetch releases: ${response.status}`)
-          }
-          return response.json()
-        })
-        .then(data => {
-          const latestRelease = Array.isArray(data) ? data.find(release => !release.draft && !release.prerelease) : null;
-          if (!latestRelease) {
-            console.log("no releases found for [%s]", releaseRepository)
-            if (force) {
-              Notify.toast("No releases found for configured Spire repository.");
-            }
-            LocalSettings.setLastCheckedUpdateTime(new Date().getTime() / 1000)
-            LocalSettings.setLatestUpdateVersion(latest)
-            LocalSettings.setLatestReleasePayload(JSON.stringify({}))
-            this.currentVersion = current
-            return
-          }
+        const latest = status.release?.tag_name?.replace(/^v/, "") || current
+        const ignoredUpdateVersion = LocalSettings.getIgnoredUpdateVersion()
+        if (status.available && ignoredUpdateVersion !== latest) {
+          console.log("update available")
+          this.showUpdateModal = true
+        } else if (status.available) {
+          console.log("update [%s] ignored", latest)
+        } else if (force) {
+          Notify.toast(`Already up to date on the ${channel === "beta" ? "Beta" : "Stable"} channel.`)
+        }
 
-          if (typeof latestRelease.tag_name !== "string") {
-            throw new Error("Latest release payload is missing tag_name")
-          }
+        LocalSettings.setLastCheckedUpdateTime(new Date().getTime() / 1000)
+        LocalSettings.setLastCheckedUpdateChannel(channel)
+        LocalSettings.setLatestUpdateVersion(latest)
+        LocalSettings.setLatestReleasePayload(JSON.stringify(this.release))
+        this.currentVersion = status.current_version || current
+        EventBus.$emit("APP_UPDATE_CHANNEL_CHANGED", channel)
+      } catch (err) {
+        console.warn("skipping update check", err)
+        this.updateError = err.response?.data?.error || "GitHub release metadata is unavailable. No update will be installed."
+      } finally {
+        this.updateChecking = false
+      }
+    },
+    async changeUpdateChannel(channel) {
+      const normalized = channel === "beta" ? "beta" : "stable"
+      if (normalized === AppEnv.getUpdateChannel()) {
+        return
+      }
 
-          latest = latestRelease.tag_name.replace("v", "")
-          this.release = latestRelease
-          const ignoredUpdateVersion = LocalSettings.getIgnoredUpdateVersion()
-
-          if (semver.gt(latest, current)) {
-            console.log("update available")
-            if (ignoredUpdateVersion !== latest) {
-              this.showUpdateModal = true;
-            } else {
-              console.log("update [%s] ignored", latest)
-            }
-          } else if (force) {
-            console.log("no update available")
-            Notify.toast("Already up to date!");
-          }
-
-          LocalSettings.setLastCheckedUpdateTime(new Date().getTime() / 1000)
-          LocalSettings.setLatestUpdateVersion(latest)
-          LocalSettings.setLatestReleasePayload(JSON.stringify(latestRelease))
-
-          this.currentVersion = current
-        })
-        .catch(err => console.warn("skipping update check", err))
+      this.updateChannelSaving = true
+      this.updateError = ""
+      try {
+        await SpireApi.v1().post("app/update-channel", {channel: normalized})
+        AppEnv.setUpdateChannel(normalized)
+        LocalSettings.clearUpdateVariables()
+        this.updateStatus = {channel: normalized}
+        this.release = {}
+        EventBus.$emit("APP_UPDATE_CHANNEL_CHANGED", normalized)
+        await this.checkForSpireUpdate(true)
+      } catch (err) {
+        this.updateError = err.response?.data?.error || "Could not save the Spire update channel."
+      } finally {
+        this.updateChannelSaving = false
+      }
+    },
+    ignoreUpdate() {
+      const version = this.release?.tag_name?.replace(/^v/, "")
+      if (version) {
+        LocalSettings.setIgnoredUpdateVersion(version)
+      }
+      this.showUpdateModal = false
     },
     handleWebsocketMessage(e) {
       if (e && e.data) {

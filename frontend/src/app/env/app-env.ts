@@ -103,6 +103,14 @@ export class AppEnv {
     this._release_repository = value;
   }
 
+  static getUpdateChannel() {
+    return this._update_channel === "beta" ? "beta" : "stable";
+  }
+
+  static setUpdateChannel(value) {
+    this._update_channel = value === "beta" ? "beta" : "stable";
+  }
+
   static isHostedReadOnlyModeEnabled() {
     return this._is_hosted_read_only_mode_enabled === true
   }
@@ -142,6 +150,7 @@ export class AppEnv {
   private static _version;
   private static _is_beta_release;
   private static _release_repository;
+  private static _update_channel;
   private static _features;
   private static _settings;
   private static _is_spire_initialized;
@@ -156,6 +165,7 @@ export class AppEnv {
       this.setVersion(data.version)
       this.setIsBetaRelease(data.is_beta_release)
       this.setReleaseRepository(data.release_repository)
+      this.setUpdateChannel(data.update_channel)
       this.setFeatures(data.features)
       this.setSettings(data.settings)
       this.setIsSpireInitialized(data.is_spire_initialized)

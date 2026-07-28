@@ -87,3 +87,11 @@ func TestInventoryKeyringIsRegisteredAsManualResource(t *testing.T) {
 		t.Fatalf("Inventory & Keyring resource = %#v, want [inventory-keyring]", prefixes)
 	}
 }
+
+func TestSpireApplicationUpdateIsRegisteredAsManualResource(t *testing.T) {
+	resources := (&Service{}).RegisterManualResources()
+	prefixes, ok := resources["Spire Application Update"]
+	if !ok || len(prefixes) != 1 || prefixes[0] != "app/update" {
+		t.Fatalf("Spire Application Update resource = %#v, want [app/update]", prefixes)
+	}
+}
