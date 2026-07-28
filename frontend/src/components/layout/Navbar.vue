@@ -507,17 +507,23 @@ export default {
             {
               title: "Characters",
               to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=characters",
-              icon: "ra ra-player mr-1"
+              icon: "ra ra-player mr-1",
+              isNew: true,
+              isAlpha: true
             },
             {
               title: "Accounts",
               to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=accounts",
-              icon: "fa fa-id-card mr-1"
+              icon: "fa fa-id-card mr-1",
+              isNew: true,
+              isAlpha: true
             },
             {
               title: "Guilds",
               to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=guilds",
-              icon: "ra ra-double-team mr-1"
+              icon: "ra ra-double-team mr-1",
+              isNew: true,
+              isAlpha: true
             },
             {
               title: "Mail & Parcels",

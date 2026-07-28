@@ -367,6 +367,23 @@ test.describe('Player Operations', () => {
     const activeCharacterNav = page.locator('a[href="/admin/player-operations?mode=characters"]');
     await expect(activeCharacterNav).toHaveAttribute('aria-current', 'page');
     await expect(activeCharacterNav).toHaveClass(/active/);
+    const playerOperationNavItems = ['characters', 'accounts', 'guilds'].map(mode =>
+      page.locator(`a[href="/admin/player-operations?mode=${mode}"]`)
+    );
+    for (const navItem of playerOperationNavItems) {
+      await expect(navItem).toContainText('NEW!');
+      await expect(navItem).toContainText('ALPHA');
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    for (const navItem of playerOperationNavItems) {
+      await expect(navItem).toBeVisible();
+      const box = await navItem.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    }
   });
 
   test('submits an account sanction independently', async ({ page }) => {
