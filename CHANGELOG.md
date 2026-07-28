@@ -1,4 +1,4 @@
-## [Unreleased] (Beta) 7/27/2026
+## [5.5.1] (Beta) 7/28/2026
 
 * Enable Beta updates via Spire Updater. Can be turned off in Settings.
 
