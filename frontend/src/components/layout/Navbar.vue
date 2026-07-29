@@ -456,7 +456,7 @@ export default {
       worldDataNav: {
         label: "World Data",
         labelIcon: "ra ra-compass mr-1",
-        routePrefixMatches: ["content-flags", "tasks", "strings-database", "titles", "zones"],
+        routePrefixMatches: ["content-flags", "data-buckets", "qglobals", "tasks", "strings-database", "titles", "zones"],
         navs: [
           {
             title: "Content Flags",
@@ -465,6 +465,22 @@ export default {
             isNew: true,
             isAlpha: true,
             routes: ['content-flags']
+          },
+          {
+            title: "Data Buckets",
+            to: ROUTE.DATA_BUCKETS,
+            icon: "fa fa-database mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['data-buckets']
+          },
+          {
+            title: "QGlobals",
+            to: ROUTE.QGLOBALS,
+            icon: "fa fa-globe mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ['qglobals']
           },
           {
             title: "Tasks",
@@ -540,6 +556,13 @@ export default {
               isAlpha: true
             },
           ]
+        },
+        {
+          label: "Chat Administration",
+          labelIcon: "fa fa-comments mr-1",
+          to: ROUTE.ADMIN_CHAT_ADMINISTRATION,
+          isNew: true,
+          isAlpha: true
         },
         { label: "Zone Servers", labelIcon: "ra ra-tower mr-1", to: ROUTE.ADMIN_ZONE_SERVERS },
         { label: "Backups", labelIcon: "fa fa-download mr-1", to: ROUTE.ADMIN_BACKUPS },

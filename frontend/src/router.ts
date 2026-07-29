@@ -199,6 +199,21 @@ const router = new Router({
           meta: {title: "Content Flag Editor"},
         },
         {
+          path: ROUTE.DATA_BUCKETS,
+          component: () => import('./views/data-buckets/DataBucketEditor.vue'),
+          meta: {title: "Data Buckets"},
+        },
+        {
+          path: ROUTE.QGLOBALS,
+          component: () => import('./views/qglobals/QGlobalEditor.vue'),
+          meta: {title: "QGlobals"},
+        },
+        {
+          path: ROUTE.ADMIN_CHAT_ADMINISTRATION,
+          component: () => import('./views/admin/chat-administration/ChatAdministration.vue'),
+          meta: {title: "Chat Administration"},
+        },
+        {
           path: ROUTE.ZONES,
           component: () => import('./views/zone/Zones.vue'),
           meta: {title: "Zones"},
@@ -375,6 +390,11 @@ const router = new Router({
           path: 'inventory-keyring',
           component: () => import('./views/admin/inventory-keyring/InventoryKeyringEditor.vue'),
           meta: {title: "Inventory & Keyring"},
+        },
+        {
+          path: 'chat-administration',
+          component: () => import('./views/admin/chat-administration/ChatAdministration.vue'),
+          meta: {title: "Chat Administration"},
         },
         {
           path: 'zones',

@@ -55,6 +55,9 @@ func (s *Service) RegisterManualResources() map[string][]string {
 		"Mercenary Editor":          {"mercenary-editor"},
 		"Player Operations":         {"player-operations"},
 		"Inventory & Keyring":       {"inventory-keyring"},
+		"Data Buckets Editor":       {"data-bucket-editor"},
+		"QGlobals Editor":           {"qglobal-editor"},
+		"Chat Administration":       {"chat-administration"},
 
 		// admin server
 		"Server Configuration":     {"admin/serverconfig"},

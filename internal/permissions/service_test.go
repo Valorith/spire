@@ -88,6 +88,21 @@ func TestInventoryKeyringIsRegisteredAsManualResource(t *testing.T) {
 	}
 }
 
+func TestOperationalDataEditorsAreRegisteredAsManualResources(t *testing.T) {
+	resources := (&Service{}).RegisterManualResources()
+	tests := map[string]string{
+		"Data Buckets Editor": "data-bucket-editor",
+		"QGlobals Editor":     "qglobal-editor",
+		"Chat Administration": "chat-administration",
+	}
+	for name, prefix := range tests {
+		prefixes, ok := resources[name]
+		if !ok || len(prefixes) != 1 || prefixes[0] != prefix {
+			t.Fatalf("%s resource = %#v, want [%s]", name, prefixes, prefix)
+		}
+	}
+}
+
 func TestSpireApplicationUpdateIsRegisteredAsManualResource(t *testing.T) {
 	resources := (&Service{}).RegisterManualResources()
 	prefixes, ok := resources["Spire Application Update"]
