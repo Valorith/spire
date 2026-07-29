@@ -557,13 +557,6 @@ export default {
             },
           ]
         },
-        {
-          label: "Chat Administration",
-          labelIcon: "fa fa-comments mr-1",
-          to: ROUTE.ADMIN_CHAT_ADMINISTRATION,
-          isNew: true,
-          isAlpha: true
-        },
         { label: "Zone Servers", labelIcon: "ra ra-tower mr-1", to: ROUTE.ADMIN_ZONE_SERVERS },
         { label: "Backups", labelIcon: "fa fa-download mr-1", to: ROUTE.ADMIN_BACKUPS },
         { label: "Client Files", labelIcon: "fa fa-download mr-1", to: ROUTE.ADMIN_CLIENT_FILE_DOWNLOADS },
@@ -571,6 +564,7 @@ export default {
           label: "Configuration",
           labelIcon: "fa fa-cog mr-1",
           routePrefixMatch: "admin/configuration",
+          routePrefixMatches: ["admin/chat-administration"],
           navs: [
             { title: "Server Config", to: ROUTE.ADMIN_SERVER_CONFIG, icon: "fa fa-cog mr-1" },
             {
@@ -586,6 +580,13 @@ export default {
             },
             { title: "Server Rules", to: ROUTE.ADMIN_CONFIG_SERVER_RULES, icon: "ra ra-interdiction mr-1" },
             { title: "UCS", to: ROUTE.ADMIN_SERVER_CONFIG + '?s=UCS', icon: "ra ra-speech-bubbles mr-1", exact: true },
+            {
+              title: "Chat Administration",
+              to: ROUTE.ADMIN_CHAT_ADMINISTRATION,
+              icon: "fa fa-comments mr-1",
+              isNew: true,
+              isAlpha: true
+            },
             {
               title: "World Server",
               to: ROUTE.ADMIN_SERVER_CONFIG + '?s=World+Server',
