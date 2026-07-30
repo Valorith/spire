@@ -1086,7 +1086,7 @@
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(178, 191, 204, 0.22);
   color: #9ca8b0;
-  display: flex;
+  display: flex !important;
   font-size: 9px;
   gap: 7px;
   justify-content: center;
