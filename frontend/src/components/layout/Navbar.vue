@@ -583,7 +583,9 @@ export default {
             {
               title: "Chat",
               to: ROUTE.ADMIN_CHAT_ADMINISTRATION,
-              icon: "fa fa-comments mr-1"
+              icon: "fa fa-comments mr-1",
+              isNew: true,
+              isAlpha: true
             },
             {
               title: "World Server",
