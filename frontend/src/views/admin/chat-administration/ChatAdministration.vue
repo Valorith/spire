@@ -1,5 +1,8 @@
 <template>
-  <content-area class="spire-editor-page operational-editor-page chat-administration-page">
+  <content-area
+    class="spire-editor-page operational-editor-page chat-administration-page"
+    :class="{ 'operational-editor-page--directory': compactView === 'directory' }"
+  >
     <div class="spire-editor-toolbar">
       <div>
         <div class="spire-editor-kicker">Server operations · player communication</div>
@@ -195,9 +198,18 @@
                 </div>
               </div>
             </div>
-            <div class="spire-editor-actions">
+          </div>
+
+          <action-dock
+            status-id="chat-administration-save-status"
+            :state="saveReadiness.state"
+            :title="saveReadiness.title"
+            :detail="saveReadiness.detail"
+            @back="showDirectory"
+          >
+            <template>
               <b-button v-if="!creating" size="sm" variant="outline-secondary" :disabled="saving" @click="createDraft(draft)">
-                <i class="fa fa-copy mr-1"></i>Copy
+                <i class="fa fa-copy mr-1"></i>{{ mode === 'saylinks' ? 'Duplicate ID' : 'Copy' }}
               </b-button>
               <b-button v-if="!creating" size="sm" variant="outline-danger" :disabled="saving || hasUnsavedChanges" @click="openDelete">
                 <i class="fa fa-trash mr-1"></i>Delete
@@ -205,11 +217,18 @@
               <b-button size="sm" variant="outline-secondary" :disabled="saving || !hasUnsavedChanges" @click="resetDraft">
                 <i class="fa fa-undo mr-1"></i>Revert
               </b-button>
-              <b-button size="sm" variant="warning" :disabled="saving || !canSave" data-testid="chat-administration-save" @click="save">
+              <b-button
+                size="sm"
+                variant="warning"
+                :disabled="saving || !canSave"
+                aria-describedby="chat-administration-save-status"
+                data-testid="chat-administration-save"
+                @click="save"
+              >
                 <i class="fa mr-1" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i>{{ creating ? 'Create' : 'Save' }}
               </b-button>
-            </div>
-          </div>
+            </template>
+          </action-dock>
 
           <div class="spire-editor-panel">
             <div v-if="mode === 'channels'" class="operational-preview-strip">
@@ -299,6 +318,10 @@
                 <button type="button" :class="{ active: draft.password_mode === 'clear' }" @click="setPasswordMode('clear')">
                   <i class="fa fa-unlock-alt"></i><span>Leave open</span>
                 </button>
+              </div>
+              <div v-if="copiedSecuredChannel" class="operational-inline-warning">
+                <i class="fa fa-shield"></i>
+                <span>The source password was not copied. This draft will stay open unless you set a new write-only password.</span>
               </div>
               <div v-if="draft.password_mode === 'replace'" class="spire-editor-field mt-2">
                 <label for="chat-channel-password">New password <span>{{ draft.password.length }}/64</span></label>
@@ -512,6 +535,13 @@
       </div>
     </b-modal>
 
+    <discard-modal
+      ref="discardModal"
+      :message="'Discard the pending ' + modeConfig.singular + ' draft to continue to another record, mode, or page.'"
+      @discard="confirmDiscard"
+      @keep="keepEditing"
+    />
+
     <transition name="spire-editor-fade">
       <div v-if="notification.message" class="spire-editor-notification" :class="{ error: notification.type === 'error' }" role="status">
         <i :class="notification.type === 'error' ? 'fa fa-exclamation-triangle' : 'fa fa-check-circle'"></i>
@@ -524,6 +554,8 @@
 <script>
   import ContentArea from '@/components/layout/ContentArea.vue'
   import EqWindow from '@/components/eq-ui/EQWindow.vue'
+  import ActionDock from '@/components/editors/OperationalActionDock.vue'
+  import DiscardModal from '@/components/editors/OperationalDiscardModal.vue'
   import { SpireApi } from '@/app/api/spire-api'
 
   const clone = value => JSON.parse(JSON.stringify(value))
@@ -612,7 +644,7 @@
 
   export default {
     name: 'ChatAdministration',
-    components: { ContentArea, EqWindow },
+    components: { ContentArea, EqWindow, ActionDock, DiscardModal },
     data () {
       return {
         modes: [
@@ -657,6 +689,11 @@
         draft: null,
         original: null,
         creating: false,
+        compactView: 'directory',
+        copiedSecuredChannel: false,
+        pendingDiscardAction: null,
+        pendingDiscardCancel: null,
+        allowRouteUpdate: false,
         searchTimer: null,
         ownerTimer: null,
         ownerQuery: '',
@@ -682,23 +719,45 @@
         if (this.mode === 'reserved') return { name: this.draft.name || '' }
         return { phrase: this.draft.phrase || '' }
       },
-      hasUnsavedChanges () {
-        if (!this.draft || !this.original) return false
-        const entityChanged = JSON.stringify(this.entitySnapshot) !== JSON.stringify(this.original)
-        const passwordChanged = this.mode === 'channels' && (
+      changedFieldCount () {
+        if (!this.entitySnapshot || !this.original) return 0
+        let count = Object.keys(this.entitySnapshot)
+          .filter(key => JSON.stringify(this.entitySnapshot[key]) !== JSON.stringify(this.original[key]))
+          .length
+        if (this.mode === 'channels' && (
           this.draft.password_mode !== (this.creating ? 'clear' : 'keep') ||
           Boolean(this.draft.password)
-        )
-        return entityChanged || passwordChanged || Boolean(this.draft.reason.trim())
+        )) count += 1
+        return count
+      },
+      hasEntityChanges () {
+        return this.changedFieldCount > 0
+      },
+      hasUnsavedChanges () {
+        if (!this.draft || !this.original) return false
+        return this.hasEntityChanges || Boolean(this.draft.reason.trim())
       },
       canSave () {
-        if (!this.draft || !this.draft.reason.trim() || !this.hasUnsavedChanges) return false
+        if (!this.draft || !this.draft.reason.trim() || !this.hasEntityChanges) return false
         if (this.mode === 'channels') {
           if (!this.draft.name.trim()) return false
           if (this.draft.password_mode === 'replace' && !this.draft.password) return false
           return true
         }
         return this.mode === 'reserved' ? Boolean(this.draft.name.trim()) : Boolean(this.draft.phrase.trim())
+      },
+      saveReadiness () {
+        if (this.saving) return { state: 'saving', title: `Saving ${this.modeConfig.singular}…`, detail: 'The audited policy change is being written transactionally.' }
+        if (!this.hasUnsavedChanges) return { state: 'idle', title: 'No pending changes', detail: `Change this ${this.modeConfig.singular} to begin an audited edit.` }
+        if (this.mode === 'channels' && !this.draft.name.trim()) return { state: 'blocked', title: 'Channel name required', detail: 'Enter the persistent channel name before saving.' }
+        if (this.mode === 'reserved' && !this.draft.name.trim()) return { state: 'blocked', title: 'Reserved name required', detail: 'Enter the exact protected channel name before saving.' }
+        if (this.mode === 'saylinks' && !this.draft.phrase.trim()) return { state: 'blocked', title: 'Saylink phrase required', detail: 'Enter the player-visible phrase before saving.' }
+        if (this.mode === 'channels' && this.draft.password_mode === 'replace' && !this.draft.password) {
+          return { state: 'blocked', title: 'Replacement password required', detail: 'Enter a write-only password or choose another credential policy.' }
+        }
+        if (!this.hasEntityChanges) return { state: 'blocked', title: `Change a ${this.modeConfig.singular} field`, detail: 'An audit reason alone does not create a policy change.' }
+        if (!this.draft.reason.trim()) return { state: 'blocked', title: 'Audit reason required', detail: `${this.changedFieldCount} ${this.changedFieldCount === 1 ? 'field is' : 'fields are'} changed; explain why before saving.` }
+        return { state: 'ready', title: this.creating ? 'Ready to create' : 'Ready to save', detail: `${this.changedFieldCount} ${this.changedFieldCount === 1 ? 'field' : 'fields'} changed with an audit reason.` }
       },
       draftTitle () {
         if (!this.draft) return ''
@@ -731,6 +790,7 @@
       }
     },
     created () {
+      window.addEventListener('beforeunload', this.onBeforeUnload)
       this.mode = MODE_CONFIG[this.$route.query.mode] ? this.$route.query.mode : 'channels'
       const requested = Number(this.$route.query.record || 0)
       this.loadDirectory().then(() => {
@@ -739,13 +799,29 @@
       })
     },
     beforeDestroy () {
+      window.removeEventListener('beforeunload', this.onBeforeUnload)
       clearTimeout(this.searchTimer)
       clearTimeout(this.ownerTimer)
       clearTimeout(this.notification.timer)
     },
     beforeRouteLeave (to, from, next) {
-      if (!this.hasUnsavedChanges || window.confirm('Discard unsaved Chat Administration changes?')) next()
-      else next(false)
+      if (!this.hasUnsavedChanges) {
+        next()
+        return
+      }
+      this.requestDiscard(() => next(), () => next(false))
+    },
+    beforeRouteUpdate (to, from, next) {
+      if (this.allowRouteUpdate) {
+        this.allowRouteUpdate = false
+        next()
+        return
+      }
+      if (!this.hasUnsavedChanges) {
+        next()
+        return
+      }
+      this.requestDiscard(() => next(), () => next(false))
     },
     methods: {
       async loadDirectory () {
@@ -786,7 +862,10 @@
       },
       async changeMode (mode, force) {
         if (mode === this.mode && !force) return
-        if (!force && this.hasUnsavedChanges && !window.confirm('Discard unsaved Chat Administration changes?')) return
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.changeMode(mode, true))
+          return
+        }
         this.mode = MODE_CONFIG[mode] ? mode : 'channels'
         this.search = ''
         this.filter = ''
@@ -795,15 +874,22 @@
         this.draft = null
         this.original = null
         this.creating = false
+        this.compactView = 'directory'
+        this.copiedSecuredChannel = false
         const query = { ...this.$route.query, mode: this.mode }
         delete query.record
-        this.$router.replace({ query }).catch(() => {})
+        this.allowRouteUpdate = true
+        this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
         await this.loadDirectory()
         if (this.records.length) await this.selectRecord(this.records[0], true)
       },
       async selectRecord (record, force) {
         if (!record) return
-        if (!force && this.hasUnsavedChanges && !window.confirm('Discard unsaved Chat Administration changes?')) return
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.selectRecord(record, true))
+          return
+        }
+        this.compactView = 'inspector'
         this.selectedID = Number(record.id)
         this.creating = false
         this.draft = null
@@ -827,6 +913,7 @@
         }
       },
       applyRecord (record) {
+        this.copiedSecuredChannel = false
         if (this.mode === 'channels') {
           this.draft = { ...emptyChannel(), ...clone(record), password_mode: 'keep', password: '', reason: '' }
           this.original = channelSnapshot(this.draft)
@@ -838,10 +925,15 @@
           this.original = { phrase: this.draft.phrase }
         }
       },
-      createDraft (source) {
-        if (this.hasUnsavedChanges && !window.confirm('Discard unsaved Chat Administration changes?')) return
+      createDraft (source, force) {
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.createDraft(source, true))
+          return
+        }
         this.creating = true
         this.selectedID = null
+        this.compactView = 'inspector'
+        this.copiedSecuredChannel = this.mode === 'channels' && Boolean(source && source.has_password)
         if (this.mode === 'channels') {
           const next = source
             ? { ...emptyChannel(), ...channelSnapshot(source), name: `${source.name} Copy`, has_password: false, password_mode: 'clear' }
@@ -857,9 +949,11 @@
         }
         const query = { ...this.$route.query, mode: this.mode }
         delete query.record
-        this.$router.replace({ query }).catch(() => {})
+        this.allowRouteUpdate = true
+        this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
       },
       resetDraft () {
+        this.copiedSecuredChannel = false
         if (this.creating) {
           if (this.mode === 'channels') {
             this.draft = emptyChannel()
@@ -1001,6 +1095,7 @@
           this.selectedID = null
           this.draft = null
           this.original = null
+          this.compactView = 'directory'
           const query = { ...this.$route.query, mode: this.mode }
           delete query.record
           this.$router.replace({ query }).catch(() => {})
@@ -1030,6 +1125,35 @@
       statusName (value) {
         const status = this.statuses.find(option => Number(option.value) === Number(value))
         return status ? status.label : `Status ${value}`
+      },
+      showDirectory () {
+        this.compactView = 'directory'
+      },
+      onBeforeUnload (event) {
+        if (!this.hasUnsavedChanges) return
+        event.preventDefault()
+        event.returnValue = ''
+      },
+      requestDiscard (action, cancel) {
+        if (!this.hasUnsavedChanges) {
+          action()
+          return
+        }
+        this.pendingDiscardAction = action
+        this.pendingDiscardCancel = cancel || null
+        this.$refs.discardModal.show()
+      },
+      confirmDiscard () {
+        const action = this.pendingDiscardAction
+        this.pendingDiscardAction = null
+        this.pendingDiscardCancel = null
+        if (action) action()
+      },
+      keepEditing () {
+        const cancel = this.pendingDiscardCancel
+        this.pendingDiscardAction = null
+        this.pendingDiscardCancel = null
+        if (cancel) cancel()
       },
       indefinite (value) {
         return /^[aeiou]/i.test(value) ? `an ${value}` : `a ${value}`

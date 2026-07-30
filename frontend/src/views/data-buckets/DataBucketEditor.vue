@@ -1,5 +1,8 @@
 <template>
-  <content-area class="spire-editor-page operational-editor-page data-bucket-editor-page">
+  <content-area
+    class="spire-editor-page operational-editor-page data-bucket-editor-page"
+    :class="{ 'operational-editor-page--directory': compactView === 'directory' }"
+  >
     <div class="spire-editor-toolbar">
       <div>
         <div class="spire-editor-kicker">World data · persistent state</div>
@@ -188,7 +191,16 @@
                 </div>
               </div>
             </div>
-            <div class="spire-editor-actions">
+          </div>
+
+          <action-dock
+            status-id="data-bucket-save-status"
+            :state="saveReadiness.state"
+            :title="saveReadiness.title"
+            :detail="saveReadiness.detail"
+            @back="showDirectory"
+          >
+            <template>
               <b-button v-if="!creating" size="sm" variant="outline-secondary" :disabled="saving" @click="createDraft(draft)">
                 <i class="fa fa-copy mr-1"></i>Copy
               </b-button>
@@ -198,11 +210,18 @@
               <b-button size="sm" variant="outline-secondary" :disabled="saving || !hasUnsavedChanges" @click="resetDraft">
                 <i class="fa fa-undo mr-1"></i>Revert
               </b-button>
-              <b-button size="sm" variant="warning" :disabled="saving || !canSave" data-testid="data-bucket-save" @click="save">
+              <b-button
+                size="sm"
+                variant="warning"
+                :disabled="saving || !canSave"
+                aria-describedby="data-bucket-save-status"
+                data-testid="data-bucket-save"
+                @click="save"
+              >
                 <i class="fa mr-1" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i>{{ creating ? 'Create' : 'Save' }}
               </b-button>
-            </div>
-          </div>
+            </template>
+          </action-dock>
 
           <div class="spire-editor-panel">
             <div class="operational-preview-strip">
@@ -230,7 +249,7 @@
                   class="form-control form-control-sm"
                   placeholder="event.progression.stage"
                 >
-                <span class="spire-editor-field-help">Names are case-sensitive according to the connected database collation.</span>
+                <span class="spire-editor-field-help">Key matching follows the connected database collation.</span>
               </div>
               <div class="spire-editor-field">
                 <label>Lifecycle</label>
@@ -280,14 +299,32 @@
               <small>Zero means unbound. Multiple nonzero fields intentionally form a composite scope.</small>
             </div>
 
-            <div class="operational-scope-grid">
+            <div class="operational-scope-composer">
+              <div>
+                <strong>{{ activeScopeFields.length ? activeScopeFields.length + ' binding ' + (activeScopeFields.length === 1 ? 'field' : 'fields') + ' shown' : 'Global bucket' }}</strong>
+                <small>Add only the fields this key needs, then enter an ID to make each binding effective.</small>
+              </div>
+              <div v-if="inactiveScopeFields.length" class="operational-scope-composer__add">
+                <select v-model="pendingScopeKey" class="form-control form-control-sm" aria-label="Scope binding to add">
+                  <option value="">Choose a binding…</option>
+                  <option v-for="field in inactiveScopeFields" :key="field.key" :value="field.key">{{ field.label }}</option>
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-warning" :disabled="!pendingScopeKey" @click="addScopeField">
+                  <i class="fa fa-plus mr-1"></i>Add binding
+                </button>
+              </div>
+              <span v-else class="operational-badge operational-badge--muted">All bindings shown</span>
+            </div>
+
+            <div v-if="activeScopeFields.length" class="operational-scope-grid">
               <scope-field
-                v-for="field in scopeFields"
+                v-for="field in activeScopeFields"
                 :key="field.key"
                 :field="field"
                 :value="Number(draft[field.key] || 0)"
                 :context="scopeContext(field.key)"
                 id-prefix="data-bucket"
+                allow-remove
                 @input="setScopeValue(field.key, $event)"
                 @lookup="openLookup(field)"
                 @clear="clearScope(field.key)"
@@ -297,9 +334,9 @@
             <div class="spire-editor-section-heading mt-4">
               <div>
                 <div class="spire-editor-section-kicker">Dependency awareness</div>
-                <h3>Key usage</h3>
+                <h3>Known database consumers</h3>
               </div>
-              <small>Merchant and spell conditions resolve by key name, across every scope.</small>
+              <small>Merchant and spell conditions resolve by key name. Script references cannot be discovered here.</small>
             </div>
 
             <div class="operational-usage-grid">
@@ -454,6 +491,13 @@
       </div>
     </b-modal>
 
+    <discard-modal
+      ref="discardModal"
+      message="Discard the pending data bucket draft to continue to another record or page."
+      @discard="confirmDiscard"
+      @keep="keepEditing"
+    />
+
     <transition name="spire-editor-fade">
       <div v-if="notification.message" class="spire-editor-notification" :class="{ error: notification.type === 'error' }" role="status">
         <i :class="notification.type === 'error' ? 'fa fa-exclamation-triangle' : 'fa fa-check-circle'"></i>
@@ -466,6 +510,8 @@
 <script>
   import ContentArea from '@/components/layout/ContentArea.vue'
   import EqWindow from '@/components/eq-ui/EQWindow.vue'
+  import ActionDock from '@/components/editors/OperationalActionDock.vue'
+  import DiscardModal from '@/components/editors/OperationalDiscardModal.vue'
   import ScopeField from '@/components/editors/OperationalScopeField.vue'
   import { SpireApi } from '@/app/api/spire-api'
 
@@ -511,7 +557,7 @@
 
   export default {
     name: 'DataBucketEditor',
-    components: { ContentArea, EqWindow, ScopeField },
+    components: { ContentArea, EqWindow, ActionDock, DiscardModal, ScopeField },
     data () {
       return {
         summary: emptySummary(),
@@ -532,8 +578,14 @@
         draft: null,
         original: null,
         creating: false,
+        compactView: 'directory',
         expiryLocal: '',
         scopeContexts: {},
+        activeScopeKeys: [],
+        pendingScopeKey: '',
+        pendingDiscardAction: null,
+        pendingDiscardCancel: null,
+        allowRouteUpdate: false,
         searchTimer: null,
         lookupTimer: null,
         lookupField: null,
@@ -565,12 +617,27 @@
       draftSnapshot () {
         return this.draft ? snapshot(this.draft) : null
       },
+      changedFieldCount () {
+        if (!this.draftSnapshot || !this.original) return 0
+        return Object.keys(this.draftSnapshot).filter(key => JSON.stringify(this.draftSnapshot[key]) !== JSON.stringify(this.original[key])).length
+      },
+      hasEntityChanges () {
+        return this.changedFieldCount > 0
+      },
       hasUnsavedChanges () {
         if (!this.draft || !this.original) return false
-        return JSON.stringify(this.draftSnapshot) !== JSON.stringify(this.original) || Boolean(this.draft.reason.trim())
+        return this.hasEntityChanges || Boolean(this.draft.reason.trim())
       },
       canSave () {
-        return this.draft && this.draft.key.trim() && this.draft.reason.trim() && this.hasUnsavedChanges
+        return this.draft && this.draft.key.trim() && this.draft.reason.trim() && this.hasEntityChanges
+      },
+      saveReadiness () {
+        if (this.saving) return { state: 'saving', title: this.creating ? 'Creating data bucket…' : 'Saving audited change…', detail: 'The current draft is being written transactionally.' }
+        if (!this.hasUnsavedChanges) return { state: 'idle', title: 'No pending changes', detail: 'Select a field to begin an audited edit.' }
+        if (!this.draft.key.trim()) return { state: 'blocked', title: 'Bucket key required', detail: 'Enter the exact persistent-state key before saving.' }
+        if (!this.hasEntityChanges) return { state: 'blocked', title: 'Change a bucket field', detail: 'An audit reason alone does not create a data change.' }
+        if (!this.draft.reason.trim()) return { state: 'blocked', title: 'Audit reason required', detail: `${this.changedFieldCount} ${this.changedFieldCount === 1 ? 'field is' : 'fields are'} changed; explain why before saving.` }
+        return { state: 'ready', title: this.creating ? 'Ready to create' : 'Ready to save', detail: `${this.changedFieldCount} ${this.changedFieldCount === 1 ? 'field' : 'fields'} changed with an audit reason.` }
       },
       expiryMode () {
         return !this.draft || Number(this.draft.expires || 0) === 0 ? 'permanent' : 'dated'
@@ -584,6 +651,12 @@
       scopeValues () {
         if (!this.draft) return []
         return this.scopeFields.filter(field => Number(this.draft[field.key] || 0) > 0)
+      },
+      activeScopeFields () {
+        return this.scopeFields.filter(field => this.activeScopeKeys.includes(field.key))
+      },
+      inactiveScopeFields () {
+        return this.scopeFields.filter(field => !this.activeScopeKeys.includes(field.key))
       },
       scopeKind () {
         if (!this.scopeValues.length) return 'global'
@@ -610,6 +683,7 @@
       }
     },
     created () {
+      window.addEventListener('beforeunload', this.onBeforeUnload)
       const requested = Number(this.$route.query.bucket || 0)
       this.loadDirectory().then(() => {
         if (requested) this.selectRecord(requested, true)
@@ -617,13 +691,29 @@
       })
     },
     beforeDestroy () {
+      window.removeEventListener('beforeunload', this.onBeforeUnload)
       clearTimeout(this.searchTimer)
       clearTimeout(this.lookupTimer)
       clearTimeout(this.notification.timer)
     },
     beforeRouteLeave (to, from, next) {
-      if (!this.hasUnsavedChanges || window.confirm('Discard unsaved data bucket changes?')) next()
-      else next(false)
+      if (!this.hasUnsavedChanges) {
+        next()
+        return
+      }
+      this.requestDiscard(() => next(), () => next(false))
+    },
+    beforeRouteUpdate (to, from, next) {
+      if (this.allowRouteUpdate) {
+        this.allowRouteUpdate = false
+        next()
+        return
+      }
+      if (!this.hasUnsavedChanges) {
+        next()
+        return
+      }
+      this.requestDiscard(() => next(), () => next(false))
     },
     methods: {
       async loadDirectory () {
@@ -664,7 +754,11 @@
         this.loadDirectory()
       },
       async selectRecord (id, force) {
-        if (!force && this.hasUnsavedChanges && !window.confirm('Discard unsaved data bucket changes?')) return
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.selectRecord(id, true))
+          return
+        }
+        this.compactView = 'inspector'
         this.selectedID = Number(id)
         this.creating = false
         this.draft = null
@@ -696,9 +790,16 @@
           bot_id: detail.bucket.bot_name ? `Bot ${detail.bucket.bot_name}` : '',
           zone_id: detail.bucket.zone_name ? `Zone ${detail.bucket.zone_name}` : ''
         }
+        this.activeScopeKeys = this.scopeFields
+          .filter(field => Number(this.draft[field.key] || 0) > 0)
+          .map(field => field.key)
+        this.pendingScopeKey = ''
       },
-      createDraft (source) {
-        if (this.hasUnsavedChanges && !window.confirm('Discard unsaved data bucket changes?')) return
+      createDraft (source, force) {
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.createDraft(source, true))
+          return
+        }
         const next = source ? { ...emptyBucket(), ...snapshot(source), key: `${source.key}.copy` } : emptyBucket()
         next.reason = ''
         this.creating = true
@@ -706,11 +807,17 @@
         this.detail = { bucket: next, usage: emptyUsage() }
         this.draft = next
         this.original = source ? snapshot(source) : snapshot(emptyBucket())
+        this.compactView = 'inspector'
         this.expiryLocal = this.toLocalInput(next.expires)
         this.scopeContexts = source ? { ...this.scopeContexts } : {}
+        this.activeScopeKeys = this.scopeFields
+          .filter(field => Number(next[field.key] || 0) > 0)
+          .map(field => field.key)
+        this.pendingScopeKey = ''
         const query = { ...this.$route.query }
         delete query.bucket
-        this.$router.replace({ query }).catch(() => {})
+        this.allowRouteUpdate = true
+        this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
       },
       resetDraft () {
         if (this.creating) {
@@ -719,6 +826,8 @@
           this.detail = { bucket: this.draft, usage: emptyUsage() }
           this.expiryLocal = ''
           this.scopeContexts = {}
+          this.activeScopeKeys = []
+          this.pendingScopeKey = ''
           return
         }
         this.reloadSelected()
@@ -778,6 +887,17 @@
       clearScope (key) {
         this.$set(this.draft, key, 0)
         this.$delete(this.scopeContexts, key)
+        this.activeScopeKeys = this.activeScopeKeys.filter(activeKey => activeKey !== key)
+      },
+      addScopeField () {
+        if (!this.pendingScopeKey || this.activeScopeKeys.includes(this.pendingScopeKey)) return
+        const key = this.pendingScopeKey
+        this.activeScopeKeys = [...this.activeScopeKeys, key]
+        this.pendingScopeKey = ''
+        this.$nextTick(() => {
+          const input = document.getElementById(`data-bucket-${key}`)
+          if (input) input.focus()
+        })
       },
       scopeContext (key) {
         return this.scopeContexts[key] || ''
@@ -858,6 +978,7 @@
           this.draft = null
           this.original = null
           this.detail = null
+          this.compactView = 'directory'
           const query = { ...this.$route.query }
           delete query.bucket
           this.$router.replace({ query }).catch(() => {})
@@ -875,6 +996,35 @@
       },
       compactScope (record) {
         return (record.scope_labels || []).join(' · ') || 'Global'
+      },
+      showDirectory () {
+        this.compactView = 'directory'
+      },
+      onBeforeUnload (event) {
+        if (!this.hasUnsavedChanges) return
+        event.preventDefault()
+        event.returnValue = ''
+      },
+      requestDiscard (action, cancel) {
+        if (!this.hasUnsavedChanges) {
+          action()
+          return
+        }
+        this.pendingDiscardAction = action
+        this.pendingDiscardCancel = cancel || null
+        this.$refs.discardModal.show()
+      },
+      confirmDiscard () {
+        const action = this.pendingDiscardAction
+        this.pendingDiscardAction = null
+        this.pendingDiscardCancel = null
+        if (action) action()
+      },
+      keepEditing () {
+        const cancel = this.pendingDiscardCancel
+        this.pendingDiscardAction = null
+        this.pendingDiscardCancel = null
+        if (cancel) cancel()
       },
       formatDate (timestamp) {
         if (!timestamp) return 'Never'

@@ -1,5 +1,8 @@
 <template>
-  <content-area class="spire-editor-page operational-editor-page qglobal-editor-page">
+  <content-area
+    class="spire-editor-page operational-editor-page qglobal-editor-page"
+    :class="{ 'operational-editor-page--directory': compactView === 'directory' }"
+  >
     <div class="spire-editor-toolbar">
       <div>
         <div class="spire-editor-kicker">World data · legacy quest state</div>
@@ -173,7 +176,7 @@
               <span class="spire-editor-identity-icon"><i class="ra ra-scroll-unfurled"></i></span>
               <div>
                 <div class="spire-editor-eyebrow">
-                  {{ creating ? 'New QGlobal' : 'Composite identity' }}
+                  {{ creating ? 'New QGlobal' : 'Match identity' }}
                   <span v-if="hasUnsavedChanges" class="spire-editor-unsaved"><i class="fa fa-circle"></i> Unsaved</span>
                 </div>
                 <h2>{{ draft.name || 'Untitled QGlobal' }}</h2>
@@ -185,7 +188,16 @@
                 </div>
               </div>
             </div>
-            <div class="spire-editor-actions">
+          </div>
+
+          <action-dock
+            status-id="qglobal-save-status"
+            :state="saveReadiness.state"
+            :title="saveReadiness.title"
+            :detail="saveReadiness.detail"
+            @back="showDirectory"
+          >
+            <template>
               <b-button v-if="!creating" size="sm" variant="outline-secondary" :disabled="saving" @click="createDraft(draft)">
                 <i class="fa fa-copy mr-1"></i>Copy
               </b-button>
@@ -195,11 +207,18 @@
               <b-button size="sm" variant="outline-secondary" :disabled="saving || !hasUnsavedChanges" @click="resetDraft">
                 <i class="fa fa-undo mr-1"></i>Revert
               </b-button>
-              <b-button size="sm" variant="warning" :disabled="saving || !canSave" data-testid="qglobal-save" @click="save">
+              <b-button
+                size="sm"
+                variant="warning"
+                :disabled="saving || !canSave"
+                aria-describedby="qglobal-save-status"
+                data-testid="qglobal-save"
+                @click="save"
+              >
                 <i class="fa mr-1" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i>{{ creating ? 'Create' : 'Save' }}
               </b-button>
-            </div>
-          </div>
+            </template>
+          </action-dock>
 
           <div class="spire-editor-panel">
             <div class="operational-preview-strip">
@@ -280,6 +299,7 @@
                 :value="Number(draft[field.key] || 0)"
                 :context="scopeContext(field.key)"
                 id-prefix="qglobal"
+                allow-any
                 @input="setScopeValue(field.key, $event)"
                 @lookup="openLookup(field)"
                 @clear="clearScope(field.key)"
@@ -433,6 +453,13 @@
       </div>
     </b-modal>
 
+    <discard-modal
+      ref="discardModal"
+      message="Discard the pending QGlobal draft to continue to another match identity or page."
+      @discard="confirmDiscard"
+      @keep="keepEditing"
+    />
+
     <transition name="spire-editor-fade">
       <div v-if="notification.message" class="spire-editor-notification" :class="{ error: notification.type === 'error' }" role="status">
         <i :class="notification.type === 'error' ? 'fa fa-exclamation-triangle' : 'fa fa-check-circle'"></i>
@@ -445,6 +472,8 @@
 <script>
   import ContentArea from '@/components/layout/ContentArea.vue'
   import EqWindow from '@/components/eq-ui/EQWindow.vue'
+  import ActionDock from '@/components/editors/OperationalActionDock.vue'
+  import DiscardModal from '@/components/editors/OperationalDiscardModal.vue'
   import ScopeField from '@/components/editors/OperationalScopeField.vue'
   import { SpireApi } from '@/app/api/spire-api'
 
@@ -484,7 +513,7 @@
 
   export default {
     name: 'QGlobalEditor',
-    components: { ContentArea, EqWindow, ScopeField },
+    components: { ContentArea, EqWindow, ActionDock, DiscardModal, ScopeField },
     data () {
       return {
         summary: emptySummary(),
@@ -505,8 +534,12 @@
         draft: null,
         original: null,
         creating: false,
+        compactView: 'directory',
         expiryLocal: '',
         scopeContexts: {},
+        pendingDiscardAction: null,
+        pendingDiscardCancel: null,
+        allowRouteUpdate: false,
         searchTimer: null,
         lookupTimer: null,
         lookupField: null,
@@ -534,12 +567,27 @@
       draftSnapshot () {
         return this.draft ? snapshot(this.draft) : null
       },
+      changedFieldCount () {
+        if (!this.draftSnapshot || !this.original) return 0
+        return Object.keys(this.draftSnapshot).filter(key => JSON.stringify(this.draftSnapshot[key]) !== JSON.stringify(this.original[key])).length
+      },
+      hasEntityChanges () {
+        return this.changedFieldCount > 0
+      },
       hasUnsavedChanges () {
         if (!this.draft || !this.original) return false
-        return JSON.stringify(this.draftSnapshot) !== JSON.stringify(this.original) || Boolean(this.draft.reason.trim())
+        return this.hasEntityChanges || Boolean(this.draft.reason.trim())
       },
       canSave () {
-        return this.draft && this.draft.name.trim() && this.draft.reason.trim() && this.hasUnsavedChanges
+        return this.draft && this.draft.name.trim() && this.draft.reason.trim() && this.hasEntityChanges
+      },
+      saveReadiness () {
+        if (this.saving) return { state: 'saving', title: this.creating ? 'Creating QGlobal…' : 'Saving audited change…', detail: 'The exact match identity is being written transactionally.' }
+        if (!this.hasUnsavedChanges) return { state: 'idle', title: 'No pending changes', detail: 'Change a field to begin an audited quest-state edit.' }
+        if (!this.draft.name.trim()) return { state: 'blocked', title: 'QGlobal name required', detail: 'Enter the exact quest-global name before saving.' }
+        if (!this.hasEntityChanges) return { state: 'blocked', title: 'Change a QGlobal field', detail: 'An audit reason alone does not create a data change.' }
+        if (!this.draft.reason.trim()) return { state: 'blocked', title: 'Audit reason required', detail: `${this.changedFieldCount} ${this.changedFieldCount === 1 ? 'field is' : 'fields are'} changed; explain why before saving.` }
+        return { state: 'ready', title: this.creating ? 'Ready to create' : 'Ready to save', detail: `${this.changedFieldCount} ${this.changedFieldCount === 1 ? 'field' : 'fields'} changed with an audit reason.` }
       },
       isPermanent () {
         return !this.draft || this.draft.expdate === null || Number(this.draft.expdate) <= 0
@@ -584,6 +632,7 @@
       }
     },
     created () {
+      window.addEventListener('beforeunload', this.onBeforeUnload)
       const requested = String(this.$route.query.qglobal || '')
       this.loadDirectory().then(() => {
         if (requested) this.selectRecord(requested, true)
@@ -591,13 +640,29 @@
       })
     },
     beforeDestroy () {
+      window.removeEventListener('beforeunload', this.onBeforeUnload)
       clearTimeout(this.searchTimer)
       clearTimeout(this.lookupTimer)
       clearTimeout(this.notification.timer)
     },
     beforeRouteLeave (to, from, next) {
-      if (!this.hasUnsavedChanges || window.confirm('Discard unsaved QGlobal changes?')) next()
-      else next(false)
+      if (!this.hasUnsavedChanges) {
+        next()
+        return
+      }
+      this.requestDiscard(() => next(), () => next(false))
+    },
+    beforeRouteUpdate (to, from, next) {
+      if (this.allowRouteUpdate) {
+        this.allowRouteUpdate = false
+        next()
+        return
+      }
+      if (!this.hasUnsavedChanges) {
+        next()
+        return
+      }
+      this.requestDiscard(() => next(), () => next(false))
     },
     methods: {
       async loadDirectory () {
@@ -638,7 +703,11 @@
         this.loadDirectory()
       },
       async selectRecord (identity, force) {
-        if (!force && this.hasUnsavedChanges && !window.confirm('Discard unsaved QGlobal changes?')) return
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.selectRecord(identity, true))
+          return
+        }
+        this.compactView = 'inspector'
         this.selectedIdentity = identity
         this.creating = false
         this.draft = null
@@ -669,8 +738,11 @@
           zoneid: detail.global.zone_name ? `Zone ${detail.global.zone_name}` : ''
         }
       },
-      createDraft (source) {
-        if (this.hasUnsavedChanges && !window.confirm('Discard unsaved QGlobal changes?')) return
+      createDraft (source, force) {
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.createDraft(source, true))
+          return
+        }
         const next = source
           ? { ...emptyGlobal(), ...snapshot(source), name: `${source.name}_copy`, identity: '' }
           : emptyGlobal()
@@ -680,11 +752,13 @@
         this.detail = { global: next, usage: emptyUsage() }
         this.draft = next
         this.original = source ? snapshot(source) : snapshot(emptyGlobal())
+        this.compactView = 'inspector'
         this.expiryLocal = this.toLocalInput(next.expdate)
         this.scopeContexts = source ? { ...this.scopeContexts } : {}
         const query = { ...this.$route.query }
         delete query.qglobal
-        this.$router.replace({ query }).catch(() => {})
+        this.allowRouteUpdate = true
+        this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
       },
       resetDraft () {
         if (this.creating) {
@@ -818,6 +892,7 @@
           this.draft = null
           this.original = null
           this.detail = null
+          this.compactView = 'directory'
           const query = { ...this.$route.query }
           delete query.qglobal
           this.$router.replace({ query }).catch(() => {})
@@ -831,12 +906,41 @@
         }
       },
       compactScope (record) {
-        if (record.scope_kind === 'global') return '***'
+        if (record.scope_kind === 'global') return 'Any character · Any NPC · Any zone'
         const values = []
-        if (record.charid) values.push(`C${record.charid}`)
-        if (record.npcid) values.push(`N${record.npcid}`)
-        if (record.zoneid) values.push(`Z${record.zoneid}`)
+        if (record.charid) values.push(`Character #${record.charid}`)
+        if (record.npcid) values.push(`NPC #${record.npcid}`)
+        if (record.zoneid) values.push(`Zone #${record.zoneid}`)
         return values.join(' · ')
+      },
+      showDirectory () {
+        this.compactView = 'directory'
+      },
+      onBeforeUnload (event) {
+        if (!this.hasUnsavedChanges) return
+        event.preventDefault()
+        event.returnValue = ''
+      },
+      requestDiscard (action, cancel) {
+        if (!this.hasUnsavedChanges) {
+          action()
+          return
+        }
+        this.pendingDiscardAction = action
+        this.pendingDiscardCancel = cancel || null
+        this.$refs.discardModal.show()
+      },
+      confirmDiscard () {
+        const action = this.pendingDiscardAction
+        this.pendingDiscardAction = null
+        this.pendingDiscardCancel = null
+        if (action) action()
+      },
+      keepEditing () {
+        const cancel = this.pendingDiscardCancel
+        this.pendingDiscardAction = null
+        this.pendingDiscardCancel = null
+        if (cancel) cancel()
       },
       formatDate (timestamp) {
         if (timestamp === null || Number(timestamp) <= 0) return 'Never'
