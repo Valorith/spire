@@ -1,3 +1,10 @@
+## [Unreleased] (Beta) 7/30/2026
+
+* Added a Data Buckets Editor with scoped browsing, JSON formatting, lifecycle controls, consumer visibility, audit history, and stale-write conflict recovery.
+* Added a QGlobals Editor with Any/Specific scope controls, overlap detection, lifecycle controls, guarded deletion, and audit history.
+* Added Chat administration under Configuration for persistent channels, reserved names, and saylinks, with collision and owner validation, protected credential handling, and audited mutations.
+* Improved operational editors with persistent URL state, keyboard shortcuts, save-readiness feedback, responsive directory/detail navigation, and reusable discard and conflict safeguards.
+
 ## [5.5.1] (Beta) 7/28/2026
 
 * Enable Beta updates via Spire Updater. Can be turned off in Settings.
