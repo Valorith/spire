@@ -581,11 +581,9 @@ export default {
             { title: "Server Rules", to: ROUTE.ADMIN_CONFIG_SERVER_RULES, icon: "ra ra-interdiction mr-1" },
             { title: "UCS", to: ROUTE.ADMIN_SERVER_CONFIG + '?s=UCS', icon: "ra ra-speech-bubbles mr-1", exact: true },
             {
-              title: "Chat Administration",
+              title: "Chat",
               to: ROUTE.ADMIN_CHAT_ADMINISTRATION,
-              icon: "fa fa-comments mr-1",
-              isNew: true,
-              isAlpha: true
+              icon: "fa fa-comments mr-1"
             },
             {
               title: "World Server",
