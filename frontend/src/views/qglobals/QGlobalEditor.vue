@@ -12,13 +12,21 @@
         </p>
       </div>
       <div class="spire-editor-summary" aria-label="QGlobals summary">
-        <span><strong>{{ number(summary.total) }}</strong> total</span>
+        <button type="button" :class="{ active: !scopeFilter && !stateFilter }" @click="applySummaryFilter('', '')">
+          <strong>{{ number(summary.total) }}</strong> total
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.global) }}</strong> wildcard</span>
+        <button type="button" :class="{ active: scopeFilter === 'global' }" @click="applySummaryFilter('global', stateFilter)">
+          <strong>{{ number(summary.global) }}</strong> wildcard
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.active) }}</strong> active</span>
+        <button type="button" :class="{ active: stateFilter === 'active' }" @click="applySummaryFilter(scopeFilter, 'active')">
+          <strong>{{ number(summary.active) }}</strong> active
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.expired) }}</strong> expired</span>
+        <button type="button" :class="{ active: stateFilter === 'expired' }" @click="applySummaryFilter(scopeFilter, 'expired')">
+          <strong>{{ number(summary.expired) }}</strong> expired
+        </button>
       </div>
     </div>
 
@@ -40,7 +48,7 @@
                 class="spire-editor-search-clear"
                 type="button"
                 aria-label="Clear QGlobal search"
-                @click="search = ''; currentPage = 1; loadDirectory()"
+                @click="search = ''; currentPage = 1; syncDirectoryQuery(); loadDirectory()"
               >
                 <i class="fa fa-times"></i>
               </button>
@@ -56,7 +64,7 @@
               v-model="scopeFilter"
               class="form-control form-control-sm"
               aria-label="Filter QGlobals by scope"
-              @change="currentPage = 1; loadDirectory()"
+              @change="currentPage = 1; syncDirectoryQuery(); loadDirectory()"
             >
               <option value="">All scopes</option>
               <option value="global">Full wildcard</option>
@@ -70,7 +78,7 @@
               v-model="stateFilter"
               class="form-control form-control-sm"
               aria-label="Filter QGlobals by expiration"
-              @change="currentPage = 1; loadDirectory()"
+              @change="currentPage = 1; syncDirectoryQuery(); loadDirectory()"
             >
               <option value="active">Active</option>
               <option value="">All lifecycle states</option>
@@ -94,6 +102,7 @@
               type="button"
               class="spire-editor-directory-row"
               :class="{ active: !creating && selectedIdentity === record.identity }"
+              :aria-current="!creating && selectedIdentity === record.identity ? 'true' : null"
               @click="selectRecord(record.identity)"
             >
               <span class="spire-editor-directory-icon">
@@ -268,6 +277,13 @@
                   >
                 </div>
                 <span class="spire-editor-field-help">Permanent stores NULL. Existing nonpositive legacy timestamps remain recognizable as permanent.</span>
+                <div class="operational-lifecycle-presets" aria-label="Expiration presets">
+                  <button type="button" @click="setRelativeExpiry(1)">+1 hour</button>
+                  <button type="button" @click="setRelativeExpiry(24)">+1 day</button>
+                  <button type="button" @click="setRelativeExpiry(168)">+7 days</button>
+                  <button type="button" @click="setRelativeExpiry(720)">+30 days</button>
+                </div>
+                <span v-if="draft.expdate" class="spire-editor-field-help">UTC {{ formatUTC(draft.expdate) }}</span>
               </div>
             </div>
 
@@ -306,20 +322,39 @@
               />
             </div>
 
-            <div class="spire-editor-section-heading mt-4">
-              <div>
-                <div class="spire-editor-section-kicker">Name consumers</div>
-                <h3>Related content</h3>
-              </div>
-              <small>Availability reflects the connected schema; missing optional tables are called out instead of treated as empty.</small>
+            <div v-if="detail && detail.overlaps && detail.overlaps.length" class="operational-inline-warning operational-inline-warning--danger mt-3">
+              <i class="fa fa-code-fork"></i>
+              <span>
+                {{ detail.overlaps.length }} same-name scope{{ detail.overlaps.length === 1 ? '' : 's' }} can match some of the same requests.
+                Review resolution order before changing this row.
+              </span>
+            </div>
+            <div v-if="detail && detail.overlaps && detail.overlaps.length" class="operational-overlap-list">
+              <button
+                v-for="overlap in detail.overlaps"
+                :key="overlap.identity"
+                type="button"
+                @click="selectRecord(overlap.identity)"
+              >
+                <span><strong>{{ overlap.name }}</strong><small>{{ compactScope(overlap) }}</small></span>
+                <i class="fa fa-angle-right"></i>
+              </button>
             </div>
 
-            <div class="operational-usage-grid qglobal-usage-grid">
-              <div v-for="source in usage.sources" :key="source.key" class="operational-usage-source">
+            <details class="operational-collapsible" :open="usage.total > 0">
+              <summary>
+                <span><i class="fa fa-sitemap mr-1"></i>Related content</span>
+                <small>{{ usage.total ? number(usage.total) + ' database consumers' : 'No installed-source references found' }}</small>
+              </summary>
+              <div v-if="unavailableUsageSources.length" class="operational-validation operational-validation--warning mb-2">
+                <i class="fa fa-info-circle"></i>
+                <span>{{ unavailableUsageSources.length }} optional source{{ unavailableUsageSources.length === 1 ? ' is' : 's are' }} unavailable in this schema.</span>
+              </div>
+              <div class="operational-usage-grid qglobal-usage-grid">
+              <div v-for="source in availableUsageSources" :key="source.key" class="operational-usage-source">
                 <div class="operational-usage-source__heading">
                   <strong>{{ source.label }}</strong>
-                  <span v-if="source.available">{{ number(source.count) }}</span>
-                  <span v-else>Not installed</span>
+                  <span>{{ number(source.count) }}</span>
                 </div>
                 <template v-if="source.samples && source.samples.length">
                   <div v-for="sample in source.samples" :key="source.key + '-' + sample.id" class="operational-usage-row">
@@ -327,14 +362,12 @@
                     <small>{{ sample.context }}<template v-if="sample.value"> · expects {{ sample.value }}</template></small>
                   </div>
                 </template>
-                <div v-else-if="source.available" class="operational-empty-inline">
+                <div v-else class="operational-empty-inline">
                   <i class="fa fa-check-circle"></i>No matching records.
                 </div>
-                <div v-else class="operational-empty-inline">
-                  <i class="fa fa-minus-circle"></i>Optional source table is unavailable.
-                </div>
               </div>
-            </div>
+              </div>
+            </details>
 
             <div class="spire-editor-field operational-audit-field">
               <label for="qglobal-reason">Required audit reason <span>{{ draft.reason.length }}/240</span></label>
@@ -347,6 +380,16 @@
                 placeholder="Explain the quest-state correction or content operation…"
               ></textarea>
             </div>
+
+            <audit-trail
+              v-if="!creating"
+              :entries="auditEntries"
+              :total="auditTotal"
+              :loading="loadingAudit"
+              :error="auditError"
+              @open="loadAudit"
+              @refresh="loadAudit(true)"
+            />
           </div>
         </eq-window>
       </main>
@@ -406,6 +449,12 @@
             <span>The exact character/NPC/zone/name row is locked and rechecked before deletion.</span>
           </div>
         </div>
+        <label v-if="usage.total" class="d-flex align-items-start">
+          <input v-model="allowReferencedDelete" type="checkbox" class="mr-2 mt-1">
+          <span class="small">
+            I reviewed {{ usage.total }} database consumer{{ usage.total === 1 ? '' : 's' }} and the same-name scope variants.
+          </span>
+        </label>
         <div class="guarded-delete-slider" :class="{ 'guarded-delete-slider--confirmed': deleteConfirmed }">
           <div class="guarded-delete-slider__heading">
             <label for="qglobal-delete-slider">{{ deleteConfirmed ? 'Deletion armed' : 'Slide to confirm' }}</label>
@@ -444,7 +493,7 @@
           <button
             type="button"
             class="btn btn-sm btn-outline-danger"
-            :disabled="saving || !deleteConfirmed || !deleteReason.trim()"
+            :disabled="saving || !deleteConfirmed || !deleteReason.trim() || (usage.total > 0 && !allowReferencedDelete)"
             @click="confirmDelete"
           >
             <i class="fa mr-1" :class="saving ? 'fa-spinner fa-spin' : 'fa-trash'"></i>Delete QGlobal
@@ -460,6 +509,13 @@
       @keep="keepEditing"
     />
 
+    <conflict-modal
+      ref="conflictModal"
+      :changes="conflictChanges"
+      @reload="acceptConflictCurrent"
+      @preserve="preserveConflictDraft"
+    />
+
     <transition name="spire-editor-fade">
       <div v-if="notification.message" class="spire-editor-notification" :class="{ error: notification.type === 'error' }" role="status">
         <i :class="notification.type === 'error' ? 'fa fa-exclamation-triangle' : 'fa fa-check-circle'"></i>
@@ -473,6 +529,8 @@
   import ContentArea from '@/components/layout/ContentArea.vue'
   import EqWindow from '@/components/eq-ui/EQWindow.vue'
   import ActionDock from '@/components/editors/OperationalActionDock.vue'
+  import AuditTrail from '@/components/editors/OperationalAuditTrail.vue'
+  import ConflictModal from '@/components/editors/OperationalConflictModal.vue'
   import DiscardModal from '@/components/editors/OperationalDiscardModal.vue'
   import ScopeField from '@/components/editors/OperationalScopeField.vue'
   import { SpireApi } from '@/app/api/spire-api'
@@ -513,7 +571,7 @@
 
   export default {
     name: 'QGlobalEditor',
-    components: { ContentArea, EqWindow, ActionDock, DiscardModal, ScopeField },
+    components: { ContentArea, EqWindow, ActionDock, AuditTrail, ConflictModal, DiscardModal, ScopeField },
     data () {
       return {
         summary: emptySummary(),
@@ -549,6 +607,14 @@
         lookupError: '',
         deleteSlider: 0,
         deleteReason: '',
+        allowReferencedDelete: false,
+        auditEntries: [],
+        auditTotal: 0,
+        loadingAudit: false,
+        auditError: '',
+        conflictLatest: null,
+        conflictDraft: null,
+        conflictChanges: [],
         notification: { message: '', type: 'success', timer: null },
         scopeFields: [
           { key: 'charid', label: 'Character', icon: 'ra ra-player', lookup: 'characters', max: 2147483647, help: '0 · any character' },
@@ -563,6 +629,12 @@
       },
       usage () {
         return this.detail && this.detail.usage ? this.detail.usage : emptyUsage()
+      },
+      availableUsageSources () {
+        return (this.usage.sources || []).filter(source => source.available)
+      },
+      unavailableUsageSources () {
+        return (this.usage.sources || []).filter(source => !source.available)
       },
       draftSnapshot () {
         return this.draft ? snapshot(this.draft) : null
@@ -633,6 +705,11 @@
     },
     created () {
       window.addEventListener('beforeunload', this.onBeforeUnload)
+      window.addEventListener('keydown', this.onShortcut)
+      this.search = String(this.$route.query.q || '')
+      this.scopeFilter = String(this.$route.query.scope || '')
+      this.stateFilter = this.$route.query.state === 'all' ? '' : String(this.$route.query.state || 'active')
+      this.currentPage = Math.max(1, Number(this.$route.query.page || 1))
       const requested = String(this.$route.query.qglobal || '')
       this.loadDirectory().then(() => {
         if (requested) this.selectRecord(requested, true)
@@ -641,6 +718,7 @@
     },
     beforeDestroy () {
       window.removeEventListener('beforeunload', this.onBeforeUnload)
+      window.removeEventListener('keydown', this.onShortcut)
       clearTimeout(this.searchTimer)
       clearTimeout(this.lookupTimer)
       clearTimeout(this.notification.timer)
@@ -695,12 +773,33 @@
         clearTimeout(this.searchTimer)
         this.searchTimer = setTimeout(() => {
           this.currentPage = 1
+          this.syncDirectoryQuery()
           this.loadDirectory()
         }, 220)
       },
       changePage (page) {
         this.currentPage = page
+        this.syncDirectoryQuery()
         this.loadDirectory()
+      },
+      applySummaryFilter (scope, state) {
+        this.scopeFilter = scope
+        this.stateFilter = state
+        this.currentPage = 1
+        this.syncDirectoryQuery()
+        this.loadDirectory()
+      },
+      syncDirectoryQuery () {
+        const query = { ...this.$route.query }
+        if (this.search) query.q = this.search
+        else delete query.q
+        if (this.scopeFilter) query.scope = this.scopeFilter
+        else delete query.scope
+        query.state = this.stateFilter || 'all'
+        if (this.currentPage > 1) query.page = String(this.currentPage)
+        else delete query.page
+        this.allowRouteUpdate = true
+        this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
       },
       async selectRecord (identity, force) {
         if (!force && this.hasUnsavedChanges) {
@@ -713,6 +812,9 @@
         this.draft = null
         this.original = null
         this.detail = null
+        this.auditEntries = []
+        this.auditTotal = 0
+        this.auditError = ''
         this.detailError = ''
         this.loadingDetail = true
         try {
@@ -749,7 +851,7 @@
         next.reason = ''
         this.creating = true
         this.selectedIdentity = ''
-        this.detail = { global: next, usage: emptyUsage() }
+        this.detail = { global: next, usage: emptyUsage(), overlaps: [], same_name_count: 0 }
         this.draft = next
         this.original = source ? snapshot(source) : snapshot(emptyGlobal())
         this.compactView = 'inspector'
@@ -793,7 +895,8 @@
           this.$router.replace({ query: { ...this.$route.query, qglobal: this.selectedIdentity } }).catch(() => {})
           this.notify(created ? 'QGlobal created with an audit record.' : 'QGlobal saved with an audit record.')
         } catch (error) {
-          this.notify(this.apiError(error), 'error')
+          if (this.isStaleConflict(error)) await this.prepareConflict()
+          else this.notify(this.apiError(error), 'error')
         } finally {
           this.saving = false
         }
@@ -801,6 +904,11 @@
       setPermanent () {
         this.draft.expdate = null
         this.expiryLocal = ''
+      },
+      setRelativeExpiry (hours) {
+        const timestamp = Math.floor(Date.now() / 1000) + (Number(hours) * 60 * 60)
+        this.draft.expdate = timestamp
+        this.expiryLocal = this.toLocalInput(timestamp)
       },
       setExpiryFromLocal () {
         if (!this.expiryLocal) {
@@ -870,6 +978,7 @@
       resetDelete () {
         this.deleteSlider = 0
         this.deleteReason = ''
+        this.allowReferencedDelete = false
       },
       updateDeleteSlider (event) {
         const value = Number(event.target.value || 0)
@@ -884,7 +993,8 @@
             data: {
               global: { ...this.draftSnapshot, reason: this.deleteReason.trim() },
               expected: this.original,
-              confirm: true
+              confirm: true,
+              allow_referenced_name: this.allowReferencedDelete
             }
           })
           this.$refs.deleteModal.hide()
@@ -900,7 +1010,12 @@
           if (this.records.length) await this.selectRecord(this.records[0].identity, true)
           this.notify('QGlobal deleted with an audit record.')
         } catch (error) {
-          this.notify(this.apiError(error), 'error')
+          if (this.isStaleConflict(error)) {
+            this.$refs.deleteModal.hide()
+            await this.prepareConflict()
+          } else {
+            this.notify(this.apiError(error), 'error')
+          }
         } finally {
           this.saving = false
         }
@@ -915,6 +1030,83 @@
       },
       showDirectory () {
         this.compactView = 'directory'
+      },
+      async loadAudit (force) {
+        if (!this.selectedIdentity || this.creating || (this.auditEntries.length && !force)) return
+        this.loadingAudit = true
+        this.auditError = ''
+        try {
+          const response = await SpireApi.v1().get(`/qglobal-editor/audit/${this.selectedIdentity}`, {
+            params: { page: 1, limit: 10 }
+          })
+          this.auditEntries = response.data.data || []
+          this.auditTotal = Number(response.data.total || 0)
+        } catch (error) {
+          this.auditError = this.apiError(error)
+        } finally {
+          this.loadingAudit = false
+        }
+      },
+      isStaleConflict (error) {
+        return error && error.response && error.response.status === 409 &&
+          /changed after it was loaded/i.test(this.apiError(error))
+      },
+      async prepareConflict () {
+        const localDraft = clone(this.draft)
+        try {
+          const response = await SpireApi.v1().get(`/qglobal-editor/global/${this.selectedIdentity}`)
+          this.conflictLatest = response.data
+          this.conflictDraft = localDraft
+          const latest = snapshot(response.data.global)
+          const labels = {
+            charid: 'Character',
+            npcid: 'NPC',
+            zoneid: 'Zone',
+            name: 'QGlobal name',
+            value: 'Value',
+            expdate: 'Expiration'
+          }
+          this.conflictChanges = Object.keys(latest)
+            .filter(key => JSON.stringify(localDraft[key]) !== JSON.stringify(latest[key]))
+            .map(key => ({ key, label: labels[key] || key, draft: localDraft[key], current: latest[key] }))
+          this.$refs.conflictModal.show()
+        } catch (error) {
+          this.notify(`The record changed and the current version could not be loaded. ${this.apiError(error)}`, 'error')
+        }
+      },
+      acceptConflictCurrent () {
+        if (!this.conflictLatest) return
+        this.applyDetail(this.conflictLatest)
+        this.conflictLatest = null
+        this.conflictDraft = null
+        this.notify('Current server version loaded.')
+      },
+      preserveConflictDraft () {
+        if (!this.conflictLatest || !this.conflictDraft) return
+        const latest = this.conflictLatest
+        this.detail = latest
+        this.original = snapshot(latest.global)
+        this.draft = this.conflictDraft
+        this.conflictLatest = null
+        this.conflictDraft = null
+        this.notify('Draft preserved against the current server version. Review before saving.')
+      },
+      onShortcut (event) {
+        const target = event.target
+        const typing = target && /input|textarea|select/i.test(target.tagName)
+        if (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault()
+          this.compactView = 'directory'
+          this.$nextTick(() => {
+            const search = document.getElementById('qglobal-search')
+            if (search) search.focus()
+          })
+          return
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+          event.preventDefault()
+          if (this.canSave && !this.saving) this.save()
+        }
       },
       onBeforeUnload (event) {
         if (!this.hasUnsavedChanges) return
@@ -945,6 +1137,10 @@
       formatDate (timestamp) {
         if (timestamp === null || Number(timestamp) <= 0) return 'Never'
         return new Date(Number(timestamp) * 1000).toLocaleString()
+      },
+      formatUTC (timestamp) {
+        if (timestamp === null || Number(timestamp) <= 0) return 'Never'
+        return new Date(Number(timestamp) * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')
       },
       toLocalInput (timestamp) {
         if (timestamp === null || Number(timestamp) <= 0) return ''

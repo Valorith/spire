@@ -12,13 +12,21 @@
         </p>
       </div>
       <div class="spire-editor-summary" aria-label="Chat administration summary">
-        <span><strong>{{ number(summary.channels) }}</strong> channels</span>
+        <button type="button" :class="{ active: mode === 'channels' && !filter }" @click="applySummaryFilter('channels', '')">
+          <strong>{{ number(summary.channels) }}</strong> channels
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.secured) }}</strong> secured</span>
+        <button type="button" :class="{ active: mode === 'channels' && filter === 'secured' }" @click="applySummaryFilter('channels', 'secured')">
+          <strong>{{ number(summary.secured) }}</strong> secured
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.reserved_names) }}</strong> reserved</span>
+        <button type="button" :class="{ active: mode === 'reserved' }" @click="applySummaryFilter('reserved', '')">
+          <strong>{{ number(summary.reserved_names) }}</strong> reserved
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.saylinks) }}</strong> saylinks</span>
+        <button type="button" :class="{ active: mode === 'saylinks' }" @click="applySummaryFilter('saylinks', '')">
+          <strong>{{ number(summary.saylinks) }}</strong> saylinks
+        </button>
       </div>
     </div>
 
@@ -29,8 +37,10 @@
         type="button"
         role="tab"
         :aria-selected="mode === option.key"
+        :tabindex="mode === option.key ? 0 : -1"
         :class="{ active: mode === option.key }"
         @click="changeMode(option.key)"
+        @keydown="onModeKeydown($event, option.key)"
       >
         <i :class="option.icon"></i>
         <span>{{ option.label }}</span>
@@ -56,7 +66,7 @@
                 class="spire-editor-search-clear"
                 type="button"
                 aria-label="Clear search"
-                @click="search = ''; currentPage = 1; loadDirectory()"
+                @click="search = ''; currentPage = 1; syncDirectoryQuery(); loadDirectory()"
               >
                 <i class="fa fa-times"></i>
               </button>
@@ -72,7 +82,7 @@
               v-model="filter"
               class="form-control form-control-sm"
               :aria-label="modeConfig.filterLabel"
-              @change="currentPage = 1; loadDirectory()"
+              @change="currentPage = 1; syncDirectoryQuery(); loadDirectory()"
             >
               <option v-for="option in modeConfig.filters" :key="option.value" :value="option.value">
                 {{ option.label }}
@@ -94,6 +104,7 @@
               type="button"
               class="spire-editor-directory-row"
               :class="{ active: !creating && Number(selectedID) === Number(record.id) }"
+              :aria-current="!creating && Number(selectedID) === Number(record.id) ? 'true' : null"
               @click="selectRecord(record)"
             >
               <span class="spire-editor-directory-icon"><i :class="recordIcon(record)"></i></span>
@@ -260,14 +271,23 @@
                     maxlength="64"
                     class="form-control form-control-sm"
                     placeholder="NewPlayers"
+                    @input="queueDraftValidation"
                   >
+                  <div v-if="nameValidation" class="operational-validation" :class="'operational-validation--' + nameValidation.state">
+                    <i :class="nameValidation.icon"></i><span>{{ nameValidation.label }}</span>
+                  </div>
                 </div>
                 <div class="spire-editor-field">
                   <label for="chat-channel-status">Minimum account status</label>
                   <select id="chat-channel-status" v-model.number="draft.minstatus" class="form-control form-control-sm">
-                    <option v-for="status in statuses" :key="status.value" :value="status.value">
-                      {{ status.value }} · {{ status.label }}
+                    <option v-if="isCustomStatus" :value="draft.minstatus">
+                      {{ draft.minstatus }} · Legacy/custom status
                     </option>
+                    <optgroup v-for="group in statusGroups" :key="group.label" :label="group.label">
+                      <option v-for="status in group.options" :key="status.value" :value="status.value">
+                        {{ status.value }} · {{ status.label }}
+                      </option>
+                    </optgroup>
                   </select>
                   <span class="spire-editor-field-help">Only accounts at or above this server status can join.</span>
                 </div>
@@ -282,6 +302,7 @@
                     maxlength="64"
                     class="form-control form-control-sm"
                     placeholder="*System* or an exact character name"
+                    @input="queueDraftValidation"
                   >
                   <button type="button" class="btn btn-sm btn-outline-secondary" @click="setSystemOwner">
                     <i class="fa fa-server mr-1"></i>System
@@ -293,6 +314,9 @@
                 <span class="spire-editor-field-help">
                   Blank owners normalize to *System*. Character ownership is matched by exact name.
                 </span>
+                <div v-if="ownerValidation" class="operational-validation" :class="'operational-validation--' + ownerValidation.state">
+                  <i :class="ownerValidation.icon"></i><span>{{ ownerValidation.label }}</span>
+                </div>
               </div>
 
               <div class="spire-editor-section-heading spire-editor-section-heading--spaced">
@@ -357,13 +381,18 @@
                   maxlength="64"
                   class="form-control form-control-sm"
                   placeholder="ServerStaff"
+                  @input="queueDraftValidation"
                 >
+                <div v-if="nameValidation" class="operational-validation" :class="'operational-validation--' + nameValidation.state">
+                  <i :class="nameValidation.icon"></i><span>{{ nameValidation.label }}</span>
+                </div>
               </div>
               <div v-if="draft.active_channel_count" class="operational-inline-warning operational-inline-warning--danger">
                 <i class="fa fa-exclamation-triangle"></i>
                 <span>
                   {{ draft.active_channel_count }} active channel{{ draft.active_channel_count === 1 ? '' : 's' }}
                   currently use this name. Reserving it does not rename or remove them.
+                  <button type="button" class="btn btn-link btn-sm p-0 ml-1" @click="browseChannelCollision">View channels</button>
                 </span>
               </div>
               <div class="operational-context-card mt-3">
@@ -403,8 +432,9 @@
               <div class="operational-context-card mt-3">
                 <i class="fa fa-commenting-o"></i>
                 <div>
-                  <strong>Phrase registry</strong>
-                  <span>IDs are stable database references. Editing text changes every consumer that resolves this row.</span>
+                  <strong>{{ creating ? 'New phrase preview' : 'Saylink #' + selectedID }}</strong>
+                  <span>Player-visible text: [{{ draft.phrase || 'empty phrase' }}]</span>
+                  <span>IDs are stable database references. Database usage is not discoverable from this table, so confirm script/dialogue references before deletion.</span>
                 </div>
               </div>
             </template>
@@ -423,6 +453,16 @@
                 <span class="spire-editor-field-help">Every create, update, and delete is recorded with this reason.</span>
               </div>
             </div>
+
+            <audit-trail
+              v-if="!creating"
+              :entries="auditEntries"
+              :total="auditTotal"
+              :loading="loadingAudit"
+              :error="auditError"
+              @open="loadAudit"
+              @refresh="loadAudit(true)"
+            />
           </div>
         </eq-window>
       </main>
@@ -542,6 +582,13 @@
       @keep="keepEditing"
     />
 
+    <conflict-modal
+      ref="conflictModal"
+      :changes="conflictChanges"
+      @reload="acceptConflictCurrent"
+      @preserve="preserveConflictDraft"
+    />
+
     <transition name="spire-editor-fade">
       <div v-if="notification.message" class="spire-editor-notification" :class="{ error: notification.type === 'error' }" role="status">
         <i :class="notification.type === 'error' ? 'fa fa-exclamation-triangle' : 'fa fa-check-circle'"></i>
@@ -555,6 +602,8 @@
   import ContentArea from '@/components/layout/ContentArea.vue'
   import EqWindow from '@/components/eq-ui/EQWindow.vue'
   import ActionDock from '@/components/editors/OperationalActionDock.vue'
+  import AuditTrail from '@/components/editors/OperationalAuditTrail.vue'
+  import ConflictModal from '@/components/editors/OperationalConflictModal.vue'
   import DiscardModal from '@/components/editors/OperationalDiscardModal.vue'
   import { SpireApi } from '@/app/api/spire-api'
 
@@ -644,7 +693,7 @@
 
   export default {
     name: 'ChatAdministration',
-    components: { ContentArea, EqWindow, ActionDock, DiscardModal },
+    components: { ContentArea, EqWindow, ActionDock, AuditTrail, ConflictModal, DiscardModal },
     data () {
       return {
         modes: [
@@ -695,6 +744,15 @@
         pendingDiscardCancel: null,
         allowRouteUpdate: false,
         searchTimer: null,
+        validationTimer: null,
+        draftValidation: {
+          checked: false,
+          loading: false,
+          channel_name_count: 0,
+          reserved_name_count: 0,
+          owner_exists: true,
+          owner_character_id: 0
+        },
         ownerTimer: null,
         ownerQuery: '',
         ownerResults: [],
@@ -703,6 +761,13 @@
         deleteSlider: 0,
         deleteReason: '',
         allowSystemDelete: false,
+        auditEntries: [],
+        auditTotal: 0,
+        loadingAudit: false,
+        auditError: '',
+        conflictLatest: null,
+        conflictDraft: null,
+        conflictChanges: [],
         notification: { message: '', type: 'success', timer: null }
       }
     },
@@ -712,6 +777,18 @@
       },
       totalPages () {
         return Math.max(1, Math.ceil(this.totalRecords / this.pageSize))
+      },
+      statusGroups () {
+        return [
+          { label: 'Restricted', options: this.statuses.filter(status => status.value < 0) },
+          { label: 'Players', options: this.statuses.filter(status => status.value === 0) },
+          { label: 'Guides and support', options: this.statuses.filter(status => status.value > 0 && status.value < 100) },
+          { label: 'Administration', options: this.statuses.filter(status => status.value >= 100) }
+        ]
+      },
+      isCustomStatus () {
+        return this.draft && this.mode === 'channels' &&
+          !this.statuses.some(status => Number(status.value) === Number(this.draft.minstatus))
       },
       entitySnapshot () {
         if (!this.draft) return null
@@ -742,9 +819,11 @@
         if (this.mode === 'channels') {
           if (!this.draft.name.trim()) return false
           if (this.draft.password_mode === 'replace' && !this.draft.password) return false
+          if (this.nameHasConflict) return false
           return true
         }
-        return this.mode === 'reserved' ? Boolean(this.draft.name.trim()) : Boolean(this.draft.phrase.trim())
+        if (this.mode === 'reserved') return Boolean(this.draft.name.trim()) && !this.nameHasConflict
+        return Boolean(this.draft.phrase.trim())
       },
       saveReadiness () {
         if (this.saving) return { state: 'saving', title: `Saving ${this.modeConfig.singular}…`, detail: 'The audited policy change is being written transactionally.' }
@@ -754,6 +833,9 @@
         if (this.mode === 'saylinks' && !this.draft.phrase.trim()) return { state: 'blocked', title: 'Saylink phrase required', detail: 'Enter the player-visible phrase before saving.' }
         if (this.mode === 'channels' && this.draft.password_mode === 'replace' && !this.draft.password) {
           return { state: 'blocked', title: 'Replacement password required', detail: 'Enter a write-only password or choose another credential policy.' }
+        }
+        if (this.nameHasConflict) {
+          return { state: 'blocked', title: 'Resolve the name collision', detail: this.nameValidation ? this.nameValidation.label : 'Choose an available exact name before saving.' }
         }
         if (!this.hasEntityChanges) return { state: 'blocked', title: `Change a ${this.modeConfig.singular} field`, detail: 'An audit reason alone does not create a policy change.' }
         if (!this.draft.reason.trim()) return { state: 'blocked', title: 'Audit reason required', detail: `${this.changedFieldCount} ${this.changedFieldCount === 1 ? 'field is' : 'fields are'} changed; explain why before saving.` }
@@ -775,6 +857,46 @@
       },
       requiresSystemApproval () {
         return this.mode === 'channels' && this.draft && this.draft.system_owned && !this.allowSystemDelete
+      },
+      nameHasConflict () {
+        if (!this.draftValidation.checked) return false
+        if (this.mode === 'channels') {
+          return this.draftValidation.channel_name_count > 0 || this.draftValidation.reserved_name_count > 0
+        }
+        return this.mode === 'reserved' && this.draftValidation.reserved_name_count > 0
+      },
+      nameValidation () {
+        if (!this.draft || (this.mode !== 'channels' && this.mode !== 'reserved') || !this.draft.name.trim()) return null
+        if (this.draftValidation.loading) {
+          return { state: 'warning', icon: 'fa fa-spinner fa-spin', label: 'Checking exact-name availability…' }
+        }
+        if (!this.draftValidation.checked) return null
+        if (this.draftValidation.channel_name_count > 0 && this.mode === 'channels') {
+          return { state: 'danger', icon: 'fa fa-times-circle', label: 'Another persistent channel already uses this exact name.' }
+        }
+        if (this.draftValidation.reserved_name_count > 0) {
+          return { state: 'danger', icon: 'fa fa-ban', label: 'This exact name is already reserved.' }
+        }
+        if (this.mode === 'reserved' && this.draftValidation.channel_name_count > 0) {
+          const count = this.draftValidation.channel_name_count
+          return { state: 'warning', icon: 'fa fa-exclamation-triangle', label: `${count} active channel${count === 1 ? '' : 's'} already ${count === 1 ? 'uses' : 'use'} this name.` }
+        }
+        return { state: 'ok', icon: 'fa fa-check-circle', label: 'Exact name is available for this record.' }
+      },
+      ownerValidation () {
+        if (!this.draft || this.mode !== 'channels') return null
+        const owner = this.draft.owner.trim() || '*System*'
+        if (owner === '*System*') {
+          return { state: 'ok', icon: 'fa fa-server', label: 'System-owned channel.' }
+        }
+        if (this.draftValidation.loading) {
+          return { state: 'warning', icon: 'fa fa-spinner fa-spin', label: 'Resolving exact character owner…' }
+        }
+        if (!this.draftValidation.checked) return null
+        if (!this.draftValidation.owner_exists) {
+          return { state: 'warning', icon: 'fa fa-exclamation-triangle', label: 'No current character matches this owner exactly. Legacy value will be preserved if saved.' }
+        }
+        return { state: 'ok', icon: 'fa fa-check-circle', label: `Resolved to character #${this.draftValidation.owner_character_id}.` }
       }
     },
     watch: {
@@ -791,7 +913,11 @@
     },
     created () {
       window.addEventListener('beforeunload', this.onBeforeUnload)
+      window.addEventListener('keydown', this.onShortcut)
       this.mode = MODE_CONFIG[this.$route.query.mode] ? this.$route.query.mode : 'channels'
+      this.search = String(this.$route.query.q || '')
+      this.filter = String(this.$route.query.filter || '')
+      this.currentPage = Math.max(1, Number(this.$route.query.page || 1))
       const requested = Number(this.$route.query.record || 0)
       this.loadDirectory().then(() => {
         const record = this.records.find(item => Number(item.id) === requested) || this.records[0]
@@ -800,7 +926,9 @@
     },
     beforeDestroy () {
       window.removeEventListener('beforeunload', this.onBeforeUnload)
+      window.removeEventListener('keydown', this.onShortcut)
       clearTimeout(this.searchTimer)
+      clearTimeout(this.validationTimer)
       clearTimeout(this.ownerTimer)
       clearTimeout(this.notification.timer)
     },
@@ -853,12 +981,36 @@
         clearTimeout(this.searchTimer)
         this.searchTimer = setTimeout(() => {
           this.currentPage = 1
+          this.syncDirectoryQuery()
           this.loadDirectory()
         }, 220)
       },
       changePage (page) {
         this.currentPage = page
+        this.syncDirectoryQuery()
         this.loadDirectory()
+      },
+      syncDirectoryQuery () {
+        const query = { ...this.$route.query, mode: this.mode }
+        if (this.search) query.q = this.search
+        else delete query.q
+        if (this.filter) query.filter = this.filter
+        else delete query.filter
+        if (this.currentPage > 1) query.page = String(this.currentPage)
+        else delete query.page
+        this.allowRouteUpdate = true
+        this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
+      },
+      async applySummaryFilter (mode, filter, force) {
+        if (!force && this.hasUnsavedChanges) {
+          this.requestDiscard(() => this.applySummaryFilter(mode, filter, true))
+          return
+        }
+        if (this.mode !== mode) await this.changeMode(mode, true)
+        this.filter = filter
+        this.currentPage = 1
+        this.syncDirectoryQuery()
+        await this.loadDirectory()
       },
       async changeMode (mode, force) {
         if (mode === this.mode && !force) return
@@ -876,8 +1028,15 @@
         this.creating = false
         this.compactView = 'directory'
         this.copiedSecuredChannel = false
+        this.resetDraftValidation()
+        this.auditEntries = []
+        this.auditTotal = 0
+        this.auditError = ''
         const query = { ...this.$route.query, mode: this.mode }
         delete query.record
+        delete query.q
+        delete query.filter
+        delete query.page
         this.allowRouteUpdate = true
         this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
         await this.loadDirectory()
@@ -894,14 +1053,14 @@
         this.creating = false
         this.draft = null
         this.original = null
+        this.auditEntries = []
+        this.auditTotal = 0
+        this.auditError = ''
         this.detailError = ''
         this.loadingDetail = true
         try {
-          let loaded = record
-          if (this.mode === 'channels') {
-            const response = await SpireApi.v1().get(`/chat-administration/channel/${record.id}`)
-            loaded = response.data
-          }
+          const response = await SpireApi.v1().get(this.recordEndpoint(record.id))
+          const loaded = response.data
           this.applyRecord(loaded)
           if (Number(this.$route.query.record) !== Number(record.id) || this.$route.query.mode !== this.mode) {
             this.$router.replace({ query: { ...this.$route.query, mode: this.mode, record: String(record.id) } }).catch(() => {})
@@ -924,6 +1083,7 @@
           this.draft = { ...emptySaylink(), ...clone(record), reason: '' }
           this.original = { phrase: this.draft.phrase }
         }
+        this.queueDraftValidation()
       },
       createDraft (source, force) {
         if (!force && this.hasUnsavedChanges) {
@@ -934,6 +1094,7 @@
         this.selectedID = null
         this.compactView = 'inspector'
         this.copiedSecuredChannel = this.mode === 'channels' && Boolean(source && source.has_password)
+        this.resetDraftValidation()
         if (this.mode === 'channels') {
           const next = source
             ? { ...emptyChannel(), ...channelSnapshot(source), name: `${source.name} Copy`, has_password: false, password_mode: 'clear' }
@@ -947,6 +1108,7 @@
           this.draft = source ? { ...emptySaylink(), phrase: source.phrase } : emptySaylink()
           this.original = { phrase: '' }
         }
+        this.queueDraftValidation()
         const query = { ...this.$route.query, mode: this.mode }
         delete query.record
         this.allowRouteUpdate = true
@@ -1007,7 +1169,8 @@
           this.$router.replace({ query: { ...this.$route.query, mode: this.mode, record: String(this.selectedID) } }).catch(() => {})
           this.notify(`${this.modeConfig.singularLabel || this.modeConfig.singular} ${created ? 'created' : 'saved'} with an audit record.`)
         } catch (error) {
-          this.notify(this.apiError(error), 'error')
+          if (this.isStaleConflict(error)) await this.prepareConflict()
+          else this.notify(this.apiError(error), 'error')
         } finally {
           this.saving = false
         }
@@ -1015,6 +1178,7 @@
       setSystemOwner () {
         this.draft.owner = '*System*'
         this.draft.system_owned = true
+        this.queueDraftValidation()
       },
       setPasswordMode (mode) {
         this.draft.password_mode = mode
@@ -1056,6 +1220,7 @@
         this.draft.owner = result.name
         this.draft.system_owned = false
         this.$refs.ownerModal.hide()
+        this.queueDraftValidation()
       },
       openDelete () {
         this.resetDelete()
@@ -1103,7 +1268,12 @@
           if (this.records.length) await this.selectRecord(this.records[0], true)
           this.notify(`${this.modeConfig.singular} deleted with an audit record.`)
         } catch (error) {
-          this.notify(this.apiError(error), 'error')
+          if (this.isStaleConflict(error)) {
+            this.$refs.deleteModal.hide()
+            await this.prepareConflict()
+          } else {
+            this.notify(this.apiError(error), 'error')
+          }
         } finally {
           this.saving = false
         }
@@ -1128,6 +1298,151 @@
       },
       showDirectory () {
         this.compactView = 'directory'
+      },
+      recordEndpoint (id) {
+        if (this.mode === 'channels') return `/chat-administration/channel/${id}`
+        if (this.mode === 'reserved') return `/chat-administration/reserved-name/${id}`
+        return `/chat-administration/saylink/${id}`
+      },
+      queueDraftValidation () {
+        clearTimeout(this.validationTimer)
+        this.draftValidation.loading = true
+        this.validationTimer = setTimeout(this.validateDraft, 220)
+      },
+      resetDraftValidation () {
+        clearTimeout(this.validationTimer)
+        this.draftValidation = {
+          checked: false,
+          loading: false,
+          channel_name_count: 0,
+          reserved_name_count: 0,
+          owner_exists: true,
+          owner_character_id: 0
+        }
+      },
+      async validateDraft () {
+        if (!this.draft || this.mode === 'saylinks') {
+          this.resetDraftValidation()
+          return
+        }
+        this.draftValidation.loading = true
+        try {
+          const response = await SpireApi.v1().get('/chat-administration/validate', {
+            params: {
+              name: this.draft.name,
+              owner: this.mode === 'channels' ? this.draft.owner : '*System*',
+              exclude_channel_id: this.mode === 'channels' && !this.creating ? this.selectedID : 0,
+              exclude_reserved_id: this.mode === 'reserved' && !this.creating ? this.selectedID : 0
+            }
+          })
+          this.draftValidation = { ...response.data, checked: true, loading: false }
+        } catch (error) {
+          this.draftValidation.loading = false
+          this.notify(this.apiError(error), 'error')
+        }
+      },
+      browseChannelCollision () {
+        const name = this.draft.name
+        const run = async () => {
+          await this.changeMode('channels', true)
+          this.search = name
+          this.filter = ''
+          this.currentPage = 1
+          this.syncDirectoryQuery()
+          await this.loadDirectory()
+        }
+        if (this.hasUnsavedChanges) this.requestDiscard(run)
+        else run()
+      },
+      async loadAudit (force) {
+        if (!this.selectedID || this.creating || (this.auditEntries.length && !force)) return
+        this.loadingAudit = true
+        this.auditError = ''
+        try {
+          const response = await SpireApi.v1().get(`/chat-administration/audit/${this.mode}/${this.selectedID}`, {
+            params: { page: 1, limit: 10 }
+          })
+          this.auditEntries = response.data.data || []
+          this.auditTotal = Number(response.data.total || 0)
+        } catch (error) {
+          this.auditError = this.apiError(error)
+        } finally {
+          this.loadingAudit = false
+        }
+      },
+      snapshotForMode (record) {
+        if (this.mode === 'channels') return channelSnapshot(record)
+        if (this.mode === 'reserved') return { name: record.name || '' }
+        return { phrase: record.phrase || '' }
+      },
+      isStaleConflict (error) {
+        return error && error.response && error.response.status === 409 &&
+          /changed after it was loaded/i.test(this.apiError(error))
+      },
+      async prepareConflict () {
+        const localDraft = clone(this.draft)
+        try {
+          const response = await SpireApi.v1().get(this.recordEndpoint(this.selectedID))
+          this.conflictLatest = response.data
+          this.conflictDraft = localDraft
+          const latest = this.snapshotForMode(response.data)
+          const local = this.mode === 'channels'
+            ? channelSnapshot(localDraft)
+            : this.mode === 'reserved'
+              ? { name: localDraft.name }
+              : { phrase: localDraft.phrase }
+          const labels = { name: 'Name', owner: 'Owner', minstatus: 'Minimum status', has_password: 'Password state', phrase: 'Phrase' }
+          this.conflictChanges = Object.keys(latest)
+            .filter(key => JSON.stringify(local[key]) !== JSON.stringify(latest[key]))
+            .map(key => ({ key, label: labels[key] || key, draft: local[key], current: latest[key] }))
+          this.$refs.conflictModal.show()
+        } catch (error) {
+          this.notify(`The record changed and the current version could not be loaded. ${this.apiError(error)}`, 'error')
+        }
+      },
+      acceptConflictCurrent () {
+        if (!this.conflictLatest) return
+        this.applyRecord(this.conflictLatest)
+        this.conflictLatest = null
+        this.conflictDraft = null
+        this.notify('Current server version loaded.')
+      },
+      preserveConflictDraft () {
+        if (!this.conflictLatest || !this.conflictDraft) return
+        this.original = this.snapshotForMode(this.conflictLatest)
+        this.draft = this.conflictDraft
+        this.conflictLatest = null
+        this.conflictDraft = null
+        this.queueDraftValidation()
+        this.notify('Draft preserved against the current server version. Review before saving.')
+      },
+      onModeKeydown (event, key) {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        event.preventDefault()
+        const index = this.modes.findIndex(option => option.key === key)
+        let nextIndex = index
+        if (event.key === 'ArrowLeft') nextIndex = (index - 1 + this.modes.length) % this.modes.length
+        if (event.key === 'ArrowRight') nextIndex = (index + 1) % this.modes.length
+        if (event.key === 'Home') nextIndex = 0
+        if (event.key === 'End') nextIndex = this.modes.length - 1
+        this.changeMode(this.modes[nextIndex].key)
+      },
+      onShortcut (event) {
+        const target = event.target
+        const typing = target && /input|textarea|select/i.test(target.tagName)
+        if (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault()
+          this.compactView = 'directory'
+          this.$nextTick(() => {
+            const search = document.getElementById('chat-administration-search')
+            if (search) search.focus()
+          })
+          return
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+          event.preventDefault()
+          if (this.canSave && !this.saving) this.save()
+        }
       },
       onBeforeUnload (event) {
         if (!this.hasUnsavedChanges) return

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/EQEmuTools/spire/internal/auditlog"
@@ -135,6 +136,13 @@ type chatSaylinkRecord struct {
 	DuplicateCount int64  `json:"duplicate_count" gorm:"column:duplicate_count"`
 }
 
+type chatAdministrationValidation struct {
+	ChannelNameCount  int64 `json:"channel_name_count"`
+	ReservedNameCount int64 `json:"reserved_name_count"`
+	OwnerExists       bool  `json:"owner_exists"`
+	OwnerCharacterID  int   `json:"owner_character_id"`
+}
+
 func NewChatAdministrationController(
 	db *database.Resolver,
 	auditLog *auditlog.UserEvent,
@@ -151,13 +159,17 @@ func (a *ChatAdministrationController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodPatch, "chat-administration/channel/:id", a.updateChannel, nil),
 		routes.RegisterRoute(http.MethodDelete, "chat-administration/channel/:id", a.deleteChannel, nil),
 		routes.RegisterRoute(http.MethodGet, "chat-administration/reserved-names", a.listReservedNames, nil),
+		routes.RegisterRoute(http.MethodGet, "chat-administration/reserved-name/:id", a.getReservedName, nil),
 		routes.RegisterRoute(http.MethodPut, "chat-administration/reserved-name", a.createReservedName, nil),
 		routes.RegisterRoute(http.MethodPatch, "chat-administration/reserved-name/:id", a.updateReservedName, nil),
 		routes.RegisterRoute(http.MethodDelete, "chat-administration/reserved-name/:id", a.deleteReservedName, nil),
 		routes.RegisterRoute(http.MethodGet, "chat-administration/saylinks", a.listSaylinks, nil),
+		routes.RegisterRoute(http.MethodGet, "chat-administration/saylink/:id", a.getSaylink, nil),
 		routes.RegisterRoute(http.MethodPut, "chat-administration/saylink", a.createSaylink, nil),
 		routes.RegisterRoute(http.MethodPatch, "chat-administration/saylink/:id", a.updateSaylink, nil),
 		routes.RegisterRoute(http.MethodDelete, "chat-administration/saylink/:id", a.deleteSaylink, nil),
+		routes.RegisterRoute(http.MethodGet, "chat-administration/audit/:kind/:id", a.listAudit, nil),
+		routes.RegisterRoute(http.MethodGet, "chat-administration/validate", a.validateDraft, nil),
 		routes.RegisterRoute(http.MethodGet, "chat-administration/owners", a.lookupOwners, nil),
 	}
 }
@@ -262,6 +274,8 @@ func (a *ChatAdministrationController) createChannel(c echo.Context) error {
 		discardOperationalEditorAudit(a.db, auditID)
 		return operationalEditorMutationError(c, "Chat channel", err)
 	}
+	payload["channel_id"] = createdID
+	enrichOperationalEditorAudit(a.db, auditID, payload)
 	record, err := loadChatChannelRecord(db, createdID)
 	if err != nil {
 		return operationalEditorMutationError(c, "Chat channel", err)
@@ -434,6 +448,18 @@ func (a *ChatAdministrationController) listReservedNames(c echo.Context) error {
 	})
 }
 
+func (a *ChatAdministrationController) getReservedName(c echo.Context) error {
+	id, err := chatAdministrationPositiveID(c, "id", "Reserved name")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	record, err := loadReservedNameRecord(a.db.Get(models.ChatchannelReservedName{}, c), id)
+	if err != nil {
+		return operationalEditorMutationError(c, "Reserved chat name", err)
+	}
+	return c.JSON(http.StatusOK, record)
+}
+
 func (a *ChatAdministrationController) createReservedName(c echo.Context) error {
 	var request chatReservedNameMutationRequest
 	if err := c.Bind(&request); err != nil {
@@ -466,6 +492,8 @@ func (a *ChatAdministrationController) createReservedName(c echo.Context) error 
 		discardOperationalEditorAudit(a.db, auditID)
 		return operationalEditorMutationError(c, "Reserved chat name", err)
 	}
+	payload["reserved_id"] = createdID
+	enrichOperationalEditorAudit(a.db, auditID, payload)
 	record, err := loadReservedNameRecord(db, createdID)
 	if err != nil {
 		return operationalEditorMutationError(c, "Reserved chat name", err)
@@ -614,6 +642,18 @@ func (a *ChatAdministrationController) listSaylinks(c echo.Context) error {
 	})
 }
 
+func (a *ChatAdministrationController) getSaylink(c echo.Context) error {
+	id, err := chatAdministrationPositiveID(c, "id", "Saylink")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	record, err := loadSaylinkRecord(a.db.Get(models.Saylink{}, c), id)
+	if err != nil {
+		return operationalEditorMutationError(c, "Saylink phrase", err)
+	}
+	return c.JSON(http.StatusOK, record)
+}
+
 func (a *ChatAdministrationController) createSaylink(c echo.Context) error {
 	var request chatSaylinkMutationRequest
 	if err := c.Bind(&request); err != nil {
@@ -643,6 +683,8 @@ func (a *ChatAdministrationController) createSaylink(c echo.Context) error {
 		discardOperationalEditorAudit(a.db, auditID)
 		return operationalEditorMutationError(c, "Saylink phrase", err)
 	}
+	payload["saylink_id"] = createdID
+	enrichOperationalEditorAudit(a.db, auditID, payload)
 	record, err := loadSaylinkRecord(db, createdID)
 	if err != nil {
 		return operationalEditorMutationError(c, "Saylink phrase", err)
@@ -754,6 +796,76 @@ func (a *ChatAdministrationController) deleteSaylink(c echo.Context) error {
 		return operationalEditorMutationError(c, "Saylink phrase", err)
 	}
 	return c.JSON(http.StatusOK, echo.Map{"deleted_id": id, "audit_id": auditID})
+}
+
+func (a *ChatAdministrationController) listAudit(c echo.Context) error {
+	id, err := chatAdministrationPositiveID(c, "id", "Chat administration record")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	var eventNames []string
+	var identityKey string
+	switch strings.TrimSpace(c.Param("kind")) {
+	case "channels":
+		eventNames = []string{chatAdminEventChannelCreate, chatAdminEventChannelUpdate, chatAdminEventChannelDelete}
+		identityKey = "channel_id"
+	case "reserved":
+		eventNames = []string{chatAdminEventReserveCreate, chatAdminEventReserveUpdate, chatAdminEventReserveDelete}
+		identityKey = "reserved_id"
+	case "saylinks":
+		eventNames = []string{chatAdminEventSaylinkCreate, chatAdminEventSaylinkUpdate, chatAdminEventSaylinkDelete}
+		identityKey = "saylink_id"
+	default:
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Unknown Chat Administration audit kind"})
+	}
+	return listOperationalEditorAudit(
+		c,
+		a.db,
+		a.auditLog,
+		eventNames,
+		fmt.Sprintf("CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.%s')) AS UNSIGNED) = ?", identityKey),
+		id,
+	)
+}
+
+func (a *ChatAdministrationController) validateDraft(c echo.Context) error {
+	db := a.db.Get(models.Chatchannel{}, c)
+	name := strings.TrimSpace(c.QueryParam("name"))
+	owner := normalizedChatOwner(c.QueryParam("owner"))
+	excludeChannelID, _ := strconv.Atoi(c.QueryParam("exclude_channel_id"))
+	excludeReservedID, _ := strconv.Atoi(c.QueryParam("exclude_reserved_id"))
+	result := chatAdministrationValidation{OwnerExists: owner == "*System*"}
+
+	if name != "" {
+		channelQuery := db.Table("chatchannels").Where("name = ?", name)
+		if excludeChannelID > 0 {
+			channelQuery = channelQuery.Where("id <> ?", excludeChannelID)
+		}
+		if err := channelQuery.Count(&result.ChannelNameCount).Error; err != nil {
+			return operationalEditorDatabaseError(c, "Chat Administration", err)
+		}
+		reservedQuery := db.Table("chatchannel_reserved_names").Where("name = ?", name)
+		if excludeReservedID > 0 {
+			reservedQuery = reservedQuery.Where("id <> ?", excludeReservedID)
+		}
+		if err := reservedQuery.Count(&result.ReservedNameCount).Error; err != nil {
+			return operationalEditorDatabaseError(c, "Chat Administration", err)
+		}
+	}
+	if owner != "*System*" {
+		var ownerRow struct {
+			ID int `gorm:"column:id"`
+		}
+		err := db.Table("character_data").Select("id").Where("name = ?", owner).Take(&ownerRow).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return operationalEditorDatabaseError(c, "Chat Administration", err)
+		}
+		if err == nil {
+			result.OwnerExists = true
+			result.OwnerCharacterID = ownerRow.ID
+		}
+	}
+	return c.JSON(http.StatusOK, result)
 }
 
 func (a *ChatAdministrationController) lookupOwners(c echo.Context) error {

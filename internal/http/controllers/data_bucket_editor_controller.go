@@ -133,6 +133,7 @@ func (d *DataBucketEditorController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodPut, "data-bucket-editor/bucket", d.createBucket, nil),
 		routes.RegisterRoute(http.MethodPatch, "data-bucket-editor/bucket/:id", d.updateBucket, nil),
 		routes.RegisterRoute(http.MethodDelete, "data-bucket-editor/bucket/:id", d.deleteBucket, nil),
+		routes.RegisterRoute(http.MethodGet, "data-bucket-editor/audit/:id", d.listAudit, nil),
 		routes.RegisterRoute(http.MethodGet, "data-bucket-editor/lookups/:kind", d.lookupScope, nil),
 	}
 }
@@ -238,6 +239,8 @@ func (d *DataBucketEditorController) createBucket(c echo.Context) error {
 		discardOperationalEditorAudit(d.db, auditID)
 		return operationalEditorMutationError(c, "Data bucket", err)
 	}
+	payload["bucket_id"] = createdID
+	enrichOperationalEditorAudit(d.db, auditID, payload)
 	detail, err := d.loadBucketDetail(db, createdID)
 	if err != nil {
 		return operationalEditorMutationError(c, "Data bucket", err)
@@ -361,6 +364,21 @@ func (d *DataBucketEditorController) deleteBucket(c echo.Context) error {
 		return operationalEditorMutationError(c, "Data bucket", err)
 	}
 	return c.JSON(http.StatusOK, echo.Map{"deleted_id": id, "audit_id": auditID})
+}
+
+func (d *DataBucketEditorController) listAudit(c echo.Context) error {
+	id, err := operationalEditorPositiveID(c, "id", "Data bucket ID")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	return listOperationalEditorAudit(
+		c,
+		d.db,
+		d.auditLog,
+		[]string{dataBucketEditorEventCreate, dataBucketEditorEventUpdate, dataBucketEditorEventDelete},
+		"CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.bucket_id')) AS UNSIGNED) = ?",
+		id,
+	)
 }
 
 func (d *DataBucketEditorController) lookupScope(c echo.Context) error {

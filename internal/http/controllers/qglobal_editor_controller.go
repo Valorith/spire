@@ -49,9 +49,10 @@ type qGlobalEditorInput struct {
 }
 
 type qGlobalEditorMutationRequest struct {
-	Global   qGlobalEditorInput     `json:"global"`
-	Expected *qGlobalEditorSnapshot `json:"expected,omitempty"`
-	Confirm  bool                   `json:"confirm,omitempty"`
+	Global              qGlobalEditorInput     `json:"global"`
+	Expected            *qGlobalEditorSnapshot `json:"expected,omitempty"`
+	Confirm             bool                   `json:"confirm,omitempty"`
+	AllowReferencedName bool                   `json:"allow_referenced_name,omitempty"`
 }
 
 type qGlobalEditorRecord struct {
@@ -109,8 +110,10 @@ type qGlobalEditorUsage struct {
 }
 
 type qGlobalEditorDetail struct {
-	Global qGlobalEditorRecord `json:"global"`
-	Usage  qGlobalEditorUsage  `json:"usage"`
+	Global        qGlobalEditorRecord   `json:"global"`
+	Usage         qGlobalEditorUsage    `json:"usage"`
+	Overlaps      []qGlobalEditorRecord `json:"overlaps"`
+	SameNameCount int                   `json:"same_name_count"`
 }
 
 func NewQGlobalEditorController(
@@ -127,6 +130,7 @@ func (q *QGlobalEditorController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodPut, "qglobal-editor/global", q.createGlobal, nil),
 		routes.RegisterRoute(http.MethodPatch, "qglobal-editor/global/:identity", q.updateGlobal, nil),
 		routes.RegisterRoute(http.MethodDelete, "qglobal-editor/global/:identity", q.deleteGlobal, nil),
+		routes.RegisterRoute(http.MethodGet, "qglobal-editor/audit/:identity", q.listAudit, nil),
 		routes.RegisterRoute(http.MethodGet, "qglobal-editor/lookups/:kind", q.lookupScope, nil),
 	}
 }
@@ -305,6 +309,16 @@ func (q *QGlobalEditorController) deleteGlobal(c echo.Context) error {
 	if err != nil {
 		return operationalEditorMutationError(c, "QGlobal", err)
 	}
+	detail, err := q.loadGlobalDetail(db, identity)
+	if err != nil {
+		return operationalEditorMutationError(c, "QGlobal", err)
+	}
+	if detail.Usage.Total > 0 && !request.AllowReferencedName {
+		return c.JSON(http.StatusConflict, echo.Map{
+			"error": "This QGlobal name is referenced by database consumers. Review the usage and explicitly allow scoped removal.",
+			"usage": detail.Usage,
+		})
+	}
 	payload := qGlobalAuditPayload("delete", before, &before, request.Global.Reason)
 	auditID, err := writeOperationalEditorAudit(c, q.auditLog, qGlobalEditorEventDelete, payload)
 	if err != nil {
@@ -334,6 +348,32 @@ func (q *QGlobalEditorController) deleteGlobal(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{
 		"deleted_identity": encodeQGlobalIdentity(identity), "audit_id": auditID,
 	})
+}
+
+func (q *QGlobalEditorController) listAudit(c echo.Context) error {
+	identity, err := decodeQGlobalIdentity(c.Param("identity"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+	return listOperationalEditorAudit(
+		c,
+		q.db,
+		q.auditLog,
+		[]string{qGlobalEditorEventCreate, qGlobalEditorEventUpdate, qGlobalEditorEventDelete},
+		`(
+			CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.identity.charid')) AS SIGNED) = ?
+			AND CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.identity.npcid')) AS SIGNED) = ?
+			AND CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.identity.zoneid')) AS SIGNED) = ?
+			AND JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.identity.name')) = ?
+		) OR (
+			CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.previous_identity.charid')) AS SIGNED) = ?
+			AND CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.previous_identity.npcid')) AS SIGNED) = ?
+			AND CAST(JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.previous_identity.zoneid')) AS SIGNED) = ?
+			AND JSON_UNQUOTE(JSON_EXTRACT(logs.data, '$.previous_identity.name')) = ?
+		)`,
+		identity.CharID, identity.NpcID, identity.ZoneID, identity.Name,
+		identity.CharID, identity.NpcID, identity.ZoneID, identity.Name,
+	)
 }
 
 func (q *QGlobalEditorController) lookupScope(c echo.Context) error {
@@ -381,7 +421,34 @@ func (q *QGlobalEditorController) loadGlobalDetail(db *gorm.DB, identity qGlobal
 	if err != nil {
 		return qGlobalEditorDetail{}, err
 	}
-	return qGlobalEditorDetail{Global: record, Usage: usage}, nil
+	sameName := make([]qGlobalEditorRecord, 0)
+	if err := qGlobalEditorBaseQuery(db).
+		Where("qg.name = ?", record.Name).
+		Select(qGlobalEditorSelectClause()).
+		Order("qg.charid, qg.npcid, qg.zoneid").
+		Scan(&sameName).Error; err != nil {
+		return qGlobalEditorDetail{}, err
+	}
+	overlaps := make([]qGlobalEditorRecord, 0)
+	for index := range sameName {
+		decorateQGlobalRecord(&sameName[index], time.Now().Unix())
+		candidate := sameName[index]
+		if candidate.Identity == record.Identity {
+			continue
+		}
+		if qGlobalScopesOverlap(record, candidate) {
+			overlaps = append(overlaps, candidate)
+		}
+	}
+	return qGlobalEditorDetail{
+		Global: record, Usage: usage, Overlaps: overlaps, SameNameCount: len(sameName),
+	}, nil
+}
+
+func qGlobalScopesOverlap(left qGlobalEditorRecord, right qGlobalEditorRecord) bool {
+	return (left.CharID == 0 || right.CharID == 0 || left.CharID == right.CharID) &&
+		(left.NpcID == 0 || right.NpcID == 0 || left.NpcID == right.NpcID) &&
+		(left.ZoneID == 0 || right.ZoneID == 0 || left.ZoneID == right.ZoneID)
 }
 
 func qGlobalEditorBaseQuery(db *gorm.DB) *gorm.DB {

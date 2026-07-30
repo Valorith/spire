@@ -70,6 +70,47 @@ func TestQGlobalSnapshotTreatsLegacyPermanentValuesEqually(t *testing.T) {
 	}
 }
 
+func TestQGlobalScopeOverlap(t *testing.T) {
+	tests := []struct {
+		name  string
+		left  qGlobalEditorRecord
+		right qGlobalEditorRecord
+		want  bool
+	}{
+		{
+			name:  "wildcard intersects specific",
+			left:  qGlobalEditorRecord{},
+			right: qGlobalEditorRecord{CharID: 42, NpcID: 7, ZoneID: 202},
+			want:  true,
+		},
+		{
+			name:  "shared character intersects narrower zone",
+			left:  qGlobalEditorRecord{CharID: 42},
+			right: qGlobalEditorRecord{CharID: 42, ZoneID: 202},
+			want:  true,
+		},
+		{
+			name:  "different specific characters cannot intersect",
+			left:  qGlobalEditorRecord{CharID: 42},
+			right: qGlobalEditorRecord{CharID: 43},
+			want:  false,
+		},
+		{
+			name:  "different specific zones cannot intersect",
+			left:  qGlobalEditorRecord{NpcID: 7, ZoneID: 202},
+			right: qGlobalEditorRecord{NpcID: 7, ZoneID: 203},
+			want:  false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := qGlobalScopesOverlap(test.left, test.right); got != test.want {
+				t.Fatalf("qGlobalScopesOverlap() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestValidateQGlobalEditorInput(t *testing.T) {
 	expires := int64(2_000_000_000)
 	valid := qGlobalEditorInput{

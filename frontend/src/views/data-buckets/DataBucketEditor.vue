@@ -12,13 +12,21 @@
         </p>
       </div>
       <div class="spire-editor-summary" aria-label="Data bucket summary">
-        <span><strong>{{ number(summary.total) }}</strong> total</span>
+        <button type="button" :class="{ active: !scopeFilter && !stateFilter }" @click="applySummaryFilter('', '')">
+          <strong>{{ number(summary.total) }}</strong> total
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.global) }}</strong> global</span>
+        <button type="button" :class="{ active: scopeFilter === 'global' }" @click="applySummaryFilter('global', stateFilter)">
+          <strong>{{ number(summary.global) }}</strong> global
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.expiring) }}</strong> expiring</span>
+        <button type="button" :class="{ active: stateFilter === 'expiring' }" @click="applySummaryFilter(scopeFilter, 'expiring')">
+          <strong>{{ number(summary.expiring) }}</strong> expiring
+        </button>
         <span class="spire-editor-summary__divider"></span>
-        <span><strong>{{ number(summary.expired) }}</strong> expired</span>
+        <button type="button" :class="{ active: stateFilter === 'expired' }" @click="applySummaryFilter(scopeFilter, 'expired')">
+          <strong>{{ number(summary.expired) }}</strong> expired
+        </button>
       </div>
     </div>
 
@@ -40,7 +48,7 @@
                 class="spire-editor-search-clear"
                 type="button"
                 aria-label="Clear data bucket search"
-                @click="search = ''; currentPage = 1; loadDirectory()"
+                @click="search = ''; currentPage = 1; syncDirectoryQuery(); loadDirectory()"
               >
                 <i class="fa fa-times"></i>
               </button>
@@ -56,7 +64,7 @@
               v-model="scopeFilter"
               class="form-control form-control-sm"
               aria-label="Filter data buckets by scope"
-              @change="currentPage = 1; loadDirectory()"
+              @change="currentPage = 1; syncDirectoryQuery(); loadDirectory()"
             >
               <option value="">All scopes</option>
               <option value="global">Global</option>
@@ -73,7 +81,7 @@
               v-model="stateFilter"
               class="form-control form-control-sm"
               aria-label="Filter data buckets by expiration"
-              @change="currentPage = 1; loadDirectory()"
+              @change="currentPage = 1; syncDirectoryQuery(); loadDirectory()"
             >
               <option value="active">Active</option>
               <option value="">All lifecycle states</option>
@@ -97,6 +105,7 @@
               type="button"
               class="spire-editor-directory-row"
               :class="{ active: !creating && Number(selectedID) === Number(record.id) }"
+              :aria-current="!creating && Number(selectedID) === Number(record.id) ? 'true' : null"
               @click="selectRecord(record.id)"
             >
               <span class="spire-editor-directory-icon">
@@ -272,23 +281,45 @@
                   >
                 </div>
                 <span class="spire-editor-field-help">Permanent records store expiration 0. Dates use your local timezone.</span>
+                <div class="operational-lifecycle-presets" aria-label="Expiration presets">
+                  <button type="button" @click="setRelativeExpiry(1)">+1 hour</button>
+                  <button type="button" @click="setRelativeExpiry(24)">+1 day</button>
+                  <button type="button" @click="setRelativeExpiry(168)">+7 days</button>
+                  <button type="button" @click="setRelativeExpiry(720)">+30 days</button>
+                </div>
+                <span v-if="draft.expires" class="spire-editor-field-help">
+                  UTC {{ formatUTC(draft.expires) }}
+                </span>
               </div>
             </div>
 
             <div class="spire-editor-field mt-3">
               <div class="operational-field-tools">
                 <label for="data-bucket-value">Value <span>{{ draft.value.length }}/65,535</span></label>
-                <button type="button" title="Format valid JSON" @click="formatJSON">
-                  <i class="fa fa-code mr-1"></i>Format JSON
-                </button>
+                <span class="operational-field-tools__actions">
+                  <button type="button" :title="valueWrap ? 'Disable soft wrap' : 'Enable soft wrap'" @click="valueWrap = !valueWrap">
+                    <i class="fa fa-align-left mr-1"></i>{{ valueWrap ? 'Wrap on' : 'Wrap off' }}
+                  </button>
+                  <button type="button" :title="valueExpanded ? 'Restore editor height' : 'Expand editor height'" @click="valueExpanded = !valueExpanded">
+                    <i :class="valueExpanded ? 'fa fa-compress mr-1' : 'fa fa-expand mr-1'"></i>{{ valueExpanded ? 'Collapse' : 'Expand' }}
+                  </button>
+                  <button type="button" title="Format valid JSON" @click="formatJSON">
+                    <i class="fa fa-code mr-1"></i>Format JSON
+                  </button>
+                </span>
               </div>
               <textarea
                 id="data-bucket-value"
                 v-model="draft.value"
                 maxlength="65535"
                 class="form-control form-control-sm operational-textarea"
+                :class="{ 'operational-textarea--expanded': valueExpanded, 'operational-textarea--nowrap': !valueWrap }"
+                :wrap="valueWrap ? 'soft' : 'off'"
                 placeholder="String, number, or serialized state…"
               ></textarea>
+              <div class="operational-value-status" :class="'operational-value-status--' + jsonStatus.state">
+                <i :class="jsonStatus.icon"></i><span>{{ jsonStatus.label }}</span>
+              </div>
             </div>
 
             <div class="spire-editor-section-heading mt-4">
@@ -331,15 +362,12 @@
               />
             </div>
 
-            <div class="spire-editor-section-heading mt-4">
-              <div>
-                <div class="spire-editor-section-kicker">Dependency awareness</div>
-                <h3>Known database consumers</h3>
-              </div>
-              <small>Merchant and spell conditions resolve by key name. Script references cannot be discovered here.</small>
-            </div>
-
-            <div class="operational-usage-grid">
+            <details class="operational-collapsible" :open="usage.total > 0">
+              <summary>
+                <span><i class="fa fa-sitemap mr-1"></i>Known database consumers</span>
+                <small>{{ usage.total ? number(usage.total) + ' references found' : 'No database references found · scripts are not discoverable' }}</small>
+              </summary>
+              <div class="operational-usage-grid">
               <div class="operational-usage-source">
                 <div class="operational-usage-source__heading">
                   <strong>Merchant conditions</strong><span>{{ number(usage.merchant_count) }}</span>
@@ -364,7 +392,8 @@
                 </template>
                 <div v-else class="operational-empty-inline"><i class="fa fa-check-circle"></i>No spell conditions use this key.</div>
               </div>
-            </div>
+              </div>
+            </details>
 
             <div class="spire-editor-field operational-audit-field">
               <label for="data-bucket-reason">Required audit reason <span>{{ draft.reason.length }}/240</span></label>
@@ -378,6 +407,16 @@
               ></textarea>
               <span class="spire-editor-field-help">The reason and structural change are written to Spire's editor audit trail; stored values are not copied into that trail.</span>
             </div>
+
+            <audit-trail
+              v-if="!creating"
+              :entries="auditEntries"
+              :total="auditTotal"
+              :loading="loadingAudit"
+              :error="auditError"
+              @open="loadAudit"
+              @refresh="loadAudit(true)"
+            />
           </div>
         </eq-window>
       </main>
@@ -498,6 +537,13 @@
       @keep="keepEditing"
     />
 
+    <conflict-modal
+      ref="conflictModal"
+      :changes="conflictChanges"
+      @reload="acceptConflictCurrent"
+      @preserve="preserveConflictDraft"
+    />
+
     <transition name="spire-editor-fade">
       <div v-if="notification.message" class="spire-editor-notification" :class="{ error: notification.type === 'error' }" role="status">
         <i :class="notification.type === 'error' ? 'fa fa-exclamation-triangle' : 'fa fa-check-circle'"></i>
@@ -511,6 +557,8 @@
   import ContentArea from '@/components/layout/ContentArea.vue'
   import EqWindow from '@/components/eq-ui/EQWindow.vue'
   import ActionDock from '@/components/editors/OperationalActionDock.vue'
+  import AuditTrail from '@/components/editors/OperationalAuditTrail.vue'
+  import ConflictModal from '@/components/editors/OperationalConflictModal.vue'
   import DiscardModal from '@/components/editors/OperationalDiscardModal.vue'
   import ScopeField from '@/components/editors/OperationalScopeField.vue'
   import { SpireApi } from '@/app/api/spire-api'
@@ -557,7 +605,7 @@
 
   export default {
     name: 'DataBucketEditor',
-    components: { ContentArea, EqWindow, ActionDock, DiscardModal, ScopeField },
+    components: { ContentArea, EqWindow, ActionDock, AuditTrail, ConflictModal, DiscardModal, ScopeField },
     data () {
       return {
         summary: emptySummary(),
@@ -580,6 +628,8 @@
         creating: false,
         compactView: 'directory',
         expiryLocal: '',
+        valueExpanded: false,
+        valueWrap: true,
         scopeContexts: {},
         activeScopeKeys: [],
         pendingScopeKey: '',
@@ -596,6 +646,13 @@
         deleteSlider: 0,
         deleteReason: '',
         allowReferencedDelete: false,
+        auditEntries: [],
+        auditTotal: 0,
+        loadingAudit: false,
+        auditError: '',
+        conflictLatest: null,
+        conflictDraft: null,
+        conflictChanges: [],
         notification: { message: '', type: 'success', timer: null },
         scopeFields: [
           { key: 'account_id', label: 'Account', icon: 'fa fa-id-card', lookup: 'accounts', max: 9007199254740991, help: '0 · any account' },
@@ -675,6 +732,19 @@
       },
       deleteConfirmed () {
         return this.deleteSlider >= 100
+      },
+      jsonStatus () {
+        const value = this.draft ? this.draft.value.trim() : ''
+        if (!value) return { state: 'plain', icon: 'fa fa-minus-circle', label: 'Empty value' }
+        if (!value.startsWith('{') && !value.startsWith('[')) {
+          return { state: 'plain', icon: 'fa fa-font', label: 'Plain text value' }
+        }
+        try {
+          JSON.parse(value)
+          return { state: 'valid', icon: 'fa fa-check-circle', label: 'Valid JSON structure' }
+        } catch (error) {
+          return { state: 'invalid', icon: 'fa fa-exclamation-triangle', label: `JSON-like value is invalid: ${error.message}` }
+        }
       }
     },
     watch: {
@@ -684,6 +754,11 @@
     },
     created () {
       window.addEventListener('beforeunload', this.onBeforeUnload)
+      window.addEventListener('keydown', this.onShortcut)
+      this.search = String(this.$route.query.q || '')
+      this.scopeFilter = String(this.$route.query.scope || '')
+      this.stateFilter = this.$route.query.state === 'all' ? '' : String(this.$route.query.state || 'active')
+      this.currentPage = Math.max(1, Number(this.$route.query.page || 1))
       const requested = Number(this.$route.query.bucket || 0)
       this.loadDirectory().then(() => {
         if (requested) this.selectRecord(requested, true)
@@ -692,6 +767,7 @@
     },
     beforeDestroy () {
       window.removeEventListener('beforeunload', this.onBeforeUnload)
+      window.removeEventListener('keydown', this.onShortcut)
       clearTimeout(this.searchTimer)
       clearTimeout(this.lookupTimer)
       clearTimeout(this.notification.timer)
@@ -746,12 +822,33 @@
         clearTimeout(this.searchTimer)
         this.searchTimer = setTimeout(() => {
           this.currentPage = 1
+          this.syncDirectoryQuery()
           this.loadDirectory()
         }, 220)
       },
       changePage (page) {
         this.currentPage = page
+        this.syncDirectoryQuery()
         this.loadDirectory()
+      },
+      applySummaryFilter (scope, state) {
+        this.scopeFilter = scope
+        this.stateFilter = state
+        this.currentPage = 1
+        this.syncDirectoryQuery()
+        this.loadDirectory()
+      },
+      syncDirectoryQuery () {
+        const query = { ...this.$route.query }
+        if (this.search) query.q = this.search
+        else delete query.q
+        if (this.scopeFilter) query.scope = this.scopeFilter
+        else delete query.scope
+        query.state = this.stateFilter || 'all'
+        if (this.currentPage > 1) query.page = String(this.currentPage)
+        else delete query.page
+        this.allowRouteUpdate = true
+        this.$router.replace({ query }).catch(() => {}).finally(() => { this.allowRouteUpdate = false })
       },
       async selectRecord (id, force) {
         if (!force && this.hasUnsavedChanges) {
@@ -764,6 +861,9 @@
         this.draft = null
         this.original = null
         this.detail = null
+        this.auditEntries = []
+        this.auditTotal = 0
+        this.auditError = ''
         this.detailError = ''
         this.loadingDetail = true
         try {
@@ -855,7 +955,8 @@
           this.$router.replace({ query: { ...this.$route.query, bucket: String(this.selectedID) } }).catch(() => {})
           this.notify(created ? 'Data bucket created with an audit record.' : 'Data bucket saved with an audit record.')
         } catch (error) {
-          this.notify(this.apiError(error), 'error')
+          if (this.isStaleConflict(error)) await this.prepareConflict()
+          else this.notify(this.apiError(error), 'error')
         } finally {
           this.saving = false
         }
@@ -867,6 +968,11 @@
         } catch (error) {
           this.notify('The current value is not valid JSON.', 'error')
         }
+      },
+      setRelativeExpiry (hours) {
+        const timestamp = Math.floor(Date.now() / 1000) + (Number(hours) * 60 * 60)
+        this.draft.expires = timestamp
+        this.expiryLocal = this.toLocalInput(timestamp)
       },
       setPermanent () {
         this.draft.expires = 0
@@ -986,7 +1092,12 @@
           if (this.records.length) await this.selectRecord(this.records[0].id, true)
           this.notify('Data bucket deleted with an audit record.')
         } catch (error) {
-          this.notify(this.apiError(error), 'error')
+          if (this.isStaleConflict(error)) {
+            this.$refs.deleteModal.hide()
+            await this.prepareConflict()
+          } else {
+            this.notify(this.apiError(error), 'error')
+          }
         } finally {
           this.saving = false
         }
@@ -999,6 +1110,86 @@
       },
       showDirectory () {
         this.compactView = 'directory'
+      },
+      async loadAudit (force) {
+        if (!this.selectedID || this.creating || (this.auditEntries.length && !force)) return
+        this.loadingAudit = true
+        this.auditError = ''
+        try {
+          const response = await SpireApi.v1().get(`/data-bucket-editor/audit/${this.selectedID}`, {
+            params: { page: 1, limit: 10 }
+          })
+          this.auditEntries = response.data.data || []
+          this.auditTotal = Number(response.data.total || 0)
+        } catch (error) {
+          this.auditError = this.apiError(error)
+        } finally {
+          this.loadingAudit = false
+        }
+      },
+      isStaleConflict (error) {
+        return error && error.response && error.response.status === 409 &&
+          /changed after it was loaded/i.test(this.apiError(error))
+      },
+      async prepareConflict () {
+        const localDraft = clone(this.draft)
+        try {
+          const response = await SpireApi.v1().get(`/data-bucket-editor/bucket/${this.selectedID}`)
+          this.conflictLatest = response.data
+          this.conflictDraft = localDraft
+          const latest = snapshot(response.data.bucket)
+          const labels = {
+            key: 'Bucket key',
+            value: 'Value',
+            expires: 'Expiration',
+            account_id: 'Account',
+            character_id: 'Character',
+            npc_id: 'NPC',
+            bot_id: 'Bot',
+            zone_id: 'Zone',
+            instance_id: 'Instance'
+          }
+          this.conflictChanges = Object.keys(latest)
+            .filter(key => JSON.stringify(localDraft[key]) !== JSON.stringify(latest[key]))
+            .map(key => ({ key, label: labels[key] || key, draft: localDraft[key], current: latest[key] }))
+          this.$refs.conflictModal.show()
+        } catch (error) {
+          this.notify(`The record changed and the current version could not be loaded. ${this.apiError(error)}`, 'error')
+        }
+      },
+      acceptConflictCurrent () {
+        if (!this.conflictLatest) return
+        this.applyDetail(this.conflictLatest)
+        this.conflictLatest = null
+        this.conflictDraft = null
+        this.notify('Current server version loaded.')
+      },
+      preserveConflictDraft () {
+        if (!this.conflictLatest || !this.conflictDraft) return
+        const latest = this.conflictLatest
+        this.detail = latest
+        this.original = snapshot(latest.bucket)
+        this.draft = this.conflictDraft
+        this.conflictLatest = null
+        this.conflictDraft = null
+        this.notify('Draft preserved against the current server version. Review before saving.')
+      },
+      onShortcut (event) {
+        const target = event.target
+        const typing = target && /input|textarea|select/i.test(target.tagName)
+        if (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault()
+          this.compactView = 'directory'
+          this.$nextTick(() => {
+            const search = document.getElementById('data-bucket-search')
+            if (search) search.focus()
+          })
+          return
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+          event.preventDefault()
+          if (this.canSave && !this.saving) this.save()
+        }
       },
       onBeforeUnload (event) {
         if (!this.hasUnsavedChanges) return
@@ -1029,6 +1220,10 @@
       formatDate (timestamp) {
         if (!timestamp) return 'Never'
         return new Date(Number(timestamp) * 1000).toLocaleString()
+      },
+      formatUTC (timestamp) {
+        if (!timestamp) return 'Never'
+        return new Date(Number(timestamp) * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')
       },
       toLocalInput (timestamp) {
         if (!timestamp) return ''

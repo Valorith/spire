@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/EQEmuTools/spire/internal/auditlog"
 	"github.com/EQEmuTools/spire/internal/database"
@@ -22,6 +23,23 @@ const (
 
 type operationalEditorConflictError struct {
 	message string
+}
+
+type operationalEditorAuditEntry struct {
+	ID        uint                   `json:"id" gorm:"column:id"`
+	UserID    uint                   `json:"user_id" gorm:"column:user_id"`
+	UserName  string                 `json:"user_name" gorm:"column:user_name"`
+	EventName string                 `json:"event_name" gorm:"column:event_name"`
+	CreatedAt time.Time              `json:"created_at" gorm:"column:created_at"`
+	Data      map[string]interface{} `json:"data" gorm:"-"`
+	RawData   string                 `json:"-" gorm:"column:data"`
+}
+
+type operationalEditorAuditPage struct {
+	Data  []operationalEditorAuditEntry `json:"data"`
+	Total int64                         `json:"total"`
+	Page  int                           `json:"page"`
+	Limit int                           `json:"limit"`
 }
 
 func (e operationalEditorConflictError) Error() string {
@@ -105,6 +123,72 @@ func discardOperationalEditorAudit(db *database.Resolver, id uint) {
 		Table("spire_user_event_log").
 		Where("id = ?", id).
 		Delete(nil).Error
+}
+
+func enrichOperationalEditorAudit(
+	db *database.Resolver,
+	id uint,
+	payload map[string]interface{},
+) {
+	if id == 0 || db.GetSpireDb() == nil {
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	_ = db.GetSpireDb().
+		Table("spire_user_event_log").
+		Where("id = ?", id).
+		Update("data", string(data)).Error
+}
+
+func listOperationalEditorAudit(
+	c echo.Context,
+	db *database.Resolver,
+	auditLog *auditlog.UserEvent,
+	eventNames []string,
+	identityClause string,
+	identityArgs ...interface{},
+) error {
+	if db.GetSpireDb() == nil {
+		return c.JSON(http.StatusServiceUnavailable, echo.Map{"error": "Spire audit database is unavailable"})
+	}
+	page, limit := operationalEditorPagination(c)
+	if limit > 25 {
+		limit = 25
+	}
+	query := db.GetSpireDb().Table("spire_user_event_log logs").
+		Joins("LEFT JOIN spire_users users ON users.id = logs.user_id").
+		Where("logs.server_database_connection_id = ?", auditLog.ActiveConnectionID(c)).
+		Where("logs.event_name IN ?", eventNames).
+		Where("JSON_VALID(logs.data) = 1").
+		Where(identityClause, identityArgs...)
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return operationalEditorDatabaseError(c, "Editor audit history", err)
+	}
+	rows := make([]operationalEditorAuditEntry, 0)
+	if err := query.Select(`
+		logs.id,
+		logs.user_id,
+		COALESCE(NULLIF(users.user_name, ''), NULLIF(users.full_name, ''), CONCAT('User ', logs.user_id)) AS user_name,
+		logs.event_name,
+		logs.created_at,
+		logs.data
+	`).Order("logs.id DESC").Limit(limit).Offset((page - 1) * limit).Scan(&rows).Error; err != nil {
+		return operationalEditorDatabaseError(c, "Editor audit history", err)
+	}
+	for index := range rows {
+		rows[index].Data = make(map[string]interface{})
+		if err := json.Unmarshal([]byte(rows[index].RawData), &rows[index].Data); err != nil {
+			rows[index].Data["raw"] = rows[index].RawData
+		}
+	}
+	return c.JSON(http.StatusOK, operationalEditorAuditPage{
+		Data: rows, Total: total, Page: page, Limit: limit,
+	})
 }
 
 func operationalEditorAuditError(c echo.Context, label string, err error) error {
