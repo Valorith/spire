@@ -1,4 +1,4 @@
-## [Unreleased] (Beta) 7/30/2026
+## [5.5.2] (Beta) 7/31/2026
 
 * Added a Data Buckets Editor with scoped browsing, JSON formatting, lifecycle controls, consumer visibility, audit history, and stale-write conflict recovery.
 * Added a QGlobals Editor with Any/Specific scope controls, overlap detection, lifecycle controls, guarded deletion, and audit history.
