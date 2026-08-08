@@ -456,8 +456,16 @@ export default {
       worldDataNav: {
         label: "World Data",
         labelIcon: "ra ra-compass mr-1",
-        routePrefixMatches: ["content-flags", "data-buckets", "qglobals", "tasks", "strings-database", "titles", "zones"],
+        routePrefixMatches: ["achievements", "content-flags", "data-buckets", "qglobals", "tasks", "strings-database", "titles", "zones"],
         navs: [
+          {
+            title: "Achievements",
+            to: ROUTE.ACHIEVEMENTS,
+            icon: "ra ra-trophy mr-1",
+            isNew: true,
+            isAlpha: true,
+            routes: ["achievements"]
+          },
           {
             title: "Content Flags",
             to: ROUTE.CONTENT_FLAGS,
@@ -518,7 +526,7 @@ export default {
         {
           label: "Player Operations",
           labelIcon: "ra ra-player mr-1",
-          routePrefixMatches: ["admin/player-operations", "admin/mail-parcels", "admin/inventory-keyring"],
+          routePrefixMatches: ["admin/player-operations", "admin/character-achievements", "admin/mail-parcels", "admin/inventory-keyring"],
           navs: [
             {
               title: "Characters",
@@ -531,6 +539,13 @@ export default {
               title: "Accounts",
               to: ROUTE.ADMIN_PLAYER_OPERATIONS + "?mode=accounts",
               icon: "fa fa-id-card mr-1",
+              isNew: true,
+              isAlpha: true
+            },
+            {
+              title: "Character Achievements",
+              to: ROUTE.ADMIN_CHARACTER_ACHIEVEMENTS,
+              icon: "ra ra-trophy mr-1",
               isNew: true,
               isAlpha: true
             },

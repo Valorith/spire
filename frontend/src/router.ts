@@ -199,6 +199,11 @@ const router = new Router({
           meta: {title: "Content Flag Editor"},
         },
         {
+          path: ROUTE.ACHIEVEMENTS,
+          component: () => import('./views/achievements/AchievementEditor.vue'),
+          meta: {title: "Achievement Editor"},
+        },
+        {
           path: ROUTE.DATA_BUCKETS,
           component: () => import('./views/data-buckets/DataBucketEditor.vue'),
           meta: {title: "Data Buckets"},
@@ -385,6 +390,11 @@ const router = new Router({
           path: 'player-operations',
           component: () => import('./views/admin/player-operations/PlayerOperations.vue'),
           meta: {title: "Player Operations"},
+        },
+        {
+          path: 'character-achievements',
+          component: () => import('./views/admin/character-achievements/CharacterAchievementEditor.vue'),
+          meta: {title: "Character Achievements"},
         },
         {
           path: 'inventory-keyring',
