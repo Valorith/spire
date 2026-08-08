@@ -371,8 +371,11 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 	setRows := make([]struct {
 		RewardSetID uint32 `gorm:"column:reward_set_id"`
 	}, 0)
-	if err := db.Table("achievement_reward_sets").Select("reward_set_id").Scan(&setRows).Error; err != nil {
-		return context, err
+	if graph.RewardSet != nil && graph.RewardSet.RewardSetID != 0 {
+		if err := db.Table("achievement_reward_sets").Select("reward_set_id").
+			Where("reward_set_id = ?", graph.RewardSet.RewardSetID).Scan(&setRows).Error; err != nil {
+			return context, err
+		}
 	}
 	for _, row := range setRows {
 		context.KnownRewardSetIDs[row.RewardSetID] = struct{}{}
@@ -381,8 +384,31 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		RewardID      string `gorm:"column:reward_id"`
 		AchievementID uint32 `gorm:"column:achievement_id"`
 	}, 0)
-	if err := db.Table("achievement_rewards").Select("reward_id, achievement_id").Scan(&rewardRows).Error; err != nil {
-		return context, err
+	rewardIDs := make([]string, 0, len(graph.Rewards))
+	seenRewardIDs := make(map[string]struct{}, len(graph.Rewards))
+	for _, reward := range graph.Rewards {
+		id := strings.TrimSpace(reward.RewardID)
+		if id == "" {
+			continue
+		}
+		if _, seen := seenRewardIDs[id]; seen {
+			continue
+		}
+		seenRewardIDs[id] = struct{}{}
+		rewardIDs = append(rewardIDs, id)
+	}
+	if len(rewardIDs) > 0 || existing {
+		rewardQuery := db.Table("achievement_rewards").Select("reward_id, achievement_id")
+		if len(rewardIDs) > 0 && existing {
+			rewardQuery = rewardQuery.Where("reward_id IN ? OR achievement_id = ?", rewardIDs, graph.ID)
+		} else if len(rewardIDs) > 0 {
+			rewardQuery = rewardQuery.Where("reward_id IN ?", rewardIDs)
+		} else {
+			rewardQuery = rewardQuery.Where("achievement_id = ?", graph.ID)
+		}
+		if err := rewardQuery.Scan(&rewardRows).Error; err != nil {
+			return context, err
+		}
 	}
 	for _, row := range rewardRows {
 		context.KnownRewardIDs[row.RewardID] = struct{}{}
@@ -394,8 +420,20 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		ComponentID   uint32 `gorm:"column:component_id"`
 		RequiredCount uint32 `gorm:"column:required_count"`
 	}, 0)
-	if err := db.Table("achievement_component_counts").Select("component_id, required_count").Scan(&countRows).Error; err != nil {
-		return context, err
+	componentIDs := make([]uint32, 0, len(graph.Components))
+	seenComponentIDs := make(map[uint32]struct{}, len(graph.Components))
+	for _, component := range graph.Components {
+		if _, seen := seenComponentIDs[component.ComponentID]; seen {
+			continue
+		}
+		seenComponentIDs[component.ComponentID] = struct{}{}
+		componentIDs = append(componentIDs, component.ComponentID)
+	}
+	if len(componentIDs) > 0 {
+		if err := db.Table("achievement_component_counts").Select("component_id, required_count").
+			Where("component_id IN ?", componentIDs).Scan(&countRows).Error; err != nil {
+			return context, err
+		}
 	}
 	for _, row := range countRows {
 		context.GlobalComponentCounts[row.ComponentID] = row.RequiredCount
@@ -405,8 +443,18 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		ComponentType uint8  `gorm:"column:component_type"`
 		ComponentID   uint32 `gorm:"column:component_id"`
 	}, 0)
-	if err := db.Table("achievement_components").Select("achievement_id, component_type, component_id").Scan(&componentRows).Error; err != nil {
-		return context, err
+	if len(componentIDs) > 0 || existing {
+		componentQuery := db.Table("achievement_components").Select("achievement_id, component_type, component_id")
+		if len(componentIDs) > 0 && existing {
+			componentQuery = componentQuery.Where("component_id IN ? OR achievement_id = ?", componentIDs, graph.ID)
+		} else if len(componentIDs) > 0 {
+			componentQuery = componentQuery.Where("component_id IN ?", componentIDs)
+		} else {
+			componentQuery = componentQuery.Where("achievement_id = ?", graph.ID)
+		}
+		if err := componentQuery.Scan(&componentRows).Error; err != nil {
+			return context, err
+		}
 	}
 	componentOwners := make(map[uint32]map[uint32]struct{})
 	for _, row := range componentRows {
