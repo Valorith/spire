@@ -212,7 +212,7 @@
                     <div class="achievement-criterion-help"><strong>{{ eventMeta(criterion).label }}</strong><span>{{ eventMeta(criterion).help }}</span></div>
                     <div class="achievement-form-grid achievement-form-grid--3">
                       <div v-if="criterion.event_type === 9 || criterion.event_type === 13" class="achievement-field"><label :for="criterionID(componentIndex, criterionIndex, 'skill')">{{ eventMeta(criterion).target1_label }}</label><select :id="criterionID(componentIndex, criterionIndex, 'skill')" v-model.number="criterion.target_id" class="form-control form-control-sm" :aria-describedby="criterionID(componentIndex, criterionIndex, 'skill-help')"><option v-if="criterion.event_type === 9" :value="4294967295">4294967295 — Any skill / wildcard</option><option v-for="skill in canonicalSkills" :key="skill.value" :value="skill.value">{{ skill.value }} — {{ skill.label }}</option></select><small :id="criterionID(componentIndex, criterionIndex, 'skill-help')">{{ eventMeta(criterion).target1_help }}</small></div>
-                      <div v-else class="achievement-field"><achievement-reference-picker :id="criterionID(componentIndex, criterionIndex, 'target1')" v-model="criterion.target_id" :label="eventMeta(criterion).target1_label || field('criteria', 'target_id').label" :help="eventMeta(criterion).target1_help || field('criteria', 'target_id').help" :kind="eventMeta(criterion).lookup || ''"></achievement-reference-picker><div v-if="criterion.event_type === 12" class="achievement-npc-helper"><label :for="criterionID(componentIndex, criterionIndex, 'npc-name')">Canonical NPC name helper</label><div><input :id="criterionID(componentIndex, criterionIndex, 'npc-name')" v-model="npcNames[componentIndex + ':' + criterionIndex]" class="form-control form-control-sm" :aria-describedby="criterionID(componentIndex, criterionIndex, 'npc-name-help')"><b-button size="sm" variant="outline-warning" @click="applyNpcHash(criterion, componentIndex, criterionIndex)">Use hash</b-button></div><small :id="criterionID(componentIndex, criterionIndex, 'npc-name-help')">Canonical: {{ npcCanonical(componentIndex, criterionIndex) || '—' }} · Hash: {{ npcHash(componentIndex, criterionIndex) }}</small></div></div>
+                      <div v-else class="achievement-field"><achievement-reference-picker :id="criterionID(componentIndex, criterionIndex, 'target1')" v-model="criterion.target_id" :label="eventMeta(criterion).target1_label || field('criteria', 'target_id').label" :help="eventMeta(criterion).target1_help || field('criteria', 'target_id').help" :kind="eventMeta(criterion).lookup || ''"></achievement-reference-picker><div v-if="criterion.event_type === 12" class="achievement-npc-helper"><label :for="criterionID(componentIndex, criterionIndex, 'npc-name')">Canonical NPC name helper</label><div><input :id="criterionID(componentIndex, criterionIndex, 'npc-name')" :value="npcNames[componentIndex + ':' + criterionIndex] || ''" class="form-control form-control-sm" :aria-describedby="criterionID(componentIndex, criterionIndex, 'npc-name-help')" @input="setNpcName(componentIndex, criterionIndex, $event)"><b-button size="sm" variant="outline-warning" @click="applyNpcHash(criterion, componentIndex, criterionIndex)">Use hash</b-button></div><small :id="criterionID(componentIndex, criterionIndex, 'npc-name-help')">Canonical: {{ npcCanonical(componentIndex, criterionIndex) || '—' }} · Hash: {{ npcHash(componentIndex, criterionIndex) }}</small></div></div>
                       <div v-if="criterion.event_type === 7 || criterion.event_type === 13" class="achievement-field"><label :for="criterionID(componentIndex, criterionIndex, 'class')">{{ eventMeta(criterion).target2_label }}</label><select :id="criterionID(componentIndex, criterionIndex, 'class')" v-model.number="criterion.target_id2" class="form-control form-control-sm" :aria-describedby="criterionID(componentIndex, criterionIndex, 'class-help')"><option v-if="criterion.event_type === 7" :value="0">0 — Any class</option><option v-for="classOption in canonicalClasses" :key="classOption.value" :value="classOption.value">{{ classOption.value }} — {{ classOption.label }}</option></select><small :id="criterionID(componentIndex, criterionIndex, 'class-help')">{{ eventMeta(criterion).target2_help }}</small></div>
                       <achievement-reference-picker v-else :id="criterionID(componentIndex, criterionIndex, 'target2')" v-model="criterion.target_id2" :label="eventMeta(criterion).target2_label || field('criteria', 'target_id2').label" :help="eventMeta(criterion).target2_help || field('criteria', 'target_id2').help" :kind="criterion.event_type === 12 ? 'zone' : ''"></achievement-reference-picker>
                       <div class="achievement-field"><label :for="criterionID(componentIndex, criterionIndex, 'value')">{{ eventMeta(criterion).target_value_label || field('criteria', 'target_value').label }}</label><input :id="criterionID(componentIndex, criterionIndex, 'value')" v-model.trim="criterion.target_value" type="text" inputmode="numeric" pattern="[0-9]*" class="form-control form-control-sm" :aria-describedby="criterionID(componentIndex, criterionIndex, 'value-help')"><small :id="criterionID(componentIndex, criterionIndex, 'value-help')">{{ eventMeta(criterion).target_value_help || field('criteria', 'target_value').help }}</small></div>
@@ -351,7 +351,7 @@
       <p>Definitions or child categories may still reference this durable category ID. The server will reject an unsafe deletion.</p>
       <div class="achievement-field"><label for="achievement-category-delete-reason">Audit reason</label><textarea id="achievement-category-delete-reason" v-model.trim="categoryDeleteForm.reason" class="form-control" rows="2" aria-describedby="achievement-category-delete-reason-help"></textarea><small id="achievement-category-delete-reason-help">Explain the hierarchy change.</small></div>
       <div class="achievement-field"><label for="achievement-category-delete-confirmation">Type {{ categoryDeletePhrase }}</label><input id="achievement-category-delete-confirmation" v-model="categoryDeleteForm.confirmation" class="form-control" aria-describedby="achievement-category-delete-confirmation-help"><small id="achievement-category-delete-confirmation-help">The exact phrase protects the stable category identity.</small></div>
-      <div class="achievement-modal-actions"><b-button variant="secondary" @click="categoryDeleteModal = false">Cancel</b-button><b-button variant="danger" :disabled="!categoryDeleteForm.reason || categoryDeleteForm.confirmation !== categoryDeletePhrase" @click="deleteCategory">Delete category</b-button></div>
+      <div class="achievement-modal-actions"><b-button variant="secondary" :disabled="categoryDeleting" @click="categoryDeleteModal = false">Cancel</b-button><b-button variant="danger" :disabled="categoryDeleting || !categoryDeleteForm.reason || categoryDeleteForm.confirmation !== categoryDeletePhrase" @click="deleteCategory"><i v-if="categoryDeleting" class="fa fa-spinner fa-spin mr-1"></i>Delete category</b-button></div>
     </b-modal>
 
     <b-modal v-model="conflictModal" title="This definition changed on the server" hide-footer no-close-on-backdrop>
@@ -430,6 +430,7 @@
         categoryExpectedRevision: '',
         categoryCreating: false,
         categorySaving: false,
+        categoryDeleting: false,
         categoryReason: '',
         categoryError: '',
         cloneModal: false,
@@ -742,6 +743,7 @@
       },
       npcCanonical (componentIndex: number, criterionIndex: number): string { return canonicalizeNpcName(this.npcNames[componentIndex + ':' + criterionIndex] || '') },
       npcHash (componentIndex: number, criterionIndex: number): number { return npcNameHash(this.npcNames[componentIndex + ':' + criterionIndex] || '') },
+      setNpcName (componentIndex: number, criterionIndex: number, event: any) { this.$set(this.npcNames, componentIndex + ':' + criterionIndex, event.target.value) },
       applyNpcHash (criterion: any, componentIndex: number, criterionIndex: number) { criterion.target_id = this.npcHash(componentIndex, criterionIndex) },
       openClone () { this.cloneForm = { new_id: 0, name: this.draft.name + ' (Copy)', reason: '', confirmation: '' }; this.cloneModal = true },
       async cloneDefinition () {
@@ -835,14 +837,15 @@
       },
       openCategoryDelete () { this.categoryDeleteForm = { reason: '', confirmation: '' }; this.categoryDeleteModal = true },
       async deleteCategory () {
-        if (!this.categoryDraft || !this.categoryDeleteForm.reason || this.categoryDeleteForm.confirmation !== this.categoryDeletePhrase) return
+        if (!this.categoryDraft || this.categoryDeleting || !this.categoryDeleteForm.reason || this.categoryDeleteForm.confirmation !== this.categoryDeletePhrase) return
+        this.categoryDeleting = true
         try {
           await SpireApi.v1().delete('/achievement-editor/category/' + Number(this.categoryDraft.id), { data: { ...this.categoryDeleteForm, expected_revision: this.categoryExpectedRevision } })
           this.categoryDeleteModal = false
           this.categoryDraft = null
           this.categoryBaseline = ''
           await this.reloadCategories()
-        } catch (error) { this.categoryError = this.errorMessage(error, 'Category could not be deleted.'); this.categoryDeleteModal = false }
+        } catch (error) { this.categoryError = this.errorMessage(error, 'Category could not be deleted.'); this.categoryDeleteModal = false } finally { this.categoryDeleting = false }
       },
       errorMessage (error: any, fallback: string): string {
         const data = error && error.response && error.response.data

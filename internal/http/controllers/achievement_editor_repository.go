@@ -997,7 +997,9 @@ func (r *achievementEditorRepository) deleteDefinition(id uint32, expectedRevisi
 			AchievementID uint32 `gorm:"column:achievement_id"`
 		}
 		result := tx.Table("achievement_criteria").Clauses(clause.Locking{Strength: "UPDATE"}).
-			Select("achievement_id").Where("event_type = ? AND target_id = ?", 11, id).Limit(1).Take(&dependent)
+			Select("achievement_id").
+			Where("event_type = ? AND target_id = ? AND achievement_id <> ?", 11, id, id).
+			Limit(1).Take(&dependent)
 		if result.Error == nil {
 			return operationalEditorConflict("Achievement %d is required by achievement %d", id, dependent.AchievementID)
 		}
@@ -1283,6 +1285,9 @@ func (r *achievementEditorRepository) lookup(kind string, search string, ids []u
 	if !ok {
 		return nil, achievementEditorRequestError(400, "Unknown achievement lookup type")
 	}
+	if kind == "title-set" {
+		return r.lookupTitleSets(search, ids, limit)
+	}
 	where := make([]string, 0)
 	args := make([]interface{}, 0)
 	if spec.baseWhere != "" {
@@ -1311,14 +1316,45 @@ func (r *achievementEditorRepository) lookup(kind string, search string, ids []u
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	// Title sets may contain several prefix/suffix rows; keep one stable choice.
-	if kind == "title-set" {
-		query += " GROUP BY title_set, prefix, suffix, id"
-	}
 	query += " ORDER BY " + spec.orderBy + " LIMIT ?"
 	args = append(args, limit)
 	rows := make([]achievementEditorLookupOption, 0)
 	if err := r.db.Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func achievementEditorTitleSetLookupQuery(db *gorm.DB, search string, ids []uint32) *gorm.DB {
+	const labelExpression = "CONCAT_WS(' / ', NULLIF(prefix, ''), NULLIF(suffix, ''))"
+	selected := db.Session(&gorm.Session{NewDB: true}).Table("titles").
+		Select("title_set, MIN(id) AS id").
+		Where("title_set > 0")
+	if len(ids) > 0 {
+		selected = selected.Where("title_set IN ?", ids)
+	} else {
+		like := "%" + search + "%"
+		if exactID, err := strconv.ParseUint(search, 10, 32); err == nil {
+			selected = selected.Where("title_set = ? OR "+labelExpression+" LIKE ?", exactID, like)
+		} else {
+			selected = selected.Where(labelExpression+" LIKE ?", like)
+		}
+	}
+	selected = selected.Group("title_set")
+	return db.Table("titles title_row").
+		Select("CAST(title_row.title_set AS CHAR) AS id, "+
+			"CONCAT_WS(' / ', NULLIF(title_row.prefix, ''), NULLIF(title_row.suffix, '')) AS label, "+
+			"CONCAT('Title row ', title_row.id) AS detail").
+		Joins("JOIN (?) selected_title_set ON selected_title_set.title_set = title_row.title_set AND selected_title_set.id = title_row.id", selected).
+		Order("title_row.title_set, title_row.id")
+}
+
+func (r *achievementEditorRepository) lookupTitleSets(search string, ids []uint32, limit int) ([]achievementEditorLookupOption, error) {
+	if len(ids) == 0 && search == "" {
+		return make([]achievementEditorLookupOption, 0), nil
+	}
+	rows := make([]achievementEditorLookupOption, 0)
+	if err := achievementEditorTitleSetLookupQuery(r.db, search, ids).Limit(limit).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil

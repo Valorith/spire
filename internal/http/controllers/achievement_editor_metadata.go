@@ -1,5 +1,7 @@
 package controllers
 
+import "sync"
+
 type achievementEditorEnumOption struct {
 	Value     int    `json:"value"`
 	Label     string `json:"label"`
@@ -56,39 +58,50 @@ type achievementEditorMetadata struct {
 	Fields                     map[string]map[string]achievementEditorFieldHelp `json:"fields"`
 }
 
+var (
+	achievementEditorMetadataOnce  sync.Once
+	achievementEditorMetadataCache achievementEditorMetadata
+)
+
 func getAchievementEditorMetadata() achievementEditorMetadata {
+	achievementEditorMetadataOnce.Do(func() {
+		achievementEditorMetadataCache = buildAchievementEditorMetadata()
+	})
+	return achievementEditorMetadataCache
+}
+
+func buildAchievementEditorMetadata() achievementEditorMetadata {
 	allModes := []int{0, 1, 2, 3}
 	absoluteModes := []int{1, 2, 3}
+	limits := map[string]string{
+		"payload_bytes":                     "2097152",
+		"text_bytes":                        "65535",
+		"associations":                      "100",
+		"components":                        "1000",
+		"criteria":                          "2000",
+		"rewards":                           "500",
+		"restrictions":                      "500",
+		"options":                           "500",
+		"mappings":                          "500",
+		"lookup_results":                    "100",
+		"uint8_max":                         "255",
+		"uint32_max":                        "4294967295",
+		"uint64_max":                        "18446744073709551615",
+		"int64_max":                         "9223372036854775807",
+		"skill_wildcard":                    "4294967295",
+		"mutation_processing_lease_seconds": "60",
+	}
+	for alias, source := range map[string]string{
+		"max_graph_bytes": "payload_bytes", "max_text_bytes": "text_bytes",
+		"max_associations": "associations", "max_components": "components",
+		"max_criteria": "criteria", "max_rewards": "rewards",
+		"max_restrictions": "restrictions", "max_reward_options": "options",
+		"max_reward_mappings": "mappings",
+	} {
+		limits[alias] = limits[source]
+	}
 	return achievementEditorMetadata{
-		Limits: map[string]string{
-			// Concise keys are consumed directly by the Vue editor. The max_*
-			// aliases keep the API self-describing for non-UI clients.
-			"payload_bytes":                     "2097152",
-			"text_bytes":                        "65535",
-			"associations":                      "100",
-			"components":                        "1000",
-			"criteria":                          "2000",
-			"rewards":                           "500",
-			"restrictions":                      "500",
-			"options":                           "500",
-			"mappings":                          "500",
-			"lookup_results":                    "100",
-			"uint8_max":                         "255",
-			"uint32_max":                        "4294967295",
-			"uint64_max":                        "18446744073709551615",
-			"int64_max":                         "9223372036854775807",
-			"skill_wildcard":                    "4294967295",
-			"max_graph_bytes":                   "2097152",
-			"max_text_bytes":                    "65535",
-			"max_associations":                  "100",
-			"max_components":                    "1000",
-			"max_criteria":                      "2000",
-			"max_rewards":                       "500",
-			"max_restrictions":                  "500",
-			"max_reward_options":                "500",
-			"max_reward_mappings":               "500",
-			"mutation_processing_lease_seconds": "60",
-		},
+		Limits: limits,
 		ComponentTypes: []achievementEditorEnumOption{
 			{Value: 0, Label: "Type 0 (state-bearing)", Help: "RoF2 state bucket 0. It persists progress and participates in evaluation."},
 			{Value: 1, Label: "Type 1 (state-bearing)", Help: "RoF2 state bucket 1. It persists progress and participates in evaluation."},

@@ -484,7 +484,7 @@ func (a *AchievementEditorController) setCharacterProgress(c echo.Context) error
 	if err != nil {
 		return achievementEditorRespondError(c, "Character", err)
 	}
-	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, character.Name); err != nil {
+	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, fmt.Sprintf("PROGRESS %d", request.AchievementID)); err != nil {
 		return achievementEditorRespondError(c, "Character achievement progress", err)
 	}
 	if request.ComponentType > 2 {
@@ -596,7 +596,7 @@ func (a *AchievementEditorController) completeCharacterAchievement(c echo.Contex
 	if err != nil {
 		return achievementEditorRespondError(c, "Character", err)
 	}
-	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, character.Name); err != nil {
+	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, fmt.Sprintf("COMPLETE %d", request.AchievementID)); err != nil {
 		return achievementEditorRespondError(c, "Character achievement completion", err)
 	}
 	failureLabel := "Character achievement completion"
@@ -990,7 +990,7 @@ func (a *AchievementEditorController) changeCharacterPendingMutation(c echo.Cont
 		return executeErr
 	}
 	if discard {
-		err = execute(nil)
+		err = execute(a.contentDB(c))
 	} else {
 		err = achievementEditorWithAdvisoryLock(a.contentDB(c), achievementEditorAuthoringLock, 5, execute)
 	}

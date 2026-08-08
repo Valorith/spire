@@ -10,6 +10,7 @@
   --ae-gold: #d7ad55;
   --ae-cyan: #4db6c6;
   --ae-danger: #e87878;
+
   min-width: 0;
 }
 
@@ -311,7 +312,7 @@
 }
 
 .achievement-lookup-results { display: grid; max-height: 240px; overflow: auto; margin-top: .45rem; }
-/* Keep result rows out of EqWindow's generic native-button skin. */
+/* Keep this full selector on result-row variants to beat EqWindow's generic native-button skin. */
 .achievement-editor [class|="eq-window"] .achievement-lookup-results button.achievement-lookup-result {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -336,7 +337,7 @@
 }
 .achievement-lookup-result strong { color: var(--ae-gold); }
 .achievement-lookup-result small { grid-column: 2; color: var(--ae-muted); }
-.achievement-lookup-result--item {
+.achievement-editor [class|="eq-window"] .achievement-lookup-results button.achievement-lookup-result--item {
   grid-template-columns: 34px auto minmax(0, 1fr);
   align-items: center;
   min-height: 44px;
@@ -354,6 +355,7 @@
   background: rgba(0, 0, 0, .35);
   color: var(--ae-muted);
 }
+.achievement-lookup-result__item-icon > span { display: block; width: 32px; height: 32px; }
 .achievement-lookup-empty { margin-top: .45rem; color: var(--ae-muted); font-size: .72rem; }
 
 .achievement-npc-helper { margin-top: .55rem; padding: .45rem; border: 1px dashed rgba(77, 182, 198, .35); border-radius: 5px; }

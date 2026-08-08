@@ -456,7 +456,7 @@ export default {
       worldDataNav: {
         label: "World Data",
         labelIcon: "ra ra-compass mr-1",
-        routePrefixMatches: ["achievements", "content-flags", "data-buckets", "qglobals", "tasks", "strings-database", "titles", "zones"],
+        routePrefixMatches: ["/achievements", "content-flags", "data-buckets", "qglobals", "tasks", "strings-database", "titles", "zones"],
         navs: [
           {
             title: "Achievements",
@@ -464,7 +464,7 @@ export default {
             icon: "ra ra-trophy mr-1",
             isNew: true,
             isAlpha: true,
-            routes: ["achievements"]
+            routes: ["/achievements"]
           },
           {
             title: "Content Flags",

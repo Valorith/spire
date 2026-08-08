@@ -674,21 +674,23 @@ func validateAchievementEditorRewards(graph achievementEditorGraph, context achi
 			if !valid {
 				result.add(path+".reward_id", "Reward ID must be a nonzero unsigned 64-bit decimal string.")
 				id = ""
-			} else if prior, duplicate := rewardPaths[id]; duplicate {
-				result.add(path+".reward_id", fmt.Sprintf("Reward ID is already used by %s.", prior))
 			} else {
-				rewardPaths[id] = path
-				rewardEnabled[id] = reward.Enabled
-			}
-			if context.ExistingAchievementID != nil {
-				if _, owned := context.ExistingRewardIDs[id]; !owned {
-					result.add(path+".reward_id", "Existing definitions cannot adopt a reward ID. Leave a new reward ID empty so the database allocates it.")
+				if prior, duplicate := rewardPaths[id]; duplicate {
+					result.add(path+".reward_id", fmt.Sprintf("Reward ID is already used by %s.", prior))
+				} else {
+					rewardPaths[id] = path
+					rewardEnabled[id] = reward.Enabled
 				}
-			} else if _, used := context.KnownRewardIDs[id]; used {
-				result.add(path+".reward_id", "This reward ID is already used by another definition.")
-			}
-			if reward.Enabled && !decimalFitsUint32(id) {
-				result.add(path+".reward_id", "Enabled reward IDs must fit the unsigned 32-bit RoF2 wire field.")
+				if context.ExistingAchievementID != nil {
+					if _, owned := context.ExistingRewardIDs[id]; !owned {
+						result.add(path+".reward_id", "Existing definitions cannot adopt a reward ID. Leave a new reward ID empty so the database allocates it.")
+					}
+				} else if _, used := context.KnownRewardIDs[id]; used {
+					result.add(path+".reward_id", "This reward ID is already used by another definition.")
+				}
+				if reward.Enabled && !decimalFitsUint32(id) {
+					result.add(path+".reward_id", "Enabled reward IDs must fit the unsigned 32-bit RoF2 wire field.")
+				}
 			}
 		} else {
 			// Blank canonical IDs are allocated transactionally. The transient

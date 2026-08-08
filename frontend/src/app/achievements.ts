@@ -554,7 +554,7 @@ export function validateDefinition (raw: any, metadata: any = FALLBACK_METADATA)
       if (criterionIdentities[criterionIdentity]) addIssue(issues, path + '.target_id', 'Event and target identity must be unique within this component.')
       criterionIdentities[criterionIdentity] = true
       if ([1, 10].includes(criterion.event_type) && (criterion.target_id !== 0 || criterion.target_id2 !== 0)) addIssue(issues, path, 'This event requires both target ID fields to be 0.')
-      if ([0, 2, 3, 5, 6, 8, 9, 11].includes(criterion.event_type) && criterion.target_id2 !== 0) addIssue(issues, path + '.target_id2', 'This event requires the secondary target to be 0.')
+      if (![7, 12, 13].includes(criterion.event_type) && criterion.target_id2 !== 0) addIssue(issues, path + '.target_id2', 'This event requires the secondary target to be 0.')
       if (criterion.event_type === 4 && criterion.target_id <= 0) addIssue(issues, path + '.target_id', 'Task Complete requires a nonzero task ID.')
       if (criterion.event_type === 9 && !((criterion.target_id >= 0 && criterion.target_id <= 77) || criterion.target_id === 4294967295)) addIssue(issues, path + '.target_id', 'Skill ID must be canonical 0-77, or 4,294,967,295 for wildcard.')
       if (criterion.event_type === 13 && (criterion.target_id < 0 || criterion.target_id > 77)) addIssue(issues, path + '.target_id', 'Skill ID must be canonical 0-77.')
@@ -655,46 +655,62 @@ export function definitionSnapshot (graph: any): string {
 
 export function runtimePolicySnapshot (raw: any): string {
   const graph = normalizeDefinition(raw)
-  const enabledRewards = graph.rewards.filter((reward: any) => reward.enabled)
-  const enabledRewardIDs = new Set<string>()
+  const runtimeSort = (left: any, right: any): number => JSON.stringify(left).localeCompare(JSON.stringify(right))
+  const rewardIdentity = (reward: any): string => {
+    const persisted = String(reward.reward_id || '').trim()
+    if (persisted) return persisted
+    return '@new:' + JSON.stringify([Number(reward.reward_type), Number(reward.reward_data_id), String(reward.amount)])
+  }
+  const enabledRewardTokens = new Set<string>()
+  const canonicalRewardIDs = new Map<string, string>()
   graph.rewards.forEach((reward: any, index: number) => {
     if (!reward.enabled) return
-    enabledRewardIDs.add(String(reward.reward_id))
-    enabledRewardIDs.add('@' + index)
+    const persisted = String(reward.reward_id || '').trim()
+    const transient = '@' + index
+    const canonical = rewardIdentity(reward)
+    if (persisted) {
+      enabledRewardTokens.add(persisted)
+      canonicalRewardIDs.set(persisted, canonical)
+    }
+    enabledRewardTokens.add(transient)
+    canonicalRewardIDs.set(transient, canonical)
   })
   const enabledOptions = graph.reward_set && graph.reward_set.enabled
     ? graph.reward_set.options.filter((option: any) => option.enabled)
     : []
   const enabledOptionIDs = new Set(enabledOptions.map((option: any) => Number(option.option_id)))
-  return JSON.stringify({
-    reset_on_version_change: graph.reset_on_version_change,
-    components: graph.components.filter((component: any) => (!component.recovery_only || component.recovery_action === 'restore') && Number(component.component_type) <= 2 && component.criteria.some((criterion: any) => criterion.enabled)).map((component: any) => ({
+  const components = graph.components.filter((component: any) => (!component.recovery_only || component.recovery_action === 'restore') && Number(component.component_type) <= 2 && component.criteria.some((criterion: any) => criterion.enabled)).map((component: any) => ({
+    component_type: component.component_type,
+    component_id: component.component_id,
+    criteria: component.criteria.filter((criterion: any) => criterion.enabled).map((criterion: any) => ({
       component_type: component.component_type,
       component_id: component.component_id,
-      criteria: component.criteria.filter((criterion: any) => criterion.enabled).map((criterion: any) => ({
-        component_type: component.component_type,
-        component_id: component.component_id,
-        event_type: criterion.event_type,
-        progress_mode: criterion.progress_mode,
-        behavior: criterion.behavior,
-        target_id: criterion.target_id,
-        target_id2: criterion.target_id2,
-        target_value: criterion.target_value,
-        required_count: criterion.required_count
-      }))
-    })),
-    rewards: enabledRewards.map((reward: any) => ({
-      reward_id: reward.reward_id,
-      reward_type: reward.reward_type,
-      reward_data_id: reward.reward_data_id,
-      amount: reward.amount
-    })),
-    mapped_rewards: graph.reward_set
-      ? graph.reward_set.mappings.filter((mapping: any) => enabledRewardIDs.has(String(mapping.reward_id))).map((mapping: any) => ({
-        option_id: mapping.option_id,
-        reward_id: mapping.reward_id
-      }))
-      : [],
+      event_type: criterion.event_type,
+      progress_mode: criterion.progress_mode,
+      behavior: criterion.behavior,
+      target_id: criterion.target_id,
+      target_id2: criterion.target_id2,
+      target_value: criterion.target_value,
+      required_count: criterion.required_count
+    })).sort(runtimeSort)
+  })).sort(runtimeSort)
+  const rewards = graph.rewards.filter((reward: any) => reward.enabled).map((reward: any) => ({
+    reward_id: rewardIdentity(reward),
+    reward_type: reward.reward_type,
+    reward_data_id: reward.reward_data_id,
+    amount: reward.amount
+  })).sort(runtimeSort)
+  const mappedRewards = graph.reward_set
+    ? graph.reward_set.mappings.filter((mapping: any) => enabledRewardTokens.has(String(mapping.reward_id))).map((mapping: any) => ({
+      option_id: mapping.option_id,
+      reward_id: canonicalRewardIDs.get(String(mapping.reward_id))
+    })).sort(runtimeSort)
+    : []
+  return JSON.stringify({
+    reset_on_version_change: graph.reset_on_version_change,
+    components,
+    rewards,
+    mapped_rewards: mappedRewards,
     reward_set: graph.reward_set && graph.reward_set.enabled
       ? {
         reward_set_id: graph.reward_set.reward_set_id,
@@ -702,11 +718,11 @@ export function runtimePolicySnapshot (raw: any): string {
           option_id: option.option_id,
           common_to_all: option.common_to_all,
           flags: option.flags
-        })),
-        mappings: graph.reward_set.mappings.filter((mapping: any) => enabledOptionIDs.has(Number(mapping.option_id)) && enabledRewardIDs.has(String(mapping.reward_id))).map((mapping: any) => ({
+        })).sort(runtimeSort),
+        mappings: graph.reward_set.mappings.filter((mapping: any) => enabledOptionIDs.has(Number(mapping.option_id)) && enabledRewardTokens.has(String(mapping.reward_id))).map((mapping: any) => ({
           option_id: mapping.option_id,
-          reward_id: mapping.reward_id
-        }))
+          reward_id: canonicalRewardIDs.get(String(mapping.reward_id))
+        })).sort(runtimeSort)
       }
       : null
   })

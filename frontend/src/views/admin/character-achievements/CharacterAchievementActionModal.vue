@@ -234,6 +234,7 @@
       },
       progressValid () {
         if (!this.action.showProgress) return true
+        if (this.progressValue === '' || this.progressValue === null || typeof this.progressValue === 'undefined') return false
         const value = Number(this.progressValue)
         return Number.isInteger(value) &&
           value >= this.numberOr(this.action.progressMin, 0) &&

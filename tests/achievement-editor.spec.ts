@@ -491,8 +491,9 @@ test.describe('Achievement Editor', () => {
     await picker.locator('#achievement-criterion-0-0-target1-lookup-search').fill('10909');
     await picker.getByRole('button', { name: 'Search' }).click();
 
-    const result = picker.getByRole('option', { name: /10909.*Blade of Tactics/ });
+    const result = picker.getByRole('button', { name: /10909.*Blade of Tactics/ });
     await expect(result).toBeVisible();
+    await expect(result).toHaveAttribute('aria-pressed', 'false');
     await expect(result).toHaveCSS('display', 'grid');
     await expect(result).toHaveCSS('text-align', 'left');
     await expect(result).toHaveCSS('background-image', 'none');

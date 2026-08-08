@@ -48,6 +48,29 @@ func TestCharacterAchievementDefinitionResolutionBoundsOrphanLookup(t *testing.T
 	}
 }
 
+func TestCharacterAchievementDefinitionQuerySupportsDatabasePagination(t *testing.T) {
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		DSN:                       "user:pass@tcp(localhost:3306)/eqemu_content",
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatalf("create dry-run GORM DB: %v", err)
+	}
+
+	categoryID := uint32(7)
+	sql := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		rows := make([]achievementEditorDefinitionSummary, 0)
+		return characterAchievementEditorDefinitionQuery(tx, characterAchievementEditorDetailFilters{
+			Search: "hero", CategoryID: &categoryID,
+		}).Select("a.id, a.name").Order("a.name ASC, a.id ASC").Limit(25).Offset(50).Scan(&rows)
+	})
+	for _, fragment := range []string{"a.description LIKE", "search_category.name LIKE", "ca.category_id = 7", "LIMIT 25 OFFSET 50"} {
+		if !strings.Contains(sql, fragment) {
+			t.Fatalf("definition page SQL is missing %q: %s", fragment, sql)
+		}
+	}
+}
+
 func TestCharacterAchievementSelectionRewardAttentionSemantics(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -211,5 +234,8 @@ func TestCharacterAchievementOrphanCanMatchAttentionAndMutationFilters(t *testin
 	)
 	if !characterAchievementEditorStateMatches(orphan, "reward_attention") || !characterAchievementEditorStateMatches(orphan, "pending_mutation") {
 		t.Fatalf("orphan diagnostics disappeared from attention filters: %+v", orphan)
+	}
+	if orphan.State != "orphaned" || !characterAchievementEditorStateMatches(orphan, "orphaned") {
+		t.Fatalf("orphan decoration lost its explicit state: %+v", orphan)
 	}
 }

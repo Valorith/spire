@@ -102,6 +102,45 @@ type characterAchievementEditorMutationAggregate struct {
 	MaximumDefinitionVersion uint32
 }
 
+func characterAchievementEditorSortedStateIDs(ids map[uint32]bool) []uint32 {
+	result := make([]uint32, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result
+}
+
+func characterAchievementEditorDefinitionQuery(
+	db *gorm.DB,
+	filters characterAchievementEditorDetailFilters,
+) *gorm.DB {
+	query := db.Table("achievements a")
+	search := strings.TrimSpace(filters.Search)
+	if search != "" {
+		like := "%" + search + "%"
+		categoryMatch := `EXISTS (
+			SELECT 1
+			FROM achievement_category_associations search_association
+			JOIN achievement_categories search_category ON search_category.id = search_association.category_id
+			WHERE search_association.achievement_id = a.id
+			AND (search_category.name LIKE ? OR search_association.display_text LIKE ?)
+		)`
+		if id, err := strconv.ParseUint(search, 10, 32); err == nil {
+			query = query.Where("a.id = ? OR a.name LIKE ? OR a.description LIKE ? OR "+categoryMatch, id, like, like, like, like)
+		} else {
+			query = query.Where("a.name LIKE ? OR a.description LIKE ? OR "+categoryMatch, like, like, like, like)
+		}
+	}
+	if filters.CategoryID != nil {
+		query = query.Where(`EXISTS (
+			SELECT 1 FROM achievement_category_associations ca
+			WHERE ca.achievement_id = a.id AND ca.category_id = ?
+		)`, *filters.CategoryID)
+	}
+	return query
+}
+
 func characterAchievementEditorDefinitionResolution(
 	definitions []achievementEditorDefinitionSummary,
 	stateIDs map[uint32]bool,
@@ -191,35 +230,6 @@ func (s *characterAchievementEditorService) loadDetail(characterID uint32, filte
 		return result, err
 	}
 
-	repository := newAchievementEditorRepository(s.contentDB)
-	definitions := make([]achievementEditorDefinitionSummary, 0)
-	definitionQuery := s.contentDB.Table("achievements a").
-		Select("a.id, a.name, a.description, a.icon_id, a.points, a.definition_version, a.enabled")
-	search := strings.TrimSpace(filters.Search)
-	if search != "" {
-		like := "%" + search + "%"
-		categoryMatch := `EXISTS (
-			SELECT 1
-			FROM achievement_category_associations search_association
-			JOIN achievement_categories search_category ON search_category.id = search_association.category_id
-			WHERE search_association.achievement_id = a.id
-			AND (search_category.name LIKE ? OR search_association.display_text LIKE ?)
-		)`
-		if id, parseErr := strconv.ParseUint(search, 10, 32); parseErr == nil {
-			definitionQuery = definitionQuery.Where("a.id = ? OR a.name LIKE ? OR a.description LIKE ? OR "+categoryMatch, id, like, like, like, like)
-		} else {
-			definitionQuery = definitionQuery.Where("a.name LIKE ? OR a.description LIKE ? OR "+categoryMatch, like, like, like, like)
-		}
-	}
-	if filters.CategoryID != nil {
-		definitionQuery = definitionQuery.Where(`EXISTS (
-			SELECT 1 FROM achievement_category_associations ca
-			WHERE ca.achievement_id = a.id AND ca.category_id = ?
-		)`, *filters.CategoryID)
-	}
-	if err := definitionQuery.Order("a.name ASC, a.id ASC").Scan(&definitions).Error; err != nil {
-		return result, err
-	}
 	completionByID := make(map[uint32]achievementEditorCharacterCompletion)
 	progressByID := make(map[uint32]characterAchievementEditorProgressAggregate)
 	rewardByID := make(map[uint32]characterAchievementEditorAttentionAggregate)
@@ -260,35 +270,25 @@ func (s *characterAchievementEditorService) loadDetail(characterID uint32, filte
 		mutationByID[mutation.AchievementID] = mutation
 		stateIDs[mutation.AchievementID] = true
 	}
-	// Search/category filters intentionally omit valid definitions from the
-	// lightweight catalog projection. Resolve only those state-bearing IDs
-	// before classifying orphan rows instead of scanning every catalog ID.
-	knownDefinitionIDs, unresolvedStateIDs := characterAchievementEditorDefinitionResolution(definitions, stateIDs)
-	if len(unresolvedStateIDs) > 0 {
-		knownStateIDs := make([]uint32, 0, len(unresolvedStateIDs))
-		if err := s.contentDB.Table("achievements").Where("id IN ?", unresolvedStateIDs).
-			Pluck("id", &knownStateIDs).Error; err != nil {
+
+	// Resolve only the character's state-bearing IDs against content. Search and
+	// category filters must not turn a valid off-filter definition into an orphan.
+	knownDefinitionIDs := make(map[uint32]bool, len(stateIDs))
+	stateIDList := characterAchievementEditorSortedStateIDs(stateIDs)
+	if len(stateIDList) > 0 {
+		knownStateIDs := make([]uint32, 0, len(stateIDList))
+		if err := s.contentDB.Table("achievements").Where("id IN ?", stateIDList).Pluck("id", &knownStateIDs).Error; err != nil {
 			return result, err
 		}
 		for _, achievementID := range knownStateIDs {
 			knownDefinitionIDs[achievementID] = true
 		}
 	}
-	filtered := make([]achievementEditorDefinitionSummary, 0, len(definitions))
-	for _, definition := range definitions {
-		definition = characterAchievementEditorDecorateAggregate(
-			definition, completionByID[definition.ID], progressByID[definition.ID],
-			rewardByID[definition.ID], selectionByID[definition.ID], mutationByID[definition.ID],
-		)
-		if characterAchievementEditorStateMatches(definition, filters.State) {
-			filtered = append(filtered, definition)
-		}
-	}
+	orphans := make([]achievementEditorDefinitionSummary, 0)
 	for achievementID := range stateIDs {
 		if knownDefinitionIDs[achievementID] {
 			continue
 		}
-		detail.OrphanAchievementIDs = append(detail.OrphanAchievementIDs, achievementID)
 		orphan := achievementEditorDefinitionSummary{
 			ID: achievementID, Name: fmt.Sprintf("Deleted definition #%d", achievementID),
 			State: "orphaned", Orphaned: true,
@@ -302,37 +302,164 @@ func (s *characterAchievementEditorService) loadDetail(characterID uint32, filte
 			rewardByID[achievementID], selectionByID[achievementID], mutationByID[achievementID],
 		)
 		if filters.CategoryID == nil && characterAchievementEditorStateMatches(orphan, filters.State) && characterAchievementEditorSearchMatches(orphan, filters.Search) {
-			filtered = append(filtered, orphan)
+			orphans = append(orphans, orphan)
 		}
 	}
-	sort.Slice(detail.OrphanAchievementIDs, func(i, j int) bool { return detail.OrphanAchievementIDs[i] < detail.OrphanAchievementIDs[j] })
-	// stateIDs is a map, so orphan insertion order is intentionally undefined.
-	// Always impose a stable total order before applying an offset; otherwise an
-	// orphan can move between pages and appear twice or not at all.
-	sort.Slice(filtered, func(i, j int) bool {
-		if filtered[i].Orphaned != filtered[j].Orphaned {
-			return !filtered[i].Orphaned
+	sort.Slice(orphans, func(i, j int) bool { return orphans[i].ID < orphans[j].ID })
+
+	includeIDs := make(map[uint32]bool)
+	excludeIDs := make(map[uint32]bool)
+	requireInclude := false
+	postFilter := false
+	suppressDefinitions := false
+	switch filters.State {
+	case "completed":
+		requireInclude = true
+		for id := range completionByID {
+			includeIDs[id] = true
 		}
-		if filtered[i].Orphaned {
-			return filtered[i].ID < filtered[j].ID
+	case "in_progress":
+		requireInclude = true
+		for id, progress := range progressByID {
+			if progress.HasPositive {
+				if _, completed := completionByID[id]; !completed {
+					includeIDs[id] = true
+				}
+			}
 		}
-		leftName := strings.ToLower(filtered[i].Name)
-		rightName := strings.ToLower(filtered[j].Name)
-		if leftName != rightName {
-			return leftName < rightName
+	case "not_completed":
+		for id := range completionByID {
+			excludeIDs[id] = true
 		}
-		return filtered[i].ID < filtered[j].ID
-	})
-	result.Total = int64(len(filtered))
-	start := (filters.Page - 1) * filters.Limit
-	if start > len(filtered) {
-		start = len(filtered)
+	case "not_started":
+		for id := range completionByID {
+			excludeIDs[id] = true
+		}
+		for id, progress := range progressByID {
+			if progress.HasPositive {
+				excludeIDs[id] = true
+			}
+		}
+	case "version_mismatch":
+		requireInclude = true
+		postFilter = true
+		for id := range completionByID {
+			includeIDs[id] = true
+		}
+		for id := range progressByID {
+			includeIDs[id] = true
+		}
+		for id := range mutationByID {
+			includeIDs[id] = true
+		}
+	case "reward_attention":
+		requireInclude = true
+		for id, reward := range rewardByID {
+			if reward.Attention {
+				includeIDs[id] = true
+			}
+		}
+		for id, selection := range selectionByID {
+			if selection.Attention {
+				includeIDs[id] = true
+			}
+		}
+	case "pending_mutation":
+		requireInclude = true
+		for id := range mutationByID {
+			includeIDs[id] = true
+		}
+	case "orphaned":
+		suppressDefinitions = true
 	}
-	end := start + filters.Limit
-	if end > len(filtered) {
-		end = len(filtered)
+
+	definitionQuery := characterAchievementEditorDefinitionQuery(s.contentDB, filters)
+	if requireInclude {
+		ids := characterAchievementEditorSortedStateIDs(includeIDs)
+		if len(ids) == 0 {
+			suppressDefinitions = true
+		} else {
+			definitionQuery = definitionQuery.Where("a.id IN ?", ids)
+		}
 	}
-	detail.Definitions = append(detail.Definitions, filtered[start:end]...)
+	if ids := characterAchievementEditorSortedStateIDs(excludeIDs); len(ids) > 0 {
+		definitionQuery = definitionQuery.Where("a.id NOT IN ?", ids)
+	}
+
+	const definitionProjection = "a.id, a.name, a.description, a.icon_id, a.points, a.definition_version, a.enabled"
+	validCandidates := make([]achievementEditorDefinitionSummary, 0)
+	var validTotal int64
+	if !suppressDefinitions && postFilter {
+		if err := definitionQuery.Select(definitionProjection).Order("a.name ASC, a.id ASC").Scan(&validCandidates).Error; err != nil {
+			return result, err
+		}
+		filteredCandidates := validCandidates[:0]
+		for _, definition := range validCandidates {
+			definition = characterAchievementEditorDecorateAggregate(
+				definition, completionByID[definition.ID], progressByID[definition.ID],
+				rewardByID[definition.ID], selectionByID[definition.ID], mutationByID[definition.ID],
+			)
+			if characterAchievementEditorStateMatches(definition, filters.State) {
+				filteredCandidates = append(filteredCandidates, definition)
+			}
+		}
+		validCandidates = filteredCandidates
+		validTotal = int64(len(validCandidates))
+	} else if !suppressDefinitions {
+		if err := definitionQuery.Count(&validTotal).Error; err != nil {
+			return result, err
+		}
+	}
+
+	result.Total = validTotal + int64(len(orphans))
+	start := int64((filters.Page - 1) * filters.Limit)
+	remaining := filters.Limit
+	pageDefinitions := make([]achievementEditorDefinitionSummary, 0, filters.Limit)
+	if start < validTotal && remaining > 0 {
+		count := remaining
+		if available := int(validTotal - start); count > available {
+			count = available
+		}
+		if postFilter {
+			pageDefinitions = append(pageDefinitions, validCandidates[int(start):int(start)+count]...)
+		} else if err := definitionQuery.Select(definitionProjection).Order("a.name ASC, a.id ASC").
+			Limit(count).Offset(int(start)).Scan(&pageDefinitions).Error; err != nil {
+			return result, err
+		}
+		remaining -= count
+	}
+	orphanOffset := 0
+	if start >= validTotal {
+		orphanOffset = int(start - validTotal)
+	}
+	pageOrphans := make([]achievementEditorDefinitionSummary, 0)
+	if remaining > 0 && orphanOffset < len(orphans) {
+		orphanEnd := orphanOffset + remaining
+		if orphanEnd > len(orphans) {
+			orphanEnd = len(orphans)
+		}
+		pageOrphans = append(pageOrphans, orphans[orphanOffset:orphanEnd]...)
+	}
+
+	repository := newAchievementEditorRepository(s.contentDB)
+	catalogPageIDs := make([]uint32, 0, len(pageDefinitions))
+	for _, definition := range pageDefinitions {
+		catalogPageIDs = append(catalogPageIDs, definition.ID)
+	}
+	pageSummaries, err := repository.loadDefinitionSummaries(catalogPageIDs)
+	if err != nil {
+		return result, err
+	}
+	for _, definition := range pageDefinitions {
+		if summary, ok := pageSummaries[definition.ID]; ok {
+			definition = summary
+		}
+		detail.Definitions = append(detail.Definitions, characterAchievementEditorDecorateAggregate(
+			definition, completionByID[definition.ID], progressByID[definition.ID],
+			rewardByID[definition.ID], selectionByID[definition.ID], mutationByID[definition.ID],
+		))
+	}
+	detail.Definitions = append(detail.Definitions, pageOrphans...)
 	pageIDs := make([]uint32, 0, len(detail.Definitions))
 	pageDefinitionIDs := make(map[uint32]bool, len(detail.Definitions))
 	pageOrphanIDs := make([]uint32, 0)
@@ -342,21 +469,6 @@ func (s *characterAchievementEditorService) loadDetail(characterID uint32, filte
 			pageIDs = append(pageIDs, definition.ID)
 		} else {
 			pageOrphanIDs = append(pageOrphanIDs, definition.ID)
-		}
-	}
-	pageSummaries, err := repository.loadDefinitionSummaries(pageIDs)
-	if err != nil {
-		return result, err
-	}
-	for index, definition := range detail.Definitions {
-		if definition.Orphaned {
-			continue
-		}
-		if summary, ok := pageSummaries[definition.ID]; ok {
-			detail.Definitions[index] = characterAchievementEditorDecorateAggregate(
-				summary, completionByID[definition.ID], progressByID[definition.ID],
-				rewardByID[definition.ID], selectionByID[definition.ID], mutationByID[definition.ID],
-			)
 		}
 	}
 	// Return page-scoped state and orphan identities so filtered/paginated views
@@ -508,6 +620,9 @@ func characterAchievementEditorDecorateAggregate(
 		((mutation.MinimumDefinitionVersion != 0 && mutation.MinimumDefinitionVersion != definition.DefinitionVersion) ||
 			(mutation.MaximumDefinitionVersion != 0 && mutation.MaximumDefinitionVersion != definition.DefinitionVersion)) {
 		definition.VersionMismatch = true
+	}
+	if definition.Orphaned {
+		definition.State = "orphaned"
 	}
 	return definition
 }

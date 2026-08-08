@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gorm.io/gorm"
@@ -170,15 +171,20 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 		Rewards:              make([]runtimeReward, 0, len(graph.Rewards)),
 		MappedRewards:        make([]runtimeRewardMapping, 0),
 	}
-	enabledRewardIDs := make(map[string]bool)
+	enabledRewardIDs := make(map[string]string)
 	for index, reward := range graph.Rewards {
 		if !reward.Enabled {
 			continue
 		}
-		enabledRewardIDs[reward.RewardID] = true
-		enabledRewardIDs[fmt.Sprintf("@%d", index)] = true
+		canonicalRewardID := strings.TrimSpace(reward.RewardID)
+		if canonicalRewardID == "" {
+			canonicalRewardID = fmt.Sprintf("@new:%d:%d:%s", reward.RewardType, reward.RewardDataID, reward.Amount)
+		} else {
+			enabledRewardIDs[reward.RewardID] = canonicalRewardID
+		}
+		enabledRewardIDs[fmt.Sprintf("@%d", index)] = canonicalRewardID
 		policy.Rewards = append(policy.Rewards, runtimeReward{
-			RewardID:     reward.RewardID,
+			RewardID:     canonicalRewardID,
 			RewardType:   reward.RewardType,
 			RewardDataID: reward.RewardDataID,
 			Amount:       reward.Amount,
@@ -186,12 +192,13 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 	}
 	if graph.RewardSet != nil {
 		for _, mapping := range graph.RewardSet.Mappings {
-			if !enabledRewardIDs[mapping.RewardID] {
+			canonicalRewardID, enabled := enabledRewardIDs[mapping.RewardID]
+			if !enabled {
 				continue
 			}
 			policy.MappedRewards = append(policy.MappedRewards, runtimeRewardMapping{
 				OptionID: mapping.OptionID,
-				RewardID: mapping.RewardID,
+				RewardID: canonicalRewardID,
 			})
 		}
 	}
@@ -211,15 +218,17 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 				OptionID:    option.OptionID,
 				CommonToAll: option.CommonToAll,
 				Flags:       option.Flags,
+				Enabled:     true,
 			})
 		}
 		for _, mapping := range graph.RewardSet.Mappings {
-			if !enabledOptionIDs[mapping.OptionID] || !enabledRewardIDs[mapping.RewardID] {
+			canonicalRewardID, rewardEnabled := enabledRewardIDs[mapping.RewardID]
+			if !enabledOptionIDs[mapping.OptionID] || !rewardEnabled {
 				continue
 			}
 			policy.RewardSet.Mappings = append(policy.RewardSet.Mappings, runtimeRewardMapping{
 				OptionID: mapping.OptionID,
-				RewardID: mapping.RewardID,
+				RewardID: canonicalRewardID,
 			})
 		}
 	}
@@ -256,8 +265,66 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 			})
 		}
 		if len(runtimeComponentRow.Criteria) > 0 {
+			sort.Slice(runtimeComponentRow.Criteria, func(i, j int) bool {
+				left, right := runtimeComponentRow.Criteria[i], runtimeComponentRow.Criteria[j]
+				if left.EventType != right.EventType {
+					return left.EventType < right.EventType
+				}
+				if left.TargetID != right.TargetID {
+					return left.TargetID < right.TargetID
+				}
+				if left.TargetID2 != right.TargetID2 {
+					return left.TargetID2 < right.TargetID2
+				}
+				if left.TargetValue != right.TargetValue {
+					return left.TargetValue < right.TargetValue
+				}
+				if left.ProgressMode != right.ProgressMode {
+					return left.ProgressMode < right.ProgressMode
+				}
+				if left.Behavior != right.Behavior {
+					return left.Behavior < right.Behavior
+				}
+				return left.RequiredCount < right.RequiredCount
+			})
 			policy.Components = append(policy.Components, runtimeComponentRow)
 		}
+	}
+	sort.Slice(policy.Components, func(i, j int) bool {
+		if policy.Components[i].ComponentType != policy.Components[j].ComponentType {
+			return policy.Components[i].ComponentType < policy.Components[j].ComponentType
+		}
+		return policy.Components[i].ComponentID < policy.Components[j].ComponentID
+	})
+	sort.Slice(policy.Rewards, func(i, j int) bool {
+		left, right := policy.Rewards[i], policy.Rewards[j]
+		if left.RewardID != right.RewardID {
+			return left.RewardID < right.RewardID
+		}
+		if left.RewardType != right.RewardType {
+			return left.RewardType < right.RewardType
+		}
+		if left.RewardDataID != right.RewardDataID {
+			return left.RewardDataID < right.RewardDataID
+		}
+		return left.Amount < right.Amount
+	})
+	sort.Slice(policy.MappedRewards, func(i, j int) bool {
+		if policy.MappedRewards[i].OptionID != policy.MappedRewards[j].OptionID {
+			return policy.MappedRewards[i].OptionID < policy.MappedRewards[j].OptionID
+		}
+		return policy.MappedRewards[i].RewardID < policy.MappedRewards[j].RewardID
+	})
+	if policy.RewardSet != nil {
+		sort.Slice(policy.RewardSet.Options, func(i, j int) bool {
+			return policy.RewardSet.Options[i].OptionID < policy.RewardSet.Options[j].OptionID
+		})
+		sort.Slice(policy.RewardSet.Mappings, func(i, j int) bool {
+			if policy.RewardSet.Mappings[i].OptionID != policy.RewardSet.Mappings[j].OptionID {
+				return policy.RewardSet.Mappings[i].OptionID < policy.RewardSet.Mappings[j].OptionID
+			}
+			return policy.RewardSet.Mappings[i].RewardID < policy.RewardSet.Mappings[j].RewardID
+		})
 	}
 	payload, err := json.Marshal(policy)
 	if err != nil {

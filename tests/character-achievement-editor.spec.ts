@@ -670,15 +670,18 @@ test.describe('Character Achievement Editor', () => {
 
     await page.getByTestId(`character-achievement-progress-${achievementID}-1-152250`).click();
     const submit = page.getByTestId('character-achievement-action-submit');
-    await page.getByTestId('character-achievement-action-progress').fill('25');
+    const progressInput = page.getByTestId('character-achievement-action-progress');
+    await progressInput.fill('');
     await page.locator('#character-achievement-action-reason').fill('Correcting progress after verified event loss');
 
-    await page.getByTestId('character-achievement-operation-confirmation').fill('Lyric');
+    await page.getByTestId('character-achievement-operation-confirmation').fill(`PROGRESS ${achievementID}`);
     await expect(submit).toBeDisabled();
     await page.getByTestId('character-achievement-operation-confirmation').fill('');
     await page.getByTestId('character-achievement-character-confirmation').fill('Lyric');
     await expect(submit).toBeDisabled();
-    await page.getByTestId('character-achievement-operation-confirmation').fill('Lyric');
+    await page.getByTestId('character-achievement-operation-confirmation').fill(`PROGRESS ${achievementID}`);
+    await expect(submit).toBeDisabled();
+    await progressInput.fill('25');
     await expect(submit).toBeEnabled();
 
     const progressRequest = page.waitForRequest(request =>
@@ -696,7 +699,7 @@ test.describe('Character Achievement Editor', () => {
       expected_definition_version: 4,
       reason: 'Correcting progress after verified event loss',
       character_confirmation: 'Lyric',
-      confirmation: 'Lyric',
+      confirmation: `PROGRESS ${achievementID}`,
     });
     await expect(page.getByTestId('character-achievement-action-modal')).toBeHidden();
     await expect(page.getByTestId(`character-achievement-record-${achievementID}`)).toContainText('25 / 30');
@@ -853,7 +856,7 @@ test.describe('Character Achievement Editor', () => {
     await expect(reset).toBeDisabled();
     await expect(reset).toHaveAttribute('title', /active 60-second processing lease/);
 
-    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000) - 61;
+    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000) - 600;
     await page.locator('.ca-character-header__actions').getByRole('button', { name: 'Refresh' }).click();
     await expect(reset).toBeEnabled();
     await reset.click();
@@ -895,7 +898,7 @@ test.describe('Character Achievement Editor', () => {
     await expect(activeDiscard).toBeDisabled();
     await expect(activeDiscard).toHaveAttribute('title', /active 60-second zone lease/);
 
-    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000) - 61;
+    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000) - 600;
     await page.locator('.ca-character-header__actions').getByRole('button', { name: 'Refresh' }).click();
     mutationRow = page.locator('tr').filter({ hasText: mutationID }).first();
     await expect(page.getByText('1 expired lease needs review', { exact: true })).toBeVisible();

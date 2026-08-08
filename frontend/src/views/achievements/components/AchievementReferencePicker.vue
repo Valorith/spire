@@ -49,15 +49,14 @@
         <i class="fa fa-exclamation-triangle"></i>
         <span>{{ error }} You can still enter a verified numeric ID above.</span>
       </div>
-      <div v-if="results.length" class="achievement-lookup-results" role="listbox" :aria-label="label + ' lookup results'">
+      <div v-if="results.length" class="achievement-lookup-results" role="group" :aria-label="label + ' lookup results'">
         <button
           v-for="row in results"
           :key="String(row.id)"
           type="button"
           class="achievement-lookup-result"
           :class="{ 'achievement-lookup-result--item': apiKind === 'item' }"
-          role="option"
-          :aria-selected="String(row.id) === String(value) ? 'true' : 'false'"
+          :aria-pressed="String(row.id) === String(value) ? 'true' : 'false'"
           @click="choose(row)"
         >
           <span
@@ -118,7 +117,7 @@
       },
       apiKind (): string {
         const aliases: any = { npc_name: 'npc-name', alternate_currency: 'currency', title: 'title-set', cast_restriction: '' }
-        return aliases[this.kind] === undefined ? this.kind : aliases[this.kind]
+        return Object.prototype.hasOwnProperty.call(aliases, this.kind) ? aliases[this.kind] : this.kind
       }
     },
     beforeDestroy () {
@@ -140,21 +139,30 @@
       },
       async search () {
         if (!this.canSearch || this.loading) return
+        const query = this.query.trim()
         this.loading = true
         this.searched = true
         this.error = ''
         try {
           const response = await SpireApi.v1().get('/achievement-editor/lookups/' + encodeURIComponent(this.apiKind), {
-            params: { q: this.query, limit: Math.min(Math.max(Number(this.limit), 1), 50) }
+            params: { q: query, limit: Math.min(Math.max(Number(this.limit), 1), 50) }
           })
-          const payload = response.data || {}
-          const rows = Array.isArray(payload) ? payload : (payload.data || [])
-          this.results = rows.slice(0, this.limit)
+          if (this.query.trim() === query) {
+            const payload = response.data || {}
+            const rows = Array.isArray(payload) ? payload : (payload.data || [])
+            this.results = rows.slice(0, this.limit)
+          }
         } catch (error) {
-          this.results = []
-          this.error = this.errorMessage(error, 'Lookup could not be loaded.')
+          if (this.query.trim() === query) {
+            this.results = []
+            this.error = this.errorMessage(error, 'Lookup could not be loaded.')
+          }
         } finally {
           this.loading = false
+          if (this.query.trim() !== query) {
+            if (this.canSearch) await this.search()
+            else this.results = []
+          }
         }
       },
       choose (row: any) {

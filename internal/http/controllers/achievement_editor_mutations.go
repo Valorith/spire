@@ -284,7 +284,7 @@ func (a *AchievementEditorController) deleteCategory(c echo.Context) error {
 	if err := validateAchievementEditorReason(request.Reason); err != nil {
 		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": err.Error(), "field": "reason"})
 	}
-	if err := achievementEditorConfirmation(request.Confirmation, fmt.Sprintf("DELETE %d", id)); err != nil {
+	if err := achievementEditorConfirmation(request.Confirmation, achievementEditorDeleteConfirmation(id)); err != nil {
 		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": err.Error(), "field": "confirmation"})
 	}
 	category, err := newAchievementEditorRepository(a.contentDB(c)).loadCategory(id)

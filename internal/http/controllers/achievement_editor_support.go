@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/labstack/echo/v4"
@@ -79,10 +80,11 @@ func achievementEditorParamID(c echo.Context, name string, label string) (uint32
 
 func validateAchievementEditorReason(reason string) error {
 	reason = strings.TrimSpace(reason)
-	if len(reason) < achievementEditorMinimumReasonLength {
+	length := utf8.RuneCountInString(reason)
+	if length < achievementEditorMinimumReasonLength {
 		return fmt.Errorf("Audit reason must contain at least %d characters", achievementEditorMinimumReasonLength)
 	}
-	if len(reason) > operationalEditorReasonMaxLength {
+	if length > operationalEditorReasonMaxLength {
 		return fmt.Errorf("Audit reason must be %d characters or fewer", operationalEditorReasonMaxLength)
 	}
 	return nil

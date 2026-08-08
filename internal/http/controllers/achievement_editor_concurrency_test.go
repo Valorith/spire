@@ -194,6 +194,84 @@ func TestAchievementEditorRuntimePolicyFingerprintsMappingsThatSuppressAutomatic
 	}
 }
 
+func TestAchievementEditorRuntimePolicyIgnoresSubmittedSliceOrder(t *testing.T) {
+	graph := validAchievementEditorGraph()
+	secondComponent := graph.Components[0]
+	secondComponent.ComponentID++
+	secondComponent.Sequence++
+	secondComponent.Criteria = append([]achievementEditorCriterion(nil), graph.Components[0].Criteria...)
+	secondComponent.Criteria[0].ComponentID = secondComponent.ComponentID
+	secondComponent.Criteria[0].TargetID++
+	graph.Components = append(graph.Components, secondComponent)
+	graph.Rewards = []achievementEditorReward{
+		{RewardID: "600", Sequence: 1, RewardType: 2, Amount: "1", Enabled: true},
+		{RewardID: "601", Sequence: 2, RewardType: 4, RewardDataID: 7, Amount: "2", Enabled: true},
+	}
+	graph.RewardSet = &achievementEditorRewardSet{
+		RewardSetID: 50,
+		Enabled:     true,
+		Options: []achievementEditorRewardOption{
+			{RewardSetID: 50, OptionID: 2, Sequence: 2, Enabled: true},
+			{RewardSetID: 50, OptionID: 1, Sequence: 1, Enabled: true},
+		},
+		Mappings: []achievementEditorRewardMapping{
+			{RewardSetID: 50, OptionID: 2, RewardID: "601"},
+			{RewardSetID: 50, OptionID: 1, RewardID: "600"},
+		},
+	}
+	baseline, err := achievementEditorRuntimePolicyRevision(graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	graph.Components[0], graph.Components[1] = graph.Components[1], graph.Components[0]
+	graph.Rewards[0], graph.Rewards[1] = graph.Rewards[1], graph.Rewards[0]
+	graph.RewardSet.Options[0], graph.RewardSet.Options[1] = graph.RewardSet.Options[1], graph.RewardSet.Options[0]
+	graph.RewardSet.Mappings[0], graph.RewardSet.Mappings[1] = graph.RewardSet.Mappings[1], graph.RewardSet.Mappings[0]
+	reordered, err := achievementEditorRuntimePolicyRevision(graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseline != reordered {
+		t.Fatal("presentation-only slice reordering changed the runtime policy revision")
+	}
+}
+
+func TestAchievementEditorRuntimePolicyCanonicalizesTransientRewardTokens(t *testing.T) {
+	graph := validAchievementEditorGraph()
+	graph.Rewards = []achievementEditorReward{
+		{Sequence: 1, RewardType: 2, Amount: "1", Enabled: true},
+		{Sequence: 2, RewardType: 4, RewardDataID: 7, Amount: "2", Enabled: true},
+	}
+	graph.RewardSet = &achievementEditorRewardSet{
+		RewardSetID: 50,
+		Enabled:     true,
+		Options: []achievementEditorRewardOption{
+			{RewardSetID: 50, OptionID: 1, Enabled: true},
+			{RewardSetID: 50, OptionID: 2, Enabled: true},
+		},
+		Mappings: []achievementEditorRewardMapping{
+			{RewardSetID: 50, OptionID: 1, RewardID: "@0"},
+			{RewardSetID: 50, OptionID: 2, RewardID: "@1"},
+		},
+	}
+	baseline, err := achievementEditorRuntimePolicyRevision(graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	graph.Rewards[0], graph.Rewards[1] = graph.Rewards[1], graph.Rewards[0]
+	graph.RewardSet.Mappings[0].RewardID = "@1"
+	graph.RewardSet.Mappings[1].RewardID = "@0"
+	reordered, err := achievementEditorRuntimePolicyRevision(graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseline != reordered {
+		t.Fatal("transient @index tokens changed runtime policy after preserving reward-to-option semantics")
+	}
+}
+
 func TestAchievementEditorCategoryRevisionIgnoresDerivedCounts(t *testing.T) {
 	category := achievementEditorCategory{ID: 10, Name: "World", AssociationCount: 1, ChildrenCount: 2, Depth: 3}
 	first, err := achievementEditorCategoryRevision(category)

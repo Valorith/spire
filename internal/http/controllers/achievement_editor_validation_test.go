@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func TestAchievementEditorReasonCountsUnicodeCharacters(t *testing.T) {
+	if err := validateAchievementEditorReason(strings.Repeat("界", achievementEditorMinimumReasonLength)); err != nil {
+		t.Fatalf("minimum-length Unicode reason was rejected: %v", err)
+	}
+	if err := validateAchievementEditorReason(strings.Repeat("界", operationalEditorReasonMaxLength+1)); err == nil {
+		t.Fatal("over-limit Unicode reason was accepted")
+	}
+}
+
 func TestAchievementEditorMutationRoutesUseExplicitNonPostVerbs(t *testing.T) {
 	want := map[string]struct{}{
 		http.MethodPut + " achievement-editor/definition":                                {},
