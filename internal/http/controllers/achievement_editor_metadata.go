@@ -50,9 +50,9 @@ type achievementEditorMetadata struct {
 	AchievementStatuses        []achievementEditorEnumOption                    `json:"achievement_statuses"`
 	CharacterRewardStatuses    []achievementEditorEnumOption                    `json:"character_reward_statuses"`
 	CharacterSelectionStatuses []achievementEditorEnumOption                    `json:"character_selection_statuses"`
-	MutationTargetTypes        []achievementEditorEnumOption                    `json:"mutation_target_types"`
-	MutationOperations         []achievementEditorEnumOption                    `json:"mutation_operations"`
-	CharacterMutationStatuses  []achievementEditorEnumOption                    `json:"character_mutation_statuses"`
+	UpdateTargetTypes          []achievementEditorEnumOption                    `json:"update_target_types"`
+	UpdateOperations           []achievementEditorEnumOption                    `json:"update_operations"`
+	CharacterUpdateStatuses    []achievementEditorEnumOption                    `json:"character_update_statuses"`
 	Classes                    []achievementEditorEnumOption                    `json:"classes"`
 	Skills                     []achievementEditorEnumOption                    `json:"skills"`
 	Fields                     map[string]map[string]achievementEditorFieldHelp `json:"fields"`
@@ -74,29 +74,33 @@ func buildAchievementEditorMetadata() achievementEditorMetadata {
 	allModes := []int{0, 1, 2, 3}
 	absoluteModes := []int{1, 2, 3}
 	limits := map[string]string{
-		"payload_bytes":                     "2097152",
-		"text_bytes":                        "65535",
-		"associations":                      "100",
-		"components":                        "1000",
-		"criteria":                          "2000",
-		"rewards":                           "500",
-		"restrictions":                      "500",
-		"options":                           "500",
-		"mappings":                          "500",
-		"lookup_results":                    "100",
-		"uint8_max":                         "255",
-		"uint32_max":                        "4294967295",
-		"uint64_max":                        "18446744073709551615",
-		"int64_max":                         "9223372036854775807",
-		"skill_wildcard":                    "4294967295",
-		"mutation_processing_lease_seconds": "60",
+		"payload_bytes":                   "2097152",
+		"text_bytes":                      "65535",
+		"associations":                    "100",
+		"components":                      "1000",
+		"criteria":                        "2000",
+		"rewards":                         "500",
+		"requirements":                    "500",
+		"options":                         "500",
+		"mappings":                        "500",
+		"lookup_results":                  "100",
+		"uint8_max":                       "255",
+		"uint32_max":                      "4294967295",
+		"uint64_max":                      "18446744073709551615",
+		"int64_max":                       "9223372036854775807",
+		"skill_wildcard":                  "4294967295",
+		"update_processing_lease_seconds": "60",
 	}
 	for alias, source := range map[string]string{
 		"max_graph_bytes": "payload_bytes", "max_text_bytes": "text_bytes",
 		"max_associations": "associations", "max_components": "components",
 		"max_criteria": "criteria", "max_rewards": "rewards",
-		"max_restrictions": "restrictions", "max_reward_options": "options",
+		"max_requirements": "requirements", "max_reward_options": "options",
 		"max_reward_mappings": "mappings",
+		// Compatibility aliases keep older API clients usable while the canonical
+		// vocabulary follows achievement_cast_requirements and pending updates.
+		"restrictions": "requirements", "max_restrictions": "requirements",
+		"mutation_processing_lease_seconds": "update_processing_lease_seconds",
 	} {
 		limits[alias] = limits[source]
 	}
@@ -168,18 +172,18 @@ func buildAchievementEditorMetadata() achievementEditorMetadata {
 			{Value: 2, Label: "Retryable Failure", Help: "The selection failed explicitly and may be reviewed for retry."},
 			{Value: 3, Label: "Ambiguous Delivery", Help: "The server cannot prove whether delivery completed. Review duplicate risk before retry."},
 		},
-		MutationTargetTypes: []achievementEditorEnumOption{
+		UpdateTargetTypes: []achievementEditorEnumOption{
 			{Value: 0, Label: "Character", Help: "The request originally targeted one character."},
 			{Value: 1, Label: "Group", Help: "World expanded a group request into per-character rows."},
 			{Value: 2, Label: "Raid", Help: "World expanded a raid request into per-character rows."},
 			{Value: 3, Label: "Dynamic Zone", Help: "World expanded a dynamic-zone roster into per-character rows."},
 			{Value: 4, Label: "Shared Task", Help: "World expanded a shared-task roster into per-character rows."},
 		},
-		MutationOperations: []achievementEditorEnumOption{
+		UpdateOperations: []achievementEditorEnumOption{
 			{Value: 0, Label: "Advance", Help: "Raise one component to at least requested_value."},
 			{Value: 1, Label: "Complete", Help: "Complete the whole achievement idempotently."},
 		},
-		CharacterMutationStatuses: []achievementEditorEnumOption{
+		CharacterUpdateStatuses: []achievementEditorEnumOption{
 			{Value: 0, Label: "Pending", Help: "Waiting for a target zone to apply the request."},
 			{Value: 1, Label: "Blocked", Help: "Invalid or incompatible content prevented application."},
 			{Value: 2, Label: "Processing", Help: "A zone holds a claim lease; stale processing may be recovered after the lease expires."},
@@ -240,40 +244,46 @@ func achievementEditorFieldMetadata() map[string]map[string]achievementEditorFie
 			"id": f("Category ID", "Stable nonzero category identity. It cannot change after creation."), "parent_id": f("Parent category", "Use 0 for a root. Parent chains must exist and remain acyclic."), "sequence": f("Order", "Sort order among siblings; ties are ordered by category ID."), "name": f("Name", "Category name shown in the achievement window."), "description": f("Description", "Category description sent to the client; limited to 65,535 UTF-8 bytes by the source TEXT column."), "icon": f("Icon resource", "Optional client texture/resource name; empty produces text-only presentation."),
 		},
 		"achievements": {
-			"id": f("Achievement ID", "Stable nonzero identity used by character state, scripts, links, and dependencies."), "name": f("Name", "Visible achievement name and default link text."), "description": f("Description", "Visible achievement description sent to the client; limited to 65,535 UTF-8 bytes by the source TEXT column."), "icon_id": f("Icon ID", "Unsigned client icon number; use 0 when no reviewed icon is known."), "points": f("Points", "Achievement score awarded on completion."), "reward_display": f("Imported reward display", "Presentation provenance only; runtime derives reward visibility from valid enabled content."), "world_display_flag": f("World display flag", "Newer-client styling provenance; not serialized to RoF2."), "definition_version": f("Definition version", "Nonzero durable schema version. Increment for incompatible deployed changes."), "reset_on_version_change": f("Reset on version change", "A mismatch clears prior state and reward ledgers before rebuilding when enabled."), "enabled": f("Enabled", "Only enabled, valid definitions enter the active server snapshot."),
+			"id": f("Achievement ID", "Stable nonzero identity used by character state, scripts, links, and dependencies."), "name": f("Name", "Visible achievement name and default link text."), "description": f("Description", "Visible achievement description sent to the client; limited to 65,535 UTF-8 bytes by the source TEXT column."), "icon_id": f("Icon ID", "Unsigned client icon number; use 0 when no reviewed icon is known."), "points": f("Points", "Achievement score awarded on completion."), "has_reward": f("Imported reward hint", "Imported client hint only; the server derives effective reward visibility from reachable enabled reward content."), "client_flag": f("Client flag", "Uninterpreted import/export client field; RoF2 does not serialize it."), "version": f("Definition version", "Unsigned durable version; 0 is valid. Increment for incompatible deployed changes."), "reset_on_version_change": f("Reset on version change", "A mismatch clears prior state and reward ledgers before rebuilding when enabled."), "enabled": f("Enabled", "Only enabled, valid definitions enter the active server snapshot."),
 		},
 		"achievement_category_associations": {
 			"category_id": f("Category", "Existing category where the achievement appears."), "sequence": f("Order", "Achievement order inside this category."), "achievement_id": f("Achievement ID", "Owning definition; supplied by the graph."), "display_text": f("Display override", "Optional association-specific client text; empty uses the definition presentation."),
 		},
 		"achievement_components": {
-			"achievement_id": f("Achievement ID", "Owning definition; supplied by the graph."), "component_type": f("Wire type", "RoF2 state bucket 0 through 3; type 3 is presentation-only."), "sequence": f("Client order", "Display order within the wire type; RoF2 clamps it to 255."), "component_id": f("Component ID", "Stable identity together with achievement ID and wire type. Zero is valid."), "description": f("Primary description", "Visible step text; limited to 65,535 UTF-8 bytes by the source TEXT column."), "description_2": f("Secondary description", "Optional second client text field; limited to 65,535 UTF-8 bytes by the source TEXT column."), "presentation_count": f("Presentation count", "Default displayed count from the global component-count row."),
+			"achievement_id": f("Achievement ID", "Owning definition; supplied by the graph."), "component_type": f("Wire type", "RoF2 state bucket 0 through 3; type 3 is presentation-only."), "sequence": f("Client order", "Display order within the wire type; RoF2 clamps it to 255."), "component_id": f("Component ID", "Stable identity together with achievement ID and wire type. Zero is valid."), "name": f("Component name", "Primary player-facing component text; limited to 65,535 UTF-8 bytes by the source TEXT column."), "description": f("Component description", "Optional secondary player-facing component text; limited to 65,535 UTF-8 bytes by the source TEXT column."), "presentation_count": f("Imported presentation count", "Default display count from achievement_associations. Enabled criterion required_count remains authoritative for progress."),
 		},
-		"achievement_component_counts": {
+		"achievement_associations": {
 			"component_id": f("Component ID", "Global presentation-count identity shared by every component using this ID."), "required_count": f("Presentation count", "Nonzero default displayed count; enabled criteria carry their explicit requirement."),
 		},
 		"achievement_criteria": {
 			"id": f("Criterion row ID", "Database-generated diagnostic identity, represented as a string for JavaScript safety."), "achievement_id": f("Achievement ID", "Owning definition copied from the graph."), "component_type": f("Component type", "Must match the containing component."), "component_sequence": f("Component order copy", "Diagnostic copy of component sequence; runtime identity does not use it."), "component_id": f("Component ID", "Must match the stable containing component identity."), "event_type": f("Event", "Game event or reconciled fact that evaluates the criterion."), "progress_mode": f("Progress mode", "How observed values update durable progress."), "behavior": f("Behavior", "How the component affects completion, locking, and visibility."), "target_id": f("Primary target", "Event-specific primary filter; zero is not universally a wildcard."), "target_id2": f("Secondary target", "Only Own Item, NPC Name Kill, and Skill Cap support a nonzero value."), "target_value": f("Target value", "Nonnegative qualifying threshold; Skill Cap uses milestone level."), "required_count": f("Required count", "Explicit nonzero count needed to satisfy the component."), "enabled": f("Enabled", "Only enabled rows become active server policy."),
 		},
-		"achievement_rewards": {
-			"reward_id": f("Reward ID", "Stable canonical grant identity. It is an unsigned BIGINT string and immutable after creation."), "achievement_id": f("Achievement ID", "Owning definition copied from the graph."), "sequence": f("Order", "Unique display and automatic-delivery order inside the achievement."), "reward_type": f("Type", "Grant kind; changes the meaning of referenced data and amount."), "reward_data_id": f("Referenced data", "Type-specific item, currency, title-set, or experience-mode value."), "amount": f("Amount", "Positive unsigned BIGINT quantity, represented as a decimal string."), "description": f("Client description", "Reward preview text; runtime supplies a fallback when empty."), "enabled": f("Enabled", "Enabled rows load as grants; disabled mapped rows remain mapped."),
+		"rewards": {
+			"reward_id": f("Reward ID", "Stable provider-independent unsigned INT grant identity, immutable after creation."), "reward_type": f("Type", "Grant kind; changes the meaning of referenced data and amount."), "reward_data_id": f("Referenced data", "Type-specific item, currency, title-set, or experience-mode value."), "amount": f("Amount", "Positive unsigned BIGINT quantity, represented as a decimal string."), "description": f("Client description", "Reward preview text; runtime supplies a fallback when empty."), "enabled": f("Enabled", "Enabled rows can be delivered by any source or option that maps them."),
 		},
-		"achievement_reward_sets": {
-			"reward_set_id": f("Stable set ID", "Stable nonzero selectable-set identity; immutable after creation."), "achievement_id": f("Achievement ID", "Owning definition. One achievement owns at most one set."), "title": f("Prompt / title", "Select Reward window title; empty falls back to the achievement name."), "enabled": f("Set enabled", "An enabled set needs a selectable option and enabled grants in every enabled option. Disable the set before disabling its owning achievement."),
+		"reward_sets": {
+			"reward_set_id": f("Stable set ID", "Stable provider-independent selectable-set identity; immutable after creation."), "title": f("Prompt / title", "Select Reward window title; an achievement may supply its name as a fallback."), "enabled": f("Set enabled", "Controls the shared set independently of every reward_sources link."),
 		},
-		"achievement_reward_options": {
+		"reward_options": {
 			"reward_set_id": f("Reward set ID", "Owning selectable reward set."), "option_id": f("Option ID", "Stable nonzero identity inside the reward set."), "sequence": f("Order", "Display order in the Select Reward window."), "label": f("Label", "Text shown in the reward choices list."), "common_to_all": f("Common", "Common options grant with every selected non-common option."), "flags": f("Flags", "Unsigned RoF2 option flags; use 0 unless verified behavior requires another value."), "enabled": f("Enabled", "Only enabled options load; each needs at least one enabled grant."),
 		},
-		"achievement_reward_option_entries": {
-			"reward_set_id": f("Reward set ID", "Set containing the mapping."), "option_id": f("Option ID", "Common or selectable option receiving the grant."), "reward_id": f("Reward ID", "Canonical reward; one reward may belong to only one option."),
+		"reward_option_entries": {
+			"reward_set_id": f("Reward set ID", "Set containing the mapping."), "option_id": f("Option ID", "Common or selectable option receiving the grant."), "sequence": f("Grant order", "Order of this reward within the option."), "reward_id": f("Reward ID", "Canonical reward; one reward may belong to only one option in a set."),
 		},
-		"achievement_cast_restrictions": {
+		"reward_sources": {
+			"source_type": f("Source type", "Provider enum; achievement sources use exactly 1."), "source_id": f("Source ID", "Achievement ID when source_type is 1."), "reward_set_id": f("Reward set ID", "Provider-independent selectable set linked to this source."), "enabled": f("Source link enabled", "Controls this source-to-set link independently of reward_sets.enabled."),
+		},
+		"reward_source_entries": {
+			"source_type": f("Source type", "Provider enum; achievement sources use exactly 1."), "source_id": f("Source ID", "Achievement ID when source_type is 1."), "sequence": f("Automatic grant order", "Unique automatic delivery order inside this source."), "reward_id": f("Reward ID", "Provider-independent canonical reward delivered automatically."),
+		},
+		"achievement_cast_requirements": {
 			"restriction_id": f("Restriction ID", "Existing spell restriction number. All rows sharing an ID are ANDed."), "achievement_id": f("Achievement ID", "Achievement tested by this restriction."), "requires_completed": f("Required state", "True requires completion; false requires the achievement to remain incomplete."),
 		},
 		"character_achievements": {
-			"character_id": f("Character ID", "Character owning this durable completion."), "achievement_id": f("Achievement ID", "Completed stable definition identity."), "definition_version": f("Saved version", "Definition version active when completion persisted."), "completed_at": f("Completed at", "Unix timestamp of durable completion."),
+			"character_id": f("Character ID", "Character owning this durable completion."), "achievement_id": f("Achievement ID", "Completed stable definition identity."), "version": f("Saved version", "Definition version active when completion persisted."), "completed_at": f("Completed at", "Unix timestamp of durable completion."),
 		},
 		"character_achievement_progress": {
-			"character_id": f("Character ID", "Character owning this durable progress."), "achievement_id": f("Achievement ID", "Stable owning definition."), "component_type": f("Wire type", "State-bearing component bucket 0 through 2."), "component_sequence": f("Current order", "Presentation copy; not part of identity."), "component_id": f("Component ID", "Stable authored component identity."), "current_count": f("Current count", "Durable progress clamped to the authored requirement."), "completed": f("Completed", "Materialized component-satisfied flag."), "definition_version": f("Saved version", "Definition version under which progress was written."), "updated_at": f("Updated at", "Unix timestamp of the last durable progress update."),
+			"character_id": f("Character ID", "Character owning this durable progress."), "achievement_id": f("Achievement ID", "Stable owning definition."), "component_type": f("Wire type", "State-bearing component bucket 0 through 2."), "component_sequence": f("Current order", "Presentation copy; not part of identity."), "component_id": f("Component ID", "Stable authored component identity."), "current_count": f("Current count", "Durable progress clamped to the authored requirement."), "completed": f("Completed", "Materialized component-satisfied flag."), "version": f("Saved version", "Definition version under which progress was written."), "updated_at": f("Updated at", "Unix timestamp of the last durable progress update."),
 		},
 		"character_achievement_rewards": {
 			"character_id": f("Character ID", "Character receiving the grant."), "achievement_id": f("Achievement ID", "Completed definition producing the grant."), "reward_id": f("Reward ID", "Canonical at-most-once grant identity."), "status": f("Delivery status", "Ledger state; ambiguous/in-flight rows require duplicate-risk review."), "attempt_count": f("Attempts", "Number of delivery claims started."), "granted_at": f("Granted at", "Successful-delivery timestamp, otherwise zero."), "last_attempt_at": f("Last attempt", "Timestamp of the latest delivery attempt."), "last_error": f("Last error", "Latest delivery or persistence diagnostic."),
@@ -281,8 +291,8 @@ func achievementEditorFieldMetadata() map[string]map[string]achievementEditorFie
 		"character_achievement_reward_selections": {
 			"character_id": f("Character ID", "Character owning the selectable claim."), "achievement_id": f("Achievement ID", "Completed definition producing the set."), "reward_set_id": f("Reward set ID", "Stable authored selectable set."), "selected_option_id": f("Selected option", "Zero before a choice; otherwise the locked option identity."), "status": f("Selection status", "Whole-selection delivery state."), "attempt_count": f("Attempts", "Number of selection attempts."), "claimed_at": f("Claimed at", "Timestamp when every grant finalized."), "last_attempt_at": f("Last attempt", "Timestamp of the latest attempt."), "last_error": f("Last error", "Latest selection-level diagnostic."),
 		},
-		"character_achievement_pending_mutations": {
-			"mutation_id": f("Mutation ID", "Durable queue identity, represented as a decimal string."), "character_id": f("Character ID", "Target character consuming the mutation."), "source_target_type": f("Original scope", "Character, group, raid, dynamic-zone, or shared-task source."), "source_target_id": f("Original target ID", "Scope-specific diagnostic identity."), "operation": f("Operation", "Advance one component or complete the achievement."), "achievement_id": f("Achievement ID", "Stable target definition identity."), "component_type": f("Component type", "State-bearing type for Advance; zero for whole completion."), "component_id": f("Component ID", "Target component identity for Advance; zero is valid."), "requested_value": f("Requested value", "Monotonic progress floor clamped to the requirement."), "definition_version": f("Source version", "Must match target-zone content or the row blocks."), "status": f("Queue status", "Pending, blocked, or processing under a lease."), "attempt_count": f("Attempts", "Application claim count and compare-and-swap token."), "created_at": f("Created at", "Timestamp when world committed the row."), "last_attempt_at": f("Last attempt", "Timestamp when the latest claim began."), "last_error": f("Last error", "Latest blocked or retryable diagnostic."),
+		"character_achievement_pending_updates": {
+			"update_id": f("Update ID", "Durable queue identity, represented as a decimal string."), "character_id": f("Character ID", "Target character consuming the update."), "source_target_type": f("Original scope", "Character, group, raid, dynamic-zone, or shared-task source."), "source_target_id": f("Original target ID", "Scope-specific diagnostic identity."), "operation": f("Operation", "Advance one component or complete the achievement."), "achievement_id": f("Achievement ID", "Stable target definition identity."), "component_type": f("Component type", "State-bearing type for Advance; zero for whole completion."), "component_id": f("Component ID", "Target component identity for Advance; zero is valid."), "requested_value": f("Requested value", "Monotonic progress floor clamped to the requirement."), "version": f("Source version", "Must match target-zone content or the row blocks."), "status": f("Queue status", "Pending, blocked, or processing under a lease."), "attempt_count": f("Attempts", "Application claim count and compare-and-swap token."), "created_at": f("Created at", "Timestamp when world committed the row."), "last_attempt_at": f("Last attempt", "Timestamp when the latest claim began."), "last_error": f("Last error", "Latest blocked or retryable diagnostic."),
 		},
 	}
 }

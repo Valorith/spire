@@ -7,7 +7,7 @@ const (
 	achievementEditorMaxComponents               = 1000
 	achievementEditorMaxCriteria                 = 2000
 	achievementEditorMaxRewards                  = 500
-	achievementEditorMaxRestrictions             = 500
+	achievementEditorMaxRequirements             = 500
 	achievementEditorMaxRewardOptions            = 500
 	achievementEditorMaxRewardMappings           = 500
 	achievementEditorMaxGraphBytes         int64 = 2 * 1024 * 1024
@@ -26,16 +26,16 @@ type achievementEditorDefinition struct {
 	Description          string                             `json:"description"`
 	IconID               uint32                             `json:"icon_id"`
 	Points               uint32                             `json:"points"`
-	RewardDisplay        uint32                             `json:"reward_display"`
-	WorldDisplayFlag     uint8                              `json:"world_display_flag"`
-	DefinitionVersion    uint32                             `json:"definition_version"`
+	HasReward            bool                               `json:"has_reward"`
+	ClientFlag           uint8                              `json:"client_flag"`
+	Version              uint32                             `json:"version"`
 	ResetOnVersionChange bool                               `json:"reset_on_version_change"`
 	Enabled              bool                               `json:"enabled"`
 	Associations         []achievementEditorAssociation     `json:"associations" gorm:"-"`
 	Components           []achievementEditorComponent       `json:"components" gorm:"-"`
 	Rewards              []achievementEditorReward          `json:"rewards" gorm:"-"`
 	RewardSet            *achievementEditorRewardSet        `json:"reward_set" gorm:"-"`
-	Restrictions         []achievementEditorCastRestriction `json:"restrictions" gorm:"-"`
+	Requirements         []achievementEditorCastRequirement `json:"requirements" gorm:"-"`
 }
 
 type achievementEditorGraph = achievementEditorDefinition
@@ -53,8 +53,8 @@ type achievementEditorComponent struct {
 	ComponentType     uint8                        `json:"component_type"`
 	Sequence          uint32                       `json:"sequence"`
 	ComponentID       uint32                       `json:"component_id"`
+	Name              string                       `json:"name"`
 	Description       string                       `json:"description"`
-	Description2      string                       `json:"description_2"`
 	PresentationCount uint32                       `json:"presentation_count"`
 	Criteria          []achievementEditorCriterion `json:"criteria" gorm:"-"`
 	// RecoveryOnly marks a synthetic component emitted when criteria survived
@@ -82,24 +82,29 @@ type achievementEditorCriterion struct {
 	Enabled           bool   `json:"enabled"`
 }
 
-// Reward IDs and amounts are strings because both are unsigned BIGINT values
-// and must round-trip through JavaScript without losing precision.
+// Amount is a string because it is an unsigned BIGINT and must round-trip
+// through JavaScript without losing precision. RewardID remains a string at the
+// API boundary so it can also be compared directly with durable BIGINT ledger
+// values, even though the canonical rewards.reward_id is unsigned INT.
 type achievementEditorReward struct {
-	RewardID      string `json:"reward_id,omitempty"`
-	AchievementID uint32 `json:"achievement_id,omitempty"`
-	Sequence      uint32 `json:"sequence"`
-	RewardType    uint8  `json:"reward_type"`
-	RewardDataID  uint32 `json:"reward_data_id"`
-	Amount        string `json:"amount"`
-	Description   string `json:"description"`
-	Enabled       bool   `json:"enabled"`
+	RewardID     string `json:"reward_id,omitempty"`
+	SourceID     uint32 `json:"source_id,omitempty" gorm:"column:source_id"`
+	Sequence     uint32 `json:"sequence"`
+	RewardType   uint8  `json:"reward_type"`
+	RewardDataID uint32 `json:"reward_data_id"`
+	Amount       string `json:"amount"`
+	Description  string `json:"description"`
+	Enabled      bool   `json:"enabled"`
 }
 
 type achievementEditorRewardSet struct {
 	RewardSetID   uint32                           `json:"reward_set_id"`
-	AchievementID uint32                           `json:"achievement_id,omitempty"`
+	SourceID      uint32                           `json:"source_id,omitempty" gorm:"column:source_id"`
 	Title         string                           `json:"title"`
 	Enabled       bool                             `json:"enabled"`
+	SourceEnabled bool                             `json:"source_enabled"`
+	Shared        bool                             `json:"shared,omitempty" gorm:"-"`
+	SourceCount   int64                            `json:"source_count,omitempty" gorm:"-"`
 	Options       []achievementEditorRewardOption  `json:"options" gorm:"-"`
 	Mappings      []achievementEditorRewardMapping `json:"mappings" gorm:"-"`
 }
@@ -117,10 +122,11 @@ type achievementEditorRewardOption struct {
 type achievementEditorRewardMapping struct {
 	RewardSetID uint32 `json:"reward_set_id,omitempty"`
 	OptionID    uint32 `json:"option_id"`
+	Sequence    uint32 `json:"sequence"`
 	RewardID    string `json:"reward_id"`
 }
 
-type achievementEditorCastRestriction struct {
+type achievementEditorCastRequirement struct {
 	RestrictionID     uint32 `json:"restriction_id"`
 	AchievementID     uint32 `json:"achievement_id,omitempty"`
 	RequiresCompleted bool   `json:"requires_completed"`
@@ -139,29 +145,29 @@ type achievementEditorCategory struct {
 }
 
 type achievementEditorDefinitionSummary struct {
-	ID                         uint32 `json:"id"`
-	Name                       string `json:"name"`
-	Description                string `json:"description"`
-	IconID                     uint32 `json:"icon_id"`
-	Points                     uint32 `json:"points"`
-	DefinitionVersion          uint32 `json:"definition_version"`
-	Enabled                    bool   `json:"enabled"`
-	CategoryCount              int64  `json:"category_count"`
-	ComponentCount             int64  `json:"component_count"`
-	CriterionCount             int64  `json:"criterion_count"`
-	RewardCount                int64  `json:"reward_count"`
-	RestrictionCount           int64  `json:"restriction_count"`
-	RewardSetCount             int64  `json:"reward_set_count"`
-	CategoryNames              string `json:"category_names"`
-	State                      string `json:"state,omitempty"`
-	CompletedAt                uint64 `json:"completed_at,omitempty"`
-	CharacterDefinitionVersion uint32 `json:"character_definition_version,omitempty"`
-	ProgressRows               int64  `json:"progress_rows,omitempty"`
-	ProgressTotal              string `json:"progress_total,omitempty"`
-	VersionMismatch            bool   `json:"version_mismatch,omitempty"`
-	RewardAttention            bool   `json:"reward_attention,omitempty"`
-	PendingMutation            bool   `json:"pending_mutation,omitempty"`
-	Orphaned                   bool   `json:"orphaned,omitempty"`
+	ID               uint32 `json:"id"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	IconID           uint32 `json:"icon_id"`
+	Points           uint32 `json:"points"`
+	Version          uint32 `json:"version"`
+	Enabled          bool   `json:"enabled"`
+	CategoryCount    int64  `json:"category_count"`
+	ComponentCount   int64  `json:"component_count"`
+	CriterionCount   int64  `json:"criterion_count"`
+	RewardCount      int64  `json:"reward_count"`
+	RequirementCount int64  `json:"requirement_count"`
+	RewardSetCount   int64  `json:"reward_set_count"`
+	CategoryNames    string `json:"category_names"`
+	State            string `json:"state,omitempty"`
+	CompletedAt      uint64 `json:"completed_at,omitempty"`
+	CharacterVersion uint32 `json:"character_version,omitempty"`
+	ProgressRows     int64  `json:"progress_rows,omitempty"`
+	ProgressTotal    string `json:"progress_total,omitempty"`
+	VersionMismatch  bool   `json:"version_mismatch,omitempty"`
+	RewardAttention  bool   `json:"reward_attention,omitempty"`
+	PendingUpdate    bool   `json:"pending_update,omitempty"`
+	Orphaned         bool   `json:"orphaned,omitempty"`
 }
 
 type achievementEditorPage struct {
@@ -184,13 +190,13 @@ type achievementEditorLookupPage struct {
 	Limit int                             `json:"limit"`
 }
 
-type achievementEditorGraphMutationRequest struct {
-	Graph                     achievementEditorGraph  `json:"graph"`
-	Definition                *achievementEditorGraph `json:"definition,omitempty"`
-	ExpectedDefinitionVersion *uint32                 `json:"expected_definition_version,omitempty"`
-	ExpectedRevision          string                  `json:"expected_revision,omitempty"`
-	Reason                    string                  `json:"reason"`
-	Confirmation              string                  `json:"confirmation,omitempty"`
+type achievementEditorGraphUpdateRequest struct {
+	Graph            achievementEditorGraph  `json:"graph"`
+	Definition       *achievementEditorGraph `json:"definition,omitempty"`
+	ExpectedVersion  *uint32                 `json:"expected_version,omitempty"`
+	ExpectedRevision string                  `json:"expected_revision,omitempty"`
+	Reason           string                  `json:"reason"`
+	Confirmation     string                  `json:"confirmation,omitempty"`
 }
 
 type achievementEditorCloneRequest struct {
@@ -207,7 +213,7 @@ type achievementEditorDeleteRequest struct {
 	ExpectedRevision string `json:"expected_revision"`
 }
 
-type achievementEditorCategoryMutationRequest struct {
+type achievementEditorCategoryUpdateRequest struct {
 	Category         achievementEditorCategory `json:"category"`
 	ExpectedParentID *uint32                   `json:"expected_parent_id,omitempty"`
 	ExpectedRevision string                    `json:"expected_revision,omitempty"`
@@ -216,6 +222,7 @@ type achievementEditorCategoryMutationRequest struct {
 
 type achievementEditorSchemaDiagnostics struct {
 	Ready     bool                        `json:"ready"`
+	Guidance  string                      `json:"guidance,omitempty"`
 	Content   achievementEditorSchemaArea `json:"content"`
 	Character achievementEditorSchemaArea `json:"character"`
 }
@@ -273,10 +280,10 @@ type achievementEditorCharacter struct {
 }
 
 type achievementEditorCharacterCompletion struct {
-	CharacterID       uint32 `json:"character_id"`
-	AchievementID     uint32 `json:"achievement_id"`
-	DefinitionVersion uint32 `json:"definition_version"`
-	CompletedAt       uint64 `json:"completed_at"`
+	CharacterID   uint32 `json:"character_id"`
+	AchievementID uint32 `json:"achievement_id"`
+	Version       uint32 `json:"version"`
+	CompletedAt   uint64 `json:"completed_at"`
 }
 
 type achievementEditorCharacterProgress struct {
@@ -287,7 +294,7 @@ type achievementEditorCharacterProgress struct {
 	ComponentID       uint32 `json:"component_id"`
 	CurrentCount      string `json:"current_count"`
 	Completed         bool   `json:"completed"`
-	DefinitionVersion uint32 `json:"definition_version"`
+	Version           uint32 `json:"version"`
 	UpdatedAt         uint64 `json:"updated_at"`
 }
 
@@ -314,22 +321,22 @@ type achievementEditorCharacterRewardSelection struct {
 	LastError        string `json:"last_error"`
 }
 
-type achievementEditorCharacterPendingMutation struct {
-	MutationID        string `json:"mutation_id"`
-	CharacterID       uint32 `json:"character_id"`
-	SourceTargetType  uint8  `json:"source_target_type"`
-	SourceTargetID    string `json:"source_target_id"`
-	Operation         uint8  `json:"operation"`
-	AchievementID     uint32 `json:"achievement_id"`
-	ComponentType     uint8  `json:"component_type"`
-	ComponentID       uint32 `json:"component_id"`
-	RequestedValue    uint32 `json:"requested_value"`
-	DefinitionVersion uint32 `json:"definition_version"`
-	Status            uint8  `json:"status"`
-	AttemptCount      uint32 `json:"attempt_count"`
-	CreatedAt         uint64 `json:"created_at"`
-	LastAttemptAt     uint64 `json:"last_attempt_at"`
-	LastError         string `json:"last_error"`
+type achievementEditorCharacterPendingUpdate struct {
+	UpdateID         string `json:"update_id"`
+	CharacterID      uint32 `json:"character_id"`
+	SourceTargetType uint8  `json:"source_target_type"`
+	SourceTargetID   string `json:"source_target_id"`
+	Operation        uint8  `json:"operation"`
+	AchievementID    uint32 `json:"achievement_id"`
+	ComponentType    uint8  `json:"component_type"`
+	ComponentID      uint32 `json:"component_id"`
+	RequestedValue   uint32 `json:"requested_value"`
+	Version          uint32 `json:"version"`
+	Status           uint8  `json:"status"`
+	AttemptCount     uint32 `json:"attempt_count"`
+	CreatedAt        uint64 `json:"created_at"`
+	LastAttemptAt    uint64 `json:"last_attempt_at"`
+	LastError        string `json:"last_error"`
 }
 
 type achievementEditorCharacterDetail struct {
@@ -342,24 +349,24 @@ type achievementEditorCharacterDetail struct {
 	RewardSets           []achievementEditorRewardSet                `json:"reward_sets"`
 	RewardOptions        []achievementEditorRewardOption             `json:"reward_options"`
 	RewardOptionEntries  []achievementEditorRewardMapping            `json:"reward_option_entries"`
-	Restrictions         []achievementEditorCastRestriction          `json:"restrictions"`
+	Requirements         []achievementEditorCastRequirement          `json:"requirements"`
 	Completions          []achievementEditorCharacterCompletion      `json:"completions"`
 	Progress             []achievementEditorCharacterProgress        `json:"progress"`
 	RewardLedgers        []achievementEditorCharacterRewardLedger    `json:"reward_ledgers"`
 	RewardSelections     []achievementEditorCharacterRewardSelection `json:"reward_selections"`
-	PendingMutations     []achievementEditorCharacterPendingMutation `json:"pending_mutations"`
+	PendingUpdates       []achievementEditorCharacterPendingUpdate   `json:"pending_updates"`
 	OrphanAchievementIDs []uint32                                    `json:"orphan_achievement_ids"`
 }
 
-type achievementEditorCharacterMutationBase struct {
-	Reason                    string `json:"reason"`
-	Confirmation              string `json:"confirmation"`
-	CharacterConfirmation     string `json:"character_confirmation"`
-	ExpectedDefinitionVersion uint32 `json:"expected_definition_version"`
+type achievementEditorCharacterUpdateBase struct {
+	Reason                string  `json:"reason"`
+	Confirmation          string  `json:"confirmation"`
+	CharacterConfirmation string  `json:"character_confirmation"`
+	ExpectedVersion       *uint32 `json:"expected_version"`
 }
 
 type achievementEditorProgressRequest struct {
-	achievementEditorCharacterMutationBase
+	achievementEditorCharacterUpdateBase
 	AchievementID        uint32  `json:"achievement_id"`
 	ComponentType        uint8   `json:"component_type"`
 	ComponentID          uint32  `json:"component_id"`
@@ -368,12 +375,12 @@ type achievementEditorProgressRequest struct {
 }
 
 type achievementEditorForceCompleteRequest struct {
-	achievementEditorCharacterMutationBase
+	achievementEditorCharacterUpdateBase
 	AchievementID uint32 `json:"achievement_id"`
 }
 
 type achievementEditorResetRequest struct {
-	achievementEditorCharacterMutationBase
+	achievementEditorCharacterUpdateBase
 	AchievementID                   uint32 `json:"achievement_id"`
 	ClearRewardHistory              bool   `json:"clear_reward_history"`
 	AcknowledgeRegrantRisk          bool   `json:"acknowledge_regrant_risk"`
@@ -381,7 +388,7 @@ type achievementEditorResetRequest struct {
 }
 
 type achievementEditorRewardRetryRequest struct {
-	achievementEditorCharacterMutationBase
+	achievementEditorCharacterUpdateBase
 	AchievementID            uint32 `json:"achievement_id"`
 	RewardID                 string `json:"reward_id"`
 	ExpectedStatus           uint8  `json:"expected_status"`
@@ -389,25 +396,25 @@ type achievementEditorRewardRetryRequest struct {
 }
 
 type achievementEditorSelectionRetryRequest struct {
-	achievementEditorCharacterMutationBase
+	achievementEditorCharacterUpdateBase
 	AchievementID            uint32 `json:"achievement_id"`
 	RewardSetID              uint32 `json:"reward_set_id"`
 	ExpectedStatus           uint8  `json:"expected_status"`
 	AcknowledgeDuplicateRisk bool   `json:"acknowledge_duplicate_risk"`
 }
 
-type achievementEditorPendingMutationRequest struct {
+type achievementEditorPendingUpdateRequest struct {
 	Reason                          string `json:"reason"`
 	Confirmation                    string `json:"confirmation"`
 	CharacterConfirmation           string `json:"character_confirmation"`
-	MutationID                      string `json:"mutation_id"`
+	UpdateID                        string `json:"update_id"`
 	Action                          string `json:"action"`
 	ExpectedStatus                  uint8  `json:"expected_status"`
 	ExpectedAttemptCount            uint32 `json:"expected_attempt_count"`
 	AcknowledgeStaleProcessingLease bool   `json:"acknowledge_stale_processing_lease"`
 }
 
-type achievementEditorCharacterMutationResponse struct {
+type achievementEditorCharacterUpdateResponse struct {
 	Detail  achievementEditorCharacterDetail `json:"detail"`
 	AuditID uint                             `json:"audit_id"`
 }

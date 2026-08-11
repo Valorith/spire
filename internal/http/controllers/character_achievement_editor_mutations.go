@@ -16,16 +16,16 @@ import (
 )
 
 type achievementEditorDefinitionPolicy struct {
-	ID                uint32 `gorm:"column:id"`
-	DefinitionVersion uint32 `gorm:"column:definition_version"`
-	Enabled           bool   `gorm:"column:enabled"`
+	ID      uint32 `gorm:"column:id"`
+	Version uint32 `gorm:"column:version"`
+	Enabled bool   `gorm:"column:enabled"`
 }
 
 const achievementEditorProcessingLeaseSeconds uint64 = 60
 
 func achievementEditorCharacterLockName(characterID uint32) string {
 	// This name is part of the EQEmu runtime's cross-process lock contract.
-	return fmt.Sprintf("eqemu_achievement_mutation_%d", characterID)
+	return fmt.Sprintf("eqemu_achievement_state_update_%d", characterID)
 }
 
 func (a *AchievementEditorController) loadAchievementDefinitionPolicy(c echo.Context, achievementID uint32) (achievementEditorDefinitionPolicy, error) {
@@ -35,7 +35,7 @@ func (a *AchievementEditorController) loadAchievementDefinitionPolicy(c echo.Con
 func loadAchievementDefinitionPolicyFromDB(db *gorm.DB, achievementID uint32) (achievementEditorDefinitionPolicy, error) {
 	policy := achievementEditorDefinitionPolicy{}
 	err := db.Table("achievements").
-		Select("id, definition_version, enabled").Where("id = ?", achievementID).Take(&policy).Error
+		Select("id, version, enabled").Where("id = ?", achievementID).Take(&policy).Error
 	return policy, err
 }
 
@@ -55,7 +55,7 @@ func validateAchievementEditorPositiveStatePolicy(
 
 func validateAchievementEditorStoredStateVersions(versions []uint32, currentVersion uint32) error {
 	for _, version := range versions {
-		if version != 0 && version != currentVersion {
+		if version != currentVersion {
 			return operationalEditorConflict(
 				"Stored character achievement state belongs to definition version %d, not %d; reset the achievement before creating new state",
 				version,
@@ -66,13 +66,10 @@ func validateAchievementEditorStoredStateVersions(versions []uint32, currentVers
 	return nil
 }
 
-func validateAchievementEditorPendingMutationRetryVersion(storedVersion uint32, currentVersion uint32) error {
-	if storedVersion == 0 {
-		return operationalEditorConflict("Queued mutation has no definition version and cannot be retried safely")
-	}
+func validateAchievementEditorPendingUpdateRetryVersion(storedVersion uint32, currentVersion uint32) error {
 	if storedVersion != currentVersion {
 		return operationalEditorConflict(
-			"Queued mutation definition version %d is incompatible with current version %d",
+			"Queued update definition version %d is incompatible with current version %d",
 			storedVersion,
 			currentVersion,
 		)
@@ -89,26 +86,29 @@ func assertAchievementEditorStoredStateVersions(
 	versions := make([]uint32, 0)
 	for _, table := range []string{"character_achievements", "character_achievement_progress"} {
 		rows := make([]struct {
-			DefinitionVersion uint32 `gorm:"column:definition_version"`
+			Version uint32 `gorm:"column:version"`
 		}, 0)
 		if err := tx.Table(table).Clauses(clause.Locking{Strength: "UPDATE"}).
-			Select("definition_version").
+			Select("version").
 			Where("character_id = ? AND achievement_id = ?", characterID, achievementID).
 			Find(&rows).Error; err != nil {
 			return err
 		}
 		for _, row := range rows {
-			versions = append(versions, row.DefinitionVersion)
+			versions = append(versions, row.Version)
 		}
 	}
 	return validateAchievementEditorStoredStateVersions(versions, currentVersion)
 }
 
-func validateCharacterAchievementMutationBase(
-	base achievementEditorCharacterMutationBase,
+func validateCharacterAchievementUpdateBase(
+	base achievementEditorCharacterUpdateBase,
 	character achievementEditorCharacter,
 	operationPhrase string,
 ) error {
+	if base.ExpectedVersion == nil {
+		return achievementEditorFieldError(http.StatusUnprocessableEntity, "expected_version", "Expected definition version is required; version 0 is valid and must be sent explicitly", nil)
+	}
 	if err := validateAchievementEditorReason(base.Reason); err != nil {
 		return achievementEditorFieldError(http.StatusUnprocessableEntity, "reason", err.Error(), nil)
 	}
@@ -121,8 +121,8 @@ func validateCharacterAchievementMutationBase(
 	return nil
 }
 
-func validateCharacterAchievementPendingMutationRequest(
-	request achievementEditorPendingMutationRequest,
+func validateCharacterAchievementPendingUpdateRequest(
+	request achievementEditorPendingUpdateRequest,
 	character achievementEditorCharacter,
 	operationPhrase string,
 ) error {
@@ -138,7 +138,7 @@ func validateCharacterAchievementPendingMutationRequest(
 	return nil
 }
 
-func (a *AchievementEditorController) executeCharacterAchievementMutation(
+func (a *AchievementEditorController) executeCharacterAchievementUpdate(
 	c echo.Context,
 	character achievementEditorCharacter,
 	event string,
@@ -188,11 +188,11 @@ func withCharacterAchievementEditorLock(
 			if releaseErr != nil {
 				connection.Logger.Error(
 					context.Background(),
-					"HIGH SEVERITY: character achievement unlock failed after work completed; preserving the mutation outcome to prevent an unsafe retry: %v",
+					"HIGH SEVERITY: character achievement unlock failed after work completed; preserving the update outcome to prevent an unsafe retry: %v",
 					releaseErr,
 				)
 			}
-			err = achievementEditorAdvisoryMutationOutcome(err, releaseErr)
+			err = achievementEditorAdvisoryUpdateOutcome(err, releaseErr)
 		}()
 
 		err = connection.Transaction(func(tx *gorm.DB) error {
@@ -306,7 +306,7 @@ func achievementEditorAuthorizeStaleProcessingLeaseRecovery(
 	acknowledged bool,
 ) error {
 	if !achievementEditorProcessingLeaseExpired(lastAttemptAt, now) {
-		return operationalEditorConflict("An active processing mutation lease exists; wait for its 60-second lease to expire")
+		return operationalEditorConflict("An active processing update lease exists; wait for its 60-second lease to expire")
 	}
 	if !acknowledged {
 		return achievementEditorFieldError(
@@ -374,6 +374,7 @@ func achievementEditorSelectionRetryRewardIDs(
 	selectedOptionID uint32,
 	options []achievementEditorRewardOption,
 	mappings []achievementEditorRewardMapping,
+	knownRewardIDs map[string]struct{},
 	enabledRewardIDs map[string]struct{},
 ) ([]string, error) {
 	relevantOptions := make(map[uint32]struct{})
@@ -403,8 +404,14 @@ func achievementEditorSelectionRetryRewardIDs(
 		if _, relevant := relevantOptions[mapping.OptionID]; !relevant {
 			continue
 		}
+		if _, known := knownRewardIDs[mapping.RewardID]; !known {
+			return nil, operationalEditorConflict("A selected or common reward mapping references a missing or foreign reward; repair the definition before retrying")
+		}
 		if _, enabled := enabledRewardIDs[mapping.RewardID]; !enabled {
-			return nil, operationalEditorConflict("A selected or common reward mapping references a missing, disabled, or foreign reward; repair the definition before retrying")
+			// Runtime catalog loading treats disabled canonical rewards as inert.
+			// Ignore them here too, then require each effective selected/common
+			// option to retain at least one enabled grant below.
+			continue
 		}
 		grantsPerOption[mapping.OptionID]++
 		rewardIDs[mapping.RewardID] = struct{}{}
@@ -429,8 +436,10 @@ func loadAchievementEditorSelectionRetryRewardIDs(
 	selectedOptionID uint32,
 ) ([]string, error) {
 	var enabledSet int64
-	if err := db.Table("achievement_reward_sets").
-		Where("achievement_id = ? AND reward_set_id = ? AND enabled = 1", achievementID, rewardSetID).
+	if err := db.Table("reward_sources source").
+		Joins("JOIN reward_sets reward_set ON reward_set.reward_set_id = source.reward_set_id").
+		Where("source.source_type = ? AND source.source_id = ? AND source.reward_set_id = ? AND source.enabled = 1 AND reward_set.enabled = 1",
+			achievementEditorRewardSourceType, achievementID, rewardSetID).
 		Count(&enabledSet).Error; err != nil {
 		return nil, err
 	}
@@ -438,34 +447,40 @@ func loadAchievementEditorSelectionRetryRewardIDs(
 		return nil, operationalEditorConflict("The selectable reward set is missing, disabled, or no longer belongs to this achievement")
 	}
 	options := make([]achievementEditorRewardOption, 0)
-	if err := db.Table("achievement_reward_options").
+	if err := db.Table("reward_options").
 		Where("reward_set_id = ?", rewardSetID).
 		Order("option_id").
 		Scan(&options).Error; err != nil {
 		return nil, err
 	}
 	mappings := make([]achievementEditorRewardMapping, 0)
-	if err := db.Table("achievement_reward_option_entries").
+	if err := db.Table("reward_option_entries").
 		Where("reward_set_id = ?", rewardSetID).
-		Order("option_id, reward_id").
+		Order("option_id, sequence, reward_id").
 		Scan(&mappings).Error; err != nil {
 		return nil, err
 	}
 	rows := make([]struct {
 		RewardID string `gorm:"column:reward_id"`
+		Enabled  bool   `gorm:"column:enabled"`
 	}, 0)
-	if err := db.Table("achievement_rewards").
-		Select("reward_id").
-		Where("achievement_id = ? AND enabled = 1", achievementID).
-		Order("reward_id").
+	if err := db.Table("reward_option_entries entry").
+		Select("reward.reward_id, reward.enabled").
+		Joins("JOIN rewards reward ON reward.reward_id = entry.reward_id").
+		Where("entry.reward_set_id = ?", rewardSetID).
+		Order("reward.reward_id").
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
+	knownRewardIDs := make(map[string]struct{}, len(rows))
 	enabledRewardIDs := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		enabledRewardIDs[row.RewardID] = struct{}{}
+		knownRewardIDs[row.RewardID] = struct{}{}
+		if row.Enabled {
+			enabledRewardIDs[row.RewardID] = struct{}{}
+		}
 	}
-	return achievementEditorSelectionRetryRewardIDs(selectedOptionID, options, mappings, enabledRewardIDs)
+	return achievementEditorSelectionRetryRewardIDs(selectedOptionID, options, mappings, knownRewardIDs, enabledRewardIDs)
 }
 
 func (a *AchievementEditorController) setCharacterProgress(c echo.Context) error {
@@ -484,7 +499,11 @@ func (a *AchievementEditorController) setCharacterProgress(c echo.Context) error
 	if err != nil {
 		return achievementEditorRespondError(c, "Character", err)
 	}
-	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, fmt.Sprintf("PROGRESS %d", request.AchievementID)); err != nil {
+	if err := validateCharacterAchievementUpdateBase(
+		request.achievementEditorCharacterUpdateBase,
+		character,
+		fmt.Sprintf("PROGRESS %d", request.AchievementID),
+	); err != nil {
 		return achievementEditorRespondError(c, "Character achievement progress", err)
 	}
 	if request.ComponentType > 2 {
@@ -502,7 +521,7 @@ func (a *AchievementEditorController) setCharacterProgress(c echo.Context) error
 			failureLabel = "Achievement definition"
 			return lockErr
 		}
-		if request.ExpectedDefinitionVersion != policy.DefinitionVersion {
+		if *request.ExpectedVersion != policy.Version {
 			return operationalEditorConflict("The achievement definition changed; reload before editing progress")
 		}
 		if lockErr := validateAchievementEditorPositiveStatePolicy(policy, "creating character progress"); lockErr != nil {
@@ -530,9 +549,9 @@ func (a *AchievementEditorController) setCharacterProgress(c echo.Context) error
 		if expectedCurrentCount != nil {
 			payload["expected_current_count"] = strconv.FormatUint(*expectedCurrentCount, 10)
 		}
-		auditID, lockErr = a.executeCharacterAchievementMutation(c, character, achievementEditorEventProgressSet, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
+		auditID, lockErr = a.executeCharacterAchievementUpdate(c, character, achievementEditorEventProgressSet, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
 			if err := assertAchievementEditorStoredStateVersions(
-				tx, characterID, request.AchievementID, policy.DefinitionVersion,
+				tx, characterID, request.AchievementID, policy.Version,
 			); err != nil {
 				return err
 			}
@@ -545,31 +564,31 @@ func (a *AchievementEditorController) setCharacterProgress(c echo.Context) error
 				return operationalEditorConflict("Completed achievements cannot receive exact progress; reset the achievement first")
 			}
 			var current struct {
-				CurrentCount      uint64 `gorm:"column:current_count"`
-				DefinitionVersion uint32 `gorm:"column:definition_version"`
+				CurrentCount uint64 `gorm:"column:current_count"`
+				Version      uint32 `gorm:"column:version"`
 			}
 			row := tx.Table("character_achievement_progress").Clauses(clause.Locking{Strength: "UPDATE"}).
-				Select("current_count, definition_version").Where(
+				Select("current_count, version").Where(
 				"character_id = ? AND achievement_id = ? AND component_type = ? AND component_id = ?",
 				characterID, request.AchievementID, request.ComponentType, request.ComponentID,
 			).Take(&current)
 			if row.Error != nil && !errors.Is(row.Error, gorm.ErrRecordNotFound) {
 				return row.Error
 			}
-			if row.Error == nil && current.DefinitionVersion != policy.DefinitionVersion {
-				return operationalEditorConflict("Stored component progress belongs to definition version %d, not %d", current.DefinitionVersion, policy.DefinitionVersion)
+			if row.Error == nil && current.Version != policy.Version {
+				return operationalEditorConflict("Stored component progress belongs to definition version %d, not %d", current.Version, policy.Version)
 			}
 			if err := validateAchievementEditorExpectedCurrentCount(expectedCurrentCount, current.CurrentCount); err != nil {
 				return err
 			}
 			completed := request.CurrentCount >= requiredCount
 			return tx.Exec(`INSERT INTO character_achievement_progress
-			(character_id, achievement_id, component_type, component_sequence, component_id, current_count, completed, definition_version, updated_at)
+			(character_id, achievement_id, component_type, component_sequence, component_id, current_count, completed, version, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE component_sequence = VALUES(component_sequence), current_count = VALUES(current_count),
-			completed = VALUES(completed), definition_version = VALUES(definition_version), updated_at = VALUES(updated_at)`,
+			completed = VALUES(completed), version = VALUES(version), updated_at = VALUES(updated_at)`,
 				characterID, request.AchievementID, request.ComponentType, componentSequence, request.ComponentID,
-				request.CurrentCount, boolToTinyInt(completed), policy.DefinitionVersion, uint64(time.Now().Unix()),
+				request.CurrentCount, boolToTinyInt(completed), policy.Version, uint64(time.Now().Unix()),
 			).Error
 		})
 		return lockErr
@@ -577,7 +596,7 @@ func (a *AchievementEditorController) setCharacterProgress(c echo.Context) error
 	if err != nil {
 		return achievementEditorRespondError(c, failureLabel, err)
 	}
-	return characterAchievementEditorMutationResponse(c, auditID, characterID)
+	return characterAchievementEditorUpdateResponse(c, auditID, characterID)
 }
 
 func (a *AchievementEditorController) completeCharacterAchievement(c echo.Context) error {
@@ -596,7 +615,11 @@ func (a *AchievementEditorController) completeCharacterAchievement(c echo.Contex
 	if err != nil {
 		return achievementEditorRespondError(c, "Character", err)
 	}
-	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, fmt.Sprintf("COMPLETE %d", request.AchievementID)); err != nil {
+	if err := validateCharacterAchievementUpdateBase(
+		request.achievementEditorCharacterUpdateBase,
+		character,
+		fmt.Sprintf("COMPLETE %d", request.AchievementID),
+	); err != nil {
 		return achievementEditorRespondError(c, "Character achievement completion", err)
 	}
 	failureLabel := "Character achievement completion"
@@ -607,17 +630,17 @@ func (a *AchievementEditorController) completeCharacterAchievement(c echo.Contex
 			failureLabel = "Achievement definition"
 			return lockErr
 		}
-		if request.ExpectedDefinitionVersion != policy.DefinitionVersion {
+		if *request.ExpectedVersion != policy.Version {
 			return operationalEditorConflict("The achievement definition changed; reload before forcing completion")
 		}
 		if lockErr := validateAchievementEditorPositiveStatePolicy(policy, "forcing character completion"); lockErr != nil {
 			return lockErr
 		}
 		payload := characterAchievementEditorAuditPayload(character, request.AchievementID, request.Reason)
-		payload["definition_version"] = policy.DefinitionVersion
-		auditID, lockErr = a.executeCharacterAchievementMutation(c, character, achievementEditorEventForceComplete, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
+		payload["version"] = policy.Version
+		auditID, lockErr = a.executeCharacterAchievementUpdate(c, character, achievementEditorEventForceComplete, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
 			if err := assertAchievementEditorStoredStateVersions(
-				tx, characterID, request.AchievementID, policy.DefinitionVersion,
+				tx, characterID, request.AchievementID, policy.Version,
 			); err != nil {
 				return err
 			}
@@ -632,7 +655,7 @@ func (a *AchievementEditorController) completeCharacterAchievement(c echo.Contex
 			}
 			return tx.Table("character_achievements").Create(map[string]interface{}{
 				"character_id": characterID, "achievement_id": request.AchievementID,
-				"definition_version": policy.DefinitionVersion, "completed_at": uint64(time.Now().Unix()),
+				"version": policy.Version, "completed_at": uint64(time.Now().Unix()),
 			}).Error
 		})
 		return lockErr
@@ -640,7 +663,7 @@ func (a *AchievementEditorController) completeCharacterAchievement(c echo.Contex
 	if err != nil {
 		return achievementEditorRespondError(c, failureLabel, err)
 	}
-	return characterAchievementEditorMutationResponse(c, auditID, characterID)
+	return characterAchievementEditorUpdateResponse(c, auditID, characterID)
 }
 
 func (a *AchievementEditorController) resetCharacterAchievement(c echo.Context) error {
@@ -663,7 +686,7 @@ func (a *AchievementEditorController) resetCharacterAchievement(c echo.Context) 
 	if request.ClearRewardHistory {
 		resetPhrase = fmt.Sprintf("RESET REWARDS %d", request.AchievementID)
 	}
-	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, resetPhrase); err != nil {
+	if err := validateCharacterAchievementUpdateBase(request.achievementEditorCharacterUpdateBase, character, resetPhrase); err != nil {
 		return achievementEditorRespondError(c, "Character achievement reset", err)
 	}
 	if request.ClearRewardHistory && !request.AcknowledgeRegrantRisk {
@@ -680,30 +703,30 @@ func (a *AchievementEditorController) resetCharacterAchievement(c echo.Context) 
 			failureLabel = "Achievement definition"
 			return policyErr
 		}
-		if policyErr == nil && request.ExpectedDefinitionVersion != policy.DefinitionVersion {
+		if policyErr == nil && *request.ExpectedVersion != policy.Version {
 			return operationalEditorConflict("The achievement definition version changed; reload before resetting state")
 		}
 		payload := characterAchievementEditorAuditPayload(character, request.AchievementID, request.Reason)
 		payload["clear_reward_history"] = request.ClearRewardHistory
 		payload["definition_present"] = policyErr == nil
 		payload["stale_processing_lease_recovery_acknowledged"] = request.AcknowledgeStaleProcessingLease
-		auditID, policyErr = a.executeCharacterAchievementMutation(c, character, achievementEditorEventReset, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
-			processing := make([]achievementEditorCharacterPendingMutation, 0)
-			if err := tx.Table("character_achievement_pending_mutations").Clauses(clause.Locking{Strength: "UPDATE"}).
-				Select("mutation_id, last_attempt_at").
+		auditID, policyErr = a.executeCharacterAchievementUpdate(c, character, achievementEditorEventReset, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
+			processing := make([]achievementEditorCharacterPendingUpdate, 0)
+			if err := tx.Table("character_achievement_pending_updates").Clauses(clause.Locking{Strength: "UPDATE"}).
+				Select("update_id, last_attempt_at").
 				Where("character_id = ? AND achievement_id = ? AND status = 2", characterID, request.AchievementID).
 				Find(&processing).Error; err != nil {
 				return err
 			}
 			now := uint64(time.Now().Unix())
-			for _, mutation := range processing {
+			for _, update := range processing {
 				if err := achievementEditorAuthorizeStaleProcessingLeaseRecovery(
-					mutation.LastAttemptAt, now, request.AcknowledgeStaleProcessingLease,
+					update.LastAttemptAt, now, request.AcknowledgeStaleProcessingLease,
 				); err != nil {
 					return err
 				}
 			}
-			for _, table := range []string{"character_achievement_progress", "character_achievement_pending_mutations", "character_achievements"} {
+			for _, table := range []string{"character_achievement_progress", "character_achievement_pending_updates", "character_achievements"} {
 				if err := tx.Table(table).Where("character_id = ? AND achievement_id = ?", characterID, request.AchievementID).Delete(nil).Error; err != nil {
 					return err
 				}
@@ -722,7 +745,7 @@ func (a *AchievementEditorController) resetCharacterAchievement(c echo.Context) 
 	if err != nil {
 		return achievementEditorRespondError(c, failureLabel, err)
 	}
-	return characterAchievementEditorMutationResponse(c, auditID, characterID)
+	return characterAchievementEditorUpdateResponse(c, auditID, characterID)
 }
 
 func (a *AchievementEditorController) retryCharacterReward(c echo.Context) error {
@@ -741,7 +764,7 @@ func (a *AchievementEditorController) retryCharacterReward(c echo.Context) error
 	if err != nil {
 		return achievementEditorRespondError(c, "Character", err)
 	}
-	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, "RETRY REWARD "+strings.TrimSpace(request.RewardID)); err != nil {
+	if err := validateCharacterAchievementUpdateBase(request.achievementEditorCharacterUpdateBase, character, "RETRY REWARD "+strings.TrimSpace(request.RewardID)); err != nil {
 		return achievementEditorRespondError(c, "Character achievement reward", err)
 	}
 	if !request.AcknowledgeDuplicateRisk {
@@ -759,12 +782,21 @@ func (a *AchievementEditorController) retryCharacterReward(c echo.Context) error
 			failureLabel = "Achievement definition"
 			return lockErr
 		}
-		if request.ExpectedDefinitionVersion != policy.DefinitionVersion {
+		if *request.ExpectedVersion != policy.Version {
 			return operationalEditorConflict("The achievement definition changed; reload before retrying delivery")
 		}
 		var enabled int64
-		if lockErr := contentDB.Table("achievement_rewards").Where(
-			"achievement_id = ? AND reward_id = ? AND enabled = 1", request.AchievementID, rewardID,
+		if lockErr := contentDB.Table("rewards").Where(
+			`reward_id = ? AND enabled = 1 AND (
+				EXISTS (SELECT 1 FROM reward_source_entries source_entry
+					WHERE source_entry.source_type = ? AND source_entry.source_id = ? AND source_entry.reward_id = rewards.reward_id)
+				OR EXISTS (SELECT 1 FROM reward_sources source
+					JOIN reward_sets reward_set ON reward_set.reward_set_id = source.reward_set_id AND reward_set.enabled = 1
+					JOIN reward_option_entries entry ON entry.reward_set_id = source.reward_set_id AND entry.reward_id = rewards.reward_id
+					JOIN reward_options option_row ON option_row.reward_set_id = entry.reward_set_id AND option_row.option_id = entry.option_id AND option_row.enabled = 1
+					WHERE source.source_type = ? AND source.source_id = ? AND source.enabled = 1)
+			)`, rewardID, achievementEditorRewardSourceType, request.AchievementID,
+			achievementEditorRewardSourceType, request.AchievementID,
 		).Count(&enabled).Error; lockErr != nil {
 			failureLabel = "Achievement reward"
 			return lockErr
@@ -773,8 +805,9 @@ func (a *AchievementEditorController) retryCharacterReward(c echo.Context) error
 			return operationalEditorConflict("The canonical reward is missing, disabled, or no longer belongs to this achievement")
 		}
 		var mappingCount int64
-		if lockErr := contentDB.Table("achievement_reward_option_entries").
-			Where("reward_id = ?", rewardID).
+		if lockErr := contentDB.Table("reward_sources source").
+			Joins("JOIN reward_option_entries entry ON entry.reward_set_id = source.reward_set_id AND entry.reward_id = ?", rewardID).
+			Where("source.source_type = ? AND source.source_id = ?", achievementEditorRewardSourceType, request.AchievementID).
 			Count(&mappingCount).Error; lockErr != nil {
 			failureLabel = "Achievement reward mapping"
 			return lockErr
@@ -786,7 +819,7 @@ func (a *AchievementEditorController) retryCharacterReward(c echo.Context) error
 		payload["reward_id"] = request.RewardID
 		payload["expected_status"] = request.ExpectedStatus
 		payload["duplicate_delivery_risk_acknowledged"] = true
-		auditID, lockErr = a.executeCharacterAchievementMutation(c, character, achievementEditorEventRewardRetry, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
+		auditID, lockErr = a.executeCharacterAchievementUpdate(c, character, achievementEditorEventRewardRetry, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
 			var ledger achievementEditorCharacterRewardLedger
 			if err := tx.Table("character_achievement_rewards").Clauses(clause.Locking{Strength: "UPDATE"}).Where(
 				"character_id = ? AND achievement_id = ? AND reward_id = ?", characterID, request.AchievementID, rewardID,
@@ -805,7 +838,7 @@ func (a *AchievementEditorController) retryCharacterReward(c echo.Context) error
 	if err != nil {
 		return achievementEditorRespondError(c, failureLabel, err)
 	}
-	return characterAchievementEditorMutationResponse(c, auditID, characterID)
+	return characterAchievementEditorUpdateResponse(c, auditID, characterID)
 }
 
 func (a *AchievementEditorController) retryCharacterSelection(c echo.Context) error {
@@ -824,7 +857,7 @@ func (a *AchievementEditorController) retryCharacterSelection(c echo.Context) er
 	if err != nil {
 		return achievementEditorRespondError(c, "Character", err)
 	}
-	if err := validateCharacterAchievementMutationBase(request.achievementEditorCharacterMutationBase, character, fmt.Sprintf("RETRY SELECTION %d", request.RewardSetID)); err != nil {
+	if err := validateCharacterAchievementUpdateBase(request.achievementEditorCharacterUpdateBase, character, fmt.Sprintf("RETRY SELECTION %d", request.RewardSetID)); err != nil {
 		return achievementEditorRespondError(c, "Character achievement reward selection", err)
 	}
 	if !request.AcknowledgeDuplicateRisk {
@@ -838,14 +871,14 @@ func (a *AchievementEditorController) retryCharacterSelection(c echo.Context) er
 			failureLabel = "Achievement definition"
 			return lockErr
 		}
-		if request.ExpectedDefinitionVersion != policy.DefinitionVersion {
+		if *request.ExpectedVersion != policy.Version {
 			return operationalEditorConflict("The achievement definition changed; reload before retrying selection delivery")
 		}
 		payload := characterAchievementEditorAuditPayload(character, request.AchievementID, request.Reason)
 		payload["reward_set_id"] = request.RewardSetID
 		payload["expected_status"] = request.ExpectedStatus
 		payload["duplicate_delivery_risk_acknowledged"] = true
-		auditID, lockErr = a.executeCharacterAchievementMutation(c, character, achievementEditorEventSelectionRetry, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
+		auditID, lockErr = a.executeCharacterAchievementUpdate(c, character, achievementEditorEventSelectionRetry, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
 			var ledger achievementEditorCharacterRewardSelection
 			if err := tx.Table("character_achievement_reward_selections").Clauses(clause.Locking{Strength: "UPDATE"}).Where(
 				"character_id = ? AND achievement_id = ? AND reward_set_id = ?", characterID, request.AchievementID, request.RewardSetID,
@@ -884,107 +917,107 @@ func (a *AchievementEditorController) retryCharacterSelection(c echo.Context) er
 	if err != nil {
 		return achievementEditorRespondError(c, failureLabel, err)
 	}
-	return characterAchievementEditorMutationResponse(c, auditID, characterID)
+	return characterAchievementEditorUpdateResponse(c, auditID, characterID)
 }
 
-func (a *AchievementEditorController) retryCharacterMutation(c echo.Context) error {
-	return a.changeCharacterPendingMutation(c, false)
+func (a *AchievementEditorController) retryCharacterUpdate(c echo.Context) error {
+	return a.changeCharacterPendingUpdate(c, false)
 }
 
-func (a *AchievementEditorController) discardCharacterMutation(c echo.Context) error {
-	return a.changeCharacterPendingMutation(c, true)
+func (a *AchievementEditorController) discardCharacterUpdate(c echo.Context) error {
+	return a.changeCharacterPendingUpdate(c, true)
 }
 
-func (a *AchievementEditorController) changeCharacterPendingMutation(c echo.Context, discard bool) error {
+func (a *AchievementEditorController) changeCharacterPendingUpdate(c echo.Context, discard bool) error {
 	if err := a.requireCharacterSchema(c); err != nil {
-		return achievementEditorRespondError(c, "Character achievement mutation", err)
+		return achievementEditorRespondError(c, "Character achievement update", err)
 	}
 	characterID, err := achievementEditorParamID(c, "id", "Character ID")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	request := achievementEditorPendingMutationRequest{}
+	request := achievementEditorPendingUpdateRequest{}
 	if err := c.Bind(&request); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "The mutation request is not valid JSON"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "The update request is not valid JSON"})
 	}
 	character, err := newCharacterAchievementEditorService(a.characterDB(c), a.contentDB(c)).loadCharacter(characterID)
 	if err != nil {
 		return achievementEditorRespondError(c, "Character", err)
 	}
-	phrase := "RETRY MUTATION " + strings.TrimSpace(request.MutationID)
-	event := achievementEditorEventMutationRetry
+	phrase := "RETRY UPDATE " + strings.TrimSpace(request.UpdateID)
+	event := achievementEditorEventUpdateRetry
 	action := "retry"
 	if discard {
-		phrase = "DISCARD MUTATION " + strings.TrimSpace(request.MutationID)
-		event = achievementEditorEventMutationDiscard
+		phrase = "DISCARD UPDATE " + strings.TrimSpace(request.UpdateID)
+		event = achievementEditorEventUpdateDiscard
 		action = "discard"
 	}
-	if err := validateCharacterAchievementPendingMutationRequest(request, character, phrase); err != nil {
-		return achievementEditorRespondError(c, "Character achievement mutation", err)
+	if err := validateCharacterAchievementPendingUpdateRequest(request, character, phrase); err != nil {
+		return achievementEditorRespondError(c, "Character achievement update", err)
 	}
 	if strings.ToLower(strings.TrimSpace(request.Action)) != action {
-		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": "The mutation action does not match this endpoint", "field": "action"})
+		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": "The update action does not match this endpoint", "field": "action"})
 	}
-	mutationID, err := strconv.ParseUint(strings.TrimSpace(request.MutationID), 10, 64)
-	if err != nil || mutationID == 0 {
-		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": "Mutation ID must be a positive unsigned 64-bit integer", "field": "mutation_id"})
+	updateID, err := strconv.ParseUint(strings.TrimSpace(request.UpdateID), 10, 64)
+	if err != nil || updateID == 0 {
+		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": "Update ID must be a positive unsigned 64-bit integer", "field": "update_id"})
 	}
 	payload := map[string]interface{}{
 		"action": action, "character_id": characterID, "character_name": character.Name,
-		"mutation_id": request.MutationID, "expected_status": request.ExpectedStatus,
+		"update_id": request.UpdateID, "expected_status": request.ExpectedStatus,
 		"expected_attempt_count": request.ExpectedAttemptCount, "reason": strings.TrimSpace(request.Reason),
 		"stale_processing_lease_recovery_acknowledged": request.AcknowledgeStaleProcessingLease,
 	}
 	var auditID uint
 	execute := func(contentDB *gorm.DB) error {
 		var executeErr error
-		auditID, executeErr = a.executeCharacterAchievementMutation(c, character, event, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
-			var mutation achievementEditorCharacterPendingMutation
-			if err := tx.Table("character_achievement_pending_mutations").Clauses(clause.Locking{Strength: "UPDATE"}).Where(
-				"character_id = ? AND mutation_id = ?", characterID, mutationID,
-			).Take(&mutation).Error; err != nil {
+		auditID, executeErr = a.executeCharacterAchievementUpdate(c, character, event, payload, func(tx *gorm.DB, _ achievementEditorCharacter) error {
+			var update achievementEditorCharacterPendingUpdate
+			if err := tx.Table("character_achievement_pending_updates").Clauses(clause.Locking{Strength: "UPDATE"}).Where(
+				"character_id = ? AND update_id = ?", characterID, updateID,
+			).Take(&update).Error; err != nil {
 				return err
 			}
-			if mutation.Status != request.ExpectedStatus || mutation.AttemptCount != request.ExpectedAttemptCount {
-				return operationalEditorConflict("Queued mutation state changed; reload before continuing")
+			if update.Status != request.ExpectedStatus || update.AttemptCount != request.ExpectedAttemptCount {
+				return operationalEditorConflict("Queued update state changed; reload before continuing")
 			}
 			if discard {
-				switch mutation.Status {
+				switch update.Status {
 				case 0, 1:
 					// Pending and blocked rows are not owned by an active consumer.
 				case 2:
 					if err := achievementEditorAuthorizeStaleProcessingLeaseRecovery(
-						mutation.LastAttemptAt,
+						update.LastAttemptAt,
 						uint64(time.Now().Unix()),
 						request.AcknowledgeStaleProcessingLease,
 					); err != nil {
 						return err
 					}
 				default:
-					return operationalEditorConflict("Unknown queued mutation status %d cannot be discarded", mutation.Status)
+					return operationalEditorConflict("Unknown queued update status %d cannot be discarded", update.Status)
 				}
-				return tx.Table("character_achievement_pending_mutations").Where(
-					"character_id = ? AND mutation_id = ?", characterID, mutationID,
+				return tx.Table("character_achievement_pending_updates").Where(
+					"character_id = ? AND update_id = ?", characterID, updateID,
 				).Delete(nil).Error
 			}
-			if mutation.Status != 1 {
-				return operationalEditorConflict("Only blocked queued mutations can be returned to pending")
+			if update.Status != 1 {
+				return operationalEditorConflict("Only blocked queued updates can be returned to pending")
 			}
-			policy, err := loadAchievementDefinitionPolicyFromDB(contentDB, mutation.AchievementID)
+			policy, err := loadAchievementDefinitionPolicyFromDB(contentDB, update.AchievementID)
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					return operationalEditorConflict("The referenced achievement definition no longer exists")
 				}
 				return err
 			}
-			if err := validateAchievementEditorPositiveStatePolicy(policy, "retrying the queued mutation"); err != nil {
+			if err := validateAchievementEditorPositiveStatePolicy(policy, "retrying the queued update"); err != nil {
 				return err
 			}
-			if err := validateAchievementEditorPendingMutationRetryVersion(mutation.DefinitionVersion, policy.DefinitionVersion); err != nil {
+			if err := validateAchievementEditorPendingUpdateRetryVersion(update.Version, policy.Version); err != nil {
 				return err
 			}
-			return tx.Table("character_achievement_pending_mutations").Where(
-				"character_id = ? AND mutation_id = ?", characterID, mutationID,
+			return tx.Table("character_achievement_pending_updates").Where(
+				"character_id = ? AND update_id = ?", characterID, updateID,
 			).Updates(map[string]interface{}{"status": 0, "last_error": ""}).Error
 		})
 		return executeErr
@@ -995,9 +1028,9 @@ func (a *AchievementEditorController) changeCharacterPendingMutation(c echo.Cont
 		err = achievementEditorWithAdvisoryLock(a.contentDB(c), achievementEditorAuthoringLock, 5, execute)
 	}
 	if err != nil {
-		return achievementEditorRespondError(c, "Character achievement mutation", err)
+		return achievementEditorRespondError(c, "Character achievement update", err)
 	}
-	return characterAchievementEditorMutationResponse(c, auditID, characterID)
+	return characterAchievementEditorUpdateResponse(c, auditID, characterID)
 }
 
 func characterAchievementEditorAuditPayload(
@@ -1011,8 +1044,8 @@ func characterAchievementEditorAuditPayload(
 	}
 }
 
-func characterAchievementEditorMutationResponse(c echo.Context, auditID uint, characterID uint32) error {
+func characterAchievementEditorUpdateResponse(c echo.Context, auditID uint, characterID uint32) error {
 	// Omitting a partial detail envelope deliberately makes the client reload
-	// its current search/filter page after the committed mutation.
+	// its current search/filter page after the committed update.
 	return c.JSON(http.StatusOK, echo.Map{"updated": true, "character_id": characterID, "audit_id": auditID})
 }

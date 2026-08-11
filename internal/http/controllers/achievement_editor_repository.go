@@ -19,8 +19,10 @@ var achievementEditorDurableCharacterStateTables = []string{
 	"character_achievement_progress",
 	"character_achievement_rewards",
 	"character_achievement_reward_selections",
-	"character_achievement_pending_mutations",
+	"character_achievement_pending_updates",
 }
+
+const achievementEditorRewardSourceType uint8 = 1
 
 type achievementEditorDefinitionFilters struct {
 	Search     string
@@ -37,13 +39,17 @@ type achievementEditorDefinitionFilters struct {
 
 const achievementEditorDefinitionSummarySelect = `
 		a.id, a.name, a.description, a.icon_id, a.points,
-		a.definition_version, a.enabled,
+		a.version, a.enabled,
 		(SELECT COUNT(*) FROM achievement_category_associations ca WHERE ca.achievement_id = a.id) AS category_count,
 		(SELECT COUNT(*) FROM achievement_components ac WHERE ac.achievement_id = a.id) AS component_count,
 		(SELECT COUNT(*) FROM achievement_criteria cr WHERE cr.achievement_id = a.id) AS criterion_count,
-		(SELECT COUNT(*) FROM achievement_rewards ar WHERE ar.achievement_id = a.id) AS reward_count,
-		(SELECT COUNT(*) FROM achievement_cast_restrictions x WHERE x.achievement_id = a.id) AS restriction_count,
-		(SELECT COUNT(*) FROM achievement_reward_sets rs WHERE rs.achievement_id = a.id) AS reward_set_count,
+		(SELECT COUNT(*) FROM reward_source_entries rse
+			WHERE rse.source_type = 1 AND rse.source_id = a.id) +
+		(SELECT COUNT(*) FROM reward_sources rs
+			JOIN reward_option_entries roe ON roe.reward_set_id = rs.reward_set_id
+			WHERE rs.source_type = 1 AND rs.source_id = a.id) AS reward_count,
+		(SELECT COUNT(*) FROM achievement_cast_requirements x WHERE x.achievement_id = a.id) AS requirement_count,
+		(SELECT COUNT(*) FROM reward_sources rs WHERE rs.source_type = 1 AND rs.source_id = a.id) AS reward_set_count,
 		COALESCE((
 			SELECT GROUP_CONCAT(cat.name ORDER BY assoc.sequence, assoc.category_id SEPARATOR ', ')
 			FROM achievement_category_associations assoc
@@ -82,32 +88,34 @@ func (r *achievementEditorRepository) listDefinitions(filters achievementEditorD
 		)`, *filters.EventType)
 	}
 	if filters.RewardType != nil {
-		base = base.Where(`EXISTS (
-			SELECT 1 FROM achievement_rewards ar
-			WHERE ar.achievement_id = a.id AND ar.reward_type = ?
-		)`, *filters.RewardType)
+		base = base.Where(`(
+			EXISTS (
+				SELECT 1 FROM reward_source_entries rse
+				JOIN rewards r ON r.reward_id = rse.reward_id
+				WHERE rse.source_type = 1 AND rse.source_id = a.id AND r.reward_type = ?
+			) OR EXISTS (
+				SELECT 1 FROM reward_sources rs
+				JOIN reward_option_entries roe ON roe.reward_set_id = rs.reward_set_id
+				JOIN rewards r ON r.reward_id = roe.reward_id
+				WHERE rs.source_type = 1 AND rs.source_id = a.id AND r.reward_type = ?
+			)
+		)`, *filters.RewardType, *filters.RewardType)
 	}
 	switch filters.RewardMode {
 	case "any":
 		base = base.Where(`(
-			EXISTS (SELECT 1 FROM achievement_rewards ar WHERE ar.achievement_id = a.id)
-			OR EXISTS (SELECT 1 FROM achievement_reward_sets rs WHERE rs.achievement_id = a.id)
+			EXISTS (SELECT 1 FROM reward_source_entries rse WHERE rse.source_type = 1 AND rse.source_id = a.id)
+			OR EXISTS (SELECT 1 FROM reward_sources rs WHERE rs.source_type = 1 AND rs.source_id = a.id)
 		)`)
 	case "automatic":
-		base = base.Where(`EXISTS (
-			SELECT 1 FROM achievement_rewards ar
-			WHERE ar.achievement_id = a.id
-			AND NOT EXISTS (
-				SELECT 1 FROM achievement_reward_option_entries entry
-				WHERE entry.reward_id = ar.reward_id
-			)
-		)`)
+		base = base.Where(`EXISTS (SELECT 1 FROM reward_source_entries rse
+			WHERE rse.source_type = 1 AND rse.source_id = a.id)`)
 	case "selectable":
-		base = base.Where("EXISTS (SELECT 1 FROM achievement_reward_sets rs WHERE rs.achievement_id = a.id)")
+		base = base.Where("EXISTS (SELECT 1 FROM reward_sources rs WHERE rs.source_type = 1 AND rs.source_id = a.id)")
 	case "none":
 		base = base.Where(`
-			NOT EXISTS (SELECT 1 FROM achievement_rewards ar WHERE ar.achievement_id = a.id)
-			AND NOT EXISTS (SELECT 1 FROM achievement_reward_sets rs WHERE rs.achievement_id = a.id)
+			NOT EXISTS (SELECT 1 FROM reward_source_entries rse WHERE rse.source_type = 1 AND rse.source_id = a.id)
+			AND NOT EXISTS (SELECT 1 FROM reward_sources rs WHERE rs.source_type = 1 AND rs.source_id = a.id)
 		`)
 	}
 
@@ -118,7 +126,7 @@ func (r *achievementEditorRepository) listDefinitions(filters achievementEditorD
 
 	sorts := map[string]string{
 		"id": "a.id", "name": "a.name", "points": "a.points",
-		"definition_version": "a.definition_version", "enabled": "a.enabled",
+		"version": "a.version", "enabled": "a.enabled",
 		"categories": "category_count", "components": "component_count",
 		"criteria": "criterion_count", "rewards": "reward_count",
 	}
@@ -167,7 +175,7 @@ func (r *achievementEditorRepository) loadDefinition(id uint32) (achievementEdit
 		Associations: make([]achievementEditorAssociation, 0),
 		Components:   make([]achievementEditorComponent, 0),
 		Rewards:      make([]achievementEditorReward, 0),
-		Restrictions: make([]achievementEditorCastRestriction, 0),
+		Requirements: make([]achievementEditorCastRequirement, 0),
 	}
 	if err := r.db.Table("achievements").Where("id = ?", id).Take(&graph).Error; err != nil {
 		return graph, err
@@ -186,16 +194,16 @@ func (r *achievementEditorRepository) loadDefinition(id uint32) (achievementEdit
 		ComponentType     uint8  `gorm:"column:component_type"`
 		Sequence          uint32 `gorm:"column:sequence"`
 		ComponentID       uint32 `gorm:"column:component_id"`
+		Name              string `gorm:"column:name"`
 		Description       string `gorm:"column:description"`
-		Description2      string `gorm:"column:description_2"`
 		PresentationCount uint32 `gorm:"column:presentation_count"`
 	}
 	componentRows := make([]componentRow, 0)
 	if err := r.db.Table("achievement_components component").
 		Select(`component.achievement_id, component.component_type, component.sequence,
-			component.component_id, component.description, component.description_2,
+			component.component_id, component.name, component.description,
 			COALESCE(component_count.required_count, 1) AS presentation_count`).
-		Joins("LEFT JOIN achievement_component_counts component_count ON component_count.component_id = component.component_id").
+		Joins("LEFT JOIN achievement_associations component_count ON component_count.component_id = component.component_id").
 		Where("component.achievement_id = ?", id).
 		Order("component.component_type, component.sequence, component.component_id").
 		Scan(&componentRows).Error; err != nil {
@@ -222,7 +230,7 @@ func (r *achievementEditorRepository) loadDefinition(id uint32) (achievementEdit
 		component := achievementEditorComponent{
 			AchievementID: row.AchievementID, ComponentType: row.ComponentType,
 			Sequence: row.Sequence, ComponentID: row.ComponentID,
-			Description: row.Description, Description2: row.Description2,
+			Name: row.Name, Description: row.Description,
 			PresentationCount: count,
 			Criteria:          criteriaByComponent[key],
 		}
@@ -249,7 +257,7 @@ func (r *achievementEditorRepository) loadDefinition(id uint32) (achievementEdit
 			ComponentID   uint32 `gorm:"column:component_id"`
 			RequiredCount uint32 `gorm:"column:required_count"`
 		}, 0)
-		if err := r.db.Table("achievement_component_counts").
+		if err := r.db.Table("achievement_associations").
 			Select("component_id, required_count").
 			Where("component_id IN ?", orphanComponentIDs).
 			Scan(&countRows).Error; err != nil {
@@ -277,8 +285,8 @@ func (r *achievementEditorRepository) loadDefinition(id uint32) (achievementEdit
 				ComponentType:         first.ComponentType,
 				Sequence:              first.ComponentSequence,
 				ComponentID:           first.ComponentID,
-				Description:           "Missing component row — recovery required",
-				Description2:          "These criteria are preserved but cannot be evaluated until an editor explicitly restores their component.",
+				Name:                  "Missing component row — recovery required",
+				Description:           "These criteria are preserved but cannot be evaluated until an editor explicitly restores their component.",
 				PresentationCount:     count,
 				Criteria:              rows,
 				RecoveryOnly:          true,
@@ -289,46 +297,79 @@ func (r *achievementEditorRepository) loadDefinition(id uint32) (achievementEdit
 	}
 
 	type rewardRow struct {
-		RewardID      string `gorm:"column:reward_id"`
-		AchievementID uint32 `gorm:"column:achievement_id"`
-		Sequence      uint32 `gorm:"column:sequence"`
-		RewardType    uint8  `gorm:"column:reward_type"`
-		RewardDataID  uint32 `gorm:"column:reward_data_id"`
-		Amount        string `gorm:"column:amount"`
-		Description   string `gorm:"column:description"`
-		Enabled       bool   `gorm:"column:enabled"`
+		RewardID     string `gorm:"column:reward_id"`
+		Sequence     uint32 `gorm:"column:sequence"`
+		RewardType   uint8  `gorm:"column:reward_type"`
+		RewardDataID uint32 `gorm:"column:reward_data_id"`
+		Amount       string `gorm:"column:amount"`
+		Description  string `gorm:"column:description"`
+		Enabled      bool   `gorm:"column:enabled"`
 	}
 	rewardRows := make([]rewardRow, 0)
-	if err := r.db.Table("achievement_rewards").Where("achievement_id = ?", id).
-		Order("sequence, reward_id").Scan(&rewardRows).Error; err != nil {
+	if err := r.db.Table("reward_source_entries source_entry").
+		Select(`reward.reward_id, source_entry.sequence, reward.reward_type,
+			reward.reward_data_id, reward.amount, reward.description, reward.enabled`).
+		Joins("JOIN rewards reward ON reward.reward_id = source_entry.reward_id").
+		Where("source_entry.source_type = ? AND source_entry.source_id = ?", achievementEditorRewardSourceType, id).
+		Order("source_entry.sequence, reward.reward_id").Scan(&rewardRows).Error; err != nil {
 		return graph, err
 	}
+	loadedRewardIDs := make(map[string]struct{}, len(rewardRows))
 	for _, row := range rewardRows {
+		loadedRewardIDs[row.RewardID] = struct{}{}
 		graph.Rewards = append(graph.Rewards, achievementEditorReward{
-			RewardID: row.RewardID, AchievementID: row.AchievementID,
-			Sequence: row.Sequence, RewardType: row.RewardType,
+			RewardID: row.RewardID, Sequence: row.Sequence, RewardType: row.RewardType,
 			RewardDataID: row.RewardDataID, Amount: row.Amount,
 			Description: row.Description, Enabled: row.Enabled,
 		})
 	}
 
 	set := achievementEditorRewardSet{Options: make([]achievementEditorRewardOption, 0), Mappings: make([]achievementEditorRewardMapping, 0)}
-	setResult := r.db.Table("achievement_reward_sets").Where("achievement_id = ?", id).Take(&set)
+	setResult := r.db.Table("reward_sources source").
+		Select(`reward_set.reward_set_id, reward_set.title, reward_set.enabled,
+			source.enabled AS source_enabled,
+			(SELECT COUNT(*) FROM reward_sources usage_source WHERE usage_source.reward_set_id = source.reward_set_id) AS source_count`).
+		Joins("JOIN reward_sets reward_set ON reward_set.reward_set_id = source.reward_set_id").
+		Where("source.source_type = ? AND source.source_id = ?", achievementEditorRewardSourceType, id).Take(&set)
 	if setResult.Error == nil {
-		if err := r.db.Table("achievement_reward_options").Where("reward_set_id = ?", set.RewardSetID).
+		set.Shared = set.SourceCount > 1
+		if err := r.db.Table("reward_options").Where("reward_set_id = ?", set.RewardSetID).
 			Order("sequence, option_id").Scan(&set.Options).Error; err != nil {
 			return graph, err
 		}
-		if err := r.db.Table("achievement_reward_option_entries").Where("reward_set_id = ?", set.RewardSetID).
-			Order("option_id, reward_id").Scan(&set.Mappings).Error; err != nil {
+		if err := r.db.Table("reward_option_entries").Where("reward_set_id = ?", set.RewardSetID).
+			Order("option_id, sequence, reward_id").Scan(&set.Mappings).Error; err != nil {
 			return graph, err
+		}
+		selectableIDs := make([]string, 0, len(set.Mappings))
+		selectableSequence := make(map[string]uint32, len(set.Mappings))
+		for _, mapping := range set.Mappings {
+			selectableSequence[mapping.RewardID] = mapping.Sequence
+			if _, loaded := loadedRewardIDs[mapping.RewardID]; !loaded {
+				loadedRewardIDs[mapping.RewardID] = struct{}{}
+				selectableIDs = append(selectableIDs, mapping.RewardID)
+			}
+		}
+		if len(selectableIDs) > 0 {
+			selectableRewards := make([]rewardRow, 0, len(selectableIDs))
+			if err := r.db.Table("rewards").Where("reward_id IN ?", selectableIDs).
+				Order("reward_id").Scan(&selectableRewards).Error; err != nil {
+				return graph, err
+			}
+			for _, row := range selectableRewards {
+				graph.Rewards = append(graph.Rewards, achievementEditorReward{
+					RewardID: row.RewardID, Sequence: selectableSequence[row.RewardID], RewardType: row.RewardType,
+					RewardDataID: row.RewardDataID, Amount: row.Amount,
+					Description: row.Description, Enabled: row.Enabled,
+				})
+			}
 		}
 		graph.RewardSet = &set
 	} else if !errors.Is(setResult.Error, gorm.ErrRecordNotFound) {
 		return graph, setResult.Error
 	}
-	if err := r.db.Table("achievement_cast_restrictions").Where("achievement_id = ?", id).
-		Order("restriction_id").Scan(&graph.Restrictions).Error; err != nil {
+	if err := r.db.Table("achievement_cast_requirements").Where("achievement_id = ?", id).
+		Order("restriction_id").Scan(&graph.Requirements).Error; err != nil {
 		return graph, err
 	}
 	return graph, nil
@@ -389,17 +430,17 @@ func (r *achievementEditorRepository) createDefinition(graph achievementEditorGr
 func (r *achievementEditorRepository) updateDefinition(graph achievementEditorGraph, expectedVersion *uint32, expectedRevision string) error {
 	return achievementEditorWithAdvisoryTransaction(r.db, achievementEditorAuthoringLock, 5, func(tx *gorm.DB) error {
 		var current struct {
-			ID                uint32
-			DefinitionVersion uint32 `gorm:"column:definition_version"`
+			ID      uint32
+			Version uint32 `gorm:"column:version"`
 		}
 		if err := tx.Table("achievements").Clauses(clause.Locking{Strength: "UPDATE"}).
-			Select("id, definition_version").Where("id = ?", graph.ID).Take(&current).Error; err != nil {
+			Select("id, version").Where("id = ?", graph.ID).Take(&current).Error; err != nil {
 			return err
 		}
-		if expectedVersion != nil && current.DefinitionVersion != *expectedVersion {
+		if expectedVersion != nil && current.Version != *expectedVersion {
 			return operationalEditorConflict(
-				"Achievement %d changed from definition version %d to %d; reload before saving",
-				graph.ID, *expectedVersion, current.DefinitionVersion,
+				"Achievement %d changed from version %d to %d; reload before saving",
+				graph.ID, *expectedVersion, current.Version,
 			)
 		}
 		persisted, err := newAchievementEditorRepository(tx).loadDefinition(graph.ID)
@@ -413,8 +454,8 @@ func (r *achievementEditorRepository) updateDefinition(graph achievementEditorGr
 		if err := achievementEditorRequireRevision(expectedRevision, currentRevision, fmt.Sprintf("Achievement %d", graph.ID)); err != nil {
 			return err
 		}
-		if graph.DefinitionVersion < current.DefinitionVersion {
-			return achievementEditorFieldError(422, "definition_version", "Definition version cannot be decreased", nil)
+		if graph.Version < current.Version {
+			return achievementEditorFieldError(422, "version", "Version cannot be decreased", nil)
 		}
 		// Character state and reward ledgers survive while a definition is
 		// disabled. Therefore unpublished edits to an existing identity still
@@ -428,11 +469,11 @@ func (r *achievementEditorRepository) updateDefinition(graph achievementEditorGr
 		if err != nil {
 			return err
 		}
-		if storedPolicy != submittedPolicy && graph.DefinitionVersion <= current.DefinitionVersion {
+		if storedPolicy != submittedPolicy && graph.Version <= current.Version {
 			return achievementEditorFieldError(
 				422,
-				"definition_version",
-				"Runtime evaluation or reward policy changed; increment the definition version before saving",
+				"version",
+				"Runtime evaluation or reward policy changed; increment the version before saving",
 				nil,
 			)
 		}
@@ -454,8 +495,8 @@ func (r *achievementEditorRepository) updateDefinition(graph achievementEditorGr
 func insertAchievementEditorDefinition(tx *gorm.DB, graph achievementEditorGraph, create bool) error {
 	values := map[string]interface{}{
 		"name": graph.Name, "description": graph.Description, "icon_id": graph.IconID,
-		"points": graph.Points, "reward_display": graph.RewardDisplay,
-		"world_display_flag": graph.WorldDisplayFlag, "definition_version": graph.DefinitionVersion,
+		"points": graph.Points, "has_reward": boolToTinyInt(graph.HasReward),
+		"client_flag": graph.ClientFlag, "version": graph.Version,
 		"reset_on_version_change": boolToTinyInt(graph.ResetOnVersionChange), "enabled": boolToTinyInt(graph.Enabled),
 	}
 	if create {
@@ -488,7 +529,7 @@ func syncAchievementEditorGraph(tx *gorm.DB, graph achievementEditorGraph, requi
 	if err := syncAchievementEditorRewards(tx, graph, requireRetained); err != nil {
 		return err
 	}
-	return syncAchievementEditorRestrictions(tx, graph)
+	return syncAchievementEditorRequirements(tx, graph)
 }
 
 func syncAchievementEditorAssociations(tx *gorm.DB, graph achievementEditorGraph) error {
@@ -565,7 +606,7 @@ func syncAchievementEditorComponents(tx *gorm.DB, graph achievementEditorGraph, 
 		var stored struct {
 			RequiredCount uint32 `gorm:"column:required_count"`
 		}
-		if err := tx.Table("achievement_component_counts").Clauses(clause.Locking{Strength: "UPDATE"}).
+		if err := tx.Table("achievement_associations").Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("component_id = ?", component.ComponentID).Take(&stored).Error; err != nil {
 			return err
 		}
@@ -586,13 +627,13 @@ func syncAchievementEditorComponents(tx *gorm.DB, graph achievementEditorGraph, 
 		componentRow := map[string]interface{}{
 			"achievement_id": graph.ID, "component_type": component.ComponentType,
 			"sequence": component.Sequence, "component_id": component.ComponentID,
-			"description": component.Description, "description_2": component.Description2,
+			"name": component.Name, "description": component.Description,
 		}
 		if err := tx.Table("achievement_components").Create(componentRow).Error; err != nil {
 			return err
 		}
 		countRow := map[string]interface{}{"component_id": component.ComponentID, "required_count": component.PresentationCount}
-		if err := tx.Table("achievement_component_counts").Clauses(clause.OnConflict{
+		if err := tx.Table("achievement_associations").Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "component_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"required_count"}),
 		}).Create(countRow).Error; err != nil {
@@ -616,200 +657,392 @@ func syncAchievementEditorComponents(tx *gorm.DB, graph achievementEditorGraph, 
 }
 
 func syncAchievementEditorRewards(tx *gorm.DB, graph achievementEditorGraph, requireRetained bool) error {
-	type idRow struct {
-		RewardID string `gorm:"column:reward_id"`
+	type sourceRow struct {
+		RewardSetID uint32 `gorm:"column:reward_set_id"`
+		Enabled     bool   `gorm:"column:enabled"`
 	}
-	existingRows := make([]idRow, 0)
-	if err := tx.Table("achievement_rewards").Clauses(clause.Locking{Strength: "UPDATE"}).
-		Select("reward_id").Where("achievement_id = ?", graph.ID).Scan(&existingRows).Error; err != nil {
+	var existingSource sourceRow
+	sourceResult := tx.Table("reward_sources").Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("reward_set_id, enabled").
+		Where("source_type = ? AND source_id = ?", achievementEditorRewardSourceType, graph.ID).
+		Take(&existingSource)
+	hasExistingSet := sourceResult.Error == nil
+	if sourceResult.Error != nil && !errors.Is(sourceResult.Error, gorm.ErrRecordNotFound) {
+		return sourceResult.Error
+	}
+	if requireRetained && hasExistingSet && graph.RewardSet == nil {
+		return achievementEditorFieldError(422, "reward_set", "A persisted selectable reward source cannot be removed; disable its source mapping to retire it safely", nil)
+	}
+	if graph.RewardSet != nil && hasExistingSet && graph.RewardSet.RewardSetID != existingSource.RewardSetID {
+		return achievementEditorFieldError(422, "reward_set.reward_set_id", "The stable reward-set ID cannot be changed", nil)
+	}
+
+	existingRewards, err := achievementEditorLoadSourceRewardCatalog(tx, graph.ID, existingSource.RewardSetID)
+	if err != nil {
 		return err
 	}
-	existing := make(map[string]bool)
-	for _, row := range existingRows {
-		existing[row.RewardID] = true
+	submittedRewards := make(map[string]achievementEditorReward, len(graph.Rewards))
+	for index, reward := range graph.Rewards {
+		if reward.RewardID == "" {
+			continue
+		}
+		if _, duplicate := submittedRewards[reward.RewardID]; duplicate {
+			return achievementEditorFieldError(422, fmt.Sprintf("rewards.%d.reward_id", index), "Reward IDs must be unique in one definition graph", nil)
+		}
+		submittedRewards[reward.RewardID] = reward
+		if requireRetained {
+			if _, owned := existingRewards[reward.RewardID]; !owned {
+				return achievementEditorFieldError(422, fmt.Sprintf("rewards.%d.reward_id", index), "This editor cannot adopt an existing provider-independent reward; clone it into a new reward ID instead", nil)
+			}
+		}
 	}
 	if requireRetained {
-		submitted := make(map[string]bool)
-		for _, reward := range graph.Rewards {
-			if reward.RewardID != "" {
-				submitted[reward.RewardID] = true
-				if !existing[reward.RewardID] {
-					return achievementEditorFieldError(422, "rewards", "Existing reward IDs cannot be adopted from another achievement", nil)
+		for rewardID := range existingRewards {
+			if _, retained := submittedRewards[rewardID]; !retained {
+				return achievementEditorFieldError(422, "rewards", "Persisted reward "+rewardID+" cannot be removed; disable it to preserve retry and history semantics", nil)
+			}
+		}
+	}
+
+	var persistedSet *achievementEditorRewardSet
+	setShared := false
+	if hasExistingSet {
+		loaded, err := achievementEditorLoadRewardSetCatalog(tx, existingSource.RewardSetID)
+		if err != nil {
+			return err
+		}
+		persistedSet = &loaded
+		var otherSources int64
+		if err := tx.Table("reward_sources").Where(
+			"reward_set_id = ? AND NOT (source_type = ? AND source_id = ?)",
+			existingSource.RewardSetID, achievementEditorRewardSourceType, graph.ID,
+		).Count(&otherSources).Error; err != nil {
+			return err
+		}
+		setShared = otherSources > 0
+		if graph.RewardSet != nil {
+			if err := achievementEditorRequireRetainedRewardOptions(*persistedSet, *graph.RewardSet); err != nil {
+				return err
+			}
+			if setShared && !achievementEditorRewardSetCatalogEqual(*persistedSet, *graph.RewardSet) {
+				return achievementEditorFieldError(422, "reward_set", "This provider-independent reward set is linked by another source; clone/detach it before changing its catalog content", nil)
+			}
+		}
+	}
+
+	for rewardID, submitted := range submittedRewards {
+		persisted, exists := existingRewards[rewardID]
+		if !exists || achievementEditorRewardCatalogEqual(persisted, submitted) {
+			continue
+		}
+		if setShared && persistedSet != nil {
+			for _, mapping := range persistedSet.Mappings {
+				if mapping.RewardID == rewardID {
+					return achievementEditorFieldError(422, "rewards", "Reward "+rewardID+" belongs to a set linked by another source; clone/detach the set before changing the grant definition", nil)
 				}
 			}
 		}
-		for rewardID := range existing {
-			if !submitted[rewardID] {
-				return achievementEditorFieldError(422, "rewards", "Persisted reward "+rewardID+" cannot be removed; disable it to retire it safely", nil)
-			}
+		shared, err := achievementEditorRewardUsedOutsideSource(tx, rewardID, graph.ID, existingSource.RewardSetID)
+		if err != nil {
+			return err
+		}
+		if shared {
+			return achievementEditorFieldError(422, "rewards", "Reward "+rewardID+" is used by another source or reward set; clone it before changing the provider-independent grant definition", nil)
 		}
 	}
 
-	type setIdentity struct {
-		RewardSetID uint32 `gorm:"column:reward_set_id"`
-	}
-	var existingSet setIdentity
-	setResult := tx.Table("achievement_reward_sets").Clauses(clause.Locking{Strength: "UPDATE"}).
-		Select("reward_set_id").Where("achievement_id = ?", graph.ID).Take(&existingSet)
-	hasExistingSet := setResult.Error == nil
-	if setResult.Error != nil && !errors.Is(setResult.Error, gorm.ErrRecordNotFound) {
-		return setResult.Error
-	}
-	if requireRetained && hasExistingSet && graph.RewardSet == nil {
-		return achievementEditorFieldError(422, "reward_set", "A persisted reward set cannot be removed; disable it to retire it safely", nil)
-	}
-	if graph.RewardSet != nil && hasExistingSet && graph.RewardSet.RewardSetID != existingSet.RewardSetID {
-		return achievementEditorFieldError(422, "reward_set.reward_set_id", "The stable reward-set ID cannot be changed", nil)
-	}
-	if requireRetained && hasExistingSet && graph.RewardSet != nil {
-		existingOptions := make([]struct {
-			OptionID uint32 `gorm:"column:option_id"`
-		}, 0)
-		if err := tx.Table("achievement_reward_options").Clauses(clause.Locking{Strength: "UPDATE"}).
-			Select("option_id").Where("reward_set_id = ?", existingSet.RewardSetID).Scan(&existingOptions).Error; err != nil {
-			return err
-		}
-		submitted := make(map[uint32]bool)
-		for _, option := range graph.RewardSet.Options {
-			submitted[option.OptionID] = true
-		}
-		for _, option := range existingOptions {
-			if !submitted[option.OptionID] {
-				return achievementEditorFieldError(422, "reward_set.options", fmt.Sprintf("Persisted option %d cannot be removed; disable it to retire it safely", option.OptionID), nil)
-			}
-		}
-	}
-
-	existingIDs := make([]string, 0, len(existing))
-	for id := range existing {
-		existingIDs = append(existingIDs, id)
-	}
-	if len(existingIDs) > 0 {
-		if err := tx.Table("achievement_reward_option_entries").Where("reward_id IN ?", existingIDs).Delete(nil).Error; err != nil {
-			return err
-		}
-	}
-	if hasExistingSet {
-		if err := tx.Table("achievement_reward_option_entries").Where("reward_set_id = ?", existingSet.RewardSetID).Delete(nil).Error; err != nil {
-			return err
-		}
-		if err := tx.Table("achievement_reward_options").Where("reward_set_id = ?", existingSet.RewardSetID).Delete(nil).Error; err != nil {
-			return err
-		}
-		if err := tx.Table("achievement_reward_sets").Where("reward_set_id = ?", existingSet.RewardSetID).Delete(nil).Error; err != nil {
-			return err
-		}
-	}
-	if err := tx.Table("achievement_rewards").Where("achievement_id = ?", graph.ID).Delete(nil).Error; err != nil {
-		return err
-	}
-
-	resolvedRewardIDs := make(map[string]string)
+	resolvedRewardIDs := make(map[string]string, len(graph.Rewards)*2)
 	for index, reward := range graph.Rewards {
 		amount, err := strconv.ParseUint(reward.Amount, 10, 64)
 		if err != nil || amount == 0 {
 			return achievementEditorFieldError(422, fmt.Sprintf("rewards.%d.amount", index), "Reward amount must be a positive unsigned 64-bit integer", nil)
 		}
-		rewardID, err := achievementEditorInsertReward(tx, graph.ID, reward, amount)
+		var rewardID string
+		_, persistedReward := existingRewards[reward.RewardID]
+		if reward.RewardID == "" || !persistedReward {
+			rewardID, err = achievementEditorInsertReward(tx, reward)
+		} else {
+			rewardID = reward.RewardID
+			err = tx.Table("rewards").Where("reward_id = ?", rewardID).Updates(map[string]interface{}{
+				"reward_type": reward.RewardType, "reward_data_id": reward.RewardDataID,
+				"amount": reward.Amount, "description": reward.Description, "enabled": boolToTinyInt(reward.Enabled),
+			}).Error
+		}
 		if err != nil {
 			return err
 		}
+		resolvedRewardIDs[fmt.Sprintf("@%d", index)] = rewardID
 		if reward.RewardID != "" {
 			resolvedRewardIDs[reward.RewardID] = rewardID
 		}
-		resolvedRewardIDs[fmt.Sprintf("@%d", index)] = rewardID
 	}
-	if graph.RewardSet == nil {
-		return nil
-	}
-	setID := graph.RewardSet.RewardSetID
-	if setID == 0 {
-		allocated, err := achievementEditorAllocateUint32(tx, "achievement_reward_sets", "reward_set_id")
-		if err != nil {
-			return err
-		}
-		setID = allocated
-	}
-	setRow := map[string]interface{}{
-		"reward_set_id": setID, "achievement_id": graph.ID,
-		"title": graph.RewardSet.Title, "enabled": boolToTinyInt(graph.RewardSet.Enabled),
-	}
-	if err := tx.Table("achievement_reward_sets").Create(setRow).Error; err != nil {
+
+	if err := tx.Table("reward_source_entries").Clauses(clause.Locking{Strength: "UPDATE"}).Where(
+		"source_type = ? AND source_id = ?", achievementEditorRewardSourceType, graph.ID,
+	).Delete(nil).Error; err != nil {
 		return err
 	}
-	optionIDs := make(map[uint32]bool)
-	for _, option := range graph.RewardSet.Options {
-		optionIDs[option.OptionID] = true
-		optionRow := map[string]interface{}{
-			"reward_set_id": setID, "option_id": option.OptionID, "sequence": option.Sequence,
-			"label": option.Label, "common_to_all": boolToTinyInt(option.CommonToAll),
-			"flags": option.Flags, "enabled": boolToTinyInt(option.Enabled),
+	if err := tx.Table("reward_sources").Where(
+		"source_type = ? AND source_id = ?", achievementEditorRewardSourceType, graph.ID,
+	).Delete(nil).Error; err != nil {
+		return err
+	}
+
+	setID := uint32(0)
+	mappedRewardIDs := make(map[string]struct{})
+	if graph.RewardSet != nil {
+		setID = graph.RewardSet.RewardSetID
+		if setID == 0 {
+			setID, err = achievementEditorAllocateUint32(tx, "reward_sets", "reward_set_id")
+			if err != nil {
+				return err
+			}
 		}
-		if err := tx.Table("achievement_reward_options").Create(optionRow).Error; err != nil {
+		if !hasExistingSet {
+			var occupied int64
+			if err := tx.Table("reward_sets").Where("reward_set_id = ?", setID).Count(&occupied).Error; err != nil {
+				return err
+			}
+			if occupied > 0 {
+				return achievementEditorFieldError(422, "reward_set.reward_set_id", "Existing shared reward sets cannot be attached implicitly; clone into a new set ID", nil)
+			}
+		}
+		if !setShared {
+			setRow := map[string]interface{}{"reward_set_id": setID, "title": graph.RewardSet.Title, "enabled": boolToTinyInt(graph.RewardSet.Enabled)}
+			if hasExistingSet {
+				if err := tx.Table("reward_sets").Where("reward_set_id = ?", setID).Updates(setRow).Error; err != nil {
+					return err
+				}
+				if err := tx.Table("reward_option_entries").Where("reward_set_id = ?", setID).Delete(nil).Error; err != nil {
+					return err
+				}
+			} else if err := tx.Table("reward_sets").Create(setRow).Error; err != nil {
+				return err
+			}
+			for _, option := range graph.RewardSet.Options {
+				optionRow := map[string]interface{}{
+					"reward_set_id": setID, "option_id": option.OptionID, "sequence": option.Sequence,
+					"label": option.Label, "common_to_all": boolToTinyInt(option.CommonToAll),
+					"flags": option.Flags, "enabled": boolToTinyInt(option.Enabled),
+				}
+				if err := tx.Table("reward_options").Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "reward_set_id"}, {Name: "option_id"}},
+					DoUpdates: clause.AssignmentColumns([]string{"sequence", "label", "common_to_all", "flags", "enabled"}),
+				}).Create(optionRow).Error; err != nil {
+					return err
+				}
+			}
+			for _, mapping := range graph.RewardSet.Mappings {
+				resolvedID := resolvedRewardIDs[mapping.RewardID]
+				if resolvedID == "" {
+					return achievementEditorFieldError(422, "reward_set.mappings", "A reward mapping references an unsaved reward", nil)
+				}
+				mappedRewardIDs[resolvedID] = struct{}{}
+				entry := map[string]interface{}{
+					"reward_set_id": setID, "option_id": mapping.OptionID,
+					"sequence": mapping.Sequence, "reward_id": resolvedID,
+				}
+				if err := tx.Table("reward_option_entries").Create(entry).Error; err != nil {
+					return err
+				}
+			}
+		} else {
+			for _, mapping := range graph.RewardSet.Mappings {
+				resolvedID := resolvedRewardIDs[mapping.RewardID]
+				if resolvedID != "" {
+					mappedRewardIDs[resolvedID] = struct{}{}
+				}
+			}
+		}
+		if err := tx.Table("reward_sources").Create(map[string]interface{}{
+			"source_type": achievementEditorRewardSourceType, "source_id": graph.ID,
+			"reward_set_id": setID, "enabled": boolToTinyInt(graph.RewardSet.SourceEnabled),
+		}).Error; err != nil {
 			return err
 		}
 	}
-	for _, mapping := range graph.RewardSet.Mappings {
-		if !optionIDs[mapping.OptionID] {
-			return achievementEditorFieldError(422, "reward_set.mappings", "A reward mapping references a missing option", nil)
+
+	for index, reward := range graph.Rewards {
+		resolvedID := resolvedRewardIDs[reward.RewardID]
+		if reward.RewardID == "" {
+			resolvedID = resolvedRewardIDs[fmt.Sprintf("@%d", index)]
 		}
-		resolvedID := mapping.RewardID
-		if replacement, ok := resolvedRewardIDs[resolvedID]; ok {
-			resolvedID = replacement
+		if _, selectable := mappedRewardIDs[resolvedID]; selectable {
+			continue
 		}
-		if resolvedID == "" {
-			return achievementEditorFieldError(422, "reward_set.mappings", "A reward mapping references an unsaved reward", nil)
-		}
-		entry := map[string]interface{}{"reward_set_id": setID, "option_id": mapping.OptionID, "reward_id": resolvedID}
-		if err := tx.Table("achievement_reward_option_entries").Create(entry).Error; err != nil {
+		if err := tx.Table("reward_source_entries").Create(map[string]interface{}{
+			"source_type": achievementEditorRewardSourceType, "source_id": graph.ID,
+			"sequence": reward.Sequence, "reward_id": resolvedID,
+		}).Error; err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func achievementEditorInsertReward(tx *gorm.DB, achievementID uint32, reward achievementEditorReward, amount uint64) (string, error) {
+func achievementEditorLoadSourceRewardCatalog(tx *gorm.DB, sourceID uint32, rewardSetID uint32) (map[string]achievementEditorReward, error) {
+	ids := make([]string, 0)
+	if err := tx.Table("reward_source_entries").Clauses(clause.Locking{Strength: "UPDATE"}).Where(
+		"source_type = ? AND source_id = ?", achievementEditorRewardSourceType, sourceID,
+	).Pluck("reward_id", &ids).Error; err != nil {
+		return nil, err
+	}
+	if rewardSetID != 0 {
+		selectableIDs := make([]string, 0)
+		if err := tx.Table("reward_option_entries").Clauses(clause.Locking{Strength: "UPDATE"}).Where("reward_set_id = ?", rewardSetID).
+			Pluck("reward_id", &selectableIDs).Error; err != nil {
+			return nil, err
+		}
+		ids = append(ids, selectableIDs...)
+	}
+	result := make(map[string]achievementEditorReward, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	rows := make([]achievementEditorReward, 0, len(ids))
+	if err := tx.Table("rewards").Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("reward_id IN ?", ids).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.RewardID] = row
+	}
+	return result, nil
+}
+
+func achievementEditorLoadRewardSetCatalog(tx *gorm.DB, rewardSetID uint32) (achievementEditorRewardSet, error) {
+	set := achievementEditorRewardSet{
+		Options:  make([]achievementEditorRewardOption, 0),
+		Mappings: make([]achievementEditorRewardMapping, 0),
+	}
+	if err := tx.Table("reward_sets").Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("reward_set_id = ?", rewardSetID).Take(&set).Error; err != nil {
+		return set, err
+	}
+	if err := tx.Table("reward_options").Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("reward_set_id = ?", rewardSetID).Order("sequence, option_id").Scan(&set.Options).Error; err != nil {
+		return set, err
+	}
+	if err := tx.Table("reward_option_entries").Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("reward_set_id = ?", rewardSetID).Order("option_id, sequence, reward_id").Scan(&set.Mappings).Error; err != nil {
+		return set, err
+	}
+	return set, nil
+}
+
+func achievementEditorRequireRetainedRewardOptions(persisted achievementEditorRewardSet, submitted achievementEditorRewardSet) error {
+	submittedIDs := make(map[uint32]struct{}, len(submitted.Options))
+	for _, option := range submitted.Options {
+		submittedIDs[option.OptionID] = struct{}{}
+	}
+	for _, option := range persisted.Options {
+		if _, retained := submittedIDs[option.OptionID]; !retained {
+			return achievementEditorFieldError(
+				422, "reward_set.options",
+				fmt.Sprintf("Persisted option %d cannot be removed; disable it to preserve claimed-selection history", option.OptionID), nil,
+			)
+		}
+	}
+	return nil
+}
+
+func achievementEditorRewardCatalogEqual(left achievementEditorReward, right achievementEditorReward) bool {
+	return left.RewardType == right.RewardType &&
+		left.RewardDataID == right.RewardDataID &&
+		left.Amount == right.Amount &&
+		left.Description == right.Description &&
+		left.Enabled == right.Enabled
+}
+
+func achievementEditorRewardSetCatalogEqual(left achievementEditorRewardSet, right achievementEditorRewardSet) bool {
+	if left.RewardSetID != right.RewardSetID || left.Title != right.Title || left.Enabled != right.Enabled ||
+		len(left.Options) != len(right.Options) || len(left.Mappings) != len(right.Mappings) {
+		return false
+	}
+	leftOptions := make(map[uint32]achievementEditorRewardOption, len(left.Options))
+	for _, option := range left.Options {
+		option.RewardSetID = 0
+		leftOptions[option.OptionID] = option
+	}
+	for _, option := range right.Options {
+		option.RewardSetID = 0
+		if stored, found := leftOptions[option.OptionID]; !found || stored != option {
+			return false
+		}
+	}
+	leftMappings := make(map[string]achievementEditorRewardMapping, len(left.Mappings))
+	for _, mapping := range left.Mappings {
+		mapping.RewardSetID = 0
+		leftMappings[fmt.Sprintf("%d:%s", mapping.OptionID, mapping.RewardID)] = mapping
+	}
+	for _, mapping := range right.Mappings {
+		mapping.RewardSetID = 0
+		key := fmt.Sprintf("%d:%s", mapping.OptionID, mapping.RewardID)
+		if stored, found := leftMappings[key]; !found || stored != mapping {
+			return false
+		}
+	}
+	return true
+}
+
+func achievementEditorRewardUsedOutsideSource(tx *gorm.DB, rewardID string, sourceID uint32, rewardSetID uint32) (bool, error) {
+	var sourceUses int64
+	if err := tx.Table("reward_source_entries").Where(
+		"reward_id = ? AND NOT (source_type = ? AND source_id = ?)", rewardID, achievementEditorRewardSourceType, sourceID,
+	).Count(&sourceUses).Error; err != nil {
+		return false, err
+	}
+	if sourceUses > 0 {
+		return true, nil
+	}
+	query := tx.Table("reward_option_entries").Where("reward_id = ?", rewardID)
+	if rewardSetID != 0 {
+		query = query.Where("reward_set_id <> ?", rewardSetID)
+	}
+	var optionUses int64
+	if err := query.Count(&optionUses).Error; err != nil {
+		return false, err
+	}
+	return optionUses > 0, nil
+}
+
+func achievementEditorInsertReward(tx *gorm.DB, reward achievementEditorReward) (string, error) {
 	type rewardInsert struct {
-		RewardID      uint64 `gorm:"column:reward_id;primaryKey;autoIncrement"`
-		AchievementID uint32 `gorm:"column:achievement_id"`
-		Sequence      uint32 `gorm:"column:sequence"`
-		RewardType    uint8  `gorm:"column:reward_type"`
-		RewardDataID  uint32 `gorm:"column:reward_data_id"`
-		Amount        uint64 `gorm:"column:amount"`
-		Description   string `gorm:"column:description"`
-		Enabled       uint8  `gorm:"column:enabled"`
+		RewardID     uint32 `gorm:"column:reward_id;primaryKey;autoIncrement"`
+		RewardType   uint8  `gorm:"column:reward_type"`
+		RewardDataID uint32 `gorm:"column:reward_data_id"`
+		Amount       string `gorm:"column:amount"`
+		Description  string `gorm:"column:description"`
+		Enabled      uint8  `gorm:"column:enabled"`
 	}
 	row := rewardInsert{
-		AchievementID: achievementID, Sequence: reward.Sequence, RewardType: reward.RewardType,
-		RewardDataID: reward.RewardDataID, Amount: amount, Description: reward.Description,
+		RewardType: reward.RewardType, RewardDataID: reward.RewardDataID,
+		Amount: reward.Amount, Description: reward.Description,
 		Enabled: boolToTinyInt(reward.Enabled),
 	}
 	if reward.RewardID != "" {
-		parsed, err := strconv.ParseUint(reward.RewardID, 10, 64)
+		parsed, err := strconv.ParseUint(reward.RewardID, 10, 32)
 		if err != nil || parsed == 0 {
-			return "", achievementEditorFieldError(422, "rewards.reward_id", "Reward ID must be a positive unsigned 64-bit integer", nil)
+			return "", achievementEditorFieldError(422, "rewards.reward_id", "Reward ID must be a positive unsigned 32-bit integer", nil)
 		}
-		row.RewardID = parsed
+		row.RewardID = uint32(parsed)
 	}
-	if err := tx.Table("achievement_rewards").Create(&row).Error; err != nil {
+	if err := tx.Table("rewards").Create(&row).Error; err != nil {
 		return "", err
 	}
-	if reward.Enabled && row.RewardID > uint64(^uint32(0)) {
-		return "", achievementEditorFieldError(422, "rewards.reward_id", "The allocated enabled reward ID exceeds the unsigned 32-bit client wire field", nil)
-	}
-	return strconv.FormatUint(row.RewardID, 10), nil
+	return strconv.FormatUint(uint64(row.RewardID), 10), nil
 }
 
-func syncAchievementEditorRestrictions(tx *gorm.DB, graph achievementEditorGraph) error {
-	if err := tx.Table("achievement_cast_restrictions").Where("achievement_id = ?", graph.ID).Delete(nil).Error; err != nil {
+func syncAchievementEditorRequirements(tx *gorm.DB, graph achievementEditorGraph) error {
+	if err := tx.Table("achievement_cast_requirements").Where("achievement_id = ?", graph.ID).Delete(nil).Error; err != nil {
 		return err
 	}
-	for _, restriction := range graph.Restrictions {
+	for _, restriction := range graph.Requirements {
 		row := map[string]interface{}{
 			"restriction_id": restriction.RestrictionID, "achievement_id": graph.ID,
 			"requires_completed": boolToTinyInt(restriction.RequiresCompleted),
 		}
-		if err := tx.Table("achievement_cast_restrictions").Create(row).Error; err != nil {
+		if err := tx.Table("achievement_cast_requirements").Create(row).Error; err != nil {
 			return err
 		}
 	}
@@ -818,9 +1051,9 @@ func syncAchievementEditorRestrictions(tx *gorm.DB, graph achievementEditorGraph
 
 func achievementEditorAllocateUint32(tx *gorm.DB, table string, column string) (uint32, error) {
 	allowed := map[string]string{
-		"achievements:id":                       "achievements:id",
-		"achievement_categories:id":             "achievement_categories:id",
-		"achievement_reward_sets:reward_set_id": "achievement_reward_sets:reward_set_id",
+		"achievements:id":           "achievements:id",
+		"achievement_categories:id": "achievement_categories:id",
+		"reward_sets:reward_set_id": "reward_sets:reward_set_id",
 	}
 	if allowed[table+":"+column] == "" {
 		return 0, errors.New("unsupported achievement identity allocation")
@@ -879,13 +1112,13 @@ func (r *achievementEditorRepository) cloneDefinition(sourceID uint32, newID uin
 
 		graph.ID = newID
 		graph.Enabled = false
-		graph.DefinitionVersion = 1
+		graph.Version = 0
 		if strings.TrimSpace(name) == "" {
 			graph.Name = strings.TrimSpace(graph.Name + " (Copy)")
 		} else {
 			graph.Name = strings.TrimSpace(name)
 		}
-		graph.Restrictions = make([]achievementEditorCastRestriction, 0)
+		graph.Requirements = make([]achievementEditorCastRequirement, 0)
 		for associationIndex := range graph.Associations {
 			graph.Associations[associationIndex].AchievementID = newID
 		}
@@ -899,14 +1132,15 @@ func (r *achievementEditorRepository) cloneDefinition(sourceID uint32, newID uin
 		}
 
 		// Preserve option semantics while allocating fresh canonical grant IDs.
-		optionByOldReward := make(map[string]uint32)
+		mappingByOldReward := make(map[string]achievementEditorRewardMapping)
 		if graph.RewardSet != nil {
 			for _, mapping := range graph.RewardSet.Mappings {
-				optionByOldReward[mapping.RewardID] = mapping.OptionID
+				mappingByOldReward[mapping.RewardID] = mapping
 			}
 			graph.RewardSet.RewardSetID = 0
-			graph.RewardSet.AchievementID = newID
 			graph.RewardSet.Mappings = make([]achievementEditorRewardMapping, 0)
+			graph.RewardSet.Shared = false
+			graph.RewardSet.SourceCount = 0
 			for optionIndex := range graph.RewardSet.Options {
 				graph.RewardSet.Options[optionIndex].RewardSetID = 0
 			}
@@ -914,11 +1148,11 @@ func (r *achievementEditorRepository) cloneDefinition(sourceID uint32, newID uin
 		for rewardIndex := range graph.Rewards {
 			oldID := graph.Rewards[rewardIndex].RewardID
 			graph.Rewards[rewardIndex].RewardID = ""
-			graph.Rewards[rewardIndex].AchievementID = newID
 			if graph.RewardSet != nil {
-				if optionID, ok := optionByOldReward[oldID]; ok {
+				if mapping, ok := mappingByOldReward[oldID]; ok {
 					graph.RewardSet.Mappings = append(graph.RewardSet.Mappings, achievementEditorRewardMapping{
-						OptionID: optionID, RewardID: fmt.Sprintf("@%d", rewardIndex),
+						OptionID: mapping.OptionID, Sequence: mapping.Sequence,
+						RewardID: fmt.Sprintf("@%d", rewardIndex),
 					})
 				}
 			}
@@ -1006,46 +1240,29 @@ func (r *achievementEditorRepository) deleteDefinition(id uint32, expectedRevisi
 		if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return result.Error
 		}
-		type rewardIDRow struct {
-			RewardID string `gorm:"column:reward_id"`
-		}
-		rewardIDs := make([]rewardIDRow, 0)
-		if err := tx.Table("achievement_rewards").Select("reward_id").Where("achievement_id = ?", id).Scan(&rewardIDs).Error; err != nil {
+		// Provider-independent reward definitions and sets may be shared with
+		// achievements, tasks, or future providers. Deleting a definition removes
+		// only this achievement's source mappings and deliberately preserves the
+		// global catalog rows for other users and historical ledgers.
+		if err := tx.Table("reward_source_entries").Where(
+			"source_type = ? AND source_id = ?", achievementEditorRewardSourceType, id,
+		).Delete(nil).Error; err != nil {
 			return err
 		}
-		ids := make([]string, 0, len(rewardIDs))
-		for _, row := range rewardIDs {
-			ids = append(ids, row.RewardID)
-		}
-		if len(ids) > 0 {
-			if err := tx.Table("achievement_reward_option_entries").Where("reward_id IN ?", ids).Delete(nil).Error; err != nil {
-				return err
-			}
-		}
-		var setIDs []uint32
-		if err := tx.Table("achievement_reward_sets").Where("achievement_id = ?", id).Pluck("reward_set_id", &setIDs).Error; err != nil {
+		if err := tx.Table("reward_sources").Where(
+			"source_type = ? AND source_id = ?", achievementEditorRewardSourceType, id,
+		).Delete(nil).Error; err != nil {
 			return err
-		}
-		if len(setIDs) > 0 {
-			if err := tx.Table("achievement_reward_option_entries").Where("reward_set_id IN ?", setIDs).Delete(nil).Error; err != nil {
-				return err
-			}
-			if err := tx.Table("achievement_reward_options").Where("reward_set_id IN ?", setIDs).Delete(nil).Error; err != nil {
-				return err
-			}
-			if err := tx.Table("achievement_reward_sets").Where("reward_set_id IN ?", setIDs).Delete(nil).Error; err != nil {
-				return err
-			}
 		}
 		for _, table := range []string{
-			"achievement_cast_restrictions", "achievement_category_associations",
-			"achievement_criteria", "achievement_components", "achievement_rewards",
+			"achievement_cast_requirements", "achievement_category_associations",
+			"achievement_criteria", "achievement_components",
 		} {
 			if err := tx.Table(table).Where("achievement_id = ?", id).Delete(nil).Error; err != nil {
 				return err
 			}
 		}
-		// achievement_component_counts is deliberately preserved: component IDs
+		// achievement_associations is deliberately preserved: component IDs
 		// are global presentation identities and orphan history must remain legible.
 		return tx.Table("achievements").Where("id = ?", id).Delete(nil).Error
 	})
@@ -1417,7 +1634,7 @@ func (r *achievementEditorRepository) lookupNPCNames(search string, limit int) (
 		hash := achievementCanonicalNPCNameHash(item.Name)
 		result = append(result, achievementEditorLookupOption{
 			ID: strconv.FormatUint(uint64(hash), 10), Label: item.Name,
-			Detail: fmt.Sprintf("NPC %d · canonical %q · race %d", item.ID, canonical, item.Race),
+			Detail: fmt.Sprintf("NPC %d - canonical %q - race %d", item.ID, canonical, item.Race),
 		})
 	}
 	return result, nil

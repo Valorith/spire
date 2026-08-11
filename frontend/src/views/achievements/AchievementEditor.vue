@@ -20,7 +20,7 @@
       <i class="fa fa-lock"></i>
       <div>
         <strong>Content writes are disabled because the achievement schema is incomplete.</strong>
-        <p>The editor fails closed. Apply the required source-workspace achievement migrations, then refresh this page.</p>
+        <p>{{ schemaGuidance }}</p>
         <ul v-if="schemaIssues.length">
           <li v-for="(issue, index) in schemaIssues" :key="index">{{ issue.message || issue.code || issue }}</li>
         </ul>
@@ -86,7 +86,7 @@
             <label for="achievement-sort-filter">Sort</label>
             <div class="achievement-filter-pair">
               <select id="achievement-sort-filter" v-model="filters.sort" class="form-control form-control-sm" aria-describedby="achievement-sort-filter-help" @change="applyFilters">
-                <option value="name">Name</option><option value="id">ID</option><option value="points">Points</option><option value="definition_version">Version</option>
+                <option value="name">Name</option><option value="id">ID</option><option value="points">Points</option><option value="version">Version</option>
               </select>
               <select v-model="filters.direction" class="form-control form-control-sm" aria-label="Sort direction" aria-describedby="achievement-sort-filter-help" @change="applyFilters"><option value="asc">Ascending</option><option value="desc">Descending</option></select>
             </div>
@@ -105,7 +105,7 @@
               <span class="spire-editor-directory-icon"><i class="fa fa-trophy"></i></span>
               <span class="spire-editor-directory-body">
                 <span class="spire-editor-directory-name">{{ row.name || '(unnamed definition)' }}</span>
-                <span class="spire-editor-directory-detail">#{{ row.id }} · {{ row.points || 0 }} points · v{{ row.definition_version || 1 }}</span>
+                <span class="spire-editor-directory-detail">#{{ row.id }} · {{ row.points || 0 }} points · v{{ Number(row.version || 0) }}</span>
                 <span class="operational-row-badges">
                   <span class="operational-badge" :class="row.enabled ? 'operational-badge--gold' : 'operational-badge--muted'">{{ row.enabled ? 'enabled' : 'disabled' }}</span>
                   <span class="operational-badge">{{ row.component_count || 0 }} components</span>
@@ -134,7 +134,7 @@
           <div class="achievement-editor__statusbar">
             <div>
               <span class="achievement-status-pill" :class="draft.enabled ? 'achievement-status-pill--enabled' : 'achievement-status-pill--disabled'">{{ draft.enabled ? 'Enabled' : 'Disabled' }}</span>
-              <span class="achievement-status-pill">Version {{ draft.definition_version }}</span>
+              <span class="achievement-status-pill">Version {{ draft.version }}</span>
               <span v-if="dirty" class="achievement-status-pill achievement-status-pill--dirty"><i class="fa fa-circle"></i> Unsaved</span>
               <span v-else class="achievement-status-pill"><i class="fa fa-check"></i> Saved</span>
             </div>
@@ -158,9 +158,9 @@
                   <div class="achievement-field achievement-field--span-3"><label for="achievement-description">{{ field('achievements', 'description').label }}</label><textarea id="achievement-description" v-model="draft.description" rows="3" class="form-control form-control-sm" aria-describedby="achievement-description-help"></textarea><small id="achievement-description-help">{{ field('achievements', 'description').help }}</small></div>
                   <div class="achievement-field"><label for="achievement-icon">{{ field('achievements', 'icon_id').label }}</label><input id="achievement-icon" v-model.number="draft.icon_id" type="number" min="0" step="1" class="form-control form-control-sm" aria-describedby="achievement-icon-help"><small id="achievement-icon-help">{{ field('achievements', 'icon_id').help }}</small></div>
                   <div class="achievement-field"><label for="achievement-points">{{ field('achievements', 'points').label }}</label><input id="achievement-points" v-model.number="draft.points" type="number" min="0" step="1" class="form-control form-control-sm" aria-describedby="achievement-points-help"><small id="achievement-points-help">{{ field('achievements', 'points').help }}</small></div>
-                  <div class="achievement-field"><label for="achievement-world-display">{{ field('achievements', 'world_display_flag').label }}</label><input id="achievement-world-display" v-model.number="draft.world_display_flag" type="number" min="0" step="1" class="form-control form-control-sm" aria-describedby="achievement-world-display-help"><small id="achievement-world-display-help">{{ field('achievements', 'world_display_flag').help }}</small></div>
-                  <div class="achievement-field achievement-field--span-3"><label for="achievement-reward-display">{{ field('achievements', 'reward_display').label }}</label><input id="achievement-reward-display" v-model.number="draft.reward_display" type="number" min="0" step="1" class="form-control form-control-sm" aria-describedby="achievement-reward-display-help"><small id="achievement-reward-display-help">{{ field('achievements', 'reward_display').help }}</small></div>
-                  <div class="achievement-field"><label for="achievement-version">{{ field('achievements', 'definition_version').label }}</label><input id="achievement-version" v-model.number="draft.definition_version" type="number" min="1" step="1" class="form-control form-control-sm" aria-describedby="achievement-version-help"><small id="achievement-version-help">{{ field('achievements', 'definition_version').help }}</small></div>
+                  <div class="achievement-field"><label for="achievement-client-flag">{{ field('achievements', 'client_flag').label }}</label><input id="achievement-client-flag" v-model.number="draft.client_flag" type="number" min="0" max="255" step="1" class="form-control form-control-sm" aria-describedby="achievement-client-flag-help"><small id="achievement-client-flag-help">{{ field('achievements', 'client_flag').help }}</small></div>
+                  <div class="achievement-field achievement-checkbox-field" role="group" aria-describedby="achievement-has-reward-help"><span class="achievement-field-label">{{ field('achievements', 'has_reward').label }}</span><eq-checkbox :value="draft.has_reward" label-right="Imported hint set" @input="draft.has_reward = $event"></eq-checkbox><small id="achievement-has-reward-help">{{ field('achievements', 'has_reward').help }}</small></div>
+                  <div class="achievement-field"><label for="achievement-version">{{ field('achievements', 'version').label }}</label><input id="achievement-version" v-model.number="draft.version" type="number" min="0" step="1" class="form-control form-control-sm" aria-describedby="achievement-version-help"><small id="achievement-version-help">{{ field('achievements', 'version').help }}</small></div>
                   <div class="achievement-field achievement-checkbox-field" role="group" aria-describedby="achievement-reset-help"><span class="achievement-field-label">{{ field('achievements', 'reset_on_version_change').label }}</span><eq-checkbox :value="draft.reset_on_version_change" label-right="Reset old state" @input="draft.reset_on_version_change = $event"></eq-checkbox><small id="achievement-reset-help">{{ field('achievements', 'reset_on_version_change').help }}</small></div>
                   <div class="achievement-field achievement-checkbox-field" role="group" aria-describedby="achievement-enabled-help"><span class="achievement-field-label">{{ field('achievements', 'enabled').label }}</span><eq-checkbox :value="draft.enabled" label-right="Enabled in active snapshot" @input="draft.enabled = $event"></eq-checkbox><small id="achievement-enabled-help">{{ field('achievements', 'enabled').help }}</small></div>
                   <div class="achievement-field achievement-field--span-3"><label for="achievement-audit-reason">Audit reason</label><textarea id="achievement-audit-reason" v-model.trim="auditReason" rows="2" class="form-control form-control-sm" aria-describedby="achievement-audit-reason-help"></textarea><small id="achievement-audit-reason-help">Required for every write. Explain the player-facing intent and any migration or compatibility impact.</small></div>
@@ -196,8 +196,8 @@
                     <div class="achievement-field"><label :for="'achievement-component-id-' + componentIndex">{{ field('components', 'component_id').label }}</label><input :id="'achievement-component-id-' + componentIndex" v-model.number="component.component_id" type="number" min="0" step="1" class="form-control form-control-sm" :disabled="componentPersisted(component)" :aria-describedby="'achievement-component-id-help-' + componentIndex"><small :id="'achievement-component-id-help-' + componentIndex">{{ field('components', 'component_id').help }}</small></div>
                     <div class="achievement-field"><label :for="'achievement-component-sequence-' + componentIndex">{{ field('components', 'sequence').label }}</label><input :id="'achievement-component-sequence-' + componentIndex" v-model.number="component.sequence" type="number" min="0" step="1" class="form-control form-control-sm" :aria-describedby="'achievement-component-sequence-help-' + componentIndex"><small :id="'achievement-component-sequence-help-' + componentIndex">{{ field('components', 'sequence').help }}</small></div>
                     <div class="achievement-field"><label :for="'achievement-component-count-' + componentIndex">{{ field('components', 'presentation_count').label }}</label><input :id="'achievement-component-count-' + componentIndex" v-model.number="component.presentation_count" type="number" min="1" step="1" class="form-control form-control-sm" :aria-describedby="'achievement-component-count-help-' + componentIndex"><small :id="'achievement-component-count-help-' + componentIndex">{{ field('components', 'presentation_count').help }}</small></div>
+                    <div class="achievement-field achievement-field--span-2"><label :for="'achievement-component-name-' + componentIndex">{{ field('components', 'name').label }}</label><input :id="'achievement-component-name-' + componentIndex" v-model="component.name" class="form-control form-control-sm" :aria-describedby="'achievement-component-name-help-' + componentIndex"><small :id="'achievement-component-name-help-' + componentIndex">{{ field('components', 'name').help }}</small></div>
                     <div class="achievement-field achievement-field--span-2"><label :for="'achievement-component-description-' + componentIndex">{{ field('components', 'description').label }}</label><input :id="'achievement-component-description-' + componentIndex" v-model="component.description" class="form-control form-control-sm" :aria-describedby="'achievement-component-description-help-' + componentIndex"><small :id="'achievement-component-description-help-' + componentIndex">{{ field('components', 'description').help }}</small></div>
-                    <div class="achievement-field achievement-field--span-2"><label :for="'achievement-component-description2-' + componentIndex">{{ field('components', 'description_2').label }}</label><input :id="'achievement-component-description2-' + componentIndex" v-model="component.description_2" class="form-control form-control-sm" :aria-describedby="'achievement-component-description2-help-' + componentIndex"><small :id="'achievement-component-description2-help-' + componentIndex">{{ field('components', 'description_2').help }}</small></div>
                   </div>
                   <div v-if="component.component_type === 3" class="achievement-inline-alert achievement-inline-alert--warning"><i class="fa fa-info-circle"></i><span>Type 3 is presentation-only. Any enabled criterion below will prevent publication.</span></div>
                   <div v-if="!component.criteria.length" class="achievement-empty-row achievement-empty-row--compact">No criteria in this component.</div>
@@ -228,15 +228,16 @@
                 <header class="achievement-section-header"><div><h2>Canonical grants</h2><p>These rows are the actual delivered rewards. Selectable options below only group these identities.</p></div><b-button size="sm" variant="outline-warning" :disabled="atLimit('rewards', draft.rewards.length)" data-testid="achievement-add-reward" @click="addReward"><i class="fa fa-plus mr-1"></i>Add grant</b-button></header>
                 <div v-if="!draft.rewards.length" class="achievement-empty-row">No rewards are authored.</div>
                 <article v-for="(reward, rewardIndex) in draft.rewards" :key="'reward-' + rewardIndex" class="achievement-row-card">
-                  <div class="achievement-row-card__title"><strong>Grant {{ reward.reward_id || rewardIndex + 1 }}</strong><div class="achievement-inline-controls"><div role="group" :aria-describedby="'achievement-reward-enabled-help-' + rewardIndex"><eq-checkbox :value="reward.enabled" label-right="Enabled" @input="reward.enabled = $event"></eq-checkbox><span :id="'achievement-reward-enabled-help-' + rewardIndex" class="sr-only">{{ field('rewards', 'enabled').help }}</span></div><b-button size="sm" variant="outline-danger" :disabled="rewardPersisted(reward)" :title="rewardPersisted(reward) ? 'Persisted reward identities must remain; disable the grant instead.' : 'Remove this new grant'" @click="removeReward(rewardIndex)"><i class="fa fa-trash"></i></b-button></div></div>
+                  <div class="achievement-row-card__title"><strong>Grant {{ reward.reward_id || rewardIndex + 1 }}</strong><div class="achievement-inline-controls"><div role="group" :aria-describedby="'achievement-reward-enabled-help-' + rewardIndex"><eq-checkbox :value="reward.enabled" :disabled="rewardCatalogProtected(reward, rewardIndex) ? 1 : 0" label-right="Enabled" @input="reward.enabled = $event"></eq-checkbox><span :id="'achievement-reward-enabled-help-' + rewardIndex" class="sr-only">{{ field('rewards', 'enabled').help }}</span></div><b-button size="sm" variant="outline-danger" :disabled="rewardPersisted(reward)" :title="rewardPersisted(reward) ? 'Persisted reward identities must remain; disable the grant instead.' : 'Remove this new grant'" @click="removeReward(rewardIndex)"><i class="fa fa-trash"></i></b-button></div></div>
+                  <div v-if="rewardCatalogProtected(reward, rewardIndex)" class="achievement-inline-alert achievement-inline-alert--warning"><i class="fa fa-link"></i><span>This grant is mapped by a shared reward set, so its provider-independent catalog fields are read-only here.</span></div>
                   <div class="achievement-form-grid achievement-form-grid--5">
                     <div class="achievement-field"><label :for="'achievement-reward-id-' + rewardIndex">{{ field('rewards', 'reward_id').label }}</label><input :id="'achievement-reward-id-' + rewardIndex" :value="reward.reward_id" type="text" class="form-control form-control-sm" disabled :placeholder="'Allocated on save (' + rewardKey(reward, rewardIndex) + ')'" :aria-describedby="'achievement-reward-id-help-' + rewardIndex"><small :id="'achievement-reward-id-help-' + rewardIndex">{{ field('rewards', 'reward_id').help }}</small></div>
-                    <div class="achievement-field"><label :for="'achievement-reward-sequence-' + rewardIndex">{{ field('rewards', 'sequence').label }}</label><input :id="'achievement-reward-sequence-' + rewardIndex" v-model.number="reward.sequence" type="number" min="0" step="1" class="form-control form-control-sm" :aria-describedby="'achievement-reward-sequence-help-' + rewardIndex"><small :id="'achievement-reward-sequence-help-' + rewardIndex">{{ field('rewards', 'sequence').help }}</small></div>
-                    <div class="achievement-field"><label :for="'achievement-reward-type-' + rewardIndex">{{ field('rewards', 'reward_type').label }}</label><select :id="'achievement-reward-type-' + rewardIndex" v-model.number="reward.reward_type" class="form-control form-control-sm" :aria-describedby="'achievement-reward-type-help-' + rewardIndex"><option v-for="option in enumList('reward_types')" :key="option.value" :value="Number(option.value)">{{ option.value }} — {{ option.label }}</option></select><small :id="'achievement-reward-type-help-' + rewardIndex">{{ selectedHelp('reward_types', reward.reward_type) }}</small></div>
-                    <div class="achievement-field"><achievement-reference-picker :id="'achievement-reward-data-' + rewardIndex" v-model="reward.reward_data_id" :label="field('rewards', 'reward_data_id').label" :help="rewardDataHelp(reward)" :kind="rewardLookup(reward)"></achievement-reference-picker></div>
-                    <div class="achievement-field"><label :for="'achievement-reward-amount-' + rewardIndex">{{ field('rewards', 'amount').label }}</label><input :id="'achievement-reward-amount-' + rewardIndex" v-model="reward.amount" type="number" min="0" step="1" class="form-control form-control-sm" :aria-describedby="'achievement-reward-amount-help-' + rewardIndex"><small :id="'achievement-reward-amount-help-' + rewardIndex">{{ field('rewards', 'amount').help }}</small></div>
-                    <div class="achievement-field achievement-field--span-4"><label :for="'achievement-reward-description-' + rewardIndex">{{ field('rewards', 'description').label }}</label><input :id="'achievement-reward-description-' + rewardIndex" v-model="reward.description" class="form-control form-control-sm" :aria-describedby="'achievement-reward-description-help-' + rewardIndex"><small :id="'achievement-reward-description-help-' + rewardIndex">{{ field('rewards', 'description').help }}</small></div>
-                    <div v-if="draft.reward_set" class="achievement-field"><label :for="'achievement-reward-option-' + rewardIndex">Selectable option</label><select :id="'achievement-reward-option-' + rewardIndex" :value="mappedOption(rewardKey(reward, rewardIndex))" class="form-control form-control-sm" :aria-describedby="'achievement-reward-option-help-' + rewardIndex" @change="setRewardMapping(rewardKey(reward, rewardIndex), $event)"><option value="">Automatic / ungrouped</option><option v-for="option in draft.reward_set.options" :key="option.option_id" :value="String(option.option_id)">#{{ option.option_id }} {{ option.label || '(unnamed option)' }}</option></select><small :id="'achievement-reward-option-help-' + rewardIndex">A canonical reward may map to only one option. New blank IDs use a safe transient @index token resolved transactionally by the server.</small></div>
+                    <div class="achievement-field"><label :for="'achievement-reward-sequence-' + rewardIndex">{{ field('rewards', 'sequence').label }}</label><input :id="'achievement-reward-sequence-' + rewardIndex" v-model.number="reward.sequence" type="number" min="0" step="1" class="form-control form-control-sm" :disabled="rewardCatalogProtected(reward, rewardIndex)" :aria-describedby="'achievement-reward-sequence-help-' + rewardIndex"><small :id="'achievement-reward-sequence-help-' + rewardIndex">{{ field('rewards', 'sequence').help }}</small></div>
+                    <div class="achievement-field"><label :for="'achievement-reward-type-' + rewardIndex">{{ field('rewards', 'reward_type').label }}</label><select :id="'achievement-reward-type-' + rewardIndex" v-model.number="reward.reward_type" class="form-control form-control-sm" :disabled="rewardCatalogProtected(reward, rewardIndex)" :aria-describedby="'achievement-reward-type-help-' + rewardIndex"><option v-for="option in enumList('reward_types')" :key="option.value" :value="Number(option.value)">{{ option.value }} — {{ option.label }}</option></select><small :id="'achievement-reward-type-help-' + rewardIndex">{{ selectedHelp('reward_types', reward.reward_type) }}</small></div>
+                    <div class="achievement-field"><achievement-reference-picker :id="'achievement-reward-data-' + rewardIndex" v-model="reward.reward_data_id" :label="field('rewards', 'reward_data_id').label" :help="rewardDataHelp(reward)" :kind="rewardLookup(reward)" :disabled="rewardCatalogProtected(reward, rewardIndex)"></achievement-reference-picker></div>
+                    <div class="achievement-field"><label :for="'achievement-reward-amount-' + rewardIndex">{{ field('rewards', 'amount').label }}</label><input :id="'achievement-reward-amount-' + rewardIndex" v-model="reward.amount" type="number" min="0" step="1" class="form-control form-control-sm" :disabled="rewardCatalogProtected(reward, rewardIndex)" :aria-describedby="'achievement-reward-amount-help-' + rewardIndex"><small :id="'achievement-reward-amount-help-' + rewardIndex">{{ field('rewards', 'amount').help }}</small></div>
+                    <div class="achievement-field achievement-field--span-4"><label :for="'achievement-reward-description-' + rewardIndex">{{ field('rewards', 'description').label }}</label><input :id="'achievement-reward-description-' + rewardIndex" v-model="reward.description" class="form-control form-control-sm" :disabled="rewardCatalogProtected(reward, rewardIndex)" :aria-describedby="'achievement-reward-description-help-' + rewardIndex"><small :id="'achievement-reward-description-help-' + rewardIndex">{{ field('rewards', 'description').help }}</small></div>
+                    <div v-if="draft.reward_set" class="achievement-field"><label :for="'achievement-reward-option-' + rewardIndex">Selectable option</label><select :id="'achievement-reward-option-' + rewardIndex" :value="mappedOption(rewardKey(reward, rewardIndex))" class="form-control form-control-sm" :disabled="draft.reward_set.shared" :aria-describedby="'achievement-reward-option-help-' + rewardIndex" @change="setRewardMapping(rewardKey(reward, rewardIndex), $event)"><option value="">Automatic / ungrouped</option><option v-for="option in draft.reward_set.options" :key="option.option_id" :value="String(option.option_id)">#{{ option.option_id }} {{ option.label || '(unnamed option)' }}</option></select><small :id="'achievement-reward-option-help-' + rewardIndex">A canonical reward may map to only one option. Its Grant order becomes reward_option_entries.sequence. New blank IDs use a safe transient @index token resolved transactionally by the server.</small></div>
                   </div>
                 </article>
 
@@ -244,13 +245,15 @@
                 <header class="achievement-section-header"><div><h2>Selectable reward set</h2><p>Enable only when the client should choose among mapped canonical grants.</p></div><b-button v-if="!draft.reward_set" size="sm" variant="outline-warning" data-testid="achievement-enable-reward-set" @click="enableRewardSet"><i class="fa fa-plus mr-1"></i>Author set</b-button><b-button v-else size="sm" variant="outline-danger" :disabled="rewardSetPersisted()" :title="rewardSetPersisted() ? 'A persisted reward set is durable; disable it instead.' : 'Remove this new selectable set'" @click="removeRewardSet"><i class="fa fa-trash mr-1"></i>Remove set</b-button></header>
                 <div v-if="!draft.reward_set" class="achievement-empty-row">No selectable reward set is authored. Enabled canonical rewards are delivered automatically.</div>
                 <div v-else class="achievement-reward-set">
+                  <div v-if="draft.reward_set.shared" class="achievement-inline-alert achievement-inline-alert--warning"><i class="fa fa-link"></i><span>This provider-independent set is used by {{ draft.reward_set.source_count }} sources. Catalog fields are protected from edits; only this achievement's source link can be enabled or disabled.</span></div>
                   <div class="achievement-form-grid achievement-form-grid--3">
                     <div class="achievement-field"><label for="achievement-reward-set-id">{{ field('reward_sets', 'reward_set_id').label }}</label><input id="achievement-reward-set-id" v-model.number="draft.reward_set.reward_set_id" type="number" min="1" step="1" class="form-control form-control-sm" :disabled="rewardSetPersisted()" aria-describedby="achievement-reward-set-id-help"><small id="achievement-reward-set-id-help">{{ field('reward_sets', 'reward_set_id').help }}</small></div>
-                    <div class="achievement-field achievement-field--span-2"><label for="achievement-reward-set-title">{{ field('reward_sets', 'title').label }}</label><input id="achievement-reward-set-title" v-model="draft.reward_set.title" class="form-control form-control-sm" aria-describedby="achievement-reward-set-title-help"><small id="achievement-reward-set-title-help">{{ field('reward_sets', 'title').help }}</small></div>
-                    <div class="achievement-field achievement-checkbox-field" role="group" aria-describedby="achievement-reward-set-enabled-help"><span class="achievement-field-label">{{ field('reward_sets', 'enabled').label }}</span><eq-checkbox :value="draft.reward_set.enabled" label-right="Set enabled" @input="draft.reward_set.enabled = $event"></eq-checkbox><small id="achievement-reward-set-enabled-help">{{ field('reward_sets', 'enabled').help }}</small></div>
+                    <div class="achievement-field achievement-field--span-2"><label for="achievement-reward-set-title">{{ field('reward_sets', 'title').label }}</label><input id="achievement-reward-set-title" v-model="draft.reward_set.title" class="form-control form-control-sm" :disabled="draft.reward_set.shared" aria-describedby="achievement-reward-set-title-help"><small id="achievement-reward-set-title-help">{{ field('reward_sets', 'title').help }}</small></div>
+                    <div class="achievement-field achievement-checkbox-field" role="group" aria-describedby="achievement-reward-source-enabled-help"><span class="achievement-field-label">{{ field('reward_sets', 'source_enabled').label }}</span><eq-checkbox :value="draft.reward_set.source_enabled" label-right="Source link enabled" @input="draft.reward_set.source_enabled = $event"></eq-checkbox><small id="achievement-reward-source-enabled-help">{{ field('reward_sets', 'source_enabled').help }}</small></div>
+                    <div class="achievement-field achievement-checkbox-field" role="group" aria-describedby="achievement-reward-set-enabled-help"><span class="achievement-field-label">{{ field('reward_sets', 'enabled').label }}</span><eq-checkbox :value="draft.reward_set.enabled" :disabled="draft.reward_set.shared ? 1 : 0" label-right="Set enabled" @input="draft.reward_set.enabled = $event"></eq-checkbox><small id="achievement-reward-set-enabled-help">{{ field('reward_sets', 'enabled').help }}</small></div>
                   </div>
-                  <header class="achievement-section-header achievement-section-header--sub"><div><h3>Options</h3><p>Every enabled option, including common options, needs an enabled mapped grant.</p></div><b-button size="sm" variant="outline-warning" :disabled="atLimit('options', draft.reward_set.options.length)" data-testid="achievement-add-option" @click="addRewardOption"><i class="fa fa-plus mr-1"></i>Add option</b-button></header>
-                  <article v-for="(option, optionIndex) in draft.reward_set.options" :key="'reward-option-' + optionIndex" class="achievement-row-card">
+                  <header class="achievement-section-header achievement-section-header--sub"><div><h3>Options</h3><p>Every enabled option, including common options, needs an enabled mapped grant.</p></div><b-button size="sm" variant="outline-warning" :disabled="draft.reward_set.shared || atLimit('options', draft.reward_set.options.length)" data-testid="achievement-add-option" @click="addRewardOption"><i class="fa fa-plus mr-1"></i>Add option</b-button></header>
+                  <fieldset v-for="(option, optionIndex) in draft.reward_set.options" :key="'reward-option-' + optionIndex" :disabled="draft.reward_set.shared" class="achievement-recovery-fieldset"><article class="achievement-row-card">
                     <div class="achievement-row-card__title"><strong>Option {{ option.option_id || optionIndex + 1 }}</strong><b-button size="sm" variant="outline-danger" :disabled="rewardOptionPersisted(option)" :title="rewardOptionPersisted(option) ? 'Persisted option identities must remain; disable the option instead.' : 'Remove this new option'" @click="removeRewardOption(optionIndex)"><i class="fa fa-trash"></i></b-button></div>
                     <div class="achievement-form-grid achievement-form-grid--5">
                       <div class="achievement-field"><label :for="'achievement-option-id-' + optionIndex">{{ field('reward_options', 'option_id').label }}</label><input :id="'achievement-option-id-' + optionIndex" v-model.number="option.option_id" type="number" min="1" step="1" class="form-control form-control-sm" :disabled="rewardOptionPersisted(option)" :aria-describedby="'achievement-option-id-help-' + optionIndex"><small :id="'achievement-option-id-help-' + optionIndex">{{ field('reward_options', 'option_id').help }}</small></div>
@@ -261,21 +264,21 @@
                       <div class="achievement-field achievement-checkbox-field" role="group" :aria-describedby="'achievement-option-enabled-help-' + optionIndex"><span class="achievement-field-label">{{ field('reward_options', 'enabled').label }}</span><eq-checkbox :value="option.enabled" label-right="Option enabled" @input="option.enabled = $event"></eq-checkbox><small :id="'achievement-option-enabled-help-' + optionIndex">{{ field('reward_options', 'enabled').help }}</small></div>
                     </div>
                     <div class="achievement-option-grants"><strong>Mapped grants:</strong><span v-if="!optionGrantLabels(option.option_id).length">none</span><span v-for="label in optionGrantLabels(option.option_id)" :key="label" class="achievement-status-pill">{{ label }}</span></div>
-                  </article>
+                  </article></fieldset>
                 </div>
               </section>
             </eq-tab>
 
-            <eq-tab name="Cast Restrictions">
-              <section class="achievement-tab" data-testid="achievement-tab-restrictions">
-                <header class="achievement-section-header"><div><h2>Spell cast restrictions</h2><p>Expose achievement completion state to existing spell restriction numbers.</p></div><b-button size="sm" variant="outline-warning" :disabled="atLimit('restrictions', draft.restrictions.length)" data-testid="achievement-add-restriction" @click="addRestriction"><i class="fa fa-plus mr-1"></i>Add restriction</b-button></header>
+            <eq-tab name="Cast Requirements">
+              <section class="achievement-tab" data-testid="achievement-tab-requirements">
+                <header class="achievement-section-header"><div><h2>Spell cast requirements</h2><p>Expose achievement completion state to existing spell restriction numbers.</p></div><b-button size="sm" variant="outline-warning" :disabled="atLimit('requirements', draft.requirements.length)" data-testid="achievement-add-restriction" @click="addRestriction"><i class="fa fa-plus mr-1"></i>Add restriction</b-button></header>
                 <div class="achievement-inline-alert achievement-inline-alert--info"><i class="fa fa-info-circle"></i><span>All applicable rows sharing a restriction ID must pass. Verify the restriction number in server spell logic before publishing.</span></div>
-                <div v-if="!draft.restrictions.length" class="achievement-empty-row">No cast restrictions reference this definition.</div>
-                <article v-for="(restriction, index) in draft.restrictions" :key="'restriction-' + index" class="achievement-row-card">
-                  <div class="achievement-row-card__title"><strong>Restriction {{ index + 1 }}</strong><b-button size="sm" variant="outline-danger" @click="removeRow(draft.restrictions, index)"><i class="fa fa-trash"></i></b-button></div>
+                <div v-if="!draft.requirements.length" class="achievement-empty-row">No cast requirements reference this definition.</div>
+                <article v-for="(restriction, index) in draft.requirements" :key="'restriction-' + index" class="achievement-row-card">
+                  <div class="achievement-row-card__title"><strong>Restriction {{ index + 1 }}</strong><b-button size="sm" variant="outline-danger" @click="removeRow(draft.requirements, index)"><i class="fa fa-trash"></i></b-button></div>
                   <div class="achievement-form-grid achievement-form-grid--2">
-                    <achievement-reference-picker :id="'achievement-restriction-' + index" v-model="restriction.restriction_id" :label="field('restrictions', 'restriction_id').label" :help="field('restrictions', 'restriction_id').help" kind=""></achievement-reference-picker>
-                    <div class="achievement-field achievement-checkbox-field" role="group" :aria-describedby="'achievement-restriction-state-help-' + index"><span class="achievement-field-label">{{ field('restrictions', 'requires_completed').label }}</span><eq-checkbox :value="restriction.requires_completed" :label-right="restriction.requires_completed ? 'Must be completed' : 'Must be incomplete'" @input="restriction.requires_completed = $event"></eq-checkbox><small :id="'achievement-restriction-state-help-' + index">{{ field('restrictions', 'requires_completed').help }}</small></div>
+                    <achievement-reference-picker :id="'achievement-restriction-' + index" v-model="restriction.restriction_id" :label="field('requirements', 'restriction_id').label" :help="field('requirements', 'restriction_id').help" kind=""></achievement-reference-picker>
+                    <div class="achievement-field achievement-checkbox-field" role="group" :aria-describedby="'achievement-restriction-state-help-' + index"><span class="achievement-field-label">{{ field('requirements', 'requires_completed').label }}</span><eq-checkbox :value="restriction.requires_completed" :label-right="restriction.requires_completed ? 'Must be completed' : 'Must be incomplete'" @input="restriction.requires_completed = $event"></eq-checkbox><small :id="'achievement-restriction-state-help-' + index">{{ field('requirements', 'requires_completed').help }}</small></div>
                   </div>
                 </article>
               </section>
@@ -450,14 +453,17 @@
         return this.schema.ready !== false && (!this.schema.content || this.schema.content.ready !== false)
       },
       schemaIssues (): any[] { return (this.schema && this.schema.content && this.schema.content.issues) || (this.schema && this.schema.issues) || [] },
+      schemaGuidance (): string {
+        return (this.schema && this.schema.guidance) || 'Install EQEmu database update 9329 for the final achievement content schema. Rewritten CREATE migrations do not alter tables created by an older draft.'
+      },
       totalPages (): number { return Math.max(1, Math.ceil(this.totalDefinitions / Number(this.filters.limit || 25))) },
       dirty (): boolean { return !!this.draft && definitionSnapshot(this.draft) !== this.baseline },
       categoryDirty (): boolean { return !!this.categoryDraft && JSON.stringify(this.categoryDraft) !== this.categoryBaseline },
       clientValidation (): any[] {
         const issues = this.draft ? validateDefinition(this.draft, this.metadata) : []
         const baseline = this.baselineDefinition()
-        if (!this.creating && this.draft && this.baseline && baseline && runtimePolicySnapshot(this.draft) !== runtimePolicySnapshot(baseline) && Number(this.draft.definition_version) <= Number(this.expectedVersion)) {
-          issues.push({ path: 'general.definition_version', message: 'Runtime evaluation or reward policy changed. Increment the definition version so deployed character state is not silently reinterpreted.', level: 'error' })
+        if (!this.creating && this.draft && this.baseline && baseline && runtimePolicySnapshot(this.draft) !== runtimePolicySnapshot(baseline) && Number(this.draft.version) <= Number(this.expectedVersion)) {
+          issues.push({ path: 'general.version', message: 'Runtime evaluation or reward policy changed. Increment the definition version so deployed character state is not silently reinterpreted.', level: 'error' })
         }
         return issues
       },
@@ -591,7 +597,7 @@
           this.draft = normalizeDefinition(payload)
           this.selectedID = Number(this.draft.id)
           this.creating = false
-          this.expectedVersion = Number(this.draft.definition_version)
+          this.expectedVersion = Number(this.draft.version)
           this.expectedRevision = String(payload.revision || '')
           this.serverValidation = this.validationRows(payload.validation)
           this.serverValidationBaseline = definitionSnapshot(this.draft)
@@ -637,7 +643,7 @@
           if (this.creating) graph.enabled = false
           const body: any = { definition: graph, reason: this.auditReason.trim() }
           if (!this.creating) {
-            body.expected_definition_version = this.expectedVersion
+            body.expected_version = this.expectedVersion
             body.expected_revision = this.expectedRevision
           }
           const response = this.creating
@@ -647,7 +653,7 @@
           this.draft = normalizeDefinition(payload.definition || payload.graph || payload)
           this.selectedID = Number(this.draft.id)
           this.creating = false
-          this.expectedVersion = Number(this.draft.definition_version)
+          this.expectedVersion = Number(this.draft.version)
           this.expectedRevision = String(payload.revision || '')
           this.serverValidation = this.validationRows(payload.validation)
           this.serverValidationBaseline = definitionSnapshot(this.draft)
@@ -673,7 +679,7 @@
       addComponent () { if (!this.atLimit('components', this.draft.components.length)) this.draft.components.push(emptyComponent(this.nextSequence(this.draft.components))) },
       addCriterion (component: any) { if (!component.recovery_only && this.totalCriteria < this.limit('criteria')) component.criteria.push(emptyCriterion()) },
       addReward () { if (!this.atLimit('rewards', this.draft.rewards.length)) this.draft.rewards.push(emptyReward(this.nextSequence(this.draft.rewards))) },
-      addRestriction () { if (!this.atLimit('restrictions', this.draft.restrictions.length)) this.draft.restrictions.push({ restriction_id: 0, requires_completed: true }) },
+      addRestriction () { if (!this.atLimit('requirements', this.draft.requirements.length)) this.draft.requirements.push({ restriction_id: 0, requires_completed: true }) },
       baselineDefinition (): any { try { return this.baseline ? JSON.parse(this.baseline) : emptyDefinition(0) } catch (error) { return emptyDefinition(0) } },
       componentPersisted (component: any): boolean { return this.baselineDefinition().components.some((row: any) => Number(row.component_type) === Number(component.component_type) && Number(row.component_id) === Number(component.component_id)) },
       recoveryLocked (component: any): boolean { return Boolean(component.recovery_only && component.recovery_action !== 'restore') },
@@ -686,6 +692,9 @@
         this.$set(component, 'recovery_action', action)
       },
       rewardPersisted (reward: any): boolean { return !!reward.reward_id && this.baselineDefinition().rewards.some((row: any) => String(row.reward_id) === String(reward.reward_id)) },
+      rewardCatalogProtected (reward: any, index: number): boolean {
+        return Boolean(this.draft && this.draft.reward_set && this.draft.reward_set.shared && this.mappedOption(this.rewardKey(reward, index)))
+      },
       rewardSetPersisted (): boolean { return !!this.baselineDefinition().reward_set },
       rewardOptionPersisted (option: any): boolean { const set = this.baselineDefinition().reward_set; return !!set && set.options.some((row: any) => Number(row.option_id) === Number(option.option_id)) },
       removeComponent (index: number) { if (!this.draft.components[index].recovery_only && !this.componentPersisted(this.draft.components[index])) this.draft.components.splice(index, 1) },
@@ -703,7 +712,7 @@
           })
         }
       },
-      enableRewardSet () { this.$set(this.draft, 'reward_set', { reward_set_id: 0, title: this.draft.name, enabled: false, options: [], mappings: [] }) },
+      enableRewardSet () { this.$set(this.draft, 'reward_set', { reward_set_id: 0, title: this.draft.name, enabled: false, source_enabled: false, shared: false, source_count: 1, options: [], mappings: [] }) },
       removeRewardSet () { if (!this.rewardSetPersisted() && window.confirm('Remove the selectable set and all option mappings? Canonical rewards will remain.')) this.$set(this.draft, 'reward_set', null) },
       addRewardOption () { if (this.draft.reward_set && !this.atLimit('options', this.draft.reward_set.options.length)) this.draft.reward_set.options.push(emptyRewardOption(this.nextNumericID(this.draft.reward_set.options, 'option_id'))) },
       removeRewardOption (index: number) {
@@ -721,7 +730,11 @@
       setRewardMapping (rewardID: any, event: any) {
         if (!this.draft.reward_set) return
         this.draft.reward_set.mappings = this.draft.reward_set.mappings.filter((row: any) => String(row.reward_id) !== String(rewardID))
-        if (event.target.value !== '') this.draft.reward_set.mappings.push({ option_id: Number(event.target.value), reward_id: String(rewardID) })
+        if (event.target.value !== '') {
+          const token = String(rewardID)
+          const reward = token.charAt(0) === '@' ? this.draft.rewards[Number(token.slice(1))] : this.draft.rewards.find((row: any) => String(row.reward_id) === token)
+          this.draft.reward_set.mappings.push({ option_id: Number(event.target.value), sequence: Number(reward && reward.sequence) || 0, reward_id: token })
+        }
       },
       optionGrantLabels (optionID: any): string[] {
         if (!this.draft.reward_set) return []

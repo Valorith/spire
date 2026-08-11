@@ -70,21 +70,21 @@ func achievementEditorContentSchemaSpec() map[string]achievementEditorSchemaTabl
 	)
 	criteriaShapes["id"] = achievementEditorSchemaColumnShape{BaseType: "bigint", Unsigned: true, NotNull: true, AutoIncrement: true}
 	rewardShapes := achievementEditorMergeColumnShapes(
-		achievementEditorUnsignedColumnShapes("bigint", "reward_id", "amount"),
-		achievementEditorUnsignedColumnShapes("int", "achievement_id", "sequence", "reward_data_id"),
+		achievementEditorUnsignedColumnShapes("int", "reward_id", "reward_data_id"),
+		achievementEditorUnsignedColumnShapes("bigint", "amount"),
 		achievementEditorUnsignedColumnShapes("tinyint", "reward_type", "enabled"),
 	)
-	rewardShapes["reward_id"] = achievementEditorSchemaColumnShape{BaseType: "bigint", Unsigned: true, NotNull: true, AutoIncrement: true}
+	rewardShapes["reward_id"] = achievementEditorSchemaColumnShape{BaseType: "int", Unsigned: true, NotNull: true, AutoIncrement: true}
 	return map[string]achievementEditorSchemaTableSpec{
 		"achievement_categories": {
 			Columns: []string{"id", "parent_id", "sequence", "name", "description", "icon"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"id"}, true}}, Shapes: achievementEditorUnsignedColumnShapes("int", "id", "parent_id", "sequence"), Engine: true,
 		},
 		"achievements": {
-			Columns: []string{"id", "name", "description", "icon_id", "points", "reward_display", "world_display_flag", "definition_version", "reset_on_version_change", "enabled"},
+			Columns: []string{"id", "name", "description", "icon_id", "points", "has_reward", "client_flag", "version", "reset_on_version_change", "enabled"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
-				achievementEditorUnsignedColumnShapes("int", "id", "icon_id", "points", "reward_display", "definition_version"),
-				achievementEditorUnsignedColumnShapes("tinyint", "world_display_flag", "reset_on_version_change", "enabled"),
+				achievementEditorUnsignedColumnShapes("int", "id", "icon_id", "points", "version"),
+				achievementEditorUnsignedColumnShapes("tinyint", "has_reward", "client_flag", "reset_on_version_change", "enabled"),
 			), Engine: true,
 		},
 		"achievement_category_associations": {
@@ -92,13 +92,13 @@ func achievementEditorContentSchemaSpec() map[string]achievementEditorSchemaTabl
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"category_id", "achievement_id"}, true}}, Shapes: achievementEditorUnsignedColumnShapes("int", "category_id", "sequence", "achievement_id"), Engine: true,
 		},
 		"achievement_components": {
-			Columns: []string{"achievement_id", "component_type", "sequence", "component_id", "description", "description_2"},
+			Columns: []string{"achievement_id", "component_type", "sequence", "component_id", "name", "description"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"achievement_id", "component_type", "component_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
 				achievementEditorUnsignedColumnShapes("int", "achievement_id", "sequence", "component_id"),
 				achievementEditorUnsignedColumnShapes("tinyint", "component_type"),
 			), Engine: true,
 		},
-		"achievement_component_counts": {
+		"achievement_associations": {
 			Columns: []string{"component_id", "required_count"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"component_id"}, true}}, Shapes: achievementEditorUnsignedColumnShapes("int", "component_id", "required_count"), Engine: true,
 		},
@@ -109,61 +109,80 @@ func achievementEditorContentSchemaSpec() map[string]achievementEditorSchemaTabl
 				{[]string{"achievement_id", "component_type", "component_id", "event_type", "target_id", "target_id2"}, true},
 			}, Shapes: criteriaShapes, Engine: true,
 		},
-		"achievement_rewards": {
-			Columns: []string{"reward_id", "achievement_id", "sequence", "reward_type", "reward_data_id", "amount", "description", "enabled"},
-			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"reward_id"}, true}, {[]string{"achievement_id", "sequence"}, true}}, Shapes: rewardShapes, Engine: true,
+		"rewards": {
+			Columns: []string{"reward_id", "reward_type", "reward_data_id", "amount", "description", "enabled"},
+			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"reward_id"}, true}}, Shapes: rewardShapes, Engine: true,
 		},
-		"achievement_cast_restrictions": {
+		"achievement_cast_requirements": {
 			Columns: []string{"restriction_id", "achievement_id", "requires_completed"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"restriction_id", "achievement_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
 				achievementEditorUnsignedColumnShapes("int", "restriction_id", "achievement_id"),
 				achievementEditorUnsignedColumnShapes("tinyint", "requires_completed"),
 			), Engine: true,
 		},
-		"achievement_reward_sets": {
-			Columns: []string{"reward_set_id", "achievement_id", "title", "enabled"},
-			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"reward_set_id"}, true}, {[]string{"achievement_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
-				achievementEditorUnsignedColumnShapes("int", "reward_set_id", "achievement_id"),
+		"reward_sets": {
+			Columns: []string{"reward_set_id", "title", "enabled"},
+			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"reward_set_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
+				achievementEditorUnsignedColumnShapes("int", "reward_set_id"),
 				achievementEditorUnsignedColumnShapes("tinyint", "enabled"),
 			), Engine: true,
 		},
-		"achievement_reward_options": {
+		"reward_options": {
 			Columns: []string{"reward_set_id", "option_id", "sequence", "label", "common_to_all", "flags", "enabled"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"reward_set_id", "option_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
 				achievementEditorUnsignedColumnShapes("int", "reward_set_id", "option_id", "sequence"),
 				achievementEditorUnsignedColumnShapes("tinyint", "common_to_all", "flags", "enabled"),
 			), Engine: true,
 		},
-		"achievement_reward_option_entries": {
-			Columns: []string{"reward_set_id", "option_id", "reward_id"},
-			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"reward_set_id", "option_id", "reward_id"}, true}, {[]string{"reward_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
-				achievementEditorUnsignedColumnShapes("int", "reward_set_id", "option_id"),
-				achievementEditorUnsignedColumnShapes("bigint", "reward_id"),
+		"reward_option_entries": {
+			Columns: []string{"reward_set_id", "option_id", "sequence", "reward_id"},
+			Indexes: []achievementEditorSchemaIndexSpec{
+				{[]string{"reward_set_id", "option_id", "reward_id"}, true},
+				{[]string{"reward_set_id", "reward_id"}, true},
+			}, Shapes: achievementEditorUnsignedColumnShapes("int", "reward_set_id", "option_id", "sequence", "reward_id"), Engine: true,
+		},
+		"reward_sources": {
+			Columns: []string{"source_type", "source_id", "reward_set_id", "enabled"},
+			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"source_type", "source_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
+				achievementEditorUnsignedColumnShapes("tinyint", "source_type", "enabled"),
+				achievementEditorUnsignedColumnShapes("bigint", "source_id"),
+				achievementEditorUnsignedColumnShapes("int", "reward_set_id"),
+			), Engine: true,
+		},
+		"reward_source_entries": {
+			Columns: []string{"source_type", "source_id", "sequence", "reward_id"},
+			Indexes: []achievementEditorSchemaIndexSpec{
+				{[]string{"source_type", "source_id", "reward_id"}, true},
+				{[]string{"source_type", "source_id", "sequence"}, true},
+			}, Shapes: achievementEditorMergeColumnShapes(
+				achievementEditorUnsignedColumnShapes("tinyint", "source_type"),
+				achievementEditorUnsignedColumnShapes("bigint", "source_id"),
+				achievementEditorUnsignedColumnShapes("int", "sequence", "reward_id"),
 			), Engine: true,
 		},
 	}
 }
 
 func achievementEditorCharacterSchemaSpec() map[string]achievementEditorSchemaTableSpec {
-	mutationShapes := achievementEditorMergeColumnShapes(
-		achievementEditorUnsignedColumnShapes("bigint", "mutation_id", "source_target_id"),
-		achievementEditorUnsignedColumnShapes("int", "character_id", "achievement_id", "component_id", "requested_value", "definition_version", "attempt_count", "created_at", "last_attempt_at"),
+	updateShapes := achievementEditorMergeColumnShapes(
+		achievementEditorUnsignedColumnShapes("bigint", "update_id", "source_target_id"),
+		achievementEditorUnsignedColumnShapes("int", "character_id", "achievement_id", "component_id", "requested_value", "version", "attempt_count", "created_at", "last_attempt_at"),
 		achievementEditorUnsignedColumnShapes("tinyint", "source_target_type", "operation", "component_type", "status"),
 	)
-	mutationShapes["mutation_id"] = achievementEditorSchemaColumnShape{BaseType: "bigint", Unsigned: true, NotNull: true, AutoIncrement: true}
+	updateShapes["update_id"] = achievementEditorSchemaColumnShape{BaseType: "bigint", Unsigned: true, NotNull: true, AutoIncrement: true}
 	return map[string]achievementEditorSchemaTableSpec{
 		"character_data": {
 			Columns: []string{"id", "account_id", "name", "level", "class", "ingame", "last_login", "deleted_at"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"id"}, true}}, Engine: true,
 		},
 		"character_achievements": {
-			Columns: []string{"character_id", "achievement_id", "definition_version", "completed_at"},
-			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"character_id", "achievement_id"}, true}}, Shapes: achievementEditorUnsignedColumnShapes("int", "character_id", "achievement_id", "definition_version", "completed_at"), Engine: true,
+			Columns: []string{"character_id", "achievement_id", "version", "completed_at"},
+			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"character_id", "achievement_id"}, true}}, Shapes: achievementEditorUnsignedColumnShapes("int", "character_id", "achievement_id", "version", "completed_at"), Engine: true,
 		},
 		"character_achievement_progress": {
-			Columns: []string{"character_id", "achievement_id", "component_type", "component_sequence", "component_id", "current_count", "completed", "definition_version", "updated_at"},
+			Columns: []string{"character_id", "achievement_id", "component_type", "component_sequence", "component_id", "current_count", "completed", "version", "updated_at"},
 			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"character_id", "achievement_id", "component_type", "component_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
-				achievementEditorUnsignedColumnShapes("int", "character_id", "achievement_id", "component_sequence", "component_id", "definition_version", "updated_at"),
+				achievementEditorUnsignedColumnShapes("int", "character_id", "achievement_id", "component_sequence", "component_id", "version", "updated_at"),
 				achievementEditorUnsignedColumnShapes("bigint", "current_count"),
 				achievementEditorUnsignedColumnShapes("tinyint", "component_type", "completed"),
 			), Engine: true,
@@ -178,18 +197,21 @@ func achievementEditorCharacterSchemaSpec() map[string]achievementEditorSchemaTa
 		},
 		"character_achievement_reward_selections": {
 			Columns: []string{"character_id", "achievement_id", "reward_set_id", "selected_option_id", "status", "attempt_count", "claimed_at", "last_attempt_at", "last_error"},
-			Indexes: []achievementEditorSchemaIndexSpec{{[]string{"character_id", "achievement_id", "reward_set_id"}, true}}, Shapes: achievementEditorMergeColumnShapes(
+			Indexes: []achievementEditorSchemaIndexSpec{
+				{[]string{"character_id", "achievement_id", "reward_set_id"}, true},
+				{[]string{"status", "character_id"}, false},
+			}, Shapes: achievementEditorMergeColumnShapes(
 				achievementEditorUnsignedColumnShapes("int", "character_id", "achievement_id", "reward_set_id", "selected_option_id", "attempt_count", "claimed_at", "last_attempt_at"),
 				achievementEditorUnsignedColumnShapes("tinyint", "status"),
 			), Engine: true,
 		},
-		"character_achievement_pending_mutations": {
-			Columns: []string{"mutation_id", "character_id", "source_target_type", "source_target_id", "operation", "achievement_id", "component_type", "component_id", "requested_value", "definition_version", "status", "attempt_count", "created_at", "last_attempt_at", "last_error"},
+		"character_achievement_pending_updates": {
+			Columns: []string{"update_id", "character_id", "source_target_type", "source_target_id", "operation", "achievement_id", "component_type", "component_id", "requested_value", "version", "status", "attempt_count", "created_at", "last_attempt_at", "last_error"},
 			Indexes: []achievementEditorSchemaIndexSpec{
-				{[]string{"mutation_id"}, true},
-				{[]string{"character_id", "status", "mutation_id"}, false},
+				{[]string{"update_id"}, true},
+				{[]string{"character_id", "status", "update_id"}, false},
 				{[]string{"status", "character_id"}, false},
-			}, Shapes: mutationShapes, Engine: true,
+			}, Shapes: updateShapes, Engine: true,
 		},
 	}
 }

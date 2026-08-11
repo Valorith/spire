@@ -16,7 +16,7 @@ func TestAchievementEditorReasonCountsUnicodeCharacters(t *testing.T) {
 	}
 }
 
-func TestAchievementEditorMutationRoutesUseExplicitNonPostVerbs(t *testing.T) {
+func TestAchievementEditorUpdateRoutesUseExplicitNonPostVerbs(t *testing.T) {
 	want := map[string]struct{}{
 		http.MethodPut + " achievement-editor/definition":                                {},
 		http.MethodPatch + " achievement-editor/definition/:id":                          {},
@@ -30,8 +30,8 @@ func TestAchievementEditorMutationRoutesUseExplicitNonPostVerbs(t *testing.T) {
 		http.MethodPatch + " character-achievement-editor/character/:id/reset":           {},
 		http.MethodPatch + " character-achievement-editor/character/:id/reward/retry":    {},
 		http.MethodPatch + " character-achievement-editor/character/:id/selection/retry": {},
-		http.MethodPatch + " character-achievement-editor/character/:id/mutation/retry":  {},
-		http.MethodDelete + " character-achievement-editor/character/:id/mutation":       {},
+		http.MethodPatch + " character-achievement-editor/character/:id/update/retry":    {},
+		http.MethodDelete + " character-achievement-editor/character/:id/update":         {},
 	}
 	seen := make(map[string]bool, len(want))
 	for _, route := range (&AchievementEditorController{}).Routes() {
@@ -44,26 +44,39 @@ func TestAchievementEditorMutationRoutesUseExplicitNonPostVerbs(t *testing.T) {
 		if _, found := want[key]; found {
 			seen[key] = true
 			if len(route.Middlewares()) == 0 {
-				t.Errorf("mutation route %s has no request body limit", key)
+				t.Errorf("update route %s has no request body limit", key)
 			}
 		}
 	}
 	for key := range want {
 		if !seen[key] {
-			t.Errorf("missing mutation route %s", key)
+			t.Errorf("missing update route %s", key)
 		}
 	}
 }
 
 func TestAchievementEditorRequestGraphAcceptsDefinitionAndLegacyGraphShapes(t *testing.T) {
 	legacy := achievementEditorGraph{ID: 10, Name: "Legacy graph"}
-	if got := achievementEditorRequestGraph(achievementEditorGraphMutationRequest{Graph: legacy}); got.ID != legacy.ID {
+	if got := achievementEditorRequestGraph(achievementEditorGraphUpdateRequest{Graph: legacy}); got.ID != legacy.ID {
 		t.Fatalf("legacy graph ID = %d, want %d", got.ID, legacy.ID)
 	}
 	definition := achievementEditorGraph{ID: 11, Name: "Definition graph"}
-	got := achievementEditorRequestGraph(achievementEditorGraphMutationRequest{Graph: legacy, Definition: &definition})
+	got := achievementEditorRequestGraph(achievementEditorGraphUpdateRequest{Graph: legacy, Definition: &definition})
 	if got.ID != definition.ID || got.Name != definition.Name {
 		t.Fatalf("definition graph = %+v, want %+v", got, definition)
+	}
+}
+
+func TestAchievementEditorDefinitionMutationSchemaScopeFailsClosedBeforeDurableIdentityChecks(t *testing.T) {
+	for _, operation := range []string{"create", "clone"} {
+		if !achievementEditorDefinitionMutationUsesCharacterSchema(operation) {
+			t.Fatalf("%s must require the combined content and character schema before durable ID checks", operation)
+		}
+	}
+	for _, operation := range []string{"update", "delete"} {
+		if achievementEditorDefinitionMutationUsesCharacterSchema(operation) {
+			t.Fatalf("%s unexpectedly requires character schema despite not checking durable identity reuse", operation)
+		}
 	}
 }
 
@@ -90,7 +103,7 @@ func TestAchievementEditorMetadataUsesCanonicalSkillsAndCompleteHelp(t *testing.
 	if metadata.Events[12].Lookup != "npc-name" {
 		t.Fatalf("NPC Name Kill lookup = %q, want npc-name", metadata.Events[12].Lookup)
 	}
-	for _, key := range []string{"payload_bytes", "text_bytes", "associations", "components", "criteria", "rewards", "restrictions", "options", "mappings"} {
+	for _, key := range []string{"payload_bytes", "text_bytes", "associations", "components", "criteria", "rewards", "requirements", "options", "mappings"} {
 		if strings.TrimSpace(metadata.Limits[key]) == "" {
 			t.Errorf("frontend limit %q is missing", key)
 		}
@@ -100,11 +113,11 @@ func TestAchievementEditorMetadataUsesCanonicalSkillsAndCompleteHelp(t *testing.
 	}
 	for _, table := range []string{
 		"achievement_categories", "achievements", "achievement_category_associations",
-		"achievement_components", "achievement_component_counts", "achievement_criteria",
-		"achievement_rewards", "achievement_cast_restrictions", "achievement_reward_sets",
-		"achievement_reward_options", "achievement_reward_option_entries",
+		"achievement_components", "achievement_associations", "achievement_criteria",
+		"rewards", "achievement_cast_requirements", "reward_sets",
+		"reward_options", "reward_option_entries", "reward_sources", "reward_source_entries",
 		"character_achievements", "character_achievement_progress", "character_achievement_rewards",
-		"character_achievement_reward_selections", "character_achievement_pending_mutations",
+		"character_achievement_reward_selections", "character_achievement_pending_updates",
 	} {
 		fields, found := metadata.Fields[table]
 		if !found || len(fields) == 0 {
@@ -118,8 +131,8 @@ func TestAchievementEditorMetadataUsesCanonicalSkillsAndCompleteHelp(t *testing.
 	}
 	for _, field := range []achievementEditorFieldHelp{
 		metadata.Fields["achievements"]["description"],
+		metadata.Fields["achievement_components"]["name"],
 		metadata.Fields["achievement_components"]["description"],
-		metadata.Fields["achievement_components"]["description_2"],
 	} {
 		if !strings.Contains(field.Help, "65,535 UTF-8 bytes") {
 			t.Errorf("TEXT field help does not explain the byte limit: %+v", field)
@@ -151,13 +164,18 @@ func TestValidateAchievementEditorGraphAcceptsSafeGraph(t *testing.T) {
 	if !result.Valid() {
 		t.Fatalf("valid graph findings = %+v", result.Findings)
 	}
+	graph.Version = 0
+	result = validateAchievementEditorGraph(graph, validAchievementEditorContext())
+	if !result.Valid() {
+		t.Fatalf("valid version-zero graph findings = %+v", result.Findings)
+	}
 }
 
 func TestValidateAchievementEditorGraphBoundsTextColumnsByUTF8Bytes(t *testing.T) {
 	graph := validAchievementEditorGraph()
 	graph.Description = strings.Repeat("a", achievementEditorTextMaxBytes)
-	graph.Components[0].Description = strings.Repeat("b", achievementEditorTextMaxBytes)
-	graph.Components[0].Description2 = strings.Repeat("c", achievementEditorTextMaxBytes)
+	graph.Components[0].Name = strings.Repeat("b", achievementEditorTextMaxBytes)
+	graph.Components[0].Description = strings.Repeat("c", achievementEditorTextMaxBytes)
 	if result := validateAchievementEditorGraph(graph, validAchievementEditorContext()); !result.Valid() {
 		t.Fatalf("exact MySQL TEXT byte boundaries were rejected: %+v", result.Findings)
 	}
@@ -168,12 +186,12 @@ func TestValidateAchievementEditorGraphBoundsTextColumnsByUTF8Bytes(t *testing.T
 	assertAchievementFinding(t, validateAchievementEditorGraph(graph, validAchievementEditorContext()), "description", "65,535 UTF-8 bytes")
 
 	graph = validAchievementEditorGraph()
-	graph.Components[0].Description = oversized
-	assertAchievementFinding(t, validateAchievementEditorGraph(graph, validAchievementEditorContext()), "components.0.description", "65,535 UTF-8 bytes")
+	graph.Components[0].Name = oversized
+	assertAchievementFinding(t, validateAchievementEditorGraph(graph, validAchievementEditorContext()), "components.0.name", "65,535 UTF-8 bytes")
 
 	graph = validAchievementEditorGraph()
-	graph.Components[0].Description2 = oversized
-	assertAchievementFinding(t, validateAchievementEditorGraph(graph, validAchievementEditorContext()), "components.0.description_2", "65,535 UTF-8 bytes")
+	graph.Components[0].Description = oversized
+	assertAchievementFinding(t, validateAchievementEditorGraph(graph, validAchievementEditorContext()), "components.0.description", "65,535 UTF-8 bytes")
 }
 
 func TestValidateAchievementEditorGraphRequiresExplicitOrphanRecovery(t *testing.T) {
@@ -304,12 +322,12 @@ func TestValidateAchievementEditorGraphEnforcesLimitsAndRequiredCollections(t *t
 	graph.Associations = make([]achievementEditorAssociation, achievementEditorMaxAssociations+1)
 	graph.Components = nil
 	graph.Rewards = nil
-	graph.Restrictions = nil
+	graph.Requirements = nil
 	result := validateAchievementEditorGraph(graph, validAchievementEditorContext())
 	assertAchievementFinding(t, result, "associations", "at most")
 	assertAchievementFinding(t, result, "components", "supplied as a list")
 	assertAchievementFinding(t, result, "rewards", "supplied as a list")
-	assertAchievementFinding(t, result, "restrictions", "supplied as a list")
+	assertAchievementFinding(t, result, "requirements", "supplied as a list")
 }
 
 func TestValidateAchievementEditorGraphRejectsUnsafeEventPolicies(t *testing.T) {
@@ -667,8 +685,9 @@ func TestValidateAchievementEditorRewardsRequireSelectableGrants(t *testing.T) {
 	graph := validAchievementEditorGraph()
 	graph.Rewards = []achievementEditorReward{{RewardID: "600", Sequence: 1, RewardType: 0, RewardDataID: 1001, Amount: "1", Enabled: true}}
 	graph.RewardSet = &achievementEditorRewardSet{
-		RewardSetID: 50,
-		Enabled:     true,
+		RewardSetID:   50,
+		Enabled:       true,
+		SourceEnabled: true,
 		Options: []achievementEditorRewardOption{
 			{OptionID: 1, Sequence: 1, Label: "All choices", CommonToAll: true, Enabled: true},
 			{OptionID: 2, Sequence: 2, Label: "Choice", Enabled: true},
@@ -690,6 +709,30 @@ func TestValidateAchievementEditorRewardsRequireSelectableGrants(t *testing.T) {
 	}
 }
 
+func TestAchievementEditorSharedSetCatalogComparisonSeparatesSourceAndSetEnablement(t *testing.T) {
+	persisted := achievementEditorRewardSet{
+		RewardSetID: 50, Title: "Shared choice", Enabled: true, SourceEnabled: true,
+		Options:  []achievementEditorRewardOption{{OptionID: 1, Sequence: 1, Enabled: true}},
+		Mappings: []achievementEditorRewardMapping{{OptionID: 1, Sequence: 10, RewardID: "600"}},
+	}
+	submitted := persisted
+	submitted.SourceEnabled = false
+	if !achievementEditorRewardSetCatalogEqual(persisted, submitted) {
+		t.Fatal("changing only this achievement's reward_sources.enabled link was treated as a shared catalog edit")
+	}
+	submitted = persisted
+	submitted.Enabled = false
+	if achievementEditorRewardSetCatalogEqual(persisted, submitted) {
+		t.Fatal("changing shared reward_sets.enabled was not detected as a provider-independent catalog edit")
+	}
+	submitted = persisted
+	submitted.Mappings = append([]achievementEditorRewardMapping(nil), persisted.Mappings...)
+	submitted.Mappings[0].Sequence++
+	if achievementEditorRewardSetCatalogEqual(persisted, submitted) {
+		t.Fatal("changing reward_option_entries.sequence was not detected as a shared catalog edit")
+	}
+}
+
 func TestValidateAchievementEditorGraphBlocksSuppressedRewardWithoutDeliveryPath(t *testing.T) {
 	graph := validAchievementEditorGraph()
 	graph.Rewards = []achievementEditorReward{{Sequence: 1, RewardType: 2, Amount: "1", Enabled: true}}
@@ -703,6 +746,7 @@ func TestValidateAchievementEditorGraphBlocksSuppressedRewardWithoutDeliveryPath
 	assertAchievementFinding(t, result, "reward_id", "excluded from automatic delivery")
 
 	graph.RewardSet.Enabled = true
+	graph.RewardSet.SourceEnabled = true
 	graph.RewardSet.Options[0].Enabled = false
 	result = validateAchievementEditorGraph(graph, validAchievementEditorContext())
 	assertAchievementFinding(t, result, "option_id", "excluded from automatic delivery")
@@ -717,10 +761,11 @@ func TestValidateAchievementEditorRewardsAcceptTransactionalLocalReferences(t *t
 	graph := validAchievementEditorGraph()
 	graph.Rewards = []achievementEditorReward{{Sequence: 1, RewardType: 2, Amount: "1", Enabled: true}}
 	graph.RewardSet = &achievementEditorRewardSet{
-		RewardSetID: 50,
-		Enabled:     true,
-		Options:     []achievementEditorRewardOption{{OptionID: 1, Sequence: 1, Label: "Choice", Enabled: true}},
-		Mappings:    []achievementEditorRewardMapping{{OptionID: 1, RewardID: "@0"}},
+		RewardSetID:   50,
+		Enabled:       true,
+		SourceEnabled: true,
+		Options:       []achievementEditorRewardOption{{OptionID: 1, Sequence: 1, Label: "Choice", Enabled: true}},
+		Mappings:      []achievementEditorRewardMapping{{OptionID: 1, RewardID: "@0"}},
 	}
 	result := validateAchievementEditorGraph(graph, validAchievementEditorContext())
 	if !result.Valid() {
@@ -732,19 +777,19 @@ func TestValidateAchievementEditorRewardsAcceptTransactionalLocalReferences(t *t
 	assertAchievementFinding(t, result, "reward_id", "valid nonzero reward ID")
 }
 
-func TestValidateAchievementEditorRewardSetCannotOutliveDisabledDefinition(t *testing.T) {
+func TestValidateAchievementEditorDisabledDefinitionMayRetainEnabledSourceAndSet(t *testing.T) {
 	graph := validAchievementEditorGraph()
 	graph.Enabled = false
 	graph.RewardSet = &achievementEditorRewardSet{
-		RewardSetID: 50,
-		Enabled:     true,
-		Options:     []achievementEditorRewardOption{},
-		Mappings:    []achievementEditorRewardMapping{},
+		RewardSetID:   50,
+		Enabled:       true,
+		SourceEnabled: true,
+		Options:       []achievementEditorRewardOption{},
+		Mappings:      []achievementEditorRewardMapping{},
 	}
 	result := validateAchievementEditorGraph(graph, validAchievementEditorContext())
-	finding := findAchievementFinding(t, result, "reward_set.enabled", "Disable the selectable reward set")
-	if finding.Severity != achievementEditorValidationError {
-		t.Fatalf("disabled definition with enabled reward set was not rejected: %+v", finding)
+	if !result.Valid() {
+		t.Fatalf("disabled definition could not retain its would-be selectable catalog policy: %+v", result.Findings)
 	}
 }
 
@@ -799,7 +844,7 @@ func TestValidateAchievementEditorRewardsRejectsInvalidDataAndMappings(t *testin
 		Mappings: []achievementEditorRewardMapping{{OptionID: 99, RewardID: "999"}},
 	}
 	result := validateAchievementEditorGraph(graph, validAchievementEditorContext())
-	assertAchievementFinding(t, result, "reward_id", "unsigned 64-bit")
+	assertAchievementFinding(t, result, "reward_id", "unsigned 32-bit")
 	assertAchievementFinding(t, result, "amount", "positive")
 	assertAchievementFinding(t, result, "sequence", "unique")
 	assertAchievementFinding(t, result, "reward_data_id", "Experience mode")
@@ -807,9 +852,9 @@ func TestValidateAchievementEditorRewardsRejectsInvalidDataAndMappings(t *testin
 	assertAchievementFinding(t, result, "reward_id", "does not exist")
 }
 
-func TestValidateAchievementEditorRestrictions(t *testing.T) {
+func TestValidateAchievementEditorRequirements(t *testing.T) {
 	graph := validAchievementEditorGraph()
-	graph.Restrictions = []achievementEditorCastRestriction{{RestrictionID: 7}, {RestrictionID: 7}, {RestrictionID: 8}}
+	graph.Requirements = []achievementEditorCastRequirement{{RestrictionID: 7}, {RestrictionID: 7}, {RestrictionID: 8}}
 	context := validAchievementEditorContext()
 	context.KnownRestrictionIDs = map[uint32]struct{}{7: {}}
 	result := validateAchievementEditorGraph(graph, context)
@@ -859,15 +904,15 @@ func TestAchievementDependencyCycleHelper(t *testing.T) {
 
 func validAchievementEditorGraph() achievementEditorGraph {
 	return achievementEditorGraph{
-		ID:                1,
-		Name:              "Level Fifty",
-		Description:       "Reach level fifty.",
-		DefinitionVersion: 1,
-		Enabled:           true,
-		Associations:      []achievementEditorAssociation{{AchievementID: 1, CategoryID: 10, Sequence: 1}},
+		ID:           1,
+		Name:         "Level Fifty",
+		Description:  "Reach level fifty.",
+		Version:      1,
+		Enabled:      true,
+		Associations: []achievementEditorAssociation{{AchievementID: 1, CategoryID: 10, Sequence: 1}},
 		Components: []achievementEditorComponent{{
 			AchievementID: 1, ComponentType: 0, Sequence: 1, ComponentID: 100,
-			Description: "Reach level 50", PresentationCount: 1,
+			Name: "Reach level 50", Description: "Reach the required level.", PresentationCount: 1,
 			Criteria: []achievementEditorCriterion{{
 				AchievementID: 1, ComponentType: 0, ComponentSequence: 1, ComponentID: 100,
 				EventType: 1, ProgressMode: 3, Behavior: 0, TargetValue: "50", RequiredCount: 1, Enabled: true,
@@ -875,7 +920,7 @@ func validAchievementEditorGraph() achievementEditorGraph {
 		}},
 		Rewards:      []achievementEditorReward{},
 		RewardSet:    nil,
-		Restrictions: []achievementEditorCastRestriction{},
+		Requirements: []achievementEditorCastRequirement{},
 	}
 }
 
@@ -915,8 +960,8 @@ func achievementEditorGraphWithOrphanRecovery(t *testing.T) (achievementEditorGr
 		ComponentType:         0,
 		Sequence:              2,
 		ComponentID:           200,
-		Description:           "Missing component row — recovery required",
-		Description2:          "These criteria are preserved but cannot be evaluated until an editor explicitly restores their component.",
+		Description:           "These criteria are preserved but cannot be evaluated until an editor explicitly restores their component.",
+		Name:                  "Missing component row - recovery required",
 		PresentationCount:     1,
 		RecoveryOnly:          true,
 		RecoveryReason:        "The achievement_components row for these stored criteria is missing. Restore the component to keep the criteria, or explicitly delete the orphan criteria.",

@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	achievementEditorGraphBodyLimit    = "2M"
-	achievementEditorMutationBodyLimit = "128K"
-	achievementEditorDefaultLimit      = 40
-	achievementEditorMaximumLimit      = 200
-	achievementEditorMaximumPage       = 100000
-	achievementEditorLookupLimit       = 100
+	achievementEditorGraphBodyLimit  = "2M"
+	achievementEditorUpdateBodyLimit = "128K"
+	achievementEditorDefaultLimit    = 40
+	achievementEditorMaximumLimit    = 200
+	achievementEditorMaximumPage     = 100000
+	achievementEditorLookupLimit     = 100
 )
 
 // AchievementEditorController owns both the content-authoring API and the
@@ -49,7 +49,7 @@ type achievementEditorSchemaCacheEntry struct {
 
 func (a *AchievementEditorController) Routes() []*routes.Route {
 	graphLimit := []echo.MiddlewareFunc{middleware.BodyLimit(achievementEditorGraphBodyLimit)}
-	mutationLimit := []echo.MiddlewareFunc{middleware.BodyLimit(achievementEditorMutationBodyLimit)}
+	updateLimit := []echo.MiddlewareFunc{middleware.BodyLimit(achievementEditorUpdateBodyLimit)}
 	return []*routes.Route{
 		// Definition, category, and authoring support.
 		routes.RegisterRoute(http.MethodGet, "achievement-editor/metadata", a.metadata, nil),
@@ -59,12 +59,12 @@ func (a *AchievementEditorController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodPut, "achievement-editor/definition", a.createDefinition, graphLimit),
 		routes.RegisterRoute(http.MethodPatch, "achievement-editor/definition/:id", a.updateDefinition, graphLimit),
 		routes.RegisterRoute(http.MethodPut, "achievement-editor/definition/:id/clone", a.cloneDefinition, graphLimit),
-		routes.RegisterRoute(http.MethodDelete, "achievement-editor/definition/:id", a.deleteDefinition, mutationLimit),
+		routes.RegisterRoute(http.MethodDelete, "achievement-editor/definition/:id", a.deleteDefinition, updateLimit),
 		routes.RegisterRoute(http.MethodGet, "achievement-editor/categories", a.listCategories, nil),
 		routes.RegisterRoute(http.MethodGet, "achievement-editor/category/:id", a.getCategory, nil),
-		routes.RegisterRoute(http.MethodPut, "achievement-editor/category", a.createCategory, mutationLimit),
-		routes.RegisterRoute(http.MethodPatch, "achievement-editor/category/:id", a.updateCategory, mutationLimit),
-		routes.RegisterRoute(http.MethodDelete, "achievement-editor/category/:id", a.deleteCategory, mutationLimit),
+		routes.RegisterRoute(http.MethodPut, "achievement-editor/category", a.createCategory, updateLimit),
+		routes.RegisterRoute(http.MethodPatch, "achievement-editor/category/:id", a.updateCategory, updateLimit),
+		routes.RegisterRoute(http.MethodDelete, "achievement-editor/category/:id", a.deleteCategory, updateLimit),
 		routes.RegisterRoute(http.MethodGet, "achievement-editor/lookups/:kind", a.lookup, nil),
 		routes.RegisterRoute(http.MethodGet, "achievement-editor/audit", a.definitionAudit, nil),
 
@@ -75,12 +75,12 @@ func (a *AchievementEditorController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodGet, "character-achievement-editor/characters", a.listAchievementCharacters, nil),
 		routes.RegisterRoute(http.MethodGet, "character-achievement-editor/character/:id", a.getCharacterAchievements, nil),
 		routes.RegisterRoute(http.MethodGet, "character-achievement-editor/character/:id/audit", a.characterAudit, nil),
-		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/progress", a.setCharacterProgress, mutationLimit),
-		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/complete", a.completeCharacterAchievement, mutationLimit),
-		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/reset", a.resetCharacterAchievement, mutationLimit),
-		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/reward/retry", a.retryCharacterReward, mutationLimit),
-		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/selection/retry", a.retryCharacterSelection, mutationLimit),
-		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/mutation/retry", a.retryCharacterMutation, mutationLimit),
-		routes.RegisterRoute(http.MethodDelete, "character-achievement-editor/character/:id/mutation", a.discardCharacterMutation, mutationLimit),
+		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/progress", a.setCharacterProgress, updateLimit),
+		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/complete", a.completeCharacterAchievement, updateLimit),
+		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/reset", a.resetCharacterAchievement, updateLimit),
+		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/reward/retry", a.retryCharacterReward, updateLimit),
+		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/selection/retry", a.retryCharacterSelection, updateLimit),
+		routes.RegisterRoute(http.MethodPatch, "character-achievement-editor/character/:id/update/retry", a.retryCharacterUpdate, updateLimit),
+		routes.RegisterRoute(http.MethodDelete, "character-achievement-editor/character/:id/update", a.discardCharacterUpdate, updateLimit),
 	}
 }

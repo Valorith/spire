@@ -90,7 +90,7 @@ func validateAchievementEditorGraph(graph achievementEditorGraph, context achiev
 	validateAchievementEditorAssociations(graph, context, &result)
 	validateAchievementEditorComponents(graph, context, &result)
 	validateAchievementEditorRewards(graph, context, &result)
-	validateAchievementEditorRestrictions(graph, context, &result)
+	validateAchievementEditorRequirements(graph, context, &result)
 	return result
 }
 
@@ -110,9 +110,6 @@ func validateAchievementEditorDefinitionHeader(graph achievementEditorGraph, con
 	if len([]byte(graph.Description)) > achievementEditorTextMaxBytes {
 		result.add("description", "Achievement description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).")
 	}
-	if graph.DefinitionVersion == 0 {
-		result.add("definition_version", "Definition version must be greater than zero.")
-	}
 	if graph.Associations == nil {
 		result.add("associations", "Category associations must be supplied as a list, even when empty.")
 	}
@@ -122,8 +119,8 @@ func validateAchievementEditorDefinitionHeader(graph achievementEditorGraph, con
 	if graph.Rewards == nil {
 		result.add("rewards", "Rewards must be supplied as a list, even when empty.")
 	}
-	if graph.Restrictions == nil {
-		result.add("restrictions", "Cast restrictions must be supplied as a list, even when empty.")
+	if graph.Requirements == nil {
+		result.add("requirements", "Cast requirements must be supplied as a list, even when empty.")
 	}
 	if context.RequireDatabaseContext && context.ExistingAchievementID != nil {
 		if context.ExistingComponentIdentities == nil {
@@ -205,11 +202,11 @@ func validateAchievementEditorComponents(graph achievementEditorGraph, context a
 		if component.ComponentType > 3 {
 			result.add(path+".component_type", "Component type must be from 0 through 3.")
 		}
-		if len([]byte(component.Description)) > achievementEditorTextMaxBytes {
-			result.add(path+".description", "Component primary description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).")
+		if len([]byte(component.Name)) > achievementEditorTextMaxBytes {
+			result.add(path+".name", "Component name may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).")
 		}
-		if len([]byte(component.Description2)) > achievementEditorTextMaxBytes {
-			result.add(path+".description_2", "Component secondary description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).")
+		if len([]byte(component.Description)) > achievementEditorTextMaxBytes {
+			result.add(path+".description", "Component description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).")
 		}
 		identity := achievementEditorComponentIdentity(component.ComponentType, component.ComponentID)
 		if _, duplicate := componentIdentities[identity]; duplicate {
@@ -651,7 +648,6 @@ func validateAchievementEditorRewards(graph achievementEditorGraph, context achi
 	}
 	rewardPaths := make(map[string]string)
 	rewardEnabled := make(map[string]bool)
-	rewardSequences := make(map[uint32]struct{})
 	if context.RequireDatabaseContext && context.ExistingAchievementID == nil && context.KnownRewardIDs == nil {
 		for _, reward := range graph.Rewards {
 			if strings.TrimSpace(reward.RewardID) != "" {
@@ -663,16 +659,13 @@ func validateAchievementEditorRewards(graph achievementEditorGraph, context achi
 
 	for index, reward := range graph.Rewards {
 		path := fmt.Sprintf("rewards.%d", index)
-		if reward.AchievementID != 0 && reward.AchievementID != graph.ID {
-			result.add(path+".achievement_id", "The reward must belong to the achievement being edited.")
-		}
 		id := ""
 		transientID := fmt.Sprintf("@%d", index)
 		if reward.RewardID != "" {
 			var valid bool
-			id, valid = parseUnsignedDecimal(reward.RewardID, 64, false)
+			id, valid = parseUnsignedDecimal(reward.RewardID, 32, false)
 			if !valid {
-				result.add(path+".reward_id", "Reward ID must be a nonzero unsigned 64-bit decimal string.")
+				result.add(path+".reward_id", "Reward ID must be a nonzero unsigned 32-bit decimal string.")
 				id = ""
 			} else {
 				if prior, duplicate := rewardPaths[id]; duplicate {
@@ -699,10 +692,6 @@ func validateAchievementEditorRewards(graph achievementEditorGraph, context achi
 			rewardPaths[transientID] = path
 			rewardEnabled[transientID] = reward.Enabled
 		}
-		if _, duplicate := rewardSequences[reward.Sequence]; duplicate {
-			result.add(path+".sequence", "Reward sequence must be unique within the achievement.")
-		}
-		rewardSequences[reward.Sequence] = struct{}{}
 		if reward.RewardType > 5 {
 			result.add(path+".reward_type", "Reward type must be from 0 through 5.")
 		}
@@ -800,6 +789,14 @@ func addAchievementEditorPublicationFinding(result *achievementEditorValidationR
 func validateAchievementEditorRewardSet(graph achievementEditorGraph, context achievementEditorValidationContext, rewardPaths map[string]string, rewardEnabled map[string]bool, result *achievementEditorValidationResult) {
 	set := graph.RewardSet
 	if set == nil {
+		automaticSequences := make(map[uint32]int)
+		for index, reward := range graph.Rewards {
+			if prior, duplicate := automaticSequences[reward.Sequence]; duplicate {
+				result.add(fmt.Sprintf("rewards.%d.sequence", index), fmt.Sprintf("Automatic grant order is already used by reward row %d; reward_source_entries requires unique source order.", prior+1))
+			} else {
+				automaticSequences[reward.Sequence] = index
+			}
+		}
 		if context.ExistingRewardSetID != nil {
 			result.add("reward_set", "The stable reward-set ID cannot be cleared after creation. Disable the set instead.")
 		}
@@ -807,12 +804,6 @@ func validateAchievementEditorRewardSet(graph achievementEditorGraph, context ac
 	}
 	if set.RewardSetID == 0 && context.ExistingAchievementID != nil {
 		result.add("reward_set.reward_set_id", "Reward set ID must be greater than zero.")
-	}
-	if set.AchievementID != 0 && set.AchievementID != graph.ID {
-		result.add("reward_set.achievement_id", "The reward set must belong to the achievement being edited.")
-	}
-	if set.Enabled && !graph.Enabled {
-		result.add("reward_set.enabled", "Disable the selectable reward set before disabling its achievement; an enabled set owned by a disabled definition makes the runtime snapshot fail to load.")
 	}
 	if len([]rune(set.Title)) > 255 {
 		result.add("reward_set.title", "Reward-set title may not exceed 255 characters.")
@@ -874,6 +865,7 @@ func validateAchievementEditorRewardSet(graph achievementEditorGraph, context ac
 
 	mappedRewards := make(map[string]uint32)
 	enabledGrants := make(map[uint32]int)
+	mappingSequences := make(map[uint32]map[uint32]struct{})
 	for index, mapping := range set.Mappings {
 		path := fmt.Sprintf("reward_set.mappings.%d", index)
 		if mapping.RewardSetID != 0 && mapping.RewardSetID != set.RewardSetID {
@@ -887,7 +879,7 @@ func validateAchievementEditorRewardSet(graph achievementEditorGraph, context ac
 		if strings.HasPrefix(rewardID, "@") {
 			_, valid = rewardPaths[rewardID]
 		} else {
-			rewardID, valid = parseUnsignedDecimal(mapping.RewardID, 64, false)
+			rewardID, valid = parseUnsignedDecimal(mapping.RewardID, 32, false)
 		}
 		if !valid {
 			result.add(path+".reward_id", "Select a valid nonzero reward ID.")
@@ -904,6 +896,13 @@ func validateAchievementEditorRewardSet(graph achievementEditorGraph, context ac
 			}
 		}
 		mappedRewards[rewardID] = mapping.OptionID
+		if mappingSequences[mapping.OptionID] == nil {
+			mappingSequences[mapping.OptionID] = make(map[uint32]struct{})
+		}
+		if _, duplicate := mappingSequences[mapping.OptionID][mapping.Sequence]; duplicate {
+			result.warn(path+".sequence", "Another reward in this option uses the same grant order; reward ID breaks the tie.")
+		}
+		mappingSequences[mapping.OptionID][mapping.Sequence] = struct{}{}
 		if rewardEnabled[rewardID] {
 			enabledGrants[mapping.OptionID]++
 			if enabled, found := optionEnabled[mapping.OptionID]; found && !enabled {
@@ -913,12 +912,27 @@ func validateAchievementEditorRewardSet(graph achievementEditorGraph, context ac
 					result.warn(path+".option_id", "This enabled reward is mapped to a disabled option and will not fall back to automatic delivery.")
 				}
 			}
-			if graph.Enabled && !set.Enabled {
-				result.add(path+".reward_id", "This enabled reward is excluded from automatic delivery by its mapping, but the selectable reward set is disabled. Enable the set, disable the reward, or remove the mapping.")
+			if graph.Enabled && (!set.SourceEnabled || !set.Enabled) {
+				result.add(path+".reward_id", "This enabled reward is excluded from automatic delivery by its mapping, but the achievement source link or selectable set is disabled. Enable both, disable the reward, or remove the mapping.")
 			}
 		}
 	}
-	if set.Enabled {
+	automaticSequences := make(map[uint32]string)
+	for index, reward := range graph.Rewards {
+		id := reward.RewardID
+		if id == "" {
+			id = fmt.Sprintf("@%d", index)
+		}
+		if _, mapped := mappedRewards[id]; mapped {
+			continue
+		}
+		if prior, duplicate := automaticSequences[reward.Sequence]; duplicate {
+			result.add(fmt.Sprintf("rewards.%d.sequence", index), "Automatic grant order is already used by reward "+prior+"; reward_source_entries requires unique source order.")
+		} else {
+			automaticSequences[reward.Sequence] = id
+		}
+	}
+	if graph.Enabled && set.SourceEnabled && set.Enabled {
 		hasSelectable := false
 		for id, path := range optionPaths {
 			if !optionEnabled[id] {
@@ -937,13 +951,13 @@ func validateAchievementEditorRewardSet(graph achievementEditorGraph, context ac
 	}
 }
 
-func validateAchievementEditorRestrictions(graph achievementEditorGraph, context achievementEditorValidationContext, result *achievementEditorValidationResult) {
-	if len(graph.Restrictions) > achievementEditorMaxRestrictions {
-		result.add("restrictions", fmt.Sprintf("A definition may contain at most %d cast restrictions.", achievementEditorMaxRestrictions))
+func validateAchievementEditorRequirements(graph achievementEditorGraph, context achievementEditorValidationContext, result *achievementEditorValidationResult) {
+	if len(graph.Requirements) > achievementEditorMaxRequirements {
+		result.add("requirements", fmt.Sprintf("A definition may contain at most %d cast requirements.", achievementEditorMaxRequirements))
 	}
-	seen := make(map[uint32]struct{}, len(graph.Restrictions))
-	for index, restriction := range graph.Restrictions {
-		path := fmt.Sprintf("restrictions.%d", index)
+	seen := make(map[uint32]struct{}, len(graph.Requirements))
+	for index, restriction := range graph.Requirements {
+		path := fmt.Sprintf("requirements.%d", index)
 		if restriction.AchievementID != 0 && restriction.AchievementID != graph.ID {
 			result.add(path+".achievement_id", "The cast restriction must belong to the achievement being edited.")
 		}
@@ -959,11 +973,11 @@ func validateAchievementEditorRestrictions(graph achievementEditorGraph, context
 			result.add(path+".restriction_id", fmt.Sprintf("Spell restriction %d does not exist.", restriction.RestrictionID))
 		}
 	}
-	if !graph.Enabled && len(graph.Restrictions) > 0 {
-		result.warn("restrictions", "Cast restrictions for a disabled achievement remain inactive until the definition is enabled.")
+	if !graph.Enabled && len(graph.Requirements) > 0 {
+		result.warn("requirements", "Cast requirements for a disabled achievement remain inactive until the definition is enabled.")
 	}
-	if len(graph.Restrictions) > 0 && context.RequireDatabaseContext && context.KnownRestrictionIDs == nil && context.RestrictionExists == nil {
-		result.add("restrictions", "Spell restriction identities could not be verified against the active content database.")
+	if len(graph.Requirements) > 0 && context.RequireDatabaseContext && context.KnownRestrictionIDs == nil && context.RestrictionExists == nil {
+		result.add("requirements", "Spell restriction identities could not be verified against the active content database.")
 	}
 }
 

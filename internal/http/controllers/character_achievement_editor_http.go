@@ -37,7 +37,7 @@ func (a *AchievementEditorController) getCharacterAchievements(c echo.Context) e
 	validStates := map[string]bool{
 		"all": true, "completed": true, "not_completed": true, "in_progress": true,
 		"not_started": true, "version_mismatch": true, "reward_attention": true,
-		"pending_mutation": true, "orphaned": true,
+		"pending_update": true, "orphaned": true,
 	}
 	if !validStates[state] {
 		state = "all"
@@ -65,8 +65,8 @@ func (a *AchievementEditorController) characterAudit(c echo.Context) error {
 	events := []string{
 		achievementEditorEventProgressSet, achievementEditorEventForceComplete,
 		achievementEditorEventReset, achievementEditorEventRewardRetry,
-		achievementEditorEventSelectionRetry, achievementEditorEventMutationRetry,
-		achievementEditorEventMutationDiscard,
+		achievementEditorEventSelectionRetry, achievementEditorEventUpdateRetry,
+		achievementEditorEventUpdateDiscard,
 	}
 	return listOperationalEditorAudit(
 		c, a.db, a.auditLog, events,

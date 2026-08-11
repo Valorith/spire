@@ -11,8 +11,23 @@ import (
 )
 
 func TestAchievementEditorCharacterLockNameMatchesEQEmuRuntime(t *testing.T) {
-	if got := achievementEditorCharacterLockName(1015); got != "eqemu_achievement_mutation_1015" {
+	if got := achievementEditorCharacterLockName(1015); got != "eqemu_achievement_state_update_1015" {
 		t.Fatalf("character lock name = %q, want EQEmu runtime lock name", got)
+	}
+}
+
+func TestCharacterAchievementUpdateRequiresExplicitExpectedVersionAndAcceptsZero(t *testing.T) {
+	character := achievementEditorCharacter{Name: "Lyric"}
+	base := achievementEditorCharacterUpdateBase{
+		Reason: "Review version-zero state safely", CharacterConfirmation: "Lyric", Confirmation: "SET PROGRESS",
+	}
+	if err := validateCharacterAchievementUpdateBase(base, character, "SET PROGRESS"); err == nil || !strings.Contains(err.Error(), "version 0 is valid") {
+		t.Fatalf("missing expected_version error = %v", err)
+	}
+	zero := uint32(0)
+	base.ExpectedVersion = &zero
+	if err := validateCharacterAchievementUpdateBase(base, character, "SET PROGRESS"); err != nil {
+		t.Fatalf("explicit expected version zero was rejected: %v", err)
 	}
 }
 
@@ -71,25 +86,28 @@ func TestAchievementEditorPositiveStateRequiresEnabledDefinition(t *testing.T) {
 	}
 }
 
-func TestAchievementEditorPositiveStateRejectsMixedDefinitionVersions(t *testing.T) {
-	if err := validateAchievementEditorStoredStateVersions([]uint32{0, 7, 7}, 7); err != nil {
-		t.Fatalf("current and legacy-zero state versions were rejected: %v", err)
+func TestAchievementEditorPositiveStateRequiresEveryStoredVersionToMatchExactly(t *testing.T) {
+	if err := validateAchievementEditorStoredStateVersions([]uint32{0, 0}, 0); err != nil {
+		t.Fatalf("valid version-zero state was rejected: %v", err)
 	}
-	err := validateAchievementEditorStoredStateVersions([]uint32{7, 6}, 7)
+	err := validateAchievementEditorStoredStateVersions([]uint32{0, 7, 7}, 7)
 	if err == nil || !strings.Contains(err.Error(), "reset the achievement") {
 		t.Fatalf("mixed-version state error = %v", err)
 	}
 }
 
-func TestAchievementEditorPendingMutationRetryRequiresExactNonzeroVersion(t *testing.T) {
-	if err := validateAchievementEditorPendingMutationRetryVersion(0, 7); err == nil {
-		t.Fatal("version-zero queued mutation was accepted for a guaranteed no-op retry")
+func TestAchievementEditorPendingUpdateRetryRequiresExactVersionIncludingZero(t *testing.T) {
+	if err := validateAchievementEditorPendingUpdateRetryVersion(0, 0); err != nil {
+		t.Fatalf("matching version-zero queued update was rejected: %v", err)
 	}
-	if err := validateAchievementEditorPendingMutationRetryVersion(6, 7); err == nil {
-		t.Fatal("stale queued mutation version was accepted")
+	if err := validateAchievementEditorPendingUpdateRetryVersion(0, 7); err == nil {
+		t.Fatal("stale version-zero queued update was accepted")
 	}
-	if err := validateAchievementEditorPendingMutationRetryVersion(7, 7); err != nil {
-		t.Fatalf("matching queued mutation version was rejected: %v", err)
+	if err := validateAchievementEditorPendingUpdateRetryVersion(6, 7); err == nil {
+		t.Fatal("stale queued update version was accepted")
+	}
+	if err := validateAchievementEditorPendingUpdateRetryVersion(7, 7); err != nil {
+		t.Fatalf("matching queued update version was rejected: %v", err)
 	}
 }
 
@@ -163,13 +181,48 @@ func TestAchievementEditorSelectionRetryIncludesSelectedAndEnabledCommonGrants(t
 	}
 	enabledRewards := map[string]struct{}{"100": {}, "200": {}, "300": {}, "400": {}}
 
-	got, err := achievementEditorSelectionRetryRewardIDs(2, options, mappings, enabledRewards)
+	got, err := achievementEditorSelectionRetryRewardIDs(2, options, mappings, enabledRewards, enabledRewards)
 	if err != nil {
 		t.Fatalf("selection retry content was rejected: %v", err)
 	}
 	want := []string{"100", "200"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("retry reward IDs = %v, want %v", got, want)
+	}
+}
+
+func TestAchievementEditorSelectionRetrySkipsDisabledGrantsWhenEffectiveOptionsRemainValid(t *testing.T) {
+	options := []achievementEditorRewardOption{
+		{OptionID: 1, Enabled: true, CommonToAll: true},
+		{OptionID: 2, Enabled: true},
+	}
+	mappings := []achievementEditorRewardMapping{
+		{OptionID: 1, Sequence: 1, RewardID: "100"},
+		{OptionID: 1, Sequence: 2, RewardID: "101"},
+		{OptionID: 2, Sequence: 1, RewardID: "200"},
+		{OptionID: 2, Sequence: 2, RewardID: "201"},
+	}
+	knownRewards := map[string]struct{}{"100": {}, "101": {}, "200": {}, "201": {}}
+	enabledRewards := map[string]struct{}{"101": {}, "201": {}}
+
+	got, err := achievementEditorSelectionRetryRewardIDs(2, options, mappings, knownRewards, enabledRewards)
+	if err != nil {
+		t.Fatalf("valid mixed enabled/disabled bundle was rejected: %v", err)
+	}
+	want := []string{"101", "201"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("retry reward IDs = %v, want only enabled grants %v", got, want)
+	}
+}
+
+func TestAchievementEditorSelectionRetryRejectsAllDisabledEffectiveOption(t *testing.T) {
+	options := []achievementEditorRewardOption{{OptionID: 2, Enabled: true}}
+	mappings := []achievementEditorRewardMapping{{OptionID: 2, RewardID: "200"}}
+	knownRewards := map[string]struct{}{"200": {}}
+
+	_, err := achievementEditorSelectionRetryRewardIDs(2, options, mappings, knownRewards, map[string]struct{}{})
+	if err == nil || !strings.Contains(err.Error(), "no enabled mapped grant") {
+		t.Fatalf("all-disabled effective option error = %v", err)
 	}
 }
 
@@ -183,16 +236,17 @@ func TestAchievementEditorSelectionRetryFailsClosedOnInvalidBundleContent(t *tes
 		selected uint32
 		options  []achievementEditorRewardOption
 		mappings []achievementEditorRewardMapping
+		known    map[string]struct{}
 		rewards  map[string]struct{}
 	}{
-		{name: "missing selected option", selected: 9, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 1, RewardID: "100"}}, rewards: map[string]struct{}{"100": {}}},
-		{name: "selected common option", selected: 1, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 1, RewardID: "100"}}, rewards: map[string]struct{}{"100": {}}},
-		{name: "common option without grant", selected: 2, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 2, RewardID: "200"}}, rewards: map[string]struct{}{"200": {}}},
-		{name: "disabled mapped reward", selected: 2, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 1, RewardID: "100"}, {OptionID: 2, RewardID: "200"}}, rewards: map[string]struct{}{"200": {}}},
+		{name: "missing selected option", selected: 9, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 1, RewardID: "100"}}, known: map[string]struct{}{"100": {}}, rewards: map[string]struct{}{"100": {}}},
+		{name: "selected common option", selected: 1, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 1, RewardID: "100"}}, known: map[string]struct{}{"100": {}}, rewards: map[string]struct{}{"100": {}}},
+		{name: "common option without grant", selected: 2, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 2, RewardID: "200"}}, known: map[string]struct{}{"200": {}}, rewards: map[string]struct{}{"200": {}}},
+		{name: "missing mapped reward", selected: 2, options: baseOptions, mappings: []achievementEditorRewardMapping{{OptionID: 1, RewardID: "100"}, {OptionID: 2, RewardID: "200"}}, known: map[string]struct{}{"200": {}}, rewards: map[string]struct{}{"200": {}}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := achievementEditorSelectionRetryRewardIDs(test.selected, test.options, test.mappings, test.rewards); err == nil {
+			if _, err := achievementEditorSelectionRetryRewardIDs(test.selected, test.options, test.mappings, test.known, test.rewards); err == nil {
 				t.Fatal("unsafe selection content was accepted")
 			}
 		})
@@ -233,8 +287,8 @@ func TestAchievementEditorStaleLeaseAcknowledgementRequestCompatibility(t *testi
 		t.Fatal("legacy reset request unexpectedly acknowledged stale lease recovery")
 	}
 
-	discard := achievementEditorPendingMutationRequest{}
-	if err := json.Unmarshal([]byte(`{"mutation_id":"42","acknowledge_stale_processing_lease":true}`), &discard); err != nil {
+	discard := achievementEditorPendingUpdateRequest{}
+	if err := json.Unmarshal([]byte(`{"update_id":"42","acknowledge_stale_processing_lease":true}`), &discard); err != nil {
 		t.Fatalf("stale-lease discard request failed to decode: %v", err)
 	}
 	if !discard.AcknowledgeStaleProcessingLease {

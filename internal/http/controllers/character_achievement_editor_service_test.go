@@ -1,12 +1,47 @@
 package controllers
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
+
+func TestCharacterAchievementHydrationPreservesMultiDefinitionRewardOwnership(t *testing.T) {
+	detail := achievementEditorCharacterDetail{
+		Rewards: []achievementEditorReward{
+			{RewardID: "101", SourceID: 10, Amount: "1"},
+			{RewardID: "202", SourceID: 20, Amount: "1"},
+		},
+		RewardSets: []achievementEditorRewardSet{
+			{RewardSetID: 1001, SourceID: 10},
+			{RewardSetID: 2002, SourceID: 20},
+		},
+	}
+	payload, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded := achievementEditorCharacterDetail{}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Rewards) != 2 || decoded.Rewards[0].SourceID != 10 || decoded.Rewards[1].SourceID != 20 {
+		t.Fatalf("hydrated reward ownership collapsed across definitions: %+v", decoded.Rewards)
+	}
+	if len(decoded.RewardSets) != 2 || decoded.RewardSets[0].SourceID != 10 || decoded.RewardSets[1].SourceID != 20 {
+		t.Fatalf("hydrated reward-set ownership collapsed across definitions: %+v", decoded.RewardSets)
+	}
+	for _, value := range []interface{}{achievementEditorReward{}, achievementEditorRewardSet{}} {
+		field, found := reflect.TypeOf(value).FieldByName("SourceID")
+		if !found || !strings.Contains(field.Tag.Get("gorm"), "column:source_id") {
+			t.Fatalf("%T cannot receive the source_id projection from multi-definition hydration", value)
+		}
+	}
+}
 
 func TestCharacterAchievementSummaryQueryUsesNonReservedCharacterAlias(t *testing.T) {
 	db, err := gorm.Open(mysql.New(mysql.Config{
@@ -118,7 +153,7 @@ func TestCharacterAchievementSelectionRewardAttentionSemantics(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			definition := achievementEditorDefinitionSummary{ID: 10, DefinitionVersion: 2}
+			definition := achievementEditorDefinitionSummary{ID: 10, Version: 2}
 			decorated := characterAchievementEditorDecorateDefinition(
 				definition,
 				achievementEditorCharacterCompletion{},
@@ -142,15 +177,15 @@ func TestCharacterAchievementSelectionRewardAttentionSemantics(t *testing.T) {
 }
 
 func TestCharacterAchievementPageSummaryHydrationPreservesStateDecoration(t *testing.T) {
-	completion := achievementEditorCharacterCompletion{AchievementID: 10, DefinitionVersion: 6, CompletedAt: 1234}
+	completion := achievementEditorCharacterCompletion{AchievementID: 10, Version: 6, CompletedAt: 1234}
 	progress := []achievementEditorCharacterProgress{
-		{AchievementID: 10, DefinitionVersion: 6, CurrentCount: "18446744073709551615"},
-		{AchievementID: 10, DefinitionVersion: 6, CurrentCount: "5"},
+		{AchievementID: 10, Version: 6, CurrentCount: "18446744073709551615"},
+		{AchievementID: 10, Version: 6, CurrentCount: "5"},
 	}
 	rewards := []achievementEditorCharacterRewardLedger{{AchievementID: 10, Status: 2}}
-	mutations := []achievementEditorCharacterPendingMutation{{AchievementID: 10, Status: 1}}
+	updates := []achievementEditorCharacterPendingUpdate{{AchievementID: 10, Status: 1}}
 
-	lightweight := achievementEditorDefinitionSummary{ID: 10, Name: "Lightweight", DefinitionVersion: 7, Enabled: true}
+	lightweight := achievementEditorDefinitionSummary{ID: 10, Name: "Lightweight", Version: 7, Enabled: true}
 	hydrated := lightweight
 	hydrated.CategoryCount = 3
 	hydrated.ComponentCount = 8
@@ -158,17 +193,17 @@ func TestCharacterAchievementPageSummaryHydrationPreservesStateDecoration(t *tes
 	hydrated.RewardCount = 2
 	hydrated.CategoryNames = "Raids, Exploration"
 
-	lightweight = characterAchievementEditorDecorateDefinition(lightweight, completion, progress, rewards, nil, mutations)
-	hydrated = characterAchievementEditorDecorateDefinition(hydrated, completion, progress, rewards, nil, mutations)
+	lightweight = characterAchievementEditorDecorateDefinition(lightweight, completion, progress, rewards, nil, updates)
+	hydrated = characterAchievementEditorDecorateDefinition(hydrated, completion, progress, rewards, nil, updates)
 
 	if hydrated.State != lightweight.State ||
 		hydrated.CompletedAt != lightweight.CompletedAt ||
-		hydrated.CharacterDefinitionVersion != lightweight.CharacterDefinitionVersion ||
+		hydrated.CharacterVersion != lightweight.CharacterVersion ||
 		hydrated.ProgressRows != lightweight.ProgressRows ||
 		hydrated.ProgressTotal != lightweight.ProgressTotal ||
 		hydrated.VersionMismatch != lightweight.VersionMismatch ||
 		hydrated.RewardAttention != lightweight.RewardAttention ||
-		hydrated.PendingMutation != lightweight.PendingMutation {
+		hydrated.PendingUpdate != lightweight.PendingUpdate {
 		t.Fatalf("bounded summary hydration changed character-state decoration:\nlightweight=%+v\nhydrated=%+v", lightweight, hydrated)
 	}
 	if hydrated.CategoryCount != 3 || hydrated.ComponentCount != 8 || hydrated.CategoryNames == "" {
@@ -180,59 +215,59 @@ func TestCharacterAchievementPageSummaryHydrationPreservesStateDecoration(t *tes
 }
 
 func TestCharacterAchievementAggregateDecorationPreservesFilterSemantics(t *testing.T) {
-	definition := achievementEditorDefinitionSummary{ID: 77, DefinitionVersion: 9, Enabled: true}
+	definition := achievementEditorDefinitionSummary{ID: 77, Version: 9, Enabled: true}
 	decorated := characterAchievementEditorDecorateAggregate(
 		definition,
 		achievementEditorCharacterCompletion{},
 		characterAchievementEditorProgressAggregate{
 			AchievementID: 77, RowCount: 2500, Total: "18446744073709551615000", HasPositive: true,
-			MinimumDefinitionVersion: 8, MaximumDefinitionVersion: 9,
+			MinimumVersion: 8, MaximumVersion: 9,
 		},
 		characterAchievementEditorAttentionAggregate{AchievementID: 77},
 		characterAchievementEditorAttentionAggregate{AchievementID: 77, Attention: true},
-		characterAchievementEditorMutationAggregate{AchievementID: 77, MinimumDefinitionVersion: 9, MaximumDefinitionVersion: 9},
+		characterAchievementEditorUpdateAggregate{AchievementID: 77, RowCount: 1, MinimumVersion: 9, MaximumVersion: 9},
 	)
 	if decorated.State != "in_progress" || decorated.ProgressRows != 2500 || decorated.ProgressTotal != "18446744073709551615000" {
 		t.Fatalf("aggregate progress decoration = %+v", decorated)
 	}
-	if !decorated.RewardAttention || !decorated.PendingMutation || !decorated.VersionMismatch {
+	if !decorated.RewardAttention || !decorated.PendingUpdate || !decorated.VersionMismatch {
 		t.Fatalf("aggregate safety flags = %+v", decorated)
 	}
-	for _, filter := range []string{"in_progress", "version_mismatch", "reward_attention", "pending_mutation"} {
+	for _, filter := range []string{"in_progress", "version_mismatch", "reward_attention", "pending_update"} {
 		if !characterAchievementEditorStateMatches(decorated, filter) {
 			t.Fatalf("aggregate row did not match %q: %+v", filter, decorated)
 		}
 	}
 }
 
-func TestCharacterAchievementLegacyZeroVersionsAreNotReportedAsMismatches(t *testing.T) {
-	definition := achievementEditorDefinitionSummary{ID: 88, DefinitionVersion: 12, Enabled: true}
+func TestCharacterAchievementVersionZeroIsComparedExactlyAndPendingRowsRemainVisible(t *testing.T) {
+	definition := achievementEditorDefinitionSummary{ID: 88, Version: 12, Enabled: true}
 	decorated := characterAchievementEditorDecorateAggregate(
 		definition,
-		achievementEditorCharacterCompletion{AchievementID: 88, DefinitionVersion: 0},
+		achievementEditorCharacterCompletion{AchievementID: 88, Version: 0},
 		characterAchievementEditorProgressAggregate{AchievementID: 88, RowCount: 1, Total: "4"},
 		characterAchievementEditorAttentionAggregate{},
 		characterAchievementEditorAttentionAggregate{},
-		characterAchievementEditorMutationAggregate{AchievementID: 88},
+		characterAchievementEditorUpdateAggregate{AchievementID: 88, RowCount: 1, MinimumVersion: 0, MaximumVersion: 0},
 	)
-	if decorated.VersionMismatch {
-		t.Fatalf("legacy version-zero state must remain compatible for repair: %+v", decorated)
+	if !decorated.VersionMismatch {
+		t.Fatalf("version-zero state must mismatch a version-12 definition: %+v", decorated)
 	}
-	if !decorated.PendingMutation {
-		t.Fatalf("a version-zero pending mutation must still be visible: %+v", decorated)
+	if !decorated.PendingUpdate {
+		t.Fatalf("a pending update with version zero must still be visible: %+v", decorated)
 	}
 }
 
-func TestCharacterAchievementOrphanCanMatchAttentionAndMutationFilters(t *testing.T) {
+func TestCharacterAchievementOrphanCanMatchAttentionAndUpdateFilters(t *testing.T) {
 	orphan := characterAchievementEditorDecorateAggregate(
 		achievementEditorDefinitionSummary{ID: 999, Orphaned: true},
 		achievementEditorCharacterCompletion{},
 		characterAchievementEditorProgressAggregate{},
 		characterAchievementEditorAttentionAggregate{AchievementID: 999, Attention: true},
 		characterAchievementEditorAttentionAggregate{},
-		characterAchievementEditorMutationAggregate{AchievementID: 999},
+		characterAchievementEditorUpdateAggregate{AchievementID: 999, RowCount: 1},
 	)
-	if !characterAchievementEditorStateMatches(orphan, "reward_attention") || !characterAchievementEditorStateMatches(orphan, "pending_mutation") {
+	if !characterAchievementEditorStateMatches(orphan, "reward_attention") || !characterAchievementEditorStateMatches(orphan, "pending_update") {
 		t.Fatalf("orphan diagnostics disappeared from attention filters: %+v", orphan)
 	}
 	if orphan.State != "orphaned" || !characterAchievementEditorStateMatches(orphan, "orphaned") {

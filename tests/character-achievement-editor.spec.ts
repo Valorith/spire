@@ -6,7 +6,7 @@ const orphanAchievementID = 9900;
 const rewardID = '9007199254740993';
 const automaticRewardID = '9007199254740994';
 const rewardSetID = 300;
-const mutationID = '18446744073709551610';
+const updateID = '18446744073709551610';
 
 type CapturedRequest = {
   method: string;
@@ -60,13 +60,13 @@ const metadata = {
     { value: 2, label: 'Retryable failure', help: 'Eligible for retry.' },
     { value: 3, label: 'Ambiguous delivery', help: 'One or more entries may have arrived.' },
   ],
-  mutation_target_types: [
+  update_target_types: [
     { value: 2, label: 'Raid', help: 'Expanded from a raid event.' },
   ],
-  mutation_operations: [
+  update_operations: [
     { value: 0, label: 'Progress floor', help: 'Raises progress to a minimum value.' },
   ],
-  character_mutation_statuses: [
+  character_update_statuses: [
     { value: 0, label: 'Pending', help: 'Waiting for a zone consumer.' },
     { value: 1, label: 'Blocked', help: 'Retained with a diagnostic.' },
     { value: 2, label: 'Processing', help: 'Owned by a live lease.' },
@@ -99,13 +99,13 @@ function detailFixture(): Record<string, any> {
         description: 'Reach the authored combat milestone.',
         icon_id: 42,
         points: 10,
-        definition_version: 4,
+        version: 4,
         enabled: true,
         category_count: 1,
         component_count: 1,
         criterion_count: 1,
         reward_count: 1,
-        restriction_count: 0,
+        requirement_count: 0,
         reward_set_count: 1,
         category_names: 'Combat',
       },
@@ -115,13 +115,13 @@ function detailFixture(): Record<string, any> {
         description: '',
         icon_id: 0,
         points: 0,
-        definition_version: 0,
+        version: 0,
         enabled: false,
         category_count: 0,
         component_count: 0,
         criterion_count: 0,
         reward_count: 0,
-        restriction_count: 0,
+        requirement_count: 0,
         orphaned: true,
       },
     ],
@@ -134,8 +134,8 @@ function detailFixture(): Record<string, any> {
         component_type: 1,
         sequence: 5,
         component_id: 152250,
-        description: 'Reach the maximum skill in Dual Wield.',
-        description_2: 'Progress is checked against the current cap.',
+        name: 'Reach the maximum skill in Dual Wield.',
+        description: 'Progress is checked against the current cap.',
         presentation_count: 30,
       },
     ],
@@ -159,7 +159,7 @@ function detailFixture(): Record<string, any> {
     rewards: [
       {
         reward_id: rewardID,
-        achievement_id: achievementID,
+        source_id: achievementID,
         sequence: 1,
         reward_type: 0,
         reward_data_id: 990061,
@@ -169,7 +169,7 @@ function detailFixture(): Record<string, any> {
       },
       {
         reward_id: automaticRewardID,
-        achievement_id: achievementID,
+        source_id: achievementID,
         sequence: 2,
         reward_type: 2,
         reward_data_id: 0,
@@ -179,15 +179,15 @@ function detailFixture(): Record<string, any> {
       },
     ],
     reward_sets: [
-      { reward_set_id: rewardSetID, achievement_id: achievementID, title: 'Ornament choice', enabled: true },
+      { reward_set_id: rewardSetID, source_id: achievementID, title: 'Ornament choice', enabled: true, source_enabled: true },
     ],
     reward_options: [
       { reward_set_id: rewardSetID, option_id: 10, sequence: 1, label: 'Axe ornament', common_to_all: false, flags: 0, enabled: true },
     ],
     reward_option_entries: [
-      { reward_set_id: rewardSetID, option_id: 10, reward_id: rewardID },
+      { reward_set_id: rewardSetID, option_id: 10, sequence: 1, reward_id: rewardID },
     ],
-    restrictions: [],
+    requirements: [],
     completions: [],
     progress: [
       {
@@ -198,7 +198,7 @@ function detailFixture(): Record<string, any> {
         component_id: 152250,
         current_count: '22',
         completed: false,
-        definition_version: 4,
+        version: 4,
         updated_at: 1786156200,
       },
       {
@@ -209,7 +209,7 @@ function detailFixture(): Record<string, any> {
         component_id: 777,
         current_count: '7',
         completed: false,
-        definition_version: 1,
+        version: 1,
         updated_at: 1786156100,
       },
     ],
@@ -248,9 +248,9 @@ function detailFixture(): Record<string, any> {
         last_error: 'Selected bundle has ambiguous delivery state.',
       },
     ],
-    pending_mutations: [
+    pending_updates: [
       {
-        mutation_id: mutationID,
+        update_id: updateID,
         character_id: characterID,
         source_target_type: 2,
         source_target_id: '88',
@@ -259,7 +259,7 @@ function detailFixture(): Record<string, any> {
         component_type: 1,
         component_id: 152250,
         requested_value: 25,
-        definition_version: 4,
+        version: 4,
         status: 1,
         attempt_count: 3,
         created_at: 1786156000,
@@ -341,10 +341,10 @@ async function installCharacterAchievementMocks(page: Page, state: CharacterAchi
       const issue = {
         area: 'character',
         table: 'character_achievement_progress',
-        column: 'definition_version',
+        column: 'version',
         code: 'missing_column',
         severity: 'error',
-        message: 'Required definition_version column is missing.',
+        message: 'Required version column is missing.',
       };
       return fulfill({
         ready: state.schemaReady,
@@ -399,8 +399,8 @@ async function installCharacterAchievementMocks(page: Page, state: CharacterAchi
       return fulfill({ ...clone(audit), page: requestedPage, limit: requestedLimit });
     }
 
-    const mutationPrefix = `/character/${characterID}/`;
-    if (path.startsWith(mutationPrefix) && ['PATCH', 'DELETE'].includes(request.method())) {
+    const updatePrefix = `/character/${characterID}/`;
+    if (path.startsWith(updatePrefix) && ['PATCH', 'DELETE'].includes(request.method())) {
       const body = (request.postDataJSON() || {}) as Record<string, unknown>;
       state.requests.push({ method: request.method(), path, body });
 
@@ -415,10 +415,10 @@ async function installCharacterAchievementMocks(page: Page, state: CharacterAchi
         state.detail.reward_ledgers[0].status = 2;
       } else if (path.endsWith('/selection/retry')) {
         state.detail.reward_selections[0].status = 2;
-      } else if (path.endsWith('/mutation/retry')) {
-        state.detail.pending_mutations[0].status = 0;
-      } else if (path.endsWith('/mutation') && request.method() === 'DELETE') {
-        state.detail.pending_mutations = [];
+      } else if (path.endsWith('/update/retry')) {
+        state.detail.pending_updates[0].status = 0;
+      } else if (path.endsWith('/update') && request.method() === 'DELETE') {
+        state.detail.pending_updates = [];
       }
       return fulfill({ detail: detailSnapshot(state), audit_id: 901 });
     }
@@ -522,7 +522,65 @@ test.describe('Character Achievement Editor', () => {
     await expect(page.getByTestId(`character-achievement-reset-${achievementID}`)).toBeDisabled();
   });
 
-  test('pages the result-scoped reward and mutation diagnostics without hiding later achievements', async ({ page }) => {
+  test('scopes selectable mappings to the reward set linked to each achievement', async ({ page }) => {
+    const state = mockState();
+    const secondAchievementID = 2002;
+    const secondRewardSetID = 301;
+    state.detail.definitions.splice(1, 0, Object.assign(clone(state.detail.definitions[0]), {
+      id: secondAchievementID,
+      name: 'Shared Grant Selectable Source',
+      description: 'Reuses a canonical reward through a different achievement source.',
+      category_count: 0,
+      component_count: 0,
+      criterion_count: 0,
+      reward_count: 1,
+      reward_set_count: 1,
+      category_names: '',
+    }));
+    state.detail.rewards.push(Object.assign(clone(state.detail.rewards[1]), {
+      source_id: secondAchievementID,
+      sequence: 1,
+      description: 'Shared canonical grant from selectable source',
+    }));
+    state.detail.reward_sets.push({
+      reward_set_id: secondRewardSetID,
+      source_id: secondAchievementID,
+      title: 'Shared grant choice',
+      enabled: true,
+      source_enabled: true,
+    });
+    state.detail.reward_options.push({
+      reward_set_id: secondRewardSetID,
+      option_id: 20,
+      sequence: 1,
+      label: 'Shared grant',
+      common_to_all: false,
+      flags: 0,
+      enabled: true,
+    });
+    state.detail.reward_option_entries.push({
+      reward_set_id: secondRewardSetID,
+      option_id: 20,
+      sequence: 1,
+      reward_id: automaticRewardID,
+    });
+    state.detailTotal = 3;
+
+    await installCharacterAchievementMocks(page, state);
+    await openCharacterEditor(page);
+
+    const automaticCard = await expandAchievement(page, achievementID);
+    const automaticRow = automaticCard.locator('tr').filter({ hasText: `ID ${automaticRewardID}` }).first();
+    await expect(automaticRow).toContainText('Automatic completion grant');
+    await expect(automaticRow).not.toContainText('Selectable reward option');
+    await expect(automaticRow.getByRole('button', { name: 'Retry' })).toBeEnabled();
+
+    const selectableCard = await expandAchievement(page, secondAchievementID);
+    const selectableRow = selectableCard.locator('tr').filter({ hasText: `ID ${automaticRewardID}` }).first();
+    await expect(selectableRow).toContainText('Selectable reward option');
+  });
+
+  test('pages the result-scoped reward and update diagnostics without hiding later achievements', async ({ page }) => {
     const state = mockState();
     state.detailTotal = 60;
     await installCharacterAchievementMocks(page, state);
@@ -543,7 +601,7 @@ test.describe('Character Achievement Editor', () => {
     const queuedOnly = page.waitForRequest(request => {
       const url = new URL(request.url());
       return url.pathname.endsWith(`/character-achievement-editor/character/${characterID}`) &&
-        url.searchParams.get('state') === 'pending_mutation' && url.searchParams.get('page') === '1';
+        url.searchParams.get('state') === 'pending_update' && url.searchParams.get('page') === '1';
     });
     await page.getByRole('button', { name: 'Show queued only' }).click();
     await queuedOnly;
@@ -553,7 +611,7 @@ test.describe('Character Achievement Editor', () => {
     const state = mockState();
     state.detail.definitions[0].version_mismatch = true;
     state.detail.progress = [];
-    state.detail.pending_mutations = [];
+    state.detail.pending_updates = [];
     await installCharacterAchievementMocks(page, state);
     await openCharacterEditor(page);
 
@@ -696,7 +754,7 @@ test.describe('Character Achievement Editor', () => {
       component_id: 152250,
       current_count: 25,
       expected_current_count: '18446744073709551615',
-      expected_definition_version: 4,
+      expected_version: 4,
       reason: 'Correcting progress after verified event loss',
       character_confirmation: 'Lyric',
       confirmation: `PROGRESS ${achievementID}`,
@@ -718,9 +776,9 @@ test.describe('Character Achievement Editor', () => {
     await expect(progress).toHaveAttribute('title', /definition is disabled.*before adding positive progress/i);
     await expect(complete).toBeDisabled();
     await expect(complete).toHaveAttribute('title', /definition is disabled.*before forcing completion/i);
-    const mutationRetry = page.locator('tr').filter({ hasText: mutationID }).first().getByRole('button', { name: 'Retry' });
-    await expect(mutationRetry).toBeDisabled();
-    await expect(mutationRetry).toHaveAttribute('title', /definition is disabled.*enable it before retrying queued work/i);
+    const updateRetry = page.locator('tr').filter({ hasText: updateID }).first().getByRole('button', { name: 'Retry' });
+    await expect(updateRetry).toBeDisabled();
+    await expect(updateRetry).toHaveAttribute('title', /definition is disabled.*enable it before retrying queued work/i);
     await expect(page.getByTestId(`character-achievement-reset-${achievementID}`)).toBeEnabled();
   });
 
@@ -781,73 +839,73 @@ test.describe('Character Achievement Editor', () => {
     await expect(page.getByTestId('character-achievement-action-modal')).toBeHidden();
   });
 
-  test('uses separate retry and discard contracts for queued mutations', async ({ page }) => {
+  test('uses separate retry and discard contracts for queued updates', async ({ page }) => {
     const state = mockState();
     await installCharacterAchievementMocks(page, state);
     await openCharacterEditor(page);
     await page.getByText('Pending Queue', { exact: true }).click();
 
-    let mutationRow = page.locator('tr').filter({ hasText: mutationID }).first();
-    await expect(mutationRow).toContainText('Blocked');
-    await mutationRow.getByRole('button', { name: 'Retry' }).click();
-    await fillSafetyConfirmation(page, `RETRY MUTATION ${mutationID}`, 'Returning the diagnosed mutation to pending');
+    let updateRow = page.locator('tr').filter({ hasText: updateID }).first();
+    await expect(updateRow).toContainText('Blocked');
+    await updateRow.getByRole('button', { name: 'Retry' }).click();
+    await fillSafetyConfirmation(page, `RETRY UPDATE ${updateID}`, 'Returning the diagnosed update to pending');
     const retryRequest = page.waitForRequest(request =>
       request.method() === 'PATCH' &&
-      new URL(request.url()).pathname.endsWith(`/character-achievement-editor/character/${characterID}/mutation/retry`)
+      new URL(request.url()).pathname.endsWith(`/character-achievement-editor/character/${characterID}/update/retry`)
     );
     await page.getByTestId('character-achievement-action-submit').click();
     const retryPayload = (await retryRequest).postDataJSON();
     expect(retryPayload).toMatchObject({
-      mutation_id: mutationID,
+      update_id: updateID,
       action: 'retry',
       expected_status: 1,
       expected_attempt_count: 3,
       character_confirmation: 'Lyric',
-      confirmation: `RETRY MUTATION ${mutationID}`,
+      confirmation: `RETRY UPDATE ${updateID}`,
     });
     await expect(page.getByTestId('character-achievement-action-modal')).toBeHidden();
 
-    mutationRow = page.locator('tr').filter({ hasText: mutationID }).first();
-    await expect(mutationRow).toContainText('Pending');
-    await mutationRow.getByRole('button', { name: 'Discard' }).click();
-    await fillSafetyConfirmation(page, `DISCARD MUTATION ${mutationID}`, 'Discarding the verified duplicate world handoff');
+    updateRow = page.locator('tr').filter({ hasText: updateID }).first();
+    await expect(updateRow).toContainText('Pending');
+    await updateRow.getByRole('button', { name: 'Discard' }).click();
+    await fillSafetyConfirmation(page, `DISCARD UPDATE ${updateID}`, 'Discarding the verified duplicate world handoff');
     const discardRequest = page.waitForRequest(request =>
       request.method() === 'DELETE' &&
-      new URL(request.url()).pathname.endsWith(`/character-achievement-editor/character/${characterID}/mutation`)
+      new URL(request.url()).pathname.endsWith(`/character-achievement-editor/character/${characterID}/update`)
     );
     await page.getByTestId('character-achievement-action-submit').click();
     const discardPayload = (await discardRequest).postDataJSON();
     expect(discardPayload).toMatchObject({
-      mutation_id: mutationID,
+      update_id: updateID,
       action: 'discard',
       expected_status: 0,
       expected_attempt_count: 3,
       character_confirmation: 'Lyric',
-      confirmation: `DISCARD MUTATION ${mutationID}`,
+      confirmation: `DISCARD UPDATE ${updateID}`,
     });
     await expect(page.getByTestId('character-achievement-action-modal')).toBeHidden();
-    await expect(page.locator('tr').filter({ hasText: mutationID })).toHaveCount(0);
-    await expect(page.getByTestId('character-achievement-pending-mutations')).toContainText('no queued mutations');
+    await expect(page.locator('tr').filter({ hasText: updateID })).toHaveCount(0);
+    await expect(page.getByTestId('character-achievement-pending-updates')).toContainText('no queued updates');
   });
 
-  test('blocks retry for a legacy queued mutation with no definition version', async ({ page }) => {
+  test('allows retry when queued and current definition versions are both zero', async ({ page }) => {
     const state = mockState();
-    state.detail.pending_mutations[0].definition_version = 0;
+    state.detail.definitions[0].version = 0;
+    state.detail.pending_updates[0].version = 0;
     await installCharacterAchievementMocks(page, state);
     await openCharacterEditor(page);
     await page.getByText('Pending Queue', { exact: true }).click();
 
-    const row = page.locator('tr').filter({ hasText: mutationID }).first();
+    const row = page.locator('tr').filter({ hasText: updateID }).first();
     const retry = row.getByRole('button', { name: 'Retry' });
-    await expect(retry).toBeDisabled();
-    await expect(retry).toHaveAttribute('title', /no definition version.*discard/i);
+    await expect(retry).toBeEnabled();
     await expect(row.getByRole('button', { name: 'Discard' })).toBeEnabled();
   });
 
   test('keeps reset locked for an active processing lease and requires acknowledgement after expiry', async ({ page }) => {
     const state = mockState();
-    state.detail.pending_mutations[0].status = 2;
-    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000);
+    state.detail.pending_updates[0].status = 2;
+    state.detail.pending_updates[0].last_attempt_at = Math.floor(Date.now() / 1000);
     await installCharacterAchievementMocks(page, state);
     await openCharacterEditor(page);
     await expandAchievement(page);
@@ -856,7 +914,7 @@ test.describe('Character Achievement Editor', () => {
     await expect(reset).toBeDisabled();
     await expect(reset).toHaveAttribute('title', /active 60-second processing lease/);
 
-    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000) - 600;
+    state.detail.pending_updates[0].last_attempt_at = Math.floor(Date.now() / 1000) - 61;
     await page.locator('.ca-character-header__actions').getByRole('button', { name: 'Refresh' }).click();
     await expect(reset).toBeEnabled();
     await reset.click();
@@ -887,25 +945,25 @@ test.describe('Character Achievement Editor', () => {
 
   test('allows only acknowledged discard of an expired status-2 processing lease', async ({ page }) => {
     const state = mockState();
-    state.detail.pending_mutations[0].status = 2;
-    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000);
+    state.detail.pending_updates[0].status = 2;
+    state.detail.pending_updates[0].last_attempt_at = Math.floor(Date.now() / 1000);
     await installCharacterAchievementMocks(page, state);
     await openCharacterEditor(page);
     await page.getByText('Pending Queue', { exact: true }).click();
 
-    let mutationRow = page.locator('tr').filter({ hasText: mutationID }).first();
-    const activeDiscard = mutationRow.getByRole('button', { name: 'Discard' });
+    let updateRow = page.locator('tr').filter({ hasText: updateID }).first();
+    const activeDiscard = updateRow.getByRole('button', { name: 'Discard' });
     await expect(activeDiscard).toBeDisabled();
     await expect(activeDiscard).toHaveAttribute('title', /active 60-second zone lease/);
 
-    state.detail.pending_mutations[0].last_attempt_at = Math.floor(Date.now() / 1000) - 600;
+    state.detail.pending_updates[0].last_attempt_at = Math.floor(Date.now() / 1000) - 61;
     await page.locator('.ca-character-header__actions').getByRole('button', { name: 'Refresh' }).click();
-    mutationRow = page.locator('tr').filter({ hasText: mutationID }).first();
+    updateRow = page.locator('tr').filter({ hasText: updateID }).first();
     await expect(page.getByText('1 expired lease needs review', { exact: true })).toBeVisible();
-    await expect(mutationRow.getByRole('button', { name: 'Retry' })).toBeDisabled();
-    await expect(mutationRow.getByRole('button', { name: 'Discard' })).toBeEnabled();
-    await mutationRow.getByRole('button', { name: 'Discard' }).click();
-    await fillSafetyConfirmation(page, `DISCARD MUTATION ${mutationID}`, 'Removing an abandoned expired processing lease');
+    await expect(updateRow.getByRole('button', { name: 'Retry' })).toBeDisabled();
+    await expect(updateRow.getByRole('button', { name: 'Discard' })).toBeEnabled();
+    await updateRow.getByRole('button', { name: 'Discard' }).click();
+    await fillSafetyConfirmation(page, `DISCARD UPDATE ${updateID}`, 'Removing an abandoned expired processing lease');
 
     const submit = page.getByTestId('character-achievement-action-submit');
     const staleAcknowledgement = page.getByTestId('character-achievement-stale-lease-acknowledgement');
@@ -916,18 +974,18 @@ test.describe('Character Achievement Editor', () => {
 
     const discardRequest = page.waitForRequest(request =>
       request.method() === 'DELETE' &&
-      new URL(request.url()).pathname.endsWith(`/character-achievement-editor/character/${characterID}/mutation`)
+      new URL(request.url()).pathname.endsWith(`/character-achievement-editor/character/${characterID}/update`)
     );
     await submit.click();
     const discardPayload = (await discardRequest).postDataJSON();
     expect(discardPayload).toMatchObject({
-      mutation_id: mutationID,
+      update_id: updateID,
       action: 'discard',
       expected_status: 2,
       expected_attempt_count: 3,
       acknowledge_stale_processing_lease: true,
       character_confirmation: 'Lyric',
-      confirmation: `DISCARD MUTATION ${mutationID}`,
+      confirmation: `DISCARD UPDATE ${updateID}`,
     });
   });
 
@@ -939,8 +997,11 @@ test.describe('Character Achievement Editor', () => {
     const failure = page.getByTestId('character-achievement-schema-failure');
     await expect(failure).toBeVisible();
     await expect(failure).toContainText('No achievement state was changed');
-    await expect(failure).toContainText('character_achievement_progress.definition_version');
-    await expect(failure).toContainText('Required definition_version column is missing.');
+    await expect(failure).toContainText('9329 (achievement content)');
+    await expect(failure).toContainText('9330 (character achievement state)');
+    await expect(failure).toContainText('older draft');
+    await expect(failure).toContainText('character_achievement_progress.version');
+    await expect(failure).toContainText('Required version column is missing.');
     await expect(page.getByTestId('character-achievement-character-directory')).toHaveCount(0);
     expect(state.characterRequests).toBe(0);
 

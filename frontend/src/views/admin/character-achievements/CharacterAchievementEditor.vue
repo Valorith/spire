@@ -7,7 +7,7 @@
           <i class="ra ra-trophy mr-1" aria-hidden="true"></i> Character Achievements
         </h1>
         <p class="spire-editor-subtitle">
-          Inspect durable completion, component progress, reward delivery, and queued world mutations with offline-only,
+          Inspect durable completion, component progress, reward delivery, and queued world updates with offline-only,
           concurrency-checked repair controls.
         </p>
       </div>
@@ -37,8 +37,8 @@
           <div>
             <h2>No achievement state was changed</h2>
             <p>
-              Spire could not verify every required content and character-state table. This editor never creates or alters
-              EQEmu schema; install the matching source migrations, then run the check again.
+              {{ schemaGuidance }} This editor never creates or alters EQEmu schema; install the matching source migrations,
+              then run the check again.
             </p>
           </div>
           <b-button size="sm" variant="outline-warning" :disabled="schemaLoading" @click="retryInitialization">
@@ -205,7 +205,7 @@
           <div class="spire-editor-empty">
             <div class="spire-editor-empty__sigil"><i class="ra ra-trophy" aria-hidden="true"></i></div>
             <h3>Select a character</h3>
-            <p>Choose a character to inspect completion, exact component progress, reward ledgers, and queued mutations.</p>
+            <p>Choose a character to inspect completion, exact component progress, reward ledgers, and queued updates.</p>
           </div>
         </eq-window>
 
@@ -379,7 +379,7 @@
                       <div class="ca-definition-facts">
                         <section><span>Published</span><strong>{{ row.enabled ? 'Enabled' : 'Disabled' }}</strong><small>Disabled definitions remain visible for state repair.</small></section>
                         <section><span>Content version</span><strong>{{ row.definitionVersion }}</strong><small>Persisted rows must match this version.</small></section>
-                        <section><span>Completion</span><strong>{{ row.completion ? formatTime(row.completion.completed_at) : 'Not completed' }}</strong><small>{{ row.completion ? 'Stored version ' + row.completion.definition_version : 'No completion ledger row' }}</small></section>
+                        <section><span>Completion</span><strong>{{ row.completion ? formatTime(row.completion.completed_at) : 'Not completed' }}</strong><small>{{ row.completion ? 'Stored version ' + row.completion.version : 'No completion ledger row' }}</small></section>
                         <section><span>Categories</span><strong>{{ row.categories.length ? row.categories.join(', ') : 'Uncategorized' }}</strong><small>Client browsing associations.</small></section>
                       </div>
 
@@ -404,8 +404,8 @@
                                 <td>
                                   <strong>{{ enumLabel('component_types', component.component_type) }} #{{ component.component_id }}</strong>
                                   <small>Sequence {{ component.sequence }} &middot; type {{ component.component_type }}</small>
-                                  <small>{{ component.description || 'No primary client description.' }}</small>
-                                  <small v-if="component.description_2">{{ component.description_2 }}</small>
+                                  <small>{{ component.name || 'No component name.' }}</small>
+                                  <small v-if="component.description">{{ component.description }}</small>
                                 </td>
                                 <td>
                                   <strong>{{ exactUnsignedCount(component.currentCount) }} / {{ number(component.requiredCount) }}</strong>
@@ -418,7 +418,7 @@
                                   <span class="ca-state-badge" :class="component.completed ? 'ca-state-badge--success' : 'ca-state-badge--neutral'">
                                     {{ component.completed ? 'Complete' : 'Open' }}
                                   </span>
-                                  <small>Stored v{{ component.progress ? component.progress.definition_version : '—' }}</small>
+                                  <small>Stored v{{ component.progress ? component.progress.version : '—' }}</small>
                                 </td>
                                 <td>
                                   <div v-if="component.criteria.length" class="ca-criteria-list">
@@ -522,22 +522,22 @@
                         </div>
                       </section>
 
-                      <section v-if="row.mutations.length" class="ca-detail-section">
+                      <section v-if="row.updates.length" class="ca-detail-section">
                         <div class="ca-detail-section__heading">
-                          <div><span>World queue</span><h4>Pending achievement mutations</h4></div>
+                          <div><span>World queue</span><h4>Pending achievement updates</h4></div>
                           <small>Queued group/raid/shared-task work is durable and normally consumed by the character's zone.</small>
                         </div>
                         <div class="ca-table-wrap">
                           <table class="ca-state-table">
-                            <thead><tr><th>Mutation</th><th>Requested work</th><th>Status and error</th><th class="text-right">Repair</th></tr></thead>
+                            <thead><tr><th>Update</th><th>Requested work</th><th>Status and error</th><th class="text-right">Repair</th></tr></thead>
                             <tbody>
-                              <tr v-for="mutation in row.mutations" :key="'inline-mutation-' + mutation.mutation_id">
-                                <td><strong>#{{ mutation.mutation_id }}</strong><small>{{ enumLabel('mutation_source_types', mutation.source_target_type) }} #{{ mutation.source_target_id }}</small><small>Created {{ formatTime(mutation.created_at) }}</small></td>
-                                <td><strong>{{ enumLabel('mutation_operations', mutation.operation) }}</strong><small>Component type {{ mutation.component_type }}, ID {{ mutation.component_id }}</small><small>Requested value {{ number(mutation.requested_value) }} &middot; v{{ mutation.definition_version }}</small></td>
-                                <td><span class="ca-state-badge" :class="'ca-state-badge--' + mutationStatusTone(mutation.status)">{{ enumLabel('mutation_statuses', mutation.status) }}</span><small>{{ number(mutation.attempt_count) }} attempts</small><small v-if="mutation.last_error" class="ca-row-error">{{ mutation.last_error }}</small></td>
+                              <tr v-for="update in row.updates" :key="'inline-update-' + update.update_id">
+                                <td><strong>#{{ update.update_id }}</strong><small>{{ enumLabel('update_source_types', update.source_target_type) }} #{{ update.source_target_id }}</small><small>Created {{ formatTime(update.created_at) }}</small></td>
+                                <td><strong>{{ enumLabel('update_operations', update.operation) }}</strong><small>Component type {{ update.component_type }}, ID {{ update.component_id }}</small><small>Requested value {{ number(update.requested_value) }} &middot; v{{ update.version }}</small></td>
+                                <td><span class="ca-state-badge" :class="'ca-state-badge--' + updateStatusTone(update.status)">{{ enumLabel('update_statuses', update.status) }}</span><small>{{ number(update.attempt_count) }} attempts</small><small v-if="update.last_error" class="ca-row-error">{{ update.last_error }}</small></td>
                                 <td class="text-right ca-inline-actions">
-                                  <b-button size="sm" variant="outline-warning" :disabled="Boolean(mutationRetryDisabledReason(row, mutation))" :title="mutationRetryDisabledReason(row, mutation) || 'Return this compatible blocked row to pending.'" @click="openMutationAction(row, mutation, 'retry')">Retry</b-button>
-                                  <b-button size="sm" variant="outline-danger" :disabled="Boolean(mutationDiscardDisabledReason(row, mutation))" :title="mutationDiscardDisabledReason(row, mutation) || 'Discard a pending/blocked row or explicitly recover an expired processing lease.'" @click="openMutationAction(row, mutation, 'discard')">Discard</b-button>
+                                  <b-button size="sm" variant="outline-warning" :disabled="Boolean(updateRetryDisabledReason(row, update))" :title="updateRetryDisabledReason(row, update) || 'Return this compatible blocked row to pending.'" @click="openUpdateAction(row, update, 'retry')">Retry</b-button>
+                                  <b-button size="sm" variant="outline-danger" :disabled="Boolean(updateDiscardDisabledReason(row, update))" :title="updateDiscardDisabledReason(row, update) || 'Discard a pending/blocked row or explicitly recover an expired processing lease.'" @click="openUpdateAction(row, update, 'discard')">Discard</b-button>
                                 </td>
                               </tr>
                             </tbody>
@@ -620,7 +620,7 @@
 
               <eq-tab name="Pending Queue" :selected="selectedTab === 'Pending Queue'">
                 <div class="editor-section-heading ca-section-heading">
-                  <div><span class="section-kicker">World handoff</span><h3>Durable pending achievement mutations</h3></div>
+                  <div><span class="section-kicker">World handoff</span><h3>Durable pending achievement updates</h3></div>
                   <span class="section-help">Pending rows are normal. Active status-2 leases stay locked; a status-2 lease expired for at least 60 seconds requires explicit recovery acknowledgement.</span>
                 </div>
 
@@ -630,43 +630,43 @@
                     <strong>Showing queued rows for achievement result page {{ achievementPage }} of {{ achievementTotalPages }}.</strong>
                     <span>Page through the matching achievement set below, or narrow it to definitions with queued work.</span>
                   </div>
-                  <b-button size="sm" variant="outline-info" @click="applyStateFromTab('pending_mutation')">Show queued only</b-button>
+                  <b-button size="sm" variant="outline-info" @click="applyStateFromTab('pending_update')">Show queued only</b-button>
                 </div>
 
-                <div class="ca-mutation-summary-grid">
-                  <section><span>Pending</span><strong>{{ mutationCount(0) }}</strong><small>Waiting for a zone consumer</small></section>
-                  <section><span>Blocked</span><strong>{{ mutationCount(1) }}</strong><small>Requires diagnosis</small></section>
-                  <section><span>Processing</span><strong>{{ mutationCount(2) }}</strong><small>{{ staleProcessingMutationCount }} expired lease{{ staleProcessingMutationCount === 1 ? '' : 's' }} need{{ staleProcessingMutationCount === 1 ? 's' : '' }} review</small></section>
-                  <section><span>Orphaned</span><strong>{{ orphanMutationCount }}</strong><small>Definition no longer exists</small></section>
+                <div class="ca-update-summary-grid">
+                  <section><span>Pending</span><strong>{{ updateCount(0) }}</strong><small>Waiting for a zone consumer</small></section>
+                  <section><span>Blocked</span><strong>{{ updateCount(1) }}</strong><small>Requires diagnosis</small></section>
+                  <section><span>Processing</span><strong>{{ updateCount(2) }}</strong><small>{{ staleProcessingUpdateCount }} expired lease{{ staleProcessingUpdateCount === 1 ? '' : 's' }} need{{ staleProcessingUpdateCount === 1 ? 's' : '' }} review</small></section>
+                  <section><span>Orphaned</span><strong>{{ orphanUpdateCount }}</strong><small>Definition no longer exists</small></section>
                 </div>
 
                 <div class="ca-table-wrap mt-3">
-                  <table class="ca-state-table" data-testid="character-achievement-pending-mutations">
-                    <thead><tr><th>Mutation identity</th><th>Achievement and request</th><th>Concurrency state</th><th>Diagnostic</th><th class="text-right">Actions</th></tr></thead>
+                  <table class="ca-state-table" data-testid="character-achievement-pending-updates">
+                    <thead><tr><th>Update identity</th><th>Achievement and request</th><th>Concurrency state</th><th>Diagnostic</th><th class="text-right">Actions</th></tr></thead>
                     <tbody>
-                      <tr v-for="entry in flatMutations" :key="'queue-' + entry.mutation.mutation_id">
-                        <td><strong>#{{ entry.mutation.mutation_id }}</strong><small>{{ enumLabel('mutation_source_types', entry.mutation.source_target_type) }} #{{ entry.mutation.source_target_id }}</small><small>{{ formatTime(entry.mutation.created_at) }}</small></td>
-                        <td><strong>{{ entry.row.name }}</strong><small>Achievement #{{ entry.row.id }} &middot; {{ enumLabel('mutation_operations', entry.mutation.operation) }}</small><small>Component {{ entry.mutation.component_type }}/{{ entry.mutation.component_id }} becomes at least {{ number(entry.mutation.requested_value) }}</small></td>
-                        <td><span class="ca-state-badge" :class="'ca-state-badge--' + mutationStatusTone(entry.mutation.status)">{{ enumLabel('mutation_statuses', entry.mutation.status) }}</span><small>Stored v{{ entry.mutation.definition_version }} &middot; current v{{ entry.row.definitionVersion }}</small><small>{{ number(entry.mutation.attempt_count) }} attempts</small></td>
-                        <td><span v-if="entry.mutation.last_error" class="ca-row-error">{{ entry.mutation.last_error }}</span><span v-else>No stored diagnostic.</span><small v-if="entry.mutation.last_attempt_at">Last attempt {{ formatTime(entry.mutation.last_attempt_at) }}</small></td>
-                        <td class="text-right ca-inline-actions"><b-button size="sm" variant="outline-warning" :disabled="Boolean(mutationRetryDisabledReason(entry.row, entry.mutation))" :title="mutationRetryDisabledReason(entry.row, entry.mutation)" @click="openMutationAction(entry.row, entry.mutation, 'retry')">Retry</b-button><b-button size="sm" variant="outline-danger" :disabled="Boolean(mutationDiscardDisabledReason(entry.row, entry.mutation))" :title="mutationDiscardDisabledReason(entry.row, entry.mutation) || 'Discard a pending/blocked row or explicitly recover an expired processing lease.'" @click="openMutationAction(entry.row, entry.mutation, 'discard')">Discard</b-button></td>
+                      <tr v-for="entry in flatUpdates" :key="'queue-' + entry.update.update_id">
+                        <td><strong>#{{ entry.update.update_id }}</strong><small>{{ enumLabel('update_source_types', entry.update.source_target_type) }} #{{ entry.update.source_target_id }}</small><small>{{ formatTime(entry.update.created_at) }}</small></td>
+                        <td><strong>{{ entry.row.name }}</strong><small>Achievement #{{ entry.row.id }} &middot; {{ enumLabel('update_operations', entry.update.operation) }}</small><small>Component {{ entry.update.component_type }}/{{ entry.update.component_id }} becomes at least {{ number(entry.update.requested_value) }}</small></td>
+                        <td><span class="ca-state-badge" :class="'ca-state-badge--' + updateStatusTone(entry.update.status)">{{ enumLabel('update_statuses', entry.update.status) }}</span><small>Stored v{{ entry.update.version }} &middot; current v{{ entry.row.definitionVersion }}</small><small>{{ number(entry.update.attempt_count) }} attempts</small></td>
+                        <td><span v-if="entry.update.last_error" class="ca-row-error">{{ entry.update.last_error }}</span><span v-else>No stored diagnostic.</span><small v-if="entry.update.last_attempt_at">Last attempt {{ formatTime(entry.update.last_attempt_at) }}</small></td>
+                        <td class="text-right ca-inline-actions"><b-button size="sm" variant="outline-warning" :disabled="Boolean(updateRetryDisabledReason(entry.row, entry.update))" :title="updateRetryDisabledReason(entry.row, entry.update)" @click="openUpdateAction(entry.row, entry.update, 'retry')">Retry</b-button><b-button size="sm" variant="outline-danger" :disabled="Boolean(updateDiscardDisabledReason(entry.row, entry.update))" :title="updateDiscardDisabledReason(entry.row, entry.update) || 'Discard a pending/blocked row or explicitly recover an expired processing lease.'" @click="openUpdateAction(entry.row, entry.update, 'discard')">Discard</b-button></td>
                       </tr>
-                      <tr v-if="!flatMutations.length"><td colspan="5" class="ca-empty-cell">This result page contains no queued mutations.</td></tr>
+                      <tr v-if="!flatUpdates.length"><td colspan="5" class="ca-empty-cell">This result page contains no queued updates.</td></tr>
                     </tbody>
                   </table>
                 </div>
 
-                <nav v-if="achievementTotalPages > 1" class="spire-editor-pagination ca-definition-pagination" aria-label="Pending mutation achievement result pages">
-                  <button type="button" aria-label="Previous pending mutation achievement page" :disabled="achievementPage <= 1" @click="changeAchievementPage(achievementPage - 1)"><i class="fa fa-angle-left"></i></button>
+                <nav v-if="achievementTotalPages > 1" class="spire-editor-pagination ca-definition-pagination" aria-label="Pending update achievement result pages">
+                  <button type="button" aria-label="Previous pending update achievement page" :disabled="achievementPage <= 1" @click="changeAchievementPage(achievementPage - 1)"><i class="fa fa-angle-left"></i></button>
                   <span><strong>{{ achievementPage }}</strong> / {{ achievementTotalPages }}</span>
-                  <button type="button" aria-label="Next pending mutation achievement page" :disabled="achievementPage >= achievementTotalPages" @click="changeAchievementPage(achievementPage + 1)"><i class="fa fa-angle-right"></i></button>
+                  <button type="button" aria-label="Next pending update achievement page" :disabled="achievementPage >= achievementTotalPages" @click="changeAchievementPage(achievementPage + 1)"><i class="fa fa-angle-right"></i></button>
                 </nav>
               </eq-tab>
 
               <eq-tab name="Audit & Safety" :selected="selectedTab === 'Audit & Safety'">
                 <div class="editor-section-heading ca-section-heading">
                   <div><span class="section-kicker">Operator guidance</span><h3>Safety model and audit history</h3></div>
-                  <span class="section-help">Every mutation is transactional, character-locked, offline-only, expected-value protected, and attributed to its operator.</span>
+                  <span class="section-help">Every update is transactional, character-locked, offline-only, expected-value protected, and attributed to its operator.</span>
                 </div>
 
                 <div class="ca-safety-grid">
@@ -759,8 +759,8 @@
     event_types: 'events',
     reward_statuses: 'character_reward_statuses',
     selection_statuses: 'character_selection_statuses',
-    mutation_source_types: 'mutation_target_types',
-    mutation_statuses: 'character_mutation_statuses'
+    update_source_types: 'update_target_types',
+    update_statuses: 'character_update_statuses'
   }
 
   const FALLBACK_ENUMS = {
@@ -819,16 +819,16 @@
       { value: 2, label: 'Retryable failure', description: 'The selected bundle explicitly failed.' },
       { value: 3, label: 'Ambiguous delivery', description: 'At least one selected grant may have been delivered.' }
     ],
-    mutation_statuses: [
+    update_statuses: [
       { value: 0, label: 'Pending', description: 'Waiting for the character zone/login consumer.' },
       { value: 1, label: 'Blocked', description: 'Retained with a diagnostic because safe application failed.' },
       { value: 2, label: 'Processing', description: 'Claimed by a zone process under a renewable lease.' }
     ],
-    mutation_operations: [
+    update_operations: [
       { value: 0, label: 'Progress floor', description: 'Raises progress to at least the requested value.' },
       { value: 1, label: 'Complete', description: 'Idempotently requests achievement completion.' }
     ],
-    mutation_source_types: [
+    update_source_types: [
       { value: 0, label: 'Unknown source', description: 'Legacy or unspecified world target.' },
       { value: 1, label: 'Group', description: 'Expanded from a group-wide event.' },
       { value: 2, label: 'Raid', description: 'Expanded from a raid-wide event.' },
@@ -844,6 +844,7 @@
   function blankSchema () {
     return {
       ready: false,
+      guidance: 'Install EQEmu database updates 9329 (achievement content) and 9330 (character achievement state). Rewritten CREATE migrations do not alter tables created by an older draft.',
       content: { ready: false, database: '', tables: {}, issues: [] },
       character: { ready: false, database: '', tables: {}, issues: [] }
     }
@@ -864,7 +865,7 @@
       progress: [],
       reward_ledgers: [],
       reward_selections: [],
-      pending_mutations: [],
+      pending_updates: [],
       orphan_achievement_ids: []
     }
   }
@@ -927,15 +928,15 @@
           { value: 'not_completed', label: 'Not completed', help: 'Definitions without a completion ledger row, including in-progress work.' },
           { value: 'in_progress', label: 'In progress', help: 'Not completed and carrying at least one positive durable component count.' },
           { value: 'not_started', label: 'Not started', help: 'No completion and no positive durable component progress.' },
-          { value: 'version_mismatch', label: 'Version mismatch', help: 'Persisted state targets a different nonzero definition version.' },
+          { value: 'version_mismatch', label: 'Version mismatch', help: 'Persisted state targets a different definition version; version 0 is compared exactly.' },
           { value: 'reward_attention', label: 'Reward attention', help: 'Contains an in-flight, failed, or ambiguous reward/selection ledger.' },
-          { value: 'pending_mutation', label: 'Pending mutation', help: 'Contains at least one durable world-handoff row.' },
+          { value: 'pending_update', label: 'Pending update', help: 'Contains at least one durable world-handoff row.' },
           { value: 'orphaned', label: 'Orphaned state', help: 'Durable character rows remain after their content definition was removed.' }
         ],
         glossaryGroups: [
           { key: 'reward_statuses', label: 'Reward ledger statuses' },
           { key: 'selection_statuses', label: 'Selection statuses' },
-          { key: 'mutation_statuses', label: 'Pending mutation statuses' },
+          { key: 'update_statuses', label: 'Pending update statuses' },
           { key: 'component_types', label: 'Component wire types' }
         ]
       }
@@ -946,6 +947,9 @@
       },
       schemaReady () {
         return Boolean(this.schema && this.schema.ready === true && this.schema.content && this.schema.content.ready === true && this.schema.character && this.schema.character.ready === true)
+      },
+      schemaGuidance () {
+        return (this.schema && this.schema.guidance) || blankSchema().guidance
       },
       schemaAreas () {
         const schema = this.schema || blankSchema()
@@ -998,16 +1002,16 @@
         this.detailRows.forEach(row => row.selectionViews.forEach(selection => output.push({ row, selection })))
         return output
       },
-      flatMutations () {
+      flatUpdates () {
         const output = []
-        this.detailRows.forEach(row => row.mutations.forEach(mutation => output.push({ row, mutation })))
+        this.detailRows.forEach(row => row.updates.forEach(update => output.push({ row, update })))
         return output
       },
-      orphanMutationCount () {
-        return this.flatMutations.filter(entry => entry.row.definitionMissing).length
+      orphanUpdateCount () {
+        return this.flatUpdates.filter(entry => entry.row.definitionMissing).length
       },
-      staleProcessingMutationCount () {
-        return this.flatMutations.filter(entry => this.isStaleProcessingLease(entry.mutation)).length
+      staleProcessingUpdateCount () {
+        return this.flatUpdates.filter(entry => this.isStaleProcessingLease(entry.update)).length
       },
       auditTotalPages () {
         return Math.max(1, Math.ceil(this.auditTotal / this.auditLimit))
@@ -1337,21 +1341,21 @@
           const criteria = array(detail.criteria).filter(row => numeric(row.achievement_id) === id)
           const progress = array(detail.progress).filter(row => numeric(row.achievement_id) === id)
           const completion = array(detail.completions).find(row => numeric(row.achievement_id) === id) || null
-          const rewards = array(detail.rewards).filter(row => numeric(row.achievement_id) === id)
+          const rewards = array(detail.rewards).filter(row => numeric(row.source_id) === id)
           const ledgers = array(detail.reward_ledgers).filter(row => numeric(row.achievement_id) === id)
-          const rewardSets = array(detail.reward_sets).filter(row => numeric(row.achievement_id) === id)
+          const rewardSets = array(detail.reward_sets).filter(row => numeric(row.source_id) === id)
           const selections = array(detail.reward_selections).filter(row => numeric(row.achievement_id) === id)
-          const mutations = array(detail.pending_mutations).filter(row => numeric(row.achievement_id) === id)
+          const updates = array(detail.pending_updates).filter(row => numeric(row.achievement_id) === id)
           const definitionMissing = Boolean(definition.definition_missing || array(detail.orphan_achievement_ids).some(value => numeric(value) === id))
           const componentRows = this.buildComponentRows(id, components, criteria, progress)
           const rewardViews = this.buildRewardViews(id, rewards, ledgers, detail)
           const selectionViews = this.buildSelectionViews(id, rewardSets, selections, detail)
-          const definitionVersion = numeric(definition.definition_version)
+          const definitionVersion = numeric(definition.version)
           const versionedRows = []
           if (completion) versionedRows.push(completion)
           progress.forEach(row => versionedRows.push(row))
-          mutations.forEach(row => versionedRows.push(row))
-          const versionMismatch = Boolean(definition.version_mismatch) || (!definitionMissing && versionedRows.some(row => numeric(row.definition_version) > 0 && numeric(row.definition_version) !== definitionVersion))
+          updates.forEach(row => versionedRows.push(row))
+          const versionMismatch = Boolean(definition.version_mismatch) || (!definitionMissing && versionedRows.some(row => numeric(row.version) !== definitionVersion))
           const rewardAttention = Boolean(definition.reward_attention) || rewardViews.some(reward => reward.ledger && numeric(reward.ledger.status) !== 1) || selectionViews.some(selection => ![0, 1].includes(numeric(selection.status)) || (numeric(selection.status) === 0 && numeric(selection.selected_option_id) > 0))
           const inProgress = definition.state === 'in_progress' || (!completion && componentRows.some(component => numeric(component.currentCount) > 0))
           const row = {
@@ -1373,11 +1377,11 @@
             componentRows,
             rewardViews,
             selectionViews,
-            mutations,
+            updates,
             versionMismatch,
             rewardAttention,
             inProgress,
-            hasState: Boolean(completion || progress.length || ledgers.length || selections.length || mutations.length)
+            hasState: Boolean(completion || progress.length || ledgers.length || selections.length || updates.length)
           }
           row.badges = this.buildBadges(row)
           return row
@@ -1392,8 +1396,8 @@
               component_type: numeric(state.component_type),
               sequence: numeric(state.component_sequence),
               component_id: numeric(state.component_id),
-              description: 'Orphaned durable component progress',
-              description_2: '',
+              name: 'Orphaned durable component progress',
+              description: '',
               presentation_count: numeric(state.current_count),
               canonical_missing: true
             })
@@ -1419,7 +1423,11 @@
             views.push({ reward_id: String(ledger.reward_id), achievement_id: achievementID, reward_type: -1, reward_data_id: 0, amount: '0', description: 'Orphaned reward ledger', enabled: false, canonical_missing: true })
           }
         })
+        const linkedSetIDs = new Set(array(detail.reward_sets)
+          .filter(set => numeric(set.source_id) === numeric(achievementID))
+          .map(set => numeric(set.reward_set_id)))
         const mappings = array(detail.reward_option_entries)
+          .filter(mapping => linkedSetIDs.has(numeric(mapping.reward_set_id)))
         return views.map(reward => {
           const mapping = mappings.find(row => String(row.reward_id) === String(reward.reward_id))
           return Object.assign({}, reward, {
@@ -1434,7 +1442,7 @@
         const sets = rewardSets.map(set => clone(set))
         selections.forEach(selection => {
           if (!sets.some(set => numeric(set.reward_set_id) === numeric(selection.reward_set_id))) {
-            sets.push({ reward_set_id: numeric(selection.reward_set_id), achievement_id: achievementID, title: 'Orphaned reward selection', enabled: false, canonical_missing: true })
+            sets.push({ reward_set_id: numeric(selection.reward_set_id), source_id: achievementID, title: 'Orphaned reward selection', enabled: false, source_enabled: false, canonical_missing: true })
           }
         })
         return sets.map(set => {
@@ -1455,7 +1463,7 @@
         else badges.push({ label: 'Not started', tone: 'neutral', help: 'No completion or positive component progress exists.' })
         if (row.versionMismatch) badges.push({ label: 'Version mismatch', tone: 'danger', help: 'Persisted state targets a different definition version.' })
         if (row.rewardAttention) badges.push({ label: 'Reward attention', tone: 'danger', help: 'Reward or selection delivery needs operator review.' })
-        if (row.mutations.length) badges.push({ label: `${row.mutations.length} queued`, tone: 'warning', help: 'Durable world mutations await processing or repair.' })
+        if (row.updates.length) badges.push({ label: `${row.updates.length} queued`, tone: 'warning', help: 'Durable world updates await processing or repair.' })
         if (!row.enabled && !row.definitionMissing) badges.push({ label: 'Definition disabled', tone: 'neutral', help: 'The content definition is not in the active server snapshot.' })
         return badges
       },
@@ -1466,7 +1474,7 @@
         if (state === 'not_started') return !row.completion && !row.inProgress
         if (state === 'version_mismatch') return row.versionMismatch
         if (state === 'reward_attention') return row.rewardAttention
-        if (state === 'pending_mutation') return row.mutations.length > 0
+        if (state === 'pending_update') return row.updates.length > 0
         if (state === 'orphaned') return row.definitionMissing
         return true
       },
@@ -1517,7 +1525,7 @@
         this.loadAudit()
         this.syncRoute()
       },
-      mutationGuardReason () {
+      updateGuardReason () {
         if (!this.schemaReady) return 'Achievement schema diagnostics are not ready.'
         if (!this.detail || !this.detail.character) return 'Select a character first.'
         if (this.characterOnline) return `${this.detail.character.name} is online. Log the character out before changing durable state.`
@@ -1525,7 +1533,7 @@
         return ''
       },
       completeDisabledReason (row) {
-        const guard = this.mutationGuardReason()
+        const guard = this.updateGuardReason()
         if (guard) return guard
         if (row.definitionMissing) return 'A missing definition cannot be force-completed.'
         if (!row.enabled) return 'This definition is disabled. Enable it in the Achievement Editor before forcing completion.'
@@ -1533,27 +1541,27 @@
         if (row.versionMismatch) return 'Resolve the version mismatch or reset stale state before forcing completion.'
         return ''
       },
-      isStaleProcessingLease (mutation) {
-        if (numeric(mutation && mutation.status) !== 2) return false
-        const lastAttemptAt = Math.max(0, numeric(mutation && mutation.last_attempt_at))
+      isStaleProcessingLease (update) {
+        if (numeric(update && update.status) !== 2) return false
+        const lastAttemptAt = Math.max(0, numeric(update && update.last_attempt_at))
         return this.processingLeaseNow >= 60 && lastAttemptAt <= this.processingLeaseNow - 60
       },
-      activeProcessingMutations (row) {
-        return row.mutations.filter(mutation => numeric(mutation.status) === 2 && !this.isStaleProcessingLease(mutation))
+      activeProcessingUpdates (row) {
+        return row.updates.filter(update => numeric(update.status) === 2 && !this.isStaleProcessingLease(update))
       },
-      staleProcessingMutations (row) {
-        return row.mutations.filter(mutation => this.isStaleProcessingLease(mutation))
+      staleProcessingUpdates (row) {
+        return row.updates.filter(update => this.isStaleProcessingLease(update))
       },
       resetDisabledReason (row) {
-        const guard = this.mutationGuardReason()
+        const guard = this.updateGuardReason()
         if (guard) return guard
-        if (!row.hasState) return 'No durable completion, progress, reward, selection, or mutation row exists to reset.'
-        const activeProcessing = this.activeProcessingMutations(row)
-        if (activeProcessing.length) return `Mutation #${activeProcessing[0].mutation_id} still has an active 60-second processing lease.`
+        if (!row.hasState) return 'No durable completion, progress, reward, selection, or update row exists to reset.'
+        const activeProcessing = this.activeProcessingUpdates(row)
+        if (activeProcessing.length) return `Update #${activeProcessing[0].update_id} still has an active 60-second processing lease.`
         return ''
       },
       progressDisabledReason (row, component) {
-        const guard = this.mutationGuardReason()
+        const guard = this.updateGuardReason()
         if (guard) return guard
         if (row.definitionMissing) return 'Orphaned progress cannot be rewritten without a definition; reset it instead.'
         if (!row.enabled) return 'This definition is disabled. Enable it in the Achievement Editor before adding positive progress.'
@@ -1564,7 +1572,7 @@
         return ''
       },
       rewardRetryDisabledReason (row, reward) {
-        const guard = this.mutationGuardReason()
+        const guard = this.updateGuardReason()
         if (guard) return guard
         if (!reward.ledger) return 'No durable reward ledger exists.'
         if (reward.canonical_missing) return 'This ledger no longer has a canonical reward grant and cannot be retried.'
@@ -1574,7 +1582,7 @@
         return ''
       },
       selectionRetryDisabledReason (row, selection) {
-        const guard = this.mutationGuardReason()
+        const guard = this.updateGuardReason()
         if (guard) return guard
         if (selection.canonical_missing) return 'This selection no longer has a canonical reward set and cannot be retried.'
         if (numeric(selection.status) === 1) return 'A fully granted selection cannot be retried.'
@@ -1582,22 +1590,21 @@
         if (![0, 2, 3].includes(numeric(selection.status))) return 'Only interrupted, failed, or ambiguous selected bundles can be retried.'
         return ''
       },
-      mutationRetryDisabledReason (row, mutation) {
-        const guard = this.mutationGuardReason()
+      updateRetryDisabledReason (row, update) {
+        const guard = this.updateGuardReason()
         if (guard) return guard
-        if (row.definitionMissing) return 'A mutation without a current definition cannot be retried.'
+        if (row.definitionMissing) return 'An update without a current definition cannot be retried.'
         if (!row.enabled) return 'This definition is disabled and outside the active server snapshot. Enable it before retrying queued work.'
-        if (numeric(mutation.status) !== 1) return 'Only blocked status 1 can be returned to pending.'
-        if (numeric(mutation.definition_version) <= 0) return 'This legacy row has no definition version and the game server will block it again; discard it after review instead of retrying.'
-        if (numeric(mutation.definition_version) !== numeric(row.definitionVersion)) return 'Stored and current definition versions differ; the row must remain blocked.'
+        if (numeric(update.status) !== 1) return 'Only blocked status 1 can be returned to pending.'
+        if (numeric(update.version) !== numeric(row.definitionVersion)) return 'Stored and current definition versions differ; the row must remain blocked.'
         return ''
       },
-      mutationDiscardDisabledReason (row, mutation) {
-        const guard = this.mutationGuardReason()
+      updateDiscardDisabledReason (row, update) {
+        const guard = this.updateGuardReason()
         if (guard) return guard
-        const status = numeric(mutation.status)
-        if (status === 2 && !this.isStaleProcessingLease(mutation)) return 'Processing status 2 still has an active 60-second zone lease.'
-        if (![0, 1, 2].includes(status)) return `Unknown mutation status ${mutation.status} cannot be discarded safely.`
+        const status = numeric(update.status)
+        if (status === 2 && !this.isStaleProcessingLease(update)) return 'Processing status 2 still has an active 60-second zone lease.'
+        if (![0, 1, 2].includes(status)) return `Unknown update status ${update.status} cannot be discarded safely.`
         return ''
       },
       openProgressAction (row, component) {
@@ -1627,7 +1634,7 @@
             component_type: numeric(component.component_type),
             component_id: numeric(component.component_id),
             expected_current_count: String(component.currentCount === undefined || component.currentCount === null ? '0' : component.currentCount),
-            expected_definition_version: row.definitionVersion
+            expected_version: row.definitionVersion
           }
         }
         this.actionOpen = true
@@ -1647,19 +1654,19 @@
           after: `Completion stored at definition v${row.definitionVersion}`,
           expectedRows: [{ label: 'Definition version', value: row.definitionVersion }],
           endpoint: 'complete',
-          payload: { achievement_id: row.id, expected_definition_version: row.definitionVersion }
+          payload: { achievement_id: row.id, expected_version: row.definitionVersion }
         }
         this.actionOpen = true
       },
       openResetAction (row) {
         const blockedReason = this.resetDisabledReason(row)
         if (blockedReason) return this.showNotification(blockedReason, 'error')
-        const staleProcessing = this.staleProcessingMutations(row)
+        const staleProcessing = this.staleProcessingUpdates(row)
         this.activeAction = {
           kind: 'reset',
           title: 'Reset achievement state',
           heading: `Reset ${row.name}?`,
-          message: 'The normal path removes completion, component progress, and queued mutations while preserving reward and selection history so recompletion cannot duplicate delivery.',
+          message: 'The normal path removes completion, component progress, and queued updates while preserving reward and selection history so recompletion cannot duplicate delivery.',
           icon: 'fa fa-undo',
           danger: true,
           submitLabel: 'Reset achievement',
@@ -1672,13 +1679,13 @@
           riskMessage: 'Clearing reward and selection ledgers allows every authored grant to be issued again after recompletion. Choose this only when the original delivery is known to be invalid or intentionally reversed.',
           showStaleLeaseAcknowledgement: staleProcessing.length > 0,
           staleLeaseMessage: staleProcessing.length
-            ? `${staleProcessing.length} status-2 mutation lease${staleProcessing.length === 1 ? '' : 's'} expired at least 60 seconds ago (${staleProcessing.map(mutation => '#' + mutation.mutation_id).join(', ')}). Reset will remove these abandoned queue rows.`
+            ? `${staleProcessing.length} status-2 update lease${staleProcessing.length === 1 ? '' : 's'} expired at least 60 seconds ago (${staleProcessing.map(update => '#' + update.update_id).join(', ')}). Reset will remove these abandoned queue rows.`
             : '',
           expectedRows: [{ label: 'Definition version', value: row.definitionVersion }].concat(staleProcessing.length
-            ? [{ label: 'Expired processing mutation IDs', value: staleProcessing.map(mutation => mutation.mutation_id).join(', ') }]
+            ? [{ label: 'Expired processing update IDs', value: staleProcessing.map(update => update.update_id).join(', ') }]
             : []),
           endpoint: 'reset',
-          payload: { achievement_id: row.id, expected_definition_version: row.definitionVersion }
+          payload: { achievement_id: row.id, expected_version: row.definitionVersion }
         }
         this.actionOpen = true
       },
@@ -1707,7 +1714,7 @@
             achievement_id: row.id,
             reward_id: String(reward.reward_id),
             expected_status: numeric(reward.ledger.status),
-            expected_definition_version: row.definitionVersion
+            expected_version: row.definitionVersion
           }
         }
         this.actionOpen = true
@@ -1736,20 +1743,20 @@
             achievement_id: row.id,
             reward_set_id: numeric(selection.reward_set_id),
             expected_status: numeric(selection.status),
-            expected_definition_version: row.definitionVersion
+            expected_version: row.definitionVersion
           }
         }
         this.actionOpen = true
       },
-      openMutationAction (row, mutation, action) {
-        const blockedReason = action === 'retry' ? this.mutationRetryDisabledReason(row, mutation) : this.mutationDiscardDisabledReason(row, mutation)
+      openUpdateAction (row, update, action) {
+        const blockedReason = action === 'retry' ? this.updateRetryDisabledReason(row, update) : this.updateDiscardDisabledReason(row, update)
         if (blockedReason) return this.showNotification(blockedReason, 'error')
         const discard = action === 'discard'
-        const staleProcessingLease = discard && this.isStaleProcessingLease(mutation)
+        const staleProcessingLease = discard && this.isStaleProcessingLease(update)
         this.activeAction = {
-          kind: discard ? 'mutation-discard' : 'mutation-retry',
-          title: discard ? 'Discard queued mutation' : 'Retry blocked mutation',
-          heading: `${discard ? 'Discard' : 'Retry'} mutation #${mutation.mutation_id}?`,
+          kind: discard ? 'update-discard' : 'update-retry',
+          title: discard ? 'Discard queued update' : 'Retry blocked update',
+          heading: `${discard ? 'Discard' : 'Retry'} update #${update.update_id}?`,
           message: discard
             ? (staleProcessingLease
               ? 'Permanently removes a status-2 world-handoff row whose 60-second processing lease has expired. Confirm that no zone consumer still owns this abandoned work.'
@@ -1758,34 +1765,34 @@
           icon: discard ? 'fa fa-trash' : 'fa fa-repeat',
           danger: discard,
           submitLabel: discard ? 'Discard permanently' : 'Return to pending',
-          confirmationPhrase: `${discard ? 'DISCARD' : 'RETRY'} MUTATION ${mutation.mutation_id}`,
-          before: `${this.enumLabel('mutation_statuses', mutation.status)}; ${mutation.attempt_count} attempts`,
+          confirmationPhrase: `${discard ? 'DISCARD' : 'RETRY'} UPDATE ${update.update_id}`,
+          before: `${this.enumLabel('update_statuses', update.status)}; ${update.attempt_count} attempts`,
           after: discard ? 'Queued row permanently removed' : 'Queued row returns to pending status (0)',
           showStaleLeaseAcknowledgement: staleProcessingLease,
           staleLeaseMessage: staleProcessingLease
-            ? `Mutation #${mutation.mutation_id} last attempted processing at ${this.formatTime(mutation.last_attempt_at)}. Its 60-second lease is expired, but removal can discard work that completed outside the ledger.`
+            ? `Update #${update.update_id} last attempted processing at ${this.formatTime(update.last_attempt_at)}. Its 60-second lease is expired, but removal can discard work that completed outside the ledger.`
             : '',
           expectedRows: [
-            { label: 'Mutation status', value: mutation.status },
-            { label: 'Attempt count', value: mutation.attempt_count },
-            { label: 'Stored definition version', value: mutation.definition_version }
+            { label: 'Update status', value: update.status },
+            { label: 'Attempt count', value: update.attempt_count },
+            { label: 'Stored definition version', value: update.version }
           ],
-          endpoint: discard ? 'mutation' : 'mutation/retry',
+          endpoint: discard ? 'update' : 'update/retry',
           delete: discard,
           payload: {
-            mutation_id: String(mutation.mutation_id),
+            update_id: String(update.update_id),
             action,
-            expected_status: numeric(mutation.status),
-            expected_attempt_count: numeric(mutation.attempt_count)
+            expected_status: numeric(update.status),
+            expected_attempt_count: numeric(update.attempt_count)
           }
         }
         this.actionOpen = true
       },
       async submitAction (form) {
         if (!this.activeAction.endpoint || !this.selectedCharacterID || this.operationBusy) return
-        if (this.mutationGuardReason()) {
+        if (this.updateGuardReason()) {
           this.actionOpen = false
-          return this.showNotification(this.mutationGuardReason(), 'error')
+          return this.showNotification(this.updateGuardReason(), 'error')
         }
         this.operationBusy = true
         const payload = Object.assign({}, this.activeAction.payload || {}, {
@@ -1873,13 +1880,13 @@
         if (numeric(status) === 3) return 'danger'
         return 'neutral'
       },
-      mutationStatusTone (status) {
+      updateStatusTone (status) {
         if (numeric(status) === 0) return 'warning'
         if (numeric(status) === 1) return 'danger'
         return 'neutral'
       },
-      mutationCount (status) {
-        return this.flatMutations.filter(entry => numeric(entry.mutation.status) === numeric(status)).length
+      updateCount (status) {
+        return this.flatUpdates.filter(entry => numeric(entry.update.status) === numeric(status)).length
       },
       isOnline (character) {
         if (!character) return false
@@ -2052,12 +2059,12 @@
 .ca-state-badge--danger { background: rgba(139, 53, 53, .14); border-color: rgba(217, 98, 98, .3); color: #e38f8f; }
 .ca-state-badge--neutral { background: rgba(91, 104, 113, .13); border-color: rgba(151, 165, 175, .22); color: #95a1aa; }
 .ca-achievement-card__detail { border-top: 1px solid rgba(224, 197, 102, .2); padding: 10px; }
-.ca-definition-facts, .ca-mutation-summary-grid, .ca-schema-ready-grid { display: grid; gap: 7px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.ca-definition-facts section, .ca-mutation-summary-grid section, .ca-schema-ready-grid section { background: rgba(0, 0, 0, .2); border: 1px solid rgba(178, 191, 204, .13); min-width: 0; padding: 8px; }
-.ca-definition-facts span, .ca-definition-facts strong, .ca-definition-facts small, .ca-mutation-summary-grid span, .ca-mutation-summary-grid strong, .ca-mutation-summary-grid small, .ca-schema-ready-grid span, .ca-schema-ready-grid strong, .ca-schema-ready-grid small { display: block; }
-.ca-definition-facts span, .ca-mutation-summary-grid span, .ca-schema-ready-grid span { color: #74818a; font-size: 8px; text-transform: uppercase; }
-.ca-definition-facts strong, .ca-mutation-summary-grid strong, .ca-schema-ready-grid strong { color: #d8c578; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ca-definition-facts small, .ca-mutation-summary-grid small, .ca-schema-ready-grid small { color: #6f7c85; font-size: 8px; margin-top: 2px; }
+.ca-definition-facts, .ca-update-summary-grid, .ca-schema-ready-grid { display: grid; gap: 7px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ca-definition-facts section, .ca-update-summary-grid section, .ca-schema-ready-grid section { background: rgba(0, 0, 0, .2); border: 1px solid rgba(178, 191, 204, .13); min-width: 0; padding: 8px; }
+.ca-definition-facts span, .ca-definition-facts strong, .ca-definition-facts small, .ca-update-summary-grid span, .ca-update-summary-grid strong, .ca-update-summary-grid small, .ca-schema-ready-grid span, .ca-schema-ready-grid strong, .ca-schema-ready-grid small { display: block; }
+.ca-definition-facts span, .ca-update-summary-grid span, .ca-schema-ready-grid span { color: #74818a; font-size: 8px; text-transform: uppercase; }
+.ca-definition-facts strong, .ca-update-summary-grid strong, .ca-schema-ready-grid strong { color: #d8c578; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ca-definition-facts small, .ca-update-summary-grid small, .ca-schema-ready-grid small { color: #6f7c85; font-size: 8px; margin-top: 2px; }
 
 .ca-detail-section { border-top: 1px solid rgba(178, 191, 204, .14); margin-top: 13px; padding-top: 11px; }
 .ca-detail-section__heading { align-items: flex-start; display: flex; gap: 10px; justify-content: space-between; margin-bottom: 7px; }
@@ -2087,7 +2094,7 @@
 .ca-definition-pagination { margin-top: 12px; }
 
 .ca-guide-callout { margin: 0 0 13px; }
-.ca-mutation-summary-grid section strong { font-family: Georgia, "Times New Roman", serif; font-size: 18px; }
+.ca-update-summary-grid section strong { font-family: Georgia, "Times New Roman", serif; font-size: 18px; }
 .ca-safety-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .ca-safety-grid section { align-items: flex-start; background: rgba(0, 0, 0, .2); border: 1px solid rgba(178, 191, 204, .14); display: flex; gap: 8px; padding: 10px; }
 .ca-safety-grid i { color: #d7bf66; flex: 0 0 18px; margin-top: 2px; text-align: center; }
@@ -2115,7 +2122,7 @@
   .character-achievement-workspace { grid-template-columns: minmax(260px, .8fr) minmax(0, 1.7fr); }
   .ca-definition-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ca-filter-summary { grid-column: 1 / -1; }
-  .ca-definition-facts, .ca-mutation-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ca-definition-facts, .ca-update-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ca-safety-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -2134,7 +2141,7 @@
 @media (max-width: 560px) {
   .ca-schema-failure__heading { grid-template-columns: 36px minmax(0, 1fr); }
   .ca-schema-failure__heading .btn { grid-column: 1 / -1; }
-  .ca-definition-controls, .ca-definition-facts, .ca-mutation-summary-grid, .ca-schema-ready-grid, .ca-safety-grid { grid-template-columns: minmax(0, 1fr); }
+  .ca-definition-controls, .ca-definition-facts, .ca-update-summary-grid, .ca-schema-ready-grid, .ca-safety-grid { grid-template-columns: minmax(0, 1fr); }
   .ca-achievement-card__summary { grid-template-columns: minmax(0, 1fr); }
   .ca-character-header__actions { align-items: stretch; width: 100%; }
 }

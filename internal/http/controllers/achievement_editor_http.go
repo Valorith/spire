@@ -10,6 +10,9 @@ import (
 )
 
 const (
+	achievementEditorContentSchemaGuidance   = "Install EQEmu database update 9329 for the final achievement content schema. Rewritten CREATE migrations do not alter tables created by an older draft."
+	achievementEditorCharacterSchemaGuidance = "Install EQEmu database updates 9329 (achievement content) and 9330 (character achievement state). Rewritten CREATE migrations do not alter tables created by an older draft."
+
 	achievementEditorEventDefinitionCreate = "ACHIEVEMENT_DEFINITION_CREATE"
 	achievementEditorEventDefinitionUpdate = "ACHIEVEMENT_DEFINITION_UPDATE"
 	achievementEditorEventDefinitionClone  = "ACHIEVEMENT_DEFINITION_CLONE"
@@ -18,13 +21,13 @@ const (
 	achievementEditorEventCategoryUpdate   = "ACHIEVEMENT_CATEGORY_UPDATE"
 	achievementEditorEventCategoryDelete   = "ACHIEVEMENT_CATEGORY_DELETE"
 
-	achievementEditorEventProgressSet     = "CHARACTER_ACHIEVEMENT_PROGRESS_SET"
-	achievementEditorEventForceComplete   = "CHARACTER_ACHIEVEMENT_FORCE_COMPLETE"
-	achievementEditorEventReset           = "CHARACTER_ACHIEVEMENT_RESET"
-	achievementEditorEventRewardRetry     = "CHARACTER_ACHIEVEMENT_REWARD_RETRY"
-	achievementEditorEventSelectionRetry  = "CHARACTER_ACHIEVEMENT_SELECTION_RETRY"
-	achievementEditorEventMutationRetry   = "CHARACTER_ACHIEVEMENT_MUTATION_RETRY"
-	achievementEditorEventMutationDiscard = "CHARACTER_ACHIEVEMENT_MUTATION_DISCARD"
+	achievementEditorEventProgressSet    = "CHARACTER_ACHIEVEMENT_PROGRESS_SET"
+	achievementEditorEventForceComplete  = "CHARACTER_ACHIEVEMENT_FORCE_COMPLETE"
+	achievementEditorEventReset          = "CHARACTER_ACHIEVEMENT_RESET"
+	achievementEditorEventRewardRetry    = "CHARACTER_ACHIEVEMENT_REWARD_RETRY"
+	achievementEditorEventSelectionRetry = "CHARACTER_ACHIEVEMENT_SELECTION_RETRY"
+	achievementEditorEventUpdateRetry    = "CHARACTER_ACHIEVEMENT_UPDATE_RETRY"
+	achievementEditorEventUpdateDiscard  = "CHARACTER_ACHIEVEMENT_UPDATE_DISCARD"
 )
 
 func (a *AchievementEditorController) metadata(c echo.Context) error {
@@ -35,6 +38,7 @@ func (a *AchievementEditorController) definitionSchema(c echo.Context) error {
 	content := a.inspectAchievementSchema(a.contentDB(c), "content", achievementEditorContentSchemaSpec(), achievementEditorRefreshSchema(c))
 	diagnostics := achievementEditorSchemaDiagnostics{
 		Ready:     content.Ready,
+		Guidance:  achievementEditorContentSchemaGuidance,
 		Content:   content,
 		Character: achievementEditorSchemaArea{Ready: false, Tables: make(map[string]achievementEditorSchemaTable), Issues: make([]achievementEditorSchemaIssue, 0)},
 	}
@@ -45,7 +49,7 @@ func (a *AchievementEditorController) characterSchema(c echo.Context) error {
 	refresh := achievementEditorRefreshSchema(c)
 	content := a.inspectAchievementSchema(a.contentDB(c), "content", achievementEditorContentSchemaSpec(), refresh)
 	character := a.inspectAchievementSchema(a.characterDB(c), "character", achievementEditorCharacterSchemaSpec(), refresh)
-	diagnostics := achievementEditorSchemaDiagnostics{Ready: content.Ready && character.Ready, Content: content, Character: character}
+	diagnostics := achievementEditorSchemaDiagnostics{Ready: content.Ready && character.Ready, Guidance: achievementEditorCharacterSchemaGuidance, Content: content, Character: character}
 	return c.JSON(http.StatusOK, diagnostics)
 }
 
@@ -54,7 +58,7 @@ func (a *AchievementEditorController) requireContentSchema(c echo.Context) error
 	if diagnostics.Ready {
 		return nil
 	}
-	return achievementEditorFieldError(http.StatusServiceUnavailable, "schema", "Achievement content schema is missing or incompatible", diagnostics)
+	return achievementEditorFieldError(http.StatusServiceUnavailable, "schema", "Achievement content schema is missing or incompatible. "+achievementEditorContentSchemaGuidance, diagnostics)
 }
 
 func (a *AchievementEditorController) requireCharacterSchema(c echo.Context) error {
@@ -64,8 +68,8 @@ func (a *AchievementEditorController) requireCharacterSchema(c echo.Context) err
 		return nil
 	}
 	return achievementEditorFieldError(
-		http.StatusServiceUnavailable, "schema", "Achievement content or character-state schema is missing or incompatible",
-		achievementEditorSchemaDiagnostics{Ready: false, Content: content, Character: character},
+		http.StatusServiceUnavailable, "schema", "Achievement content or character-state schema is missing or incompatible. "+achievementEditorCharacterSchemaGuidance,
+		achievementEditorSchemaDiagnostics{Ready: false, Guidance: achievementEditorCharacterSchemaGuidance, Content: content, Character: character},
 	)
 }
 
@@ -207,14 +211,14 @@ func (a *AchievementEditorController) definitionAudit(c echo.Context) error {
 func achievementEditorAuditPayload(action string, graph achievementEditorGraph, reason string) map[string]interface{} {
 	return map[string]interface{}{
 		"action": action, "achievement_id": graph.ID, "achievement_name": graph.Name,
-		"definition_version": graph.DefinitionVersion, "enabled": graph.Enabled,
+		"version": graph.Version, "enabled": graph.Enabled,
 		"categories": len(graph.Associations), "components": len(graph.Components),
-		"rewards": len(graph.Rewards), "restrictions": len(graph.Restrictions),
+		"rewards": len(graph.Rewards), "requirements": len(graph.Requirements),
 		"reason": strings.TrimSpace(reason),
 	}
 }
 
-func achievementEditorMutationSuccess(c echo.Context, status int, definition achievementEditorGraph, auditID uint) error {
+func achievementEditorUpdateSuccess(c echo.Context, status int, definition achievementEditorGraph, auditID uint) error {
 	return c.JSON(status, echo.Map{"definition": definition, "audit_id": auditID})
 }
 

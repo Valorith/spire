@@ -355,7 +355,11 @@
   background: rgba(0, 0, 0, .35);
   color: var(--ae-muted);
 }
-.achievement-lookup-result__item-icon > span { display: block; width: 32px; height: 32px; }
+.achievement-lookup-result__item-icon > span {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
 .achievement-lookup-empty { margin-top: .45rem; color: var(--ae-muted); font-size: .72rem; }
 
 .achievement-npc-helper { margin-top: .55rem; padding: .45rem; border: 1px dashed rgba(77, 182, 198, .35); border-radius: 5px; }

@@ -10,18 +10,31 @@ import (
 	"gorm.io/gorm"
 )
 
-func achievementEditorRequestGraph(request achievementEditorGraphMutationRequest) achievementEditorGraph {
+func achievementEditorRequestGraph(request achievementEditorGraphUpdateRequest) achievementEditorGraph {
 	if request.Definition != nil {
 		return *request.Definition
 	}
 	return request.Graph
 }
 
+func achievementEditorDefinitionMutationUsesCharacterSchema(operation string) bool {
+	return operation == "create" || operation == "clone"
+}
+
+func (a *AchievementEditorController) requireDefinitionMutationSchema(c echo.Context, operation string) error {
+	if achievementEditorDefinitionMutationUsesCharacterSchema(operation) {
+		// Stable-ID reuse checks query durable character state. Fail closed with
+		// actionable schema diagnostics before touching legacy or missing tables.
+		return a.requireCharacterSchema(c)
+	}
+	return a.requireContentSchema(c)
+}
+
 func (a *AchievementEditorController) createDefinition(c echo.Context) error {
-	if err := a.requireContentSchema(c); err != nil {
+	if err := a.requireDefinitionMutationSchema(c, "create"); err != nil {
 		return achievementEditorRespondError(c, "Achievement definition", err)
 	}
-	request := achievementEditorGraphMutationRequest{}
+	request := achievementEditorGraphUpdateRequest{}
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "The definition graph is not valid JSON"})
 	}
@@ -64,14 +77,14 @@ func (a *AchievementEditorController) createDefinition(c echo.Context) error {
 }
 
 func (a *AchievementEditorController) updateDefinition(c echo.Context) error {
-	if err := a.requireContentSchema(c); err != nil {
+	if err := a.requireDefinitionMutationSchema(c, "update"); err != nil {
 		return achievementEditorRespondError(c, "Achievement definition", err)
 	}
 	id, err := achievementEditorParamID(c, "id", "Achievement ID")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-	request := achievementEditorGraphMutationRequest{}
+	request := achievementEditorGraphUpdateRequest{}
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "The definition graph is not valid JSON"})
 	}
@@ -91,12 +104,12 @@ func (a *AchievementEditorController) updateDefinition(c echo.Context) error {
 		return achievementEditorValidationResponse(c, validation)
 	}
 	payload := achievementEditorAuditPayload("update", graph, request.Reason)
-	payload["expected_definition_version"] = request.ExpectedDefinitionVersion
+	payload["expected_version"] = request.ExpectedVersion
 	auditID, err := writeOperationalEditorAudit(c, a.auditLog, achievementEditorEventDefinitionUpdate, payload)
 	if err != nil {
 		return achievementEditorRespondError(c, "Achievement audit record", err)
 	}
-	if err = newAchievementEditorRepository(a.contentDB(c)).updateDefinition(graph, request.ExpectedDefinitionVersion, request.ExpectedRevision); err != nil {
+	if err = newAchievementEditorRepository(a.contentDB(c)).updateDefinition(graph, request.ExpectedVersion, request.ExpectedRevision); err != nil {
 		discardOperationalEditorAudit(a.db, auditID)
 		return achievementEditorRespondError(c, "Achievement definition", err)
 	}
@@ -112,7 +125,7 @@ func (a *AchievementEditorController) updateDefinition(c echo.Context) error {
 }
 
 func (a *AchievementEditorController) cloneDefinition(c echo.Context) error {
-	if err := a.requireContentSchema(c); err != nil {
+	if err := a.requireDefinitionMutationSchema(c, "clone"); err != nil {
 		return achievementEditorRespondError(c, "Achievement definition", err)
 	}
 	sourceID, err := achievementEditorParamID(c, "id", "Achievement ID")
@@ -161,7 +174,7 @@ func (a *AchievementEditorController) cloneDefinition(c echo.Context) error {
 }
 
 func (a *AchievementEditorController) deleteDefinition(c echo.Context) error {
-	if err := a.requireContentSchema(c); err != nil {
+	if err := a.requireDefinitionMutationSchema(c, "delete"); err != nil {
 		return achievementEditorRespondError(c, "Achievement definition", err)
 	}
 	id, err := achievementEditorParamID(c, "id", "Achievement ID")
@@ -206,7 +219,7 @@ func (a *AchievementEditorController) mutateCategory(c echo.Context, create bool
 	if err := a.requireContentSchema(c); err != nil {
 		return achievementEditorRespondError(c, "Achievement category", err)
 	}
-	request := achievementEditorCategoryMutationRequest{}
+	request := achievementEditorCategoryUpdateRequest{}
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "The category request is not valid JSON"})
 	}
@@ -354,7 +367,7 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		context.DependencyEdges[row.AchievementID] = append(context.DependencyEdges[row.AchievementID], row.TargetID)
 	}
 	var restrictionIDs []uint32
-	if err := db.Table("achievement_cast_restrictions").Distinct("restriction_id").Pluck("restriction_id", &restrictionIDs).Error; err != nil {
+	if err := db.Table("achievement_cast_requirements").Distinct("restriction_id").Pluck("restriction_id", &restrictionIDs).Error; err != nil {
 		return context, err
 	}
 	for _, id := range restrictionIDs {
@@ -363,7 +376,7 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 	// The server's legacy spell-restriction switch is not represented by a
 	// catalog table. Nonzero IDs submitted by the author are therefore the only
 	// additional identities that can be verified here.
-	for _, restriction := range graph.Restrictions {
+	for _, restriction := range graph.Requirements {
 		if restriction.RestrictionID != 0 {
 			context.KnownRestrictionIDs[restriction.RestrictionID] = struct{}{}
 		}
@@ -372,7 +385,7 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		RewardSetID uint32 `gorm:"column:reward_set_id"`
 	}, 0)
 	if graph.RewardSet != nil && graph.RewardSet.RewardSetID != 0 {
-		if err := db.Table("achievement_reward_sets").Select("reward_set_id").
+		if err := db.Table("reward_sets").Select("reward_set_id").
 			Where("reward_set_id = ?", graph.RewardSet.RewardSetID).Scan(&setRows).Error; err != nil {
 			return context, err
 		}
@@ -381,8 +394,7 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		context.KnownRewardSetIDs[row.RewardSetID] = struct{}{}
 	}
 	rewardRows := make([]struct {
-		RewardID      string `gorm:"column:reward_id"`
-		AchievementID uint32 `gorm:"column:achievement_id"`
+		RewardID string `gorm:"column:reward_id"`
 	}, 0)
 	rewardIDs := make([]string, 0, len(graph.Rewards))
 	seenRewardIDs := make(map[string]struct{}, len(graph.Rewards))
@@ -397,23 +409,24 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		seenRewardIDs[id] = struct{}{}
 		rewardIDs = append(rewardIDs, id)
 	}
-	if len(rewardIDs) > 0 || existing {
-		rewardQuery := db.Table("achievement_rewards").Select("reward_id, achievement_id")
-		if len(rewardIDs) > 0 && existing {
-			rewardQuery = rewardQuery.Where("reward_id IN ? OR achievement_id = ?", rewardIDs, graph.ID)
-		} else if len(rewardIDs) > 0 {
-			rewardQuery = rewardQuery.Where("reward_id IN ?", rewardIDs)
-		} else {
-			rewardQuery = rewardQuery.Where("achievement_id = ?", graph.ID)
-		}
-		if err := rewardQuery.Scan(&rewardRows).Error; err != nil {
+	if len(rewardIDs) > 0 {
+		if err := db.Table("rewards").Select("reward_id").
+			Where("reward_id IN ?", rewardIDs).Scan(&rewardRows).Error; err != nil {
 			return context, err
 		}
 	}
 	for _, row := range rewardRows {
 		context.KnownRewardIDs[row.RewardID] = struct{}{}
-		if existing && row.AchievementID == graph.ID {
-			context.ExistingRewardIDs[row.RewardID] = struct{}{}
+	}
+	if existing {
+		automaticIDs := make([]string, 0)
+		if err := db.Table("reward_source_entries").Where(
+			"source_type = ? AND source_id = ?", achievementEditorRewardSourceType, graph.ID,
+		).Pluck("reward_id", &automaticIDs).Error; err != nil {
+			return context, err
+		}
+		for _, rewardID := range automaticIDs {
+			context.ExistingRewardIDs[rewardID] = struct{}{}
 		}
 	}
 	countRows := make([]struct {
@@ -430,7 +443,7 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		componentIDs = append(componentIDs, component.ComponentID)
 	}
 	if len(componentIDs) > 0 {
-		if err := db.Table("achievement_component_counts").Select("component_id, required_count").
+		if err := db.Table("achievement_associations").Select("component_id, required_count").
 			Where("component_id IN ?", componentIDs).Scan(&countRows).Error; err != nil {
 			return context, err
 		}
@@ -507,11 +520,20 @@ func buildAchievementEditorValidationContext(db *gorm.DB, graph achievementEdito
 		var set struct {
 			RewardSetID uint32 `gorm:"column:reward_set_id"`
 		}
-		result := db.Table("achievement_reward_sets").Select("reward_set_id").Where("achievement_id = ?", graph.ID).Take(&set)
+		result := db.Table("reward_sources").Select("reward_set_id").
+			Where("source_type = ? AND source_id = ?", achievementEditorRewardSourceType, graph.ID).Take(&set)
 		if result.Error == nil {
 			context.ExistingRewardSetID = &set.RewardSetID
+			var selectableIDs []string
+			if err := db.Table("reward_option_entries").Where("reward_set_id = ?", set.RewardSetID).
+				Pluck("reward_id", &selectableIDs).Error; err != nil {
+				return context, err
+			}
+			for _, rewardID := range selectableIDs {
+				context.ExistingRewardIDs[rewardID] = struct{}{}
+			}
 			var optionIDs []uint32
-			if err := db.Table("achievement_reward_options").Where("reward_set_id = ?", set.RewardSetID).Pluck("option_id", &optionIDs).Error; err != nil {
+			if err := db.Table("reward_options").Where("reward_set_id = ?", set.RewardSetID).Pluck("option_id", &optionIDs).Error; err != nil {
 				return context, err
 			}
 			for _, optionID := range optionIDs {

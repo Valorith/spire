@@ -31,7 +31,7 @@ func achievementEditorWithAdvisoryLock(
 			return err
 		}
 		if lock.Acquired == nil || *lock.Acquired != 1 {
-			return operationalEditorConflict("Another achievement mutation is active; retry after it completes")
+			return operationalEditorConflict("Another achievement update is active; retry after it completes")
 		}
 		defer func() {
 			var release struct {
@@ -44,11 +44,11 @@ func achievementEditorWithAdvisoryLock(
 			if releaseErr != nil {
 				connection.Logger.Error(
 					context.Background(),
-					"HIGH SEVERITY: achievement advisory unlock failed after work completed; preserving the mutation outcome to prevent an unsafe retry: %v",
+					"HIGH SEVERITY: achievement advisory unlock failed after work completed; preserving the update outcome to prevent an unsafe retry: %v",
 					releaseErr,
 				)
 			}
-			err = achievementEditorAdvisoryMutationOutcome(err, releaseErr)
+			err = achievementEditorAdvisoryUpdateOutcome(err, releaseErr)
 		}()
 
 		err = work(connection)
@@ -56,12 +56,12 @@ func achievementEditorWithAdvisoryLock(
 	})
 }
 
-// achievementEditorAdvisoryMutationOutcome deliberately treats the committed
-// mutation (or its original failure) as authoritative. Reporting an unlock
+// achievementEditorAdvisoryUpdateOutcome deliberately treats the committed
+// update (or its original failure) as authoritative. Reporting an unlock
 // failure to the API after commit makes clients retry a change that already
-// happened and can duplicate durable delivery or authoring mutations.
-func achievementEditorAdvisoryMutationOutcome(mutationErr, _ error) error {
-	return mutationErr
+// happened and can duplicate durable delivery or authoring updates.
+func achievementEditorAdvisoryUpdateOutcome(updateErr, _ error) error {
+	return updateErr
 }
 
 // achievementEditorWithAdvisoryTransaction holds the shared authoring lock
@@ -70,10 +70,10 @@ func achievementEditorWithAdvisoryTransaction(
 	db *gorm.DB,
 	lockName string,
 	timeoutSeconds int,
-	mutation func(*gorm.DB) error,
+	update func(*gorm.DB) error,
 ) error {
 	return achievementEditorWithAdvisoryLock(db, lockName, timeoutSeconds, func(connection *gorm.DB) error {
-		return connection.Transaction(mutation)
+		return connection.Transaction(update)
 	})
 }
 
@@ -138,6 +138,7 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 	}
 	type runtimeReward struct {
 		RewardID     string `json:"reward_id"`
+		Sequence     uint32 `json:"sequence"`
 		RewardType   uint8  `json:"reward_type"`
 		RewardDataID uint32 `json:"reward_data_id"`
 		Amount       string `json:"amount"`
@@ -150,6 +151,7 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 	}
 	type runtimeRewardMapping struct {
 		OptionID uint32 `json:"option_id"`
+		Sequence uint32 `json:"sequence"`
 		RewardID string `json:"reward_id"`
 	}
 	type runtimeRewardSet struct {
@@ -159,6 +161,7 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 	}
 	type runtimePolicy struct {
 		ResetOnVersionChange bool                   `json:"reset_on_version_change"`
+		RewardSourceEnabled  bool                   `json:"reward_source_enabled"`
 		Components           []runtimeComponent     `json:"components"`
 		Rewards              []runtimeReward        `json:"rewards"`
 		MappedRewards        []runtimeRewardMapping `json:"mapped_rewards"`
@@ -170,6 +173,9 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 		Components:           make([]runtimeComponent, 0, len(graph.Components)),
 		Rewards:              make([]runtimeReward, 0, len(graph.Rewards)),
 		MappedRewards:        make([]runtimeRewardMapping, 0),
+	}
+	if graph.RewardSet != nil {
+		policy.RewardSourceEnabled = graph.RewardSet.SourceEnabled
 	}
 	enabledRewardIDs := make(map[string]string)
 	for index, reward := range graph.Rewards {
@@ -185,6 +191,7 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 		enabledRewardIDs[fmt.Sprintf("@%d", index)] = canonicalRewardID
 		policy.Rewards = append(policy.Rewards, runtimeReward{
 			RewardID:     canonicalRewardID,
+			Sequence:     reward.Sequence,
 			RewardType:   reward.RewardType,
 			RewardDataID: reward.RewardDataID,
 			Amount:       reward.Amount,
@@ -198,11 +205,12 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 			}
 			policy.MappedRewards = append(policy.MappedRewards, runtimeRewardMapping{
 				OptionID: mapping.OptionID,
+				Sequence: mapping.Sequence,
 				RewardID: canonicalRewardID,
 			})
 		}
 	}
-	if graph.RewardSet != nil && graph.RewardSet.Enabled {
+	if graph.RewardSet != nil && graph.RewardSet.SourceEnabled && graph.RewardSet.Enabled {
 		policy.RewardSet = &runtimeRewardSet{
 			RewardSetID: graph.RewardSet.RewardSetID,
 			Options:     make([]runtimeRewardOption, 0, len(graph.RewardSet.Options)),
@@ -228,6 +236,7 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 			}
 			policy.RewardSet.Mappings = append(policy.RewardSet.Mappings, runtimeRewardMapping{
 				OptionID: mapping.OptionID,
+				Sequence: mapping.Sequence,
 				RewardID: canonicalRewardID,
 			})
 		}
@@ -301,6 +310,9 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 		if left.RewardID != right.RewardID {
 			return left.RewardID < right.RewardID
 		}
+		if left.Sequence != right.Sequence {
+			return left.Sequence < right.Sequence
+		}
 		if left.RewardType != right.RewardType {
 			return left.RewardType < right.RewardType
 		}
@@ -313,6 +325,9 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 		if policy.MappedRewards[i].OptionID != policy.MappedRewards[j].OptionID {
 			return policy.MappedRewards[i].OptionID < policy.MappedRewards[j].OptionID
 		}
+		if policy.MappedRewards[i].Sequence != policy.MappedRewards[j].Sequence {
+			return policy.MappedRewards[i].Sequence < policy.MappedRewards[j].Sequence
+		}
 		return policy.MappedRewards[i].RewardID < policy.MappedRewards[j].RewardID
 	})
 	if policy.RewardSet != nil {
@@ -322,6 +337,9 @@ func achievementEditorRuntimePolicyRevision(graph achievementEditorGraph) (strin
 		sort.Slice(policy.RewardSet.Mappings, func(i, j int) bool {
 			if policy.RewardSet.Mappings[i].OptionID != policy.RewardSet.Mappings[j].OptionID {
 				return policy.RewardSet.Mappings[i].OptionID < policy.RewardSet.Mappings[j].OptionID
+			}
+			if policy.RewardSet.Mappings[i].Sequence != policy.RewardSet.Mappings[j].Sequence {
+				return policy.RewardSet.Mappings[i].Sequence < policy.RewardSet.Mappings[j].Sequence
 			}
 			return policy.RewardSet.Mappings[i].RewardID < policy.RewardSet.Mappings[j].RewardID
 		})

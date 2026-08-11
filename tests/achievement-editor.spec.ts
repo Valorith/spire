@@ -28,9 +28,9 @@ const definition = {
   description: 'Reach level 50 while exploring Norrath.',
   icon_id: 12,
   points: 10,
-  reward_display: 0,
-  world_display_flag: 0,
-  definition_version: 2,
+  has_reward: false,
+  client_flag: 0,
+  version: 2,
   reset_on_version_change: false,
   enabled: true,
   associations: [
@@ -41,8 +41,8 @@ const definition = {
       component_type: 0,
       sequence: 1,
       component_id: 1000,
-      description: 'Reach level 50.',
-      description_2: '',
+      name: 'Reach level 50.',
+      description: '',
       presentation_count: 1,
       criteria: [
         {
@@ -71,7 +71,7 @@ const definition = {
     },
   ],
   reward_set: null,
-  restrictions: [],
+  requirements: [],
 };
 
 const summary = {
@@ -80,13 +80,13 @@ const summary = {
   description: definition.description,
   icon_id: definition.icon_id,
   points: definition.points,
-  definition_version: definition.definition_version,
+  version: definition.version,
   enabled: definition.enabled,
   category_count: 1,
   component_count: 1,
   criterion_count: 1,
   reward_count: 1,
-  restriction_count: 0,
+  requirement_count: 0,
 };
 
 const metadata = {
@@ -97,16 +97,16 @@ const metadata = {
     max_components: '1000',
     max_criteria: '2000',
     max_rewards: '500',
-    max_restrictions: '500',
+    max_requirements: '500',
     max_reward_options: '500',
   },
   fields: {
     achievements: {
       id: { label: 'Achievement ID', help: 'Stable nonzero identity used by character state and scripts.' },
       name: { label: 'Name', help: 'Visible achievement name sent to the client.' },
-      definition_version: { label: 'Definition version', help: 'Increment only for incompatible deployed changes.' },
+      version: { label: 'Definition version', help: 'Increment only for incompatible deployed changes.' },
     },
-    achievement_rewards: {
+    rewards: {
       reward_id: { label: 'Reward ID', help: 'Stable canonical grant identity, immutable after creation.' },
     },
     achievement_categories: {
@@ -238,7 +238,7 @@ async function installAchievementMocks(page: Page, state: AchievementMockState) 
       cloned.id = Number(state.clonePayload.new_id);
       cloned.name = state.clonePayload.name || source.name;
       cloned.enabled = false;
-      cloned.definition_version = 1;
+      cloned.version = 1;
       definitionsByID[cloned.id] = cloned;
       return json(route, { definition: cloned, revision: 'definition-rev-' + cloned.id, audit_id: 12 }, 201);
     }
@@ -284,6 +284,8 @@ test.describe('Achievement Editor', () => {
     const blocked = page.getByTestId('achievement-schema-blocked');
     await expect(blocked).toBeVisible();
     await expect(blocked).toContainText('Content writes are disabled');
+    await expect(blocked).toContainText('database update 9329');
+    await expect(blocked).toContainText('older draft');
     await expect(blocked).toContainText('The achievements table is missing.');
     await expect(page.getByTestId('achievement-new-definition')).toBeDisabled();
   });
@@ -300,8 +302,7 @@ test.describe('Achievement Editor', () => {
 
     await page.locator('#achievement-version').fill('0');
     await selectGraphTab(page, 'Validation');
-    await expect(page.getByTestId('achievement-tab-validation')).toContainText('Definition version must be a positive integer.');
-    await expect(page.locator('.achievement-validation-summary--danger')).toContainText('1 blocking issue');
+    await expect(page.getByTestId('achievement-tab-validation')).not.toContainText('Definition version must');
   });
 
   test('rejects definition and component TEXT values over 65,535 UTF-8 bytes', async ({ page }) => {
@@ -312,19 +313,19 @@ test.describe('Achievement Editor', () => {
     await expect(page.locator('#achievement-description-help')).toContainText('65,535 UTF-8 bytes');
     await page.locator('#achievement-description').fill(oversized);
     await selectGraphTab(page, 'Components');
+    await expect(page.locator('#achievement-component-name-help-0')).toContainText('65,535 UTF-8 bytes');
     await expect(page.locator('#achievement-component-description-help-0')).toContainText('65,535 UTF-8 bytes');
-    await expect(page.locator('#achievement-component-description2-help-0')).toContainText('65,535 UTF-8 bytes');
+    await page.locator('#achievement-component-name-0').fill(oversized);
     await page.locator('#achievement-component-description-0').fill(oversized);
-    await page.locator('#achievement-component-description2-0').fill(oversized);
 
     await selectGraphTab(page, 'Validation');
     const validation = page.getByTestId('achievement-tab-validation');
     await expect(validation.getByText('general.description', { exact: true })).toBeVisible();
+    await expect(validation.getByText('components.0.name', { exact: true })).toBeVisible();
     await expect(validation.getByText('components.0.description', { exact: true })).toBeVisible();
-    await expect(validation.getByText('components.0.description_2', { exact: true })).toBeVisible();
     await expect(validation.getByText('Achievement description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).', { exact: true })).toBeVisible();
-    await expect(validation.getByText('Component primary description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).', { exact: true })).toBeVisible();
-    await expect(validation.getByText('Component secondary description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).', { exact: true })).toBeVisible();
+    await expect(validation.getByText('Component name may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).', { exact: true })).toBeVisible();
+    await expect(validation.getByText('Component description may not exceed 65,535 UTF-8 bytes (the MySQL TEXT limit).', { exact: true })).toBeVisible();
   });
 
   test('preserves orphan criteria and requires an explicit whole-group recovery choice', async ({ page }) => {
@@ -333,8 +334,8 @@ test.describe('Achievement Editor', () => {
       component_type: 1,
       sequence: 2,
       component_id: 2000,
-      description: 'Missing component row — recovery required',
-      description_2: 'These criteria are preserved but cannot be evaluated until explicitly restored.',
+      name: 'Missing component row - recovery required',
+      description: 'These criteria are preserved but cannot be evaluated until explicitly restored.',
       presentation_count: 1,
       recovery_only: true,
       recovery_action: '',
@@ -431,7 +432,7 @@ test.describe('Achievement Editor', () => {
 
     expect(state.savePayload).toBeTruthy();
     expect(state.savePayload.reason).toBe('Add a disabled test definition for reviewed progression content.');
-    expect(state.savePayload.expected_definition_version).toBeUndefined();
+    expect(state.savePayload.expected_version).toBeUndefined();
     expect(state.savePayload.definition).toMatchObject({
       id: 101,
       name: 'Transient Reward Mapping',
@@ -440,7 +441,7 @@ test.describe('Achievement Editor', () => {
     expect(state.savePayload.definition.components).toHaveLength(1);
     expect(state.savePayload.definition.components[0].criteria).toHaveLength(1);
     expect(state.savePayload.definition.rewards[0].reward_id).toBe('');
-    expect(state.savePayload.definition.reward_set.mappings).toEqual([{ option_id: 1, reward_id: '@0' }]);
+    expect(state.savePayload.definition.reward_set.mappings).toEqual([{ option_id: 1, reward_id: '@0', sequence: 1 }]);
   });
 
   test('saves criterion containment and target values without losing signed BIGINT precision', async ({ page }) => {
@@ -462,7 +463,7 @@ test.describe('Achievement Editor', () => {
     await expect(page.getByText('Definition graph saved transactionally.')).toBeVisible();
 
     await expect.poll(() => state.savePayload).toBeTruthy();
-    expect(state.savePayload.expected_definition_version).toBe(2);
+    expect(state.savePayload.expected_version).toBe(2);
     expect(state.savePayload.expected_revision).toBe('definition-rev-100');
     const savedCriterion = state.savePayload.definition.components[0].criteria[0];
     expect(savedCriterion).toMatchObject({
@@ -548,12 +549,13 @@ test.describe('Achievement Editor', () => {
     await expect(page.getByTestId('achievement-tab-validation')).not.toContainText('Runtime evaluation or reward policy changed.');
   });
 
-  test('allows a disabled reward set to stage an enabled option without a grant', async ({ page }) => {
+  test('allows a disabled source link to stage an enabled set option without a grant', async ({ page }) => {
     const staged = clone(definition);
     staged.reward_set = {
       reward_set_id: 700,
       title: 'Staged choices',
-      enabled: false,
+      enabled: true,
+      source_enabled: false,
       options: [{ option_id: 1, sequence: 1, label: 'Future choice', common_to_all: false, flags: 0, enabled: true }],
       mappings: [],
     };
@@ -563,20 +565,52 @@ test.describe('Achievement Editor', () => {
     await expect(page.getByTestId('achievement-tab-validation')).not.toContainText('has no enabled grant');
   });
 
-  test('rejects an enabled reward set owned by a disabled definition', async ({ page }) => {
-    const unsafe = clone(definition);
-    unsafe.enabled = false;
-    unsafe.reward_set = {
+  test('allows a disabled definition to retain its source and set policy', async ({ page }) => {
+    const staged = clone(definition);
+    staged.enabled = false;
+    staged.reward_set = {
       reward_set_id: 700,
-      title: 'Unsafe choices',
+      title: 'Retained choices',
       enabled: true,
+      source_enabled: true,
       options: [{ option_id: 1, sequence: 1, label: 'Choice', common_to_all: false, flags: 0, enabled: true }],
       mappings: [{ option_id: 1, reward_id: '5000' }],
     };
-    await gotoAchievementEditor(page, { definitionOverride: unsafe });
+    await gotoAchievementEditor(page, { definitionOverride: staged });
     await openDefinition(page);
     await selectGraphTab(page, 'Validation');
-    await expect(page.getByTestId('achievement-tab-validation')).toContainText('Disable the selectable reward set before disabling its achievement');
+    await expect(page.getByTestId('achievement-tab-validation')).not.toContainText('Disable the selectable reward set before disabling its achievement');
+    await expect(page.getByTestId('achievement-tab-validation')).toContainText('No client-side blockers');
+  });
+
+  test('protects shared reward catalog fields while leaving this source link editable', async ({ page }) => {
+    const shared = clone(definition);
+    shared.reward_set = {
+      reward_set_id: 700,
+      title: 'Shared choices',
+      enabled: true,
+      source_enabled: true,
+      shared: true,
+      source_count: 2,
+      options: [{ option_id: 1, sequence: 1, label: 'Choice', common_to_all: false, flags: 0, enabled: true }],
+      mappings: [{ option_id: 1, sequence: 1, reward_id: '5000' }],
+    };
+    await gotoAchievementEditor(page, { definitionOverride: shared });
+    await openDefinition(page);
+    await selectGraphTab(page, 'Rewards');
+
+    const rewards = page.getByTestId('achievement-tab-rewards');
+    await expect(rewards).toContainText('used by 2 sources');
+    await expect(rewards).toContainText('mapped by a shared reward set');
+    await expect(page.locator('#achievement-reward-type-0')).toBeDisabled();
+    await expect(page.locator('#achievement-reward-amount-0')).toBeDisabled();
+    await expect(page.locator('#achievement-reward-set-title')).toBeDisabled();
+    await expect(page.locator('#achievement-reward-option-0')).toBeDisabled();
+
+    const sourceToggle = rewards.locator('.achievement-checkbox-field').filter({ hasText: 'Source link enabled' }).locator('input[type="checkbox"]');
+    const setToggle = rewards.locator('.achievement-checkbox-field').filter({ hasText: 'Set enabled' }).locator('input[type="checkbox"]');
+    await expect(sourceToggle).toBeEnabled();
+    await expect(setToggle).toBeDisabled();
   });
 
   test('sends the selected reward-content catalog filter to the bounded directory query', async ({ page }) => {

@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-func TestAchievementEditorAdvisoryUnlockCannotReverseMutationOutcome(t *testing.T) {
+func TestAchievementEditorAdvisoryUnlockCannotReverseUpdateOutcome(t *testing.T) {
 	unlockErr := errors.New("connection failed during RELEASE_LOCK")
-	if err := achievementEditorAdvisoryMutationOutcome(nil, unlockErr); err != nil {
+	if err := achievementEditorAdvisoryUpdateOutcome(nil, unlockErr); err != nil {
 		t.Fatalf("post-commit unlock failure escaped to caller: %v", err)
 	}
-	mutationErr := errors.New("mutation rolled back")
-	if got := achievementEditorAdvisoryMutationOutcome(mutationErr, unlockErr); !errors.Is(got, mutationErr) {
-		t.Fatalf("original mutation error = %v, want %v", got, mutationErr)
+	updateErr := errors.New("update rolled back")
+	if got := achievementEditorAdvisoryUpdateOutcome(updateErr, unlockErr); !errors.Is(got, updateErr) {
+		t.Fatalf("original update error = %v, want %v", got, updateErr)
 	}
 }
 
@@ -21,7 +21,7 @@ func TestAchievementEditorAdvisoryLockNamesMatchRuntimeContracts(t *testing.T) {
 	if achievementEditorAuthoringLock != "eqemu_achievement_authoring" {
 		t.Fatalf("authoring lock = %q", achievementEditorAuthoringLock)
 	}
-	if got := achievementEditorCharacterLockName(1015); got != "eqemu_achievement_mutation_1015" {
+	if got := achievementEditorCharacterLockName(1015); got != "eqemu_achievement_state_update_1015" {
 		t.Fatalf("character lock = %q", got)
 	}
 	if achievementEditorAuthoringLock == achievementEditorCharacterLockName(1015) {
