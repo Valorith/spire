@@ -104,7 +104,7 @@ func (a *AchievementEditorController) listDefinitions(c echo.Context) error {
 		converted := uint8(value)
 		filters.EventType = &converted
 	}
-	if value, ok := achievementEditorIntQuery(c, "reward_type", 0, 5); ok {
+	if value, ok := achievementEditorIntQuery(c, "reward_type", 0, 7); ok {
 		converted := uint8(value)
 		filters.RewardType = &converted
 	}

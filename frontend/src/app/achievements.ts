@@ -110,7 +110,9 @@ export const FALLBACK_METADATA: any = {
     { value: 2, label: 'Alternate Advancement', help: 'Reward data must be 0; amount is AA points.' },
     { value: 3, label: 'Copper', help: 'Reward data must be 0; amount is copper pieces.' },
     { value: 4, label: 'Alternate Currency', help: 'Reward data is the currency ID; amount is currency granted.' },
-    { value: 5, label: 'Title', help: 'Reward data is the title-set ID; amount must be positive.' }
+    { value: 5, label: 'Title', help: 'Reward data is the title-set ID; amount must be 1.' },
+    { value: 6, label: 'Alternate Advancement Ability', help: 'Reward data is an enabled aa_ability.id; amount is the desired cumulative rank and that rank must exist.' },
+    { value: 7, label: 'Class-ineligible AA fallback', help: 'Automatic-achievement-only inverse-class fallback. Reward data must match exactly one automatic type 6 ability; amount is unspent AA points for ineligible playable classes.' }
   ],
   events: [
     eventHelp(0, 'Manual', 'No engine event is observed. Quest or administrative APIs update it.', 'Target ID', 'Normally 0.', 'Secondary target', 'Must be 0.', 'Target value', 'Normally 0.', null, [0, 1, 2, 3]),
@@ -173,8 +175,8 @@ export const FIELD_HELP: any = {
     reward_id: ['Reward ID', 'Stable unsigned INT identity allocated transactionally for a new blank row. Persisted IDs are immutable and must never be renumbered.'],
     sequence: ['Grant order', 'Order within automatic source entries, or within the selected option when this grant is mapped.'],
     reward_type: ['Reward type', 'Controls how reward data and amount are interpreted.'],
-    reward_data_id: ['Referenced data', 'Type-specific ID such as item, alternate currency, or title-set ID.'],
-    amount: ['Amount', 'Positive quantity delivered when this grant is awarded.'],
+    reward_data_id: ['Referenced data', 'Type-specific ID such as item, alternate currency, title set, or AA ability ID.'],
+    amount: ['Amount', 'Positive quantity delivered when this grant is awarded. For type 6 this is the desired cumulative AA rank; for type 7 it is fallback AA points.'],
     description: ['Client description', 'Player-facing reward text. The server may derive a fallback when blank.'],
     enabled: ['Enabled', 'Disabled grants remain authored but are not delivered.']
   },
@@ -596,10 +598,10 @@ export function validateDefinition (raw: any, metadata: any = FALLBACK_METADATA)
     const path = 'rewards.' + index
     if (String(reward.reward_id).trim() !== '' && (!validUnsignedDecimal(reward.reward_id) || !decimalFitsUint32(reward.reward_id))) addIssue(issues, path + '.reward_id', 'Persisted reward ID must be a positive unsigned 32-bit decimal string.')
     if (!Number.isInteger(reward.sequence) || reward.sequence < 0) addIssue(issues, path + '.sequence', 'Reward sequence must be a non-negative integer.')
-    if (reward.reward_type < 0 || reward.reward_type > 5) addIssue(issues, path + '.reward_type', 'Reward type must be supported.')
+    if (reward.reward_type < 0 || reward.reward_type > 7) addIssue(issues, path + '.reward_type', 'Reward type must be supported from 0 through 7.')
     const amountValid = validUnsignedDecimal(reward.amount)
     if (!amountValid) addIssue(issues, path + '.amount', 'Reward amount must be a positive unsigned BIGINT value.')
-    if (reward.enabled && [0, 4, 5].includes(reward.reward_type) && reward.reward_data_id <= 0) addIssue(issues, path + '.reward_data_id', 'This enabled reward type requires a nonzero referenced data ID.')
+    if (reward.enabled && [0, 4, 5, 6, 7].includes(reward.reward_type) && reward.reward_data_id <= 0) addIssue(issues, path + '.reward_data_id', 'This enabled reward type requires a nonzero referenced data ID.')
     if (reward.reward_type === 1 && reward.reward_data_id > 1) addIssue(issues, path + '.reward_data_id', 'Experience mode must be 0 for normal handling or 1 for normal-only raw XP.')
     const deliveryFindingLevel = graph.enabled ? 'error' : 'warning'
     if (reward.enabled && amountValid && reward.reward_type === 0 && !decimalFitsMaximum(reward.amount, '32767')) addIssue(issues, path + '.amount', 'Item reward amount cannot exceed 32,767, the runtime item-summon limit.', deliveryFindingLevel)
@@ -611,6 +613,8 @@ export function validateDefinition (raw: any, metadata: any = FALLBACK_METADATA)
     if (reward.enabled && amountValid && reward.reward_type === 4 && !decimalFitsMaximum(reward.amount, '2147483647')) addIssue(issues, path + '.amount', 'Alternate-currency reward amount cannot exceed 2,147,483,647.', deliveryFindingLevel)
     if (reward.enabled && reward.reward_type === 5 && reward.reward_data_id > 2147483647) addIssue(issues, path + '.reward_data_id', 'Title-set ID cannot exceed 2,147,483,647, the runtime signed title limit.', deliveryFindingLevel)
     if (reward.enabled && amountValid && reward.reward_type === 5 && normalizedUnsignedDecimal(reward.amount) !== '1') addIssue(issues, path + '.amount', 'Title rewards must use amount 1; the title set is unlocked once.', deliveryFindingLevel)
+    if (reward.enabled && amountValid && reward.reward_type === 6 && !decimalFitsMaximum(reward.amount, '2147483647')) addIssue(issues, path + '.amount', 'Alternate Advancement ability desired rank cannot exceed 2,147,483,647.', deliveryFindingLevel)
+    if (reward.enabled && amountValid && reward.reward_type === 7 && !decimalFitsMaximum(reward.amount, '2147483647')) addIssue(issues, path + '.amount', 'Class-ineligible Alternate Advancement fallback cannot exceed 2,147,483,647 AA points.', deliveryFindingLevel)
   })
   if (graph.reward_set) {
     const set = graph.reward_set
@@ -654,6 +658,30 @@ export function validateDefinition (raw: any, metadata: any = FALLBACK_METADATA)
   } else {
     duplicateValues(graph.rewards, row => String(row.sequence)).forEach(sequence => addIssue(issues, 'rewards', 'Automatic grant order ' + sequence + ' is duplicated; reward_source_entries requires unique source order.'))
   }
+  const mappedRewardTokens = new Set<string>(graph.reward_set ? graph.reward_set.mappings.map((mapping: any) => String(mapping.reward_id)) : [])
+  const automaticAAPairs = new Map<number, { primary: number, fallback: number }>()
+  graph.rewards.forEach((reward: any, index: number) => {
+    if (!reward.enabled) return
+    const token = String(reward.reward_id || ('@' + index))
+    const mapped = mappedRewardTokens.has(token)
+    if (reward.reward_type === 7 && mapped) {
+      addIssue(issues, 'rewards.' + index + '.reward_type', 'Class-ineligible Alternate Advancement fallbacks are valid only as direct automatic achievement rewards and cannot be mapped to a selectable option.', graph.enabled ? 'error' : 'warning')
+    }
+    if (mapped || ![6, 7].includes(reward.reward_type)) return
+    const pair = automaticAAPairs.get(Number(reward.reward_data_id)) || { primary: 0, fallback: 0 }
+    if (reward.reward_type === 6) pair.primary++
+    else pair.fallback++
+    automaticAAPairs.set(Number(reward.reward_data_id), pair)
+  })
+  graph.rewards.forEach((reward: any, index: number) => {
+    if (!reward.enabled || reward.reward_type !== 7) return
+    const token = String(reward.reward_id || ('@' + index))
+    if (mappedRewardTokens.has(token)) return
+    const pair = automaticAAPairs.get(Number(reward.reward_data_id)) || { primary: 0, fallback: 0 }
+    if (pair.primary !== 1 || pair.fallback !== 1) {
+      addIssue(issues, 'rewards.' + index + '.reward_type', 'This automatic class-ineligible AA fallback requires exactly one enabled automatic type 6 primary and exactly one enabled automatic type 7 fallback for AA ability ' + reward.reward_data_id + '; found ' + pair.primary + ' primary and ' + pair.fallback + ' fallback.', graph.enabled ? 'error' : 'warning')
+    }
+  })
   if (graph.requirements.length > limits.requirements) addIssue(issues, 'requirements', 'The graph exceeds the cast restriction limit of ' + limits.requirements + '.')
   duplicateValues(graph.requirements, row => String(row.restriction_id)).forEach(id => addIssue(issues, 'requirements', 'Restriction ID ' + id + ' is duplicated; duplicate or contradictory rows are unsafe.'))
   graph.requirements.forEach((row: any, index: number) => {

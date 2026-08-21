@@ -1479,6 +1479,7 @@ func achievementEditorLookupSpecs() map[string]achievementEditorLookupSpec {
 		"recipe":      {from: "tradeskill_recipe", idColumn: "id", labelExpr: "name", detailExpr: "CONCAT('Tradeskill ', tradeskill, ', trivial ', trivial)", orderBy: "name, id"},
 		"currency":    {from: "alternate_currency", idColumn: "id", labelExpr: "CONCAT('Currency ', id)", detailExpr: "CONCAT('Token item ', item_id)", orderBy: "id"},
 		"title-set":   {from: "titles", idColumn: "title_set", labelExpr: "CONCAT_WS(' / ', NULLIF(prefix, ''), NULLIF(suffix, ''))", detailExpr: "CONCAT('Title row ', id)", baseWhere: "title_set > 0", orderBy: "title_set, id"},
+		"aa-ability":  {from: "aa_ability", idColumn: "id", labelExpr: "name", detailExpr: "CONCAT('First rank ', first_rank_id, ', class mask ', classes)", baseWhere: "enabled = 1", orderBy: "name, id"},
 	}
 }
 
@@ -1495,6 +1496,9 @@ func (r *achievementEditorRepository) lookup(kind string, search string, ids []u
 	}
 	if kind == "race" {
 		return r.lookupNPCRaces(search, ids, limit)
+	}
+	if kind == "aa-ability" {
+		return r.lookupAAAbilities(search, ids, limit)
 	}
 
 	specs := achievementEditorLookupSpecs()
@@ -1540,6 +1544,55 @@ func (r *achievementEditorRepository) lookup(kind string, search string, ids []u
 		return nil, err
 	}
 	return rows, nil
+}
+
+func (r *achievementEditorRepository) lookupAAAbilities(search string, ids []uint32, limit int) ([]achievementEditorLookupOption, error) {
+	if len(ids) == 0 && search == "" {
+		return make([]achievementEditorLookupOption, 0), nil
+	}
+	var available int64
+	if err := r.db.Raw(`SELECT COUNT(DISTINCT column_name) FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = 'aa_ability'
+		AND column_name IN ('id', 'name', 'classes', 'first_rank_id', 'enabled')`).Scan(&available).Error; err != nil {
+		return nil, achievementEditorRequestError(503, "The AA ability catalog schema could not be inspected; numeric authoring remains available after the catalog is restored")
+	}
+	if available != 5 {
+		return nil, achievementEditorRequestError(503, "The AA ability lookup requires aa_ability.id, name, classes, first_rank_id, and enabled; numeric authoring remains available after the catalog is restored")
+	}
+	where, args := achievementEditorAAAbilityLookupWhere(search, ids)
+	query := `SELECT CAST(id AS CHAR) AS id, name AS label,
+		CONCAT('First rank ', first_rank_id, ' · class mask ', classes,
+			CASE WHEN (classes & 65535) = 65535 THEN ' · all playable classes'
+				WHEN (classes & 65535) = 0 THEN ' · no playable classes'
+				ELSE ' · class-limited' END,
+			CASE WHEN enabled = 1 THEN '' ELSE ' · disabled; cannot be delivered' END) AS detail,
+		CAST(classes AS UNSIGNED) AS classes, first_rank_id
+		FROM aa_ability WHERE ` + strings.Join(where, " AND ") + ` ORDER BY name, id LIMIT ?`
+	args = append(args, limit)
+	rows := make([]achievementEditorLookupOption, 0)
+	if err := r.db.Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, achievementEditorRequestError(503, "The AA ability catalog could not be queried; numeric authoring remains available after the catalog is restored")
+	}
+	return rows, nil
+}
+
+func achievementEditorAAAbilityLookupWhere(search string, ids []uint32) ([]string, []interface{}) {
+	where := make([]string, 0, 2)
+	args := make([]interface{}, 0, 2)
+	if len(ids) > 0 {
+		where = append(where, "id IN ?")
+		args = append(args, ids)
+	} else {
+		like := "%" + search + "%"
+		if exactID, err := strconv.ParseUint(search, 10, 32); err == nil {
+			where = append(where, "(id = ? OR (enabled = 1 AND name LIKE ?))")
+			args = append(args, exactID, like)
+		} else {
+			where = append(where, "enabled = 1 AND name LIKE ?")
+			args = append(args, like)
+		}
+	}
+	return where, args
 }
 
 func achievementEditorTitleSetLookupQuery(db *gorm.DB, search string, ids []uint32) *gorm.DB {

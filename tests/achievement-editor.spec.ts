@@ -205,11 +205,14 @@ async function installAchievementMocks(page: Page, state: AchievementMockState) 
     const url = new URL(route.request().url());
     const query = url.searchParams.get('q') || '';
     const isItemLookup = url.pathname.endsWith('/lookups/item');
+    const isAAAbilityLookup = url.pathname.endsWith('/lookups/aa-ability');
     return json(route, {
       data: query
         ? [isItemLookup
           ? { id: '10909', label: 'Blade of Tactics', detail: 'Icon 590', icon_id: 590 }
-          : { id: '1', label: 'Exploration', detail: 'Root category' }]
+          : isAAAbilityLookup
+            ? { id: '30300', label: 'Seasonal Martial Aptitude', detail: 'First rank 30300 · class mask 33089 · class-limited', classes: 33089, first_rank_id: 30300 }
+            : { id: '1', label: 'Exploration', detail: 'Root category' }]
         : [],
       total: query ? 1 : 0,
       limit: 20,
@@ -500,6 +503,34 @@ test.describe('Achievement Editor', () => {
     await expect(result).toHaveCSS('background-image', 'none');
     await expect(result.locator('[data-item-icon="590"]')).toBeVisible();
     await expect(result.locator('.item-590-sm')).toBeVisible();
+  });
+
+  test('educates and searches specific AA ability rewards while accepting a valid automatic fallback pair', async ({ page }) => {
+    const aaDefinition = clone(definition);
+    aaDefinition.rewards = [
+      { reward_id: '5000', sequence: 1, reward_type: 6, reward_data_id: 30300, amount: '2', description: 'Seasonal Martial Aptitude II', enabled: true },
+      { reward_id: '5001', sequence: 2, reward_type: 7, reward_data_id: 30300, amount: '3', description: '3 AA points for ineligible classes', enabled: true },
+    ];
+    await gotoAchievementEditor(page, { definitionOverride: aaDefinition });
+    await openDefinition(page);
+    await selectGraphTab(page, 'Rewards');
+
+    const rewards = page.getByTestId('achievement-tab-rewards');
+    await expect(rewards).toContainText('Specific AA ability');
+    await expect(rewards).toContainText('Inverse-class fallback');
+    await expect(rewards.locator('label[for="achievement-reward-amount-0"]')).toHaveText('Desired cumulative rank');
+    await expect(rewards.locator('label[for="achievement-reward-amount-1"]')).toHaveText('Fallback AA points');
+    await expect(page.locator('#achievement-reward-amount-help-0')).toContainText('aa_ranks.next_id');
+
+    const picker = page.locator('.achievement-reference-picker').filter({ has: page.locator('#achievement-reward-data-0') });
+    await picker.getByRole('button', { name: 'Find' }).click();
+    await picker.locator('#achievement-reward-data-0-lookup-search').fill('30300');
+    await picker.getByRole('button', { name: 'Search' }).click();
+    const result = picker.getByRole('button', { name: /30300.*Seasonal Martial Aptitude/ });
+    await expect(result).toContainText('class mask 33089');
+
+    await selectGraphTab(page, 'Validation');
+    await expect(page.getByTestId('achievement-tab-validation')).not.toContainText('automatic class-ineligible AA fallback requires');
   });
 
   test('narrows version checks to runtime policy and drops stale server findings after edits', async ({ page }) => {

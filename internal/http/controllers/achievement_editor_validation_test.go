@@ -397,6 +397,8 @@ func TestCollectAchievementEditorReferenceRequestsDeduplicatesAndPreservesWildca
 		{RewardType: 0, RewardDataID: 1001, Enabled: true},
 		{RewardType: 4, RewardDataID: 9, Enabled: true},
 		{RewardType: 5, RewardDataID: 10, Enabled: true},
+		{RewardType: 6, RewardDataID: 30300, Amount: "1", Enabled: true},
+		{RewardType: 7, RewardDataID: 30300, Enabled: true},
 		{RewardType: 2, RewardDataID: 0, Enabled: true},
 		{RewardType: 0, RewardDataID: 9999, Enabled: false},
 	}
@@ -408,6 +410,10 @@ func TestCollectAchievementEditorReferenceRequestsDeduplicatesAndPreservesWildca
 	assertAchievementReferenceSet(t, requests.RecipeIDs, 88)
 	assertAchievementReferenceSet(t, requests.CurrencyIDs, 9)
 	assertAchievementReferenceSet(t, requests.TitleSetIDs, 10)
+	assertAchievementReferenceSet(t, requests.AAAbilityIDs, 30300)
+	if got := requests.AAAbilityMaximumRanks[30300]; got != 1 {
+		t.Fatalf("maximum requested AA rank = %d, want 1", got)
+	}
 	if len(requests.NPCRaceIDs) != 0 {
 		t.Fatalf("wildcard race IDs were added to the query plan: %+v", requests.NPCRaceIDs)
 	}
@@ -417,8 +423,8 @@ func TestCollectAchievementEditorReferenceRequestsDeduplicatesAndPreservesWildca
 	if _, found := requests.SkillCaps[achievementEditorSkillCapReference{SkillID: 0, ClassID: 1, Level: 50}]; !found {
 		t.Fatal("exact Skill Cap skill 0 tuple was mistaken for a wildcard")
 	}
-	if got := len(requests.usedCatalogs()); got != 8 {
-		t.Fatalf("used catalog count = %d, want 8 batched catalogs", got)
+	if got := len(requests.usedCatalogs()); got != 10 {
+		t.Fatalf("used catalog count = %d, want 10 batched catalogs", got)
 	}
 }
 
@@ -428,13 +434,14 @@ func TestAchievementEditorReferenceCatalogsReuseBoundedLookupSpecs(t *testing.T)
 		table  string
 		column string
 	}{
-		"npc":       {table: "npc_types", column: "id"},
-		"task":      {table: "tasks", column: "id"},
-		"zone":      {table: "zone", column: "zoneidnumber"},
-		"item":      {table: "items", column: "id"},
-		"recipe":    {table: "tradeskill_recipe", column: "id"},
-		"currency":  {table: "alternate_currency", column: "id"},
-		"title-set": {table: "titles", column: "title_set"},
+		"npc":        {table: "npc_types", column: "id"},
+		"task":       {table: "tasks", column: "id"},
+		"zone":       {table: "zone", column: "zoneidnumber"},
+		"item":       {table: "items", column: "id"},
+		"recipe":     {table: "tradeskill_recipe", column: "id"},
+		"currency":   {table: "alternate_currency", column: "id"},
+		"title-set":  {table: "titles", column: "title_set"},
+		"aa-ability": {table: "aa_ability", column: "id"},
 	}
 	for kind, expected := range want {
 		spec, found := specs[kind]
@@ -902,6 +909,123 @@ func TestAchievementDependencyCycleHelper(t *testing.T) {
 	}
 }
 
+func TestValidateAchievementEditorSpecificAARewardRequiresReachableRank(t *testing.T) {
+	graph := validAchievementEditorGraph()
+	graph.Rewards = []achievementEditorReward{{Sequence: 1, RewardType: 6, RewardDataID: 30300, Amount: "2", Enabled: true}}
+	context := validAchievementEditorContext()
+	context.KnownAAAbilities[30300] = achievementEditorAAAbilityReference{
+		Classes: 33089, ReachableRanks: 2, RankChainVerified: true,
+	}
+	if result := validateAchievementEditorGraph(graph, context); !result.Valid() {
+		t.Fatalf("valid specific AA rank was rejected: %+v", result.Findings)
+	}
+
+	graph.Rewards[0].Amount = "3"
+	result := validateAchievementEditorGraph(graph, context)
+	assertAchievementFinding(t, result, "amount", "has 2 reachable rank(s)")
+
+	graph.Rewards[0].Amount = "1"
+	context.KnownAAAbilities[30300] = achievementEditorAAAbilityReference{
+		Classes: 33089, RankChainCyclic: true,
+	}
+	result = validateAchievementEditorGraph(graph, context)
+	assertAchievementFinding(t, result, "amount", "cyclic rank chain")
+}
+
+func TestWalkAchievementEditorAARankChainsStopsAtRequestedRank(t *testing.T) {
+	rows := map[uint32]int64{100: 101, 101: 102, 102: 103, 103: -1}
+	result := walkAchievementEditorAARankChains(
+		map[uint32]int64{30: 100},
+		map[uint32]uint32{30: 2},
+		rows,
+	)
+	reference := result[30]
+	if reference.ReachableRanks != 2 || !reference.RankChainVerified {
+		t.Fatalf("rank walk = %+v, want two verified ranks", reference)
+	}
+}
+
+func TestWalkAchievementEditorAARankChainsFailsClosedAtSafetyLimit(t *testing.T) {
+	result := walkAchievementEditorAARankChains(
+		map[uint32]int64{30: 1},
+		map[uint32]uint32{30: achievementEditorAARankTraversalLimit + 1},
+		map[uint32]int64{1: 2},
+	)
+	reference := result[30]
+	if !reference.RankChainTraversalLimited || reference.RankChainVerified || reference.ReachableRanks != 0 {
+		t.Fatalf("limited rank walk = %+v", reference)
+	}
+}
+
+func TestBuildAchievementEditorAARankMapRejectsOversizedCatalog(t *testing.T) {
+	rows := make([]achievementEditorAARankRow, achievementEditorAARankCatalogRowLimit+1)
+	if _, err := buildAchievementEditorAARankMap(rows); err == nil || !strings.Contains(err.Error(), "exceeds the editor safety limit") {
+		t.Fatalf("oversized AA rank catalog error = %v", err)
+	}
+}
+
+func TestWalkAchievementEditorAARankChainsDetectsCycleAndMissingRank(t *testing.T) {
+	rows := map[uint32]int64{100: 101, 101: 100, 200: 201}
+	result := walkAchievementEditorAARankChains(
+		map[uint32]int64{30: 100, 40: 200},
+		map[uint32]uint32{30: 3, 40: 3},
+		rows,
+	)
+	if !result[30].RankChainCyclic {
+		t.Fatalf("cycle was not detected: %+v", result[30])
+	}
+	if !result[40].RankChainVerified || result[40].ReachableRanks != 1 {
+		t.Fatalf("missing rank did not terminate as a one-rank chain: %+v", result[40])
+	}
+}
+
+func TestValidateAchievementEditorClassIneligibleAAPairing(t *testing.T) {
+	graph := validAchievementEditorGraph()
+	graph.Rewards = []achievementEditorReward{
+		{Sequence: 1, RewardType: 6, RewardDataID: 30300, Amount: "1", Enabled: true},
+		{Sequence: 2, RewardType: 7, RewardDataID: 30300, Amount: "3", Enabled: true},
+	}
+	context := validAchievementEditorContext()
+	context.KnownAAAbilities[30300] = achievementEditorAAAbilityReference{
+		Classes: 33089, ReachableRanks: 1, RankChainVerified: true,
+	}
+	if result := validateAchievementEditorGraph(graph, context); !result.Valid() {
+		t.Fatalf("valid automatic inverse-class AA pair was rejected: %+v", result.Findings)
+	}
+
+	graph.Rewards = append(graph.Rewards, achievementEditorReward{Sequence: 3, RewardType: 6, RewardDataID: 30300, Amount: "1", Enabled: true})
+	result := validateAchievementEditorGraph(graph, context)
+	assertAchievementFinding(t, result, "reward_type", "found 2 primary and 1 fallback")
+
+	graph.Rewards = graph.Rewards[:2]
+	graph.RewardSet = &achievementEditorRewardSet{
+		RewardSetID: 700, Title: "Choice", Enabled: false, SourceEnabled: false,
+		Options:  []achievementEditorRewardOption{{OptionID: 1, Sequence: 1, Label: "Fallback", Enabled: false}},
+		Mappings: []achievementEditorRewardMapping{{OptionID: 1, Sequence: 2, RewardID: "@1"}},
+	}
+	result = validateAchievementEditorGraph(graph, context)
+	assertAchievementFinding(t, result, "reward_type", "cannot be mapped to a selectable option")
+}
+
+func TestValidateAchievementEditorClassIneligibleAARequiresClassLimitedAbility(t *testing.T) {
+	graph := validAchievementEditorGraph()
+	graph.Rewards = []achievementEditorReward{
+		{Sequence: 1, RewardType: 6, RewardDataID: 30300, Amount: "1", Enabled: true},
+		{Sequence: 2, RewardType: 7, RewardDataID: 30300, Amount: "3", Enabled: true},
+	}
+	context := validAchievementEditorContext()
+	context.KnownAAAbilities[30300] = achievementEditorAAAbilityReference{
+		Classes: 65535, ReachableRanks: 1, RankChainVerified: true,
+	}
+	result := validateAchievementEditorGraph(graph, context)
+	assertAchievementFinding(t, result, "reward_data_id", "available to all playable classes")
+
+	graph.Rewards[1].Enabled = false
+	if result = validateAchievementEditorGraph(graph, context); !result.Valid() {
+		t.Fatalf("disabled fallback should remain inert draft data: %+v", result.Findings)
+	}
+}
+
 func validAchievementEditorGraph() achievementEditorGraph {
 	return achievementEditorGraph{
 		ID:           1,
@@ -947,6 +1071,7 @@ func validAchievementEditorContext() achievementEditorValidationContext {
 		KnownSkillCaps:              map[achievementEditorSkillCapReference]struct{}{},
 		KnownAlternateCurrencyIDs:   map[uint32]struct{}{},
 		KnownTitleSetIDs:            map[uint32]struct{}{},
+		KnownAAAbilities:            map[uint32]achievementEditorAAAbilityReference{},
 		ReferenceCatalogIssues:      map[string]string{},
 		RequireDatabaseContext:      true,
 	}

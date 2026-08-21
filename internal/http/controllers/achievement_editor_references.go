@@ -3,21 +3,33 @@ package controllers
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gorm.io/gorm"
 )
 
 const (
-	achievementEditorReferenceNPCType  = "npc_type"
-	achievementEditorReferenceNPCRace  = "npc_race"
-	achievementEditorReferenceTask     = "task"
-	achievementEditorReferenceZone     = "zone"
-	achievementEditorReferenceItem     = "item"
-	achievementEditorReferenceRecipe   = "recipe"
-	achievementEditorReferenceSkillCap = "skill_cap"
-	achievementEditorReferenceCurrency = "currency"
-	achievementEditorReferenceTitleSet = "title_set"
+	// Load the rank catalog once, with a sentinel row, then validate every
+	// requested chain in memory. The row and hop ceilings fail closed on
+	// unexpectedly large or malformed custom catalogs without serial queries.
+	achievementEditorAARankCatalogRowLimit uint32 = 100000
+	achievementEditorAARankTraversalLimit  uint32 = 10000
+	achievementEditorMaximumRuntimeAARank  uint64 = 2147483647
+)
+
+const (
+	achievementEditorReferenceNPCType   = "npc_type"
+	achievementEditorReferenceNPCRace   = "npc_race"
+	achievementEditorReferenceTask      = "task"
+	achievementEditorReferenceZone      = "zone"
+	achievementEditorReferenceItem      = "item"
+	achievementEditorReferenceRecipe    = "recipe"
+	achievementEditorReferenceSkillCap  = "skill_cap"
+	achievementEditorReferenceCurrency  = "currency"
+	achievementEditorReferenceTitleSet  = "title_set"
+	achievementEditorReferenceAAAbility = "aa_ability"
+	achievementEditorReferenceAARank    = "aa_rank"
 )
 
 type achievementEditorSkillCapReference struct {
@@ -27,15 +39,17 @@ type achievementEditorSkillCapReference struct {
 }
 
 type achievementEditorReferenceRequests struct {
-	NPCTypeIDs  map[uint32]struct{}
-	NPCRaceIDs  map[uint32]struct{}
-	TaskIDs     map[uint32]struct{}
-	ZoneIDs     map[uint32]struct{}
-	ItemIDs     map[uint32]struct{}
-	RecipeIDs   map[uint32]struct{}
-	SkillCaps   map[achievementEditorSkillCapReference]struct{}
-	CurrencyIDs map[uint32]struct{}
-	TitleSetIDs map[uint32]struct{}
+	NPCTypeIDs            map[uint32]struct{}
+	NPCRaceIDs            map[uint32]struct{}
+	TaskIDs               map[uint32]struct{}
+	ZoneIDs               map[uint32]struct{}
+	ItemIDs               map[uint32]struct{}
+	RecipeIDs             map[uint32]struct{}
+	SkillCaps             map[achievementEditorSkillCapReference]struct{}
+	CurrencyIDs           map[uint32]struct{}
+	TitleSetIDs           map[uint32]struct{}
+	AAAbilityIDs          map[uint32]struct{}
+	AAAbilityMaximumRanks map[uint32]uint32
 }
 
 func newAchievementEditorReferenceRequests() achievementEditorReferenceRequests {
@@ -45,6 +59,7 @@ func newAchievementEditorReferenceRequests() achievementEditorReferenceRequests 
 		ItemIDs: make(map[uint32]struct{}), RecipeIDs: make(map[uint32]struct{}),
 		SkillCaps:   make(map[achievementEditorSkillCapReference]struct{}),
 		CurrencyIDs: make(map[uint32]struct{}), TitleSetIDs: make(map[uint32]struct{}),
+		AAAbilityIDs: make(map[uint32]struct{}), AAAbilityMaximumRanks: make(map[uint32]uint32),
 	}
 }
 
@@ -110,6 +125,21 @@ func collectAchievementEditorReferenceRequests(graph achievementEditorGraph) ach
 			requests.CurrencyIDs[reward.RewardDataID] = struct{}{}
 		case 5:
 			requests.TitleSetIDs[reward.RewardDataID] = struct{}{}
+		case 6:
+			requests.AAAbilityIDs[reward.RewardDataID] = struct{}{}
+			amount, valid := parseUnsignedDecimal(reward.Amount, 64, false)
+			if !valid {
+				continue
+			}
+			desiredRank, err := strconv.ParseUint(amount, 10, 32)
+			if err != nil || desiredRank == 0 || desiredRank > achievementEditorMaximumRuntimeAARank {
+				continue
+			}
+			if rank := uint32(desiredRank); rank > requests.AAAbilityMaximumRanks[reward.RewardDataID] {
+				requests.AAAbilityMaximumRanks[reward.RewardDataID] = rank
+			}
+		case 7:
+			requests.AAAbilityIDs[reward.RewardDataID] = struct{}{}
 		}
 	}
 	return requests
@@ -144,6 +174,12 @@ func (r achievementEditorReferenceRequests) usedCatalogs() []string {
 	if len(r.TitleSetIDs) > 0 {
 		result = append(result, achievementEditorReferenceTitleSet)
 	}
+	if len(r.AAAbilityIDs) > 0 {
+		result = append(result, achievementEditorReferenceAAAbility)
+	}
+	if len(r.AAAbilityMaximumRanks) > 0 {
+		result = append(result, achievementEditorReferenceAARank)
+	}
 	return result
 }
 
@@ -165,15 +201,17 @@ func achievementEditorReferenceLookupSpec(kind string) achievementEditorLookupSp
 func achievementEditorReferenceCatalogRequirements() map[string]achievementEditorReferenceCatalogRequirement {
 	specs := achievementEditorLookupSpecs()
 	return map[string]achievementEditorReferenceCatalogRequirement{
-		achievementEditorReferenceNPCType:  {table: specs["npc"].from, columns: []string{specs["npc"].idColumn}},
-		achievementEditorReferenceNPCRace:  {table: specs["npc"].from, columns: []string{"race"}},
-		achievementEditorReferenceTask:     {table: specs["task"].from, columns: []string{specs["task"].idColumn}},
-		achievementEditorReferenceZone:     {table: specs["zone"].from, columns: []string{specs["zone"].idColumn}},
-		achievementEditorReferenceItem:     {table: specs["item"].from, columns: []string{specs["item"].idColumn}},
-		achievementEditorReferenceRecipe:   {table: specs["recipe"].from, columns: []string{specs["recipe"].idColumn}},
-		achievementEditorReferenceSkillCap: {table: "skill_caps", columns: []string{"skill_id", "class_id", "level"}},
-		achievementEditorReferenceCurrency: {table: specs["currency"].from, columns: []string{specs["currency"].idColumn}},
-		achievementEditorReferenceTitleSet: {table: specs["title-set"].from, columns: []string{specs["title-set"].idColumn}},
+		achievementEditorReferenceNPCType:   {table: specs["npc"].from, columns: []string{specs["npc"].idColumn}},
+		achievementEditorReferenceNPCRace:   {table: specs["npc"].from, columns: []string{"race"}},
+		achievementEditorReferenceTask:      {table: specs["task"].from, columns: []string{specs["task"].idColumn}},
+		achievementEditorReferenceZone:      {table: specs["zone"].from, columns: []string{specs["zone"].idColumn}},
+		achievementEditorReferenceItem:      {table: specs["item"].from, columns: []string{specs["item"].idColumn}},
+		achievementEditorReferenceRecipe:    {table: specs["recipe"].from, columns: []string{specs["recipe"].idColumn}},
+		achievementEditorReferenceSkillCap:  {table: "skill_caps", columns: []string{"skill_id", "class_id", "level"}},
+		achievementEditorReferenceCurrency:  {table: specs["currency"].from, columns: []string{specs["currency"].idColumn}},
+		achievementEditorReferenceTitleSet:  {table: specs["title-set"].from, columns: []string{specs["title-set"].idColumn}},
+		achievementEditorReferenceAAAbility: {table: "aa_ability", columns: []string{"id", "name", "classes", "first_rank_id", "enabled"}},
+		achievementEditorReferenceAARank:    {table: "aa_ranks", columns: []string{"id", "next_id"}},
 	}
 }
 
@@ -240,6 +278,136 @@ func loadAchievementEditorReferenceContext(db *gorm.DB, graph achievementEditorG
 	loadAchievementEditorSkillCapReferences(db, requests, context)
 	loadAchievementEditorIDReferences(db, requests.CurrencyIDs, achievementEditorReferenceCurrency, achievementEditorReferenceLookupSpec("currency"), &context.KnownAlternateCurrencyIDs, context)
 	loadAchievementEditorIDReferences(db, requests.TitleSetIDs, achievementEditorReferenceTitleSet, achievementEditorReferenceLookupSpec("title-set"), &context.KnownTitleSetIDs, context)
+	loadAchievementEditorAAReferences(db, requests, context)
+}
+
+type achievementEditorAAAbilityRow struct {
+	ID          uint32 `gorm:"column:id"`
+	Classes     uint32 `gorm:"column:classes"`
+	FirstRankID int64  `gorm:"column:first_rank_id"`
+}
+
+type achievementEditorAARankRow struct {
+	ID     uint32 `gorm:"column:id"`
+	NextID int64  `gorm:"column:next_id"`
+}
+
+// loadAchievementEditorAAReferences mirrors the zone loader's first_rank_id /
+// next_id walk without trusting the authored chain. The bounded rank catalog is
+// fetched once and every requested ability is then walked in memory, so a long
+// or cyclic chain cannot amplify database round trips inside a write lock.
+func loadAchievementEditorAAReferences(db *gorm.DB, requests achievementEditorReferenceRequests, context *achievementEditorValidationContext) {
+	if len(requests.AAAbilityIDs) == 0 || context.ReferenceCatalogIssues[achievementEditorReferenceAAAbility] != "" {
+		return
+	}
+	abilityRows := make([]achievementEditorAAAbilityRow, 0, len(requests.AAAbilityIDs))
+	if err := db.Table("aa_ability").Select("id, classes, first_rank_id").
+		Where("enabled = 1 AND id IN ?", achievementEditorReferenceIDs(requests.AAAbilityIDs)).
+		Scan(&abilityRows).Error; err != nil {
+		context.ReferenceCatalogIssues[achievementEditorReferenceAAAbility] = "table aa_ability could not be queried"
+		return
+	}
+	context.KnownAAAbilities = make(map[uint32]achievementEditorAAAbilityReference, len(abilityRows))
+	firstRanks := make(map[uint32]int64, len(abilityRows))
+	for _, row := range abilityRows {
+		context.KnownAAAbilities[row.ID] = achievementEditorAAAbilityReference{Classes: row.Classes}
+		if desiredRank, needsRanks := requests.AAAbilityMaximumRanks[row.ID]; needsRanks {
+			if desiredRank > achievementEditorAARankTraversalLimit {
+				reference := context.KnownAAAbilities[row.ID]
+				reference.RankChainTraversalLimited = true
+				context.KnownAAAbilities[row.ID] = reference
+				continue
+			}
+			firstRanks[row.ID] = row.FirstRankID
+		}
+	}
+	if len(firstRanks) == 0 || context.ReferenceCatalogIssues[achievementEditorReferenceAARank] != "" {
+		return
+	}
+	ranks, err := loadAchievementEditorAARankChains(db, firstRanks, requests.AAAbilityMaximumRanks)
+	if err != nil {
+		context.ReferenceCatalogIssues[achievementEditorReferenceAARank] = err.Error()
+		return
+	}
+	for id, rank := range ranks {
+		reference := context.KnownAAAbilities[id]
+		reference.ReachableRanks = rank.ReachableRanks
+		reference.RankChainVerified = rank.RankChainVerified
+		reference.RankChainCyclic = rank.RankChainCyclic
+		reference.RankChainTraversalLimited = rank.RankChainTraversalLimited
+		context.KnownAAAbilities[id] = reference
+	}
+}
+
+func loadAchievementEditorAARankChains(db *gorm.DB, firstRanks map[uint32]int64, desiredRanks map[uint32]uint32) (map[uint32]achievementEditorAAAbilityReference, error) {
+	rows := make([]achievementEditorAARankRow, 0, achievementEditorAARankCatalogRowLimit+1)
+	if err := achievementEditorAARankCatalogQuery(db).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("table aa_ranks could not be queried")
+	}
+	ranks, err := buildAchievementEditorAARankMap(rows)
+	if err != nil {
+		return nil, err
+	}
+	return walkAchievementEditorAARankChains(firstRanks, desiredRanks, ranks), nil
+}
+
+func achievementEditorAARankCatalogQuery(db *gorm.DB) *gorm.DB {
+	return db.Table("aa_ranks").Select("id, next_id").Order("id").
+		Limit(int(achievementEditorAARankCatalogRowLimit) + 1)
+}
+
+func buildAchievementEditorAARankMap(rows []achievementEditorAARankRow) (map[uint32]int64, error) {
+	if len(rows) > int(achievementEditorAARankCatalogRowLimit) {
+		return nil, fmt.Errorf("table aa_ranks exceeds the editor safety limit of %d rows", achievementEditorAARankCatalogRowLimit)
+	}
+	ranks := make(map[uint32]int64, len(rows))
+	for _, row := range rows {
+		ranks[row.ID] = row.NextID
+	}
+	return ranks, nil
+}
+
+func walkAchievementEditorAARankChains(firstRanks map[uint32]int64, desiredRanks map[uint32]uint32, ranks map[uint32]int64) map[uint32]achievementEditorAAAbilityReference {
+	result := make(map[uint32]achievementEditorAAAbilityReference, len(firstRanks))
+	for abilityID, firstRankID := range firstRanks {
+		desiredRank := desiredRanks[abilityID]
+		if desiredRank == 0 {
+			continue
+		}
+		reference := achievementEditorAAAbilityReference{}
+		if desiredRank > achievementEditorAARankTraversalLimit {
+			reference.RankChainTraversalLimited = true
+			result[abilityID] = reference
+			continue
+		}
+		visited := make(map[uint32]struct{}, desiredRank)
+		rankID := firstRankID
+		for reference.ReachableRanks < desiredRank {
+			if rankID <= 0 || rankID > int64(^uint32(0)) {
+				reference.RankChainVerified = true
+				break
+			}
+			id := uint32(rankID)
+			if _, duplicate := visited[id]; duplicate {
+				reference.RankChainCyclic = true
+				break
+			}
+			nextID, found := ranks[id]
+			if !found {
+				reference.RankChainVerified = true
+				break
+			}
+			visited[id] = struct{}{}
+			reference.ReachableRanks++
+			if reference.ReachableRanks >= desiredRank {
+				reference.RankChainVerified = true
+				break
+			}
+			rankID = nextID
+		}
+		result[abilityID] = reference
+	}
+	return result
 }
 
 func loadAchievementEditorIDReferences(

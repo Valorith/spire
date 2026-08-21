@@ -46,6 +46,8 @@
           <li>Each enabled option needs at least one mapped, enabled grant.</li>
           <li>Common grants are combined with exactly one selected non-common option.</li>
           <li>A disabled grant can remain mapped for safe staged authoring, but does not satisfy validation.</li>
+          <li>Type 6 grants one enabled AA ability to a desired cumulative rank; the amount is a rank number, not AA points.</li>
+          <li>Type 7 is only an automatic achievement fallback. Pair exactly one type 7 with exactly one automatic type 6 using the same class-limited AA ability ID; never map type 7 into a selectable option.</li>
         </ul>
       </article>
       <article>

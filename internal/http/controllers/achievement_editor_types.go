@@ -178,10 +178,12 @@ type achievementEditorPage struct {
 }
 
 type achievementEditorLookupOption struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Detail string `json:"detail,omitempty"`
-	IconID uint32 `json:"icon_id,omitempty"`
+	ID          string  `json:"id"`
+	Label       string  `json:"label"`
+	Detail      string  `json:"detail,omitempty"`
+	IconID      uint32  `json:"icon_id,omitempty"`
+	Classes     *uint32 `json:"classes,omitempty"`
+	FirstRankID *int64  `json:"first_rank_id,omitempty"`
 }
 
 type achievementEditorLookupPage struct {

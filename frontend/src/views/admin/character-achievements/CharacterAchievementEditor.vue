@@ -806,7 +806,9 @@
       { value: 2, label: 'Alternate advancement', description: 'Awards unspent AA points.' },
       { value: 3, label: 'Copper', description: 'Awards coin measured in copper.' },
       { value: 4, label: 'Alternate currency', description: 'Awards a configured alternate currency.' },
-      { value: 5, label: 'Title', description: 'Unlocks a title set.' }
+      { value: 5, label: 'Title', description: 'Unlocks a title set.' },
+      { value: 6, label: 'Alternate Advancement ability', description: 'Grants a specific AA ability to the authored cumulative rank.' },
+      { value: 7, label: 'Class-ineligible AA fallback', description: 'Awards unspent AA points when a playable class cannot receive the paired specific AA ability.' }
     ],
     reward_statuses: [
       { value: 0, label: 'In-flight / ambiguous', description: 'Delivery may have happened, but durable finalization did not.' },

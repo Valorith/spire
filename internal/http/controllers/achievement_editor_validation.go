@@ -22,6 +22,14 @@ type achievementEditorValidationResult struct {
 	Findings []achievementEditorValidationFinding `json:"findings"`
 }
 
+type achievementEditorAAAbilityReference struct {
+	Classes                   uint32
+	ReachableRanks            uint32
+	RankChainVerified         bool
+	RankChainCyclic           bool
+	RankChainTraversalLimited bool
+}
+
 func (r achievementEditorValidationResult) Valid() bool {
 	for _, finding := range r.Findings {
 		if finding.Severity == achievementEditorValidationError {
@@ -67,6 +75,7 @@ type achievementEditorValidationContext struct {
 	KnownSkillCaps                  map[achievementEditorSkillCapReference]struct{}
 	KnownAlternateCurrencyIDs       map[uint32]struct{}
 	KnownTitleSetIDs                map[uint32]struct{}
+	KnownAAAbilities                map[uint32]achievementEditorAAAbilityReference
 	ReferenceCatalogIssues          map[string]string
 	RequireDatabaseContext          bool
 	CategoryExists                  func(uint32) bool
@@ -692,8 +701,8 @@ func validateAchievementEditorRewards(graph achievementEditorGraph, context achi
 			rewardPaths[transientID] = path
 			rewardEnabled[transientID] = reward.Enabled
 		}
-		if reward.RewardType > 5 {
-			result.add(path+".reward_type", "Reward type must be from 0 through 5.")
+		if reward.RewardType > 7 {
+			result.add(path+".reward_type", "Reward type must be from 0 through 7.")
 		}
 		amount, amountValid := parseUnsignedDecimal(reward.Amount, 64, false)
 		if !amountValid {
@@ -702,8 +711,8 @@ func validateAchievementEditorRewards(graph achievementEditorGraph, context achi
 		if len([]rune(reward.Description)) > 255 {
 			result.add(path+".description", "Reward description may not exceed 255 characters.")
 		}
-		if reward.Enabled && (reward.RewardType == 0 || reward.RewardType == 4 || reward.RewardType == 5) && reward.RewardDataID == 0 {
-			result.add(path+".reward_data_id", "Enabled item, alternate-currency, and title rewards require a nonzero referenced data ID.")
+		if reward.Enabled && (reward.RewardType == 0 || reward.RewardType == 4 || reward.RewardType == 5 || reward.RewardType == 6 || reward.RewardType == 7) && reward.RewardDataID == 0 {
+			result.add(path+".reward_data_id", "This enabled reward type requires a nonzero referenced data ID.")
 		}
 		if reward.RewardType == 1 && reward.RewardDataID > 1 {
 			result.add(path+".reward_data_id", "Experience mode must be 0 (normal handling) or 1 (normal-only raw XP).")
@@ -721,6 +730,7 @@ func validateAchievementEditorRewards(graph achievementEditorGraph, context achi
 		}
 	}
 	validateAchievementEditorRewardSet(graph, context, rewardPaths, rewardEnabled, result)
+	validateAchievementEditorClassExclusiveAARewards(graph, result)
 }
 
 func validateAchievementEditorRewardReference(reward achievementEditorReward, path string, definitionEnabled bool, context achievementEditorValidationContext, result *achievementEditorValidationResult) {
@@ -737,6 +747,63 @@ func validateAchievementEditorRewardReference(reward achievementEditorReward, pa
 		if reward.RewardDataID != 0 {
 			validateAchievementEditorIDReference(path+".reward_data_id", "Title set", reward.RewardDataID, achievementEditorReferenceTitleSet, context.KnownTitleSetIDs, definitionEnabled, context, result)
 		}
+	case 6, 7:
+		validateAchievementEditorAARewardReference(reward, path, definitionEnabled, context, result)
+	}
+}
+
+func validateAchievementEditorAARewardReference(reward achievementEditorReward, path string, definitionEnabled bool, context achievementEditorValidationContext, result *achievementEditorValidationResult) {
+	if reward.RewardDataID == 0 {
+		return
+	}
+	if context.KnownAAAbilities == nil {
+		if context.RequireDatabaseContext {
+			addAchievementEditorPublicationFinding(result, path+".reward_data_id", achievementEditorReferenceUnavailableMessage("Alternate advancement ability", achievementEditorReferenceAAAbility, context), definitionEnabled)
+		}
+		return
+	}
+	reference, found := context.KnownAAAbilities[reward.RewardDataID]
+	if !found {
+		addAchievementEditorPublicationFinding(result, path+".reward_data_id", fmt.Sprintf("Alternate advancement ability %d does not exist or is disabled.", reward.RewardDataID), definitionEnabled)
+		return
+	}
+	if reward.RewardType == 7 {
+		playableClasses := reference.Classes & 65535
+		switch playableClasses {
+		case 0:
+			addAchievementEditorPublicationFinding(result, path+".reward_data_id", fmt.Sprintf("Alternate advancement ability %d has no playable eligible classes, so it cannot define a safe inverse-class fallback.", reward.RewardDataID), definitionEnabled)
+		case 65535:
+			addAchievementEditorPublicationFinding(result, path+".reward_data_id", fmt.Sprintf("Alternate advancement ability %d is available to all playable classes, so a class-ineligible fallback would never apply.", reward.RewardDataID), definitionEnabled)
+		}
+		return
+	}
+	amount, valid := parseUnsignedDecimal(reward.Amount, 64, false)
+	if !valid {
+		return
+	}
+	desiredRank, err := strconv.ParseUint(amount, 10, 32)
+	if err != nil || desiredRank > achievementEditorMaximumRuntimeAARank {
+		// Delivery-bound validation reports the authoritative signed runtime
+		// limit. Do not attempt a catalog walk for a rank that can never be
+		// delivered.
+		return
+	}
+	if reference.RankChainCyclic {
+		addAchievementEditorPublicationFinding(result, path+".amount", fmt.Sprintf("Alternate advancement ability %d has a cyclic rank chain and cannot be granted safely.", reward.RewardDataID), definitionEnabled)
+		return
+	}
+	if reference.RankChainTraversalLimited {
+		addAchievementEditorPublicationFinding(result, path+".amount", fmt.Sprintf("Alternate advancement ability %d could not be verified within the editor safety limit of %d linked ranks.", reward.RewardDataID, achievementEditorAARankTraversalLimit), definitionEnabled)
+		return
+	}
+	if !reference.RankChainVerified {
+		if context.RequireDatabaseContext {
+			addAchievementEditorPublicationFinding(result, path+".amount", achievementEditorReferenceUnavailableMessage("Alternate advancement rank chain", achievementEditorReferenceAARank, context), definitionEnabled)
+		}
+		return
+	}
+	if desiredRank > uint64(reference.ReachableRanks) {
+		addAchievementEditorPublicationFinding(result, path+".amount", fmt.Sprintf("Alternate advancement ability %d has %d reachable rank(s); desired cumulative rank %s does not exist.", reward.RewardDataID, reference.ReachableRanks, amount), definitionEnabled)
 	}
 }
 
@@ -774,6 +841,76 @@ func validateAchievementEditorRewardDeliveryBounds(reward achievementEditorRewar
 		}
 		if amount != "1" {
 			addAchievementEditorPublicationFinding(result, path+".amount", "Title rewards must use amount 1; the title set is unlocked once.", definitionEnabled)
+		}
+	case 6:
+		if !decimalFitsMaximum(amount, "2147483647") {
+			addAchievementEditorPublicationFinding(result, path+".amount", "Alternate Advancement ability desired rank cannot exceed 2,147,483,647.", definitionEnabled)
+		}
+	case 7:
+		if !decimalFitsMaximum(amount, "2147483647") {
+			addAchievementEditorPublicationFinding(result, path+".amount", "Class-ineligible Alternate Advancement fallback cannot exceed 2,147,483,647 AA points.", definitionEnabled)
+		}
+	}
+}
+
+// Type 7 is meaningful only in the direct automatic reward vector for one
+// achievement. Disabled rows are inert drafts. An enabled fallback must be
+// unmapped and have exactly one enabled, unmapped type 6 primary plus exactly
+// one enabled, unmapped fallback sharing the same AA ability ID.
+func validateAchievementEditorClassExclusiveAARewards(graph achievementEditorGraph, result *achievementEditorValidationResult) {
+	mapped := make(map[int]struct{})
+	indices := make(map[string]int, len(graph.Rewards)*2)
+	for index, reward := range graph.Rewards {
+		indices[fmt.Sprintf("@%d", index)] = index
+		if id, valid := parseUnsignedDecimal(reward.RewardID, 32, false); valid {
+			indices[id] = index
+		}
+	}
+	if graph.RewardSet != nil {
+		for _, mapping := range graph.RewardSet.Mappings {
+			token := strings.TrimSpace(mapping.RewardID)
+			if !strings.HasPrefix(token, "@") {
+				if id, valid := parseUnsignedDecimal(token, 32, false); valid {
+					token = id
+				}
+			}
+			if index, found := indices[token]; found {
+				mapped[index] = struct{}{}
+			}
+		}
+	}
+	type pairCount struct{ primary, fallback int }
+	counts := make(map[uint32]pairCount)
+	for index, reward := range graph.Rewards {
+		if !reward.Enabled {
+			continue
+		}
+		_, isMapped := mapped[index]
+		if reward.RewardType == 7 && isMapped {
+			addAchievementEditorPublicationFinding(result, fmt.Sprintf("rewards.%d.reward_type", index), "Class-ineligible Alternate Advancement fallbacks are valid only as direct automatic achievement rewards and cannot be mapped to a selectable option.", graph.Enabled)
+		}
+		if isMapped {
+			continue
+		}
+		count := counts[reward.RewardDataID]
+		switch reward.RewardType {
+		case 6:
+			count.primary++
+		case 7:
+			count.fallback++
+		}
+		counts[reward.RewardDataID] = count
+	}
+	for index, reward := range graph.Rewards {
+		if !reward.Enabled || reward.RewardType != 7 {
+			continue
+		}
+		if _, isMapped := mapped[index]; isMapped {
+			continue
+		}
+		count := counts[reward.RewardDataID]
+		if count.primary != 1 || count.fallback != 1 {
+			addAchievementEditorPublicationFinding(result, fmt.Sprintf("rewards.%d.reward_type", index), fmt.Sprintf("This automatic class-ineligible AA fallback requires exactly one enabled automatic type 6 primary and exactly one enabled automatic type 7 fallback for AA ability %d; found %d primary and %d fallback.", reward.RewardDataID, count.primary, count.fallback), graph.Enabled)
 		}
 	}
 }
