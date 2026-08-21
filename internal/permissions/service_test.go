@@ -64,6 +64,20 @@ func TestAlternateCurrencyEditorIsRegisteredAsManualResource(t *testing.T) {
 	}
 }
 
+func TestAchievementEditorsAreRegisteredAsManualResources(t *testing.T) {
+	resources := (&Service{}).RegisterManualResources()
+	tests := map[string]string{
+		"Achievement Editor":     "achievement-editor",
+		"Character Achievements": "character-achievement-editor",
+	}
+	for name, prefix := range tests {
+		prefixes, ok := resources[name]
+		if !ok || len(prefixes) != 1 || prefixes[0] != prefix {
+			t.Fatalf("%s resource = %#v, want [%s]", name, prefixes, prefix)
+		}
+	}
+}
+
 func TestPlayerOperationsIsRegisteredAsManualResource(t *testing.T) {
 	resources := (&Service{}).RegisterManualResources()
 	prefixes, ok := resources["Player Operations"]

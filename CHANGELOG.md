@@ -1,3 +1,14 @@
+## [Unreleased] (Beta) 8/8/2026
+
+* Added a complete World Data achievement editor for definitions, categories, criteria, rewards, selectable reward sets, cast restrictions, references, validation, and authoring guidance.
+* Added Character Achievement administration with paginated state inspection, orphan diagnostics, exact progress repair, guarded completion/reset tools, reward recovery, and pending-mutation management.
+* Added fail-closed achievement schema diagnostics, split content/player database support, transactional stable-identity protection, optimistic concurrency, and audited high-risk operations.
+* Added achievement editor navigation, responsive layouts, contextual field help, canonical EQEmu skill labels, and focused backend and browser regression coverage.
+* Fixed achievement item lookup rows to retain their icon grid instead of inheriting the EQ window button skin.
+* Fixed item criterion lookup results to render the native item icon supplied by the achievement lookup API.
+* Fixed achievement definition loading by excluding manually hydrated graph children from GORM relationship discovery.
+* Fixed character achievement directory queries on MariaDB by replacing the reserved `character` table alias.
+
 ## [5.5.2] (Beta) 7/31/2026
 
 * Added a Data Buckets Editor with scoped browsing, JSON formatting, lifecycle controls, consumer visibility, audit history, and stale-write conflict recovery.
