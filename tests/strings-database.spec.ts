@@ -6,6 +6,29 @@ type DbString = {
   value: string;
 };
 
+function filterStringsForRequest(strings: DbString[], url: URL) {
+  const where = url.searchParams.get('where') || '';
+  const typeMatch = where.match(/(?:^|\.)type__(\d+)/);
+  const idMatch = where.match(/(?:^|\.)id__(\d+)/);
+  const idGreaterThanMatch = where.match(/(?:^|\.)id_gt_(\d+)/);
+  const valueMatch = where.match(/(?:^|\.)value_like_([^.]*)/);
+
+  let response = strings.filter(string => {
+    if (typeMatch && string.type !== parseInt(typeMatch[1], 10)) return false;
+    if (idMatch && string.id !== parseInt(idMatch[1], 10)) return false;
+    if (idGreaterThanMatch && string.id <= parseInt(idGreaterThanMatch[1], 10)) return false;
+    if (valueMatch && !string.value.toLowerCase().includes(valueMatch[1].toLowerCase())) return false;
+    return true;
+  });
+
+  if (url.searchParams.get('orderBy') === 'id') {
+    const direction = url.searchParams.get('orderDirection') === 'desc' ? -1 : 1;
+    response = response.slice().sort((left, right) => (left.id - right.id) * direction);
+  }
+
+  return response;
+}
+
 async function mockStringsDatabaseApis(page: Page) {
   let strings: DbString[] = [
     {
@@ -13,10 +36,25 @@ async function mockStringsDatabaseApis(page: Page) {
       type: 0,
       value: 'QA braces {{ 7 * 7 }}<BR>Second line <img src=x onerror="window.__stringsPreviewExecuted=true">',
     },
+    { id: 1, type: 5, value: 'Strength' },
+    { id: 2, type: 5, value: 'Stamina' },
+    { id: 4, type: 5, value: 'Dexterity' },
     { id: 12, type: 5, value: 'Charisma' },
     { id: 13, type: 5, value: 'Cold' },
+    ...Array.from({ length: 55 }, (_, index) => ({
+      id: index + 1,
+      type: 6,
+      value: index === 10 || index === 52 ? `Needle result ${index + 1}` : `Paged string ${index + 1}`,
+    })),
+    ...Array.from({ length: 1000 }, (_, index) => ({
+      id: index + 1,
+      type: 7,
+      value: `Contiguous string ${index + 1}`,
+    })),
+    { id: 1002, type: 7, value: 'After the paged gap' },
   ];
-  let listRequests = 0;
+  const listUrls: string[] = [];
+  const createdRecords: DbString[] = [];
   let createRequests = 0;
   let deleteRequests = 0;
   let updateRequests = 0;
@@ -50,12 +88,21 @@ async function mockStringsDatabaseApis(page: Page) {
   );
 
   await page.route('**/api/v1/db_strs**', route => {
-    listRequests++;
     const url = new URL(route.request().url());
-    const typeMatch = (url.searchParams.get('where') || '').match(/(?:^|\.)type__(\d+)/);
-    const response = typeMatch
-      ? strings.filter(string => string.type === parseInt(typeMatch[1], 10))
-      : strings;
+    const filtered = filterStringsForRequest(strings, url);
+
+    if (url.pathname.endsWith('/count')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ count: filtered.length }),
+      });
+    }
+
+    listUrls.push(url.toString());
+    const limit = parseInt(url.searchParams.get('limit') || '1000', 10);
+    const pageIndex = parseInt(url.searchParams.get('page') || '0', 10);
+    const response = filtered.slice(pageIndex * limit, (pageIndex + 1) * limit);
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -69,6 +116,14 @@ async function mockStringsDatabaseApis(page: Page) {
     }
     createRequests++;
     const record = JSON.parse(route.request().postData() || '{}') as DbString;
+    if (strings.some(string => string.id === record.id && string.type === record.type)) {
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Error inserting entity [Duplicate entry]' }),
+      });
+    }
+    createdRecords.push(record);
     strings = strings.concat(record);
     return route.fulfill({
       status: 200,
@@ -105,15 +160,17 @@ async function mockStringsDatabaseApis(page: Page) {
 
   return {
     getCreateRequests: () => createRequests,
+    getCreatedRecords: () => createdRecords,
     getDeleteRequests: () => deleteRequests,
-    getListRequests: () => listRequests,
+    getListRequests: () => listUrls.length,
+    getListUrls: () => listUrls,
     getUpdateRequests: () => updateRequests,
   };
 }
 
 test.describe('Strings Database Editor', () => {
-  test('renders type 0 and treats database text as literal preview content', async ({ page }) => {
-    await mockStringsDatabaseApis(page);
+  test('renders type 0 safely and only requests a bounded category page', async ({ page }) => {
+    const api = await mockStringsDatabaseApis(page);
     await page.goto('/strings-database?type=0&selectedId=1');
 
     const preview = page.locator('.string-preview');
@@ -124,6 +181,13 @@ test.describe('Strings Database Editor', () => {
     await expect(preview).not.toContainText('QA braces 49');
     await expect(preview).toHaveCSS('white-space', 'pre-wrap');
     await expect.poll(() => page.evaluate(() => (window as any).__stringsPreviewExecuted)).toBeUndefined();
+
+    expect(api.getListUrls().length).toBeGreaterThan(0);
+    for (const requestUrl of api.getListUrls()) {
+      const url = new URL(requestUrl);
+      expect(url.searchParams.get('where')).toContain('type__0');
+      expect(parseInt(url.searchParams.get('limit') || '0', 10)).toBeLessThanOrEqual(50);
+    }
   });
 
   test('protects unsaved edits and does not refetch a type when selecting rows', async ({ page }) => {
@@ -157,12 +221,58 @@ test.describe('Strings Database Editor', () => {
     expect(api.getListRequests()).toBe(requestsAfterLoad);
   });
 
+  test('lets the user choose an unused ID and blocks an existing one before insert', async ({ page }) => {
+    const api = await mockStringsDatabaseApis(page);
+    await page.goto('/strings-database?type=5');
+
+    await page.getByRole('button', { name: 'Create' }).click();
+    const idInput = page.locator('#selected_id');
+    await expect(idInput).toBeEnabled();
+    await expect(idInput).toHaveValue('3');
+    await expect(page.getByText('ID 3 is available for this type.', { exact: true })).toBeVisible();
+
+    await idInput.fill('12');
+    await idInput.blur();
+    await expect(page.getByText('ID 12 already exists for this type. Choose another ID.', { exact: true })).toBeVisible();
+    await expect(page.locator('.col-6.fade-in').getByRole('button', { name: 'Create' })).toBeDisabled();
+    expect(api.getCreateRequests()).toBe(0);
+
+    await idInput.fill('42');
+    await idInput.blur();
+    await expect(page.getByText('ID 42 is available for this type.', { exact: true })).toBeVisible();
+    await page.locator('#selected_value').fill('Chosen string ID');
+    await page.locator('.col-6.fade-in').getByRole('button', { name: 'Create' }).click();
+
+    await expect(page.getByText('Saved successfully', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/type=5&selectedId=42/);
+    expect(api.getCreateRequests()).toBe(1);
+    expect(api.getCreatedRecords()).toEqual([{ id: 42, type: 5, value: 'Chosen string ID' }]);
+  });
+
+  test('finds the lowest available ID across multiple ID-only batches', async ({ page }) => {
+    const api = await mockStringsDatabaseApis(page);
+    await page.goto('/strings-database?type=7');
+
+    await page.getByRole('button', { name: 'Create' }).click();
+    await expect(page.locator('#selected_id')).toHaveValue('1001');
+    await expect(page.getByText('ID 1001 is available for this type.', { exact: true })).toBeVisible();
+
+    const scanRequests = api.getListUrls()
+      .map(requestUrl => new URL(requestUrl))
+      .filter(url => url.searchParams.get('select') === 'id.type');
+    expect(scanRequests).toHaveLength(2);
+    expect(scanRequests[0].searchParams.get('where')).toContain('id_gt_0');
+    expect(scanRequests[1].searchParams.get('where')).toContain('id_gt_1000');
+    expect(scanRequests.every(url => url.searchParams.get('limit') === '1000')).toBe(true);
+  });
+
   test('keeps new rows local until save and keeps delete confirmation visible for an empty type', async ({ page }) => {
     const api = await mockStringsDatabaseApis(page);
     await page.goto('/strings-database?type=29');
 
     await page.getByRole('button', { name: 'Create' }).click();
     await expect(page.getByText('Create Database String', { exact: true })).toBeVisible();
+    await expect(page.locator('#selected_id')).toHaveValue('1');
     expect(api.getCreateRequests()).toBe(0);
 
     await page.locator('#selected_value').fill('Temporary test string');
@@ -193,6 +303,30 @@ test.describe('Strings Database Editor', () => {
     await expect(page).toHaveURL(/type=5&selectedId=12/);
     expect(api.getUpdateRequests()).toBe(1);
     expect(api.getListRequests()).toBe(requestsAfterLoad + 1);
+  });
+
+  test('searches within the selected type and pages without loading the entire category', async ({ page }) => {
+    const api = await mockStringsDatabaseApis(page);
+    await page.goto('/strings-database?type=6');
+
+    await expect(page.getByText('Showing 1-50 of 55 strings', { exact: true })).toBeVisible();
+    await expect(page.locator('tbody tr')).toHaveCount(50);
+    await page.getByRole('button', { name: 'Next page' }).click();
+    await expect(page.getByText('Showing 51-55 of 55 strings', { exact: true })).toBeVisible();
+    await expect(page.locator('tbody tr')).toHaveCount(5);
+
+    await page.locator('#db-string-search').fill('Needle');
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(page.getByText('Showing 1-2 of 2 strings matching "Needle"', { exact: true })).toBeVisible();
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+    await expect(page.locator('tbody')).toContainText('Needle result 11');
+    await expect(page.locator('tbody')).toContainText('Needle result 53');
+
+    const listUrls = api.getListUrls().map(requestUrl => new URL(requestUrl));
+    expect(listUrls.every(url => (url.searchParams.get('where') || '').includes('type__6'))).toBe(true);
+    const searchRequest = listUrls[listUrls.length - 1];
+    expect(searchRequest.searchParams.get('where')).toContain('value_like_Needle');
+    expect(searchRequest.searchParams.get('limit')).toBe('50');
   });
 
   test('reports invalid type and missing-record deep links', async ({ page }) => {
