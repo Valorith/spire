@@ -48,16 +48,18 @@
           <div v-if="isValidStringType(selectedType)" class="row mt-3">
             <div class="col-12">
               <label class="sr-only" for="db-string-search">Search strings</label>
-              <b-input-group>
+              <div class="string-search-controls">
                 <b-form-input
                   id="db-string-search"
                   v-model="searchTerm"
+                  class="string-search-input"
                   placeholder="Search this type by exact ID or text"
                   autocomplete="off"
                   @keyup.enter="applySearch"
                 />
-                <b-input-group-append>
+                <div class="string-search-actions">
                   <b-button
+                    id="db-string-search-submit"
                     variant="outline-warning"
                     :disabled="loading"
                     @click="applySearch"
@@ -66,14 +68,15 @@
                     Search
                   </b-button>
                   <b-button
+                    id="db-string-search-clear"
                     variant="outline-secondary"
                     :disabled="loading || (!searchTerm && !appliedSearch)"
                     @click="clearSearch"
                   >
                     Clear
                   </b-button>
-                </b-input-group-append>
-              </b-input-group>
+                </div>
+              </div>
 
               <div v-if="!loading" class="search-summary mt-2">
                 <span v-if="totalMatches > 0">
@@ -987,6 +990,30 @@
 .search-summary {
   color: #c4bda8;
   font-size: 0.82rem;
+}
+
+.string-search-controls,
+.string-search-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.string-search-input {
+  min-width: 0;
+}
+
+.string-search-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 575.98px) {
+  .string-search-controls {
+    flex-direction: column;
+  }
+
+  .string-search-actions > .btn {
+    flex: 1 1 0;
+  }
 }
 
 .strings-pagination {

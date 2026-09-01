@@ -309,6 +309,16 @@ test.describe('Strings Database Editor', () => {
     const api = await mockStringsDatabaseApis(page);
     await page.goto('/strings-database?type=6');
 
+    const searchInputBounds = await page.locator('#db-string-search').boundingBox();
+    const searchButtonBounds = await page.locator('#db-string-search-submit').boundingBox();
+    const clearButtonBounds = await page.locator('#db-string-search-clear').boundingBox();
+    await expect(page.locator('.string-search-controls')).toHaveCSS('gap', '12px');
+    expect(searchInputBounds).not.toBeNull();
+    expect(searchButtonBounds).not.toBeNull();
+    expect(clearButtonBounds).not.toBeNull();
+    expect(searchButtonBounds!.x - (searchInputBounds!.x + searchInputBounds!.width)).toBeGreaterThanOrEqual(8);
+    expect(clearButtonBounds!.x - (searchButtonBounds!.x + searchButtonBounds!.width)).toBeGreaterThanOrEqual(8);
+
     await expect(page.getByText('Showing 1-50 of 55 strings', { exact: true })).toBeVisible();
     await expect(page.locator('tbody tr')).toHaveCount(50);
     await page.getByRole('button', { name: 'Next page' }).click();
