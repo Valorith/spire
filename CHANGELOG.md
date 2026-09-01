@@ -1,4 +1,4 @@
-## [Unreleased] (Beta) 9/1/2026
+## [5.6.0] (Beta) 9/1/2026
 
 * Improved ID management within the db strings editor.
 
