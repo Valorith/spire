@@ -46,7 +46,15 @@ function filterStringsForRequest(strings: DbString[], url: URL) {
   return response;
 }
 
-async function mockStringsDatabaseApis(page: Page, options: { scanGate?: Promise<void> } = {}) {
+async function mockStringsDatabaseApis(page: Page, options: {
+  scanGate?: Promise<void>;
+  selectedPageGate?: {
+    type: number;
+    id: number;
+    started: () => void;
+    release: Promise<void>;
+  };
+} = {}) {
   let strings: DbString[] = [
     {
       id: 1,
@@ -77,6 +85,7 @@ async function mockStringsDatabaseApis(page: Page, options: { scanGate?: Promise
   let createRequests = 0;
   let deleteRequests = 0;
   let updateRequests = 0;
+  let selectedPageGateUsed = false;
 
   // Playwright evaluates matching routes in reverse registration order. Keep
   // the broad fallback first so the Strings DB handlers below win.
@@ -110,6 +119,18 @@ async function mockStringsDatabaseApis(page: Page, options: { scanGate?: Promise
     const url = new URL(route.request().url());
     if (url.searchParams.get('select') === 'id.type' && options.scanGate) {
       await options.scanGate;
+    }
+    const where = url.searchParams.get('where') || '';
+    if (
+      url.pathname.endsWith('/count') &&
+      options.selectedPageGate &&
+      !selectedPageGateUsed &&
+      where.includes(`type__${options.selectedPageGate.type}`) &&
+      where.includes(`id_lte_${options.selectedPageGate.id}`)
+    ) {
+      selectedPageGateUsed = true;
+      options.selectedPageGate.started();
+      await options.selectedPageGate.release;
     }
     const filtered = filterStringsForRequest(strings, url);
 
@@ -408,6 +429,46 @@ test.describe('Strings Database Editor', () => {
     await expect(page.locator('#string-53')).toBeVisible();
     await expect(page.locator('#string-53')).toHaveClass(/pulsate-highlight-white/);
     await expect(page.locator('#selected_value')).toHaveValue('Needle result 53');
+  });
+
+  test('ignores stale deep-link initialization after a newer navigation', async ({ page }) => {
+    let releaseSelectedPage = () => {};
+    let markSelectedPageStarted = () => {};
+    const selectedPageRelease = new Promise<void>(resolve => {
+      releaseSelectedPage = resolve;
+    });
+    const selectedPageStarted = new Promise<void>(resolve => {
+      markSelectedPageStarted = resolve;
+    });
+    await mockStringsDatabaseApis(page, {
+      selectedPageGate: {
+        type: 6,
+        id: 53,
+        started: markSelectedPageStarted,
+        release: selectedPageRelease,
+      },
+    });
+    await page.goto('/strings-database?type=5&selectedId=12');
+    await expect(page.locator('#selected_value')).toHaveValue('Charisma');
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/strings-database?type=6&selectedId=53');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await selectedPageStarted;
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/strings-database?type=5&selectedId=13');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    await expect(page.locator('#selected_value')).toHaveValue('Cold');
+    await expect(page).toHaveURL(/type=5&selectedId=13/);
+    releaseSelectedPage();
+    await page.waitForTimeout(250);
+
+    await expect(page.locator('#selected_value')).toHaveValue('Cold');
+    await expect(page.locator('#string-13')).toHaveClass(/pulsate-highlight-white/);
+    await expect(page.getByText('Showing 1-5 of 5 strings', { exact: true })).toBeVisible();
   });
 
   test('preserves periods as part of text search phrases', async ({ page }) => {

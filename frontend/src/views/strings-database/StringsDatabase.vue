@@ -309,6 +309,7 @@
         idCheckRequestToken: 0,
         listRequestToken: 0,
         createSuggestionRequestToken: 0,
+        initRequestToken: 0,
 
         error: '',
         notification: '',
@@ -574,15 +575,27 @@
         return Math.max(1, Math.ceil(position / this.pageSize))
       },
 
-      async loadSelectedString (stringId, typeId) {
+      async loadSelectedString (stringId, typeId, initRequestToken = null) {
+        const isStale = () => initRequestToken !== null && initRequestToken !== this.initRequestToken
+        if (isStale()) {
+          return false
+        }
+
         let selected = this.strings.find(string => string.id === stringId && string.type === typeId)
         if (!selected) {
           try {
             selected = await this.findString(typeId, stringId)
           } catch (err) {
+            if (isStale()) {
+              return false
+            }
             this.error = this.getApiError(err, 'Unable to load the selected string')
             return false
           }
+        }
+
+        if (isStale()) {
+          return false
         }
 
         if (!selected) {
@@ -961,6 +974,8 @@
       },
 
       async init () {
+        const initRequestToken = ++this.initRequestToken
+        this.listRequestToken++
         this.createSuggestionRequestToken++
         this.creatingSuggestion = false
         this.loadQueryState()
@@ -975,15 +990,28 @@
         const selectedType = this.subSelectedType
         if (selectedId >= 0) {
           try {
-            this.currentPage = await this.findStringPage(selectedType, selectedId)
+            const selectedPage = await this.findStringPage(selectedType, selectedId)
+            if (initRequestToken !== this.initRequestToken) {
+              return
+            }
+            this.currentPage = selectedPage
           } catch (err) {
+            if (initRequestToken !== this.initRequestToken) {
+              return
+            }
             this.error = this.getApiError(err, 'Unable to locate the selected string in the list')
           }
         }
         await this.loadStrings()
+        if (initRequestToken !== this.initRequestToken) {
+          return
+        }
 
         if (selectedId >= 0) {
-          await this.loadSelectedString(selectedId, selectedType)
+          const selectedLoaded = await this.loadSelectedString(selectedId, selectedType, initRequestToken)
+          if (!selectedLoaded || initRequestToken !== this.initRequestToken) {
+            return
+          }
           this.scrollToHighlighted()
         }
       },
@@ -1008,6 +1036,7 @@
       this.idCheckRequestToken++
       this.listRequestToken++
       this.createSuggestionRequestToken++
+      this.initRequestToken++
       window.removeEventListener('beforeunload', this.warnUnsavedChanges)
     },
     beforeRouteUpdate (to, from, next) {
