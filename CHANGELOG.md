@@ -1,3 +1,7 @@
+## [Unreleased] 9/1/2026
+
+* Improved ID management within the db strings editor.
+
 ## [5.5.2] (Beta) 7/31/2026
 
 * Added a Data Buckets Editor with scoped browsing, JSON formatting, lifecycle controls, consumer visibility, audit history, and stale-write conflict recovery.

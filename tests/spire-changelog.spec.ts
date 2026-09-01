@@ -156,6 +156,32 @@ test('keeps the changelog editor at the new release heading', async ({ page }) =
   expect(selectionStart).toBeLessThan(40);
 });
 
+test('loads and reloads the changelog preview at the newest release without interrupting user scrolling', async ({ page }) => {
+  await installChangelogMocks(page);
+  await page.goto('/dev/spirechangelog');
+
+  const editor = page.locator('textarea.changelog-editor');
+  const preview = page.locator('.spire-changelog-preview');
+  await expect(editor).toBeVisible();
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate(element => element.scrollTop)).toBeLessThanOrEqual(1);
+
+  await preview.evaluate(element => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect.poll(() => preview.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: 'Reload' }).click();
+  await expect.poll(() => preview.evaluate(element => element.scrollTop)).toBeLessThanOrEqual(1);
+
+  await preview.evaluate(element => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await editor.press('End');
+  await editor.type('\n* Draft release note');
+  await expect.poll(() => preview.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+});
+
 test('recovers when the local API briefly restarts', async ({ page }) => {
   const requests = await installChangelogMocks(page, 2);
   await page.goto('/dev/spirechangelog');

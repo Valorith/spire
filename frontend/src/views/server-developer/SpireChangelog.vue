@@ -802,6 +802,7 @@ export default {
           try {
             const response = await SpireApi.v1().get("spirechangelog");
             this.applyState(response.data.data);
+            this.resetPreviewScroll();
             return true;
           } catch (e) {
             lastError = e;
@@ -825,6 +826,21 @@ export default {
     },
     waitForStateRetry(delayMs) {
       return new Promise(resolve => window.setTimeout(resolve, delayMs));
+    },
+    resetPreviewScroll() {
+      this.$nextTick(() => {
+        const previewRoot = this.$refs.previewRoot;
+        if (!previewRoot) {
+          return;
+        }
+
+        const resetScroll = () => {
+          previewRoot.scrollTop = 0;
+          previewRoot.scrollLeft = 0;
+        };
+        resetScroll();
+        window.requestAnimationFrame(resetScroll);
+      });
     },
     applyState(state) {
       this.content = state.content || "";
