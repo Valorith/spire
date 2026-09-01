@@ -8,15 +8,32 @@ type DbString = {
 
 function filterStringsForRequest(strings: DbString[], url: URL) {
   const where = url.searchParams.get('where') || '';
-  const typeMatch = where.match(/(?:^|\.)type__(\d+)/);
-  const idMatch = where.match(/(?:^|\.)id__(\d+)/);
-  const idGreaterThanMatch = where.match(/(?:^|\.)id_gt_(\d+)/);
-  const valueMatch = where.match(/(?:^|\.)value_like_([^.]*)/);
+  const filters: string[] = [];
+  let filter = '';
+  for (let index = 0; index < where.length; index++) {
+    if (where[index] === '\\' && index + 1 < where.length && (where[index + 1] === '.' || where[index + 1] === '\\')) {
+      filter += where[index + 1];
+      index++;
+    } else if (where[index] === '.') {
+      if (filter) filters.push(filter);
+      filter = '';
+    } else {
+      filter += where[index];
+    }
+  }
+  if (filter) filters.push(filter);
+
+  const typeMatch = filters.find(value => value.startsWith('type__'))?.match(/^type__(\d+)/);
+  const idMatch = filters.find(value => value.startsWith('id__'))?.match(/^id__(\d+)/);
+  const idGreaterThanMatch = filters.find(value => value.startsWith('id_gt_'))?.match(/^id_gt_(\d+)/);
+  const idLessThanEqualMatch = filters.find(value => value.startsWith('id_lte_'))?.match(/^id_lte_(\d+)/);
+  const valueMatch = filters.find(value => value.startsWith('value_like_'))?.match(/^value_like_(.*)/);
 
   let response = strings.filter(string => {
     if (typeMatch && string.type !== parseInt(typeMatch[1], 10)) return false;
     if (idMatch && string.id !== parseInt(idMatch[1], 10)) return false;
     if (idGreaterThanMatch && string.id <= parseInt(idGreaterThanMatch[1], 10)) return false;
+    if (idLessThanEqualMatch && string.id > parseInt(idLessThanEqualMatch[1], 10)) return false;
     if (valueMatch && !string.value.toLowerCase().includes(valueMatch[1].toLowerCase())) return false;
     return true;
   });
@@ -29,7 +46,7 @@ function filterStringsForRequest(strings: DbString[], url: URL) {
   return response;
 }
 
-async function mockStringsDatabaseApis(page: Page) {
+async function mockStringsDatabaseApis(page: Page, options: { scanGate?: Promise<void> } = {}) {
   let strings: DbString[] = [
     {
       id: 1,
@@ -41,6 +58,8 @@ async function mockStringsDatabaseApis(page: Page) {
     { id: 4, type: 5, value: 'Dexterity' },
     { id: 12, type: 5, value: 'Charisma' },
     { id: 13, type: 5, value: 'Cold' },
+    { id: 1, type: 28, value: 'Fire. Bolt' },
+    { id: 2, type: 28, value: 'Fire starter' },
     ...Array.from({ length: 55 }, (_, index) => ({
       id: index + 1,
       type: 6,
@@ -87,8 +106,11 @@ async function mockStringsDatabaseApis(page: Page) {
     })
   );
 
-  await page.route('**/api/v1/db_strs**', route => {
+  await page.route('**/api/v1/db_strs**', async route => {
     const url = new URL(route.request().url());
+    if (url.searchParams.get('select') === 'id.type' && options.scanGate) {
+      await options.scanGate;
+    }
     const filtered = filterStringsForRequest(strings, url);
 
     if (url.pathname.endsWith('/count')) {
@@ -266,6 +288,26 @@ test.describe('Strings Database Editor', () => {
     expect(scanRequests.every(url => url.searchParams.get('limit') === '1000')).toBe(true);
   });
 
+  test('pins the selected type and clears the previous editor while the ID scan is running', async ({ page }) => {
+    let releaseScan = () => {};
+    const scanGate = new Promise<void>(resolve => {
+      releaseScan = resolve;
+    });
+    await mockStringsDatabaseApis(page, { scanGate });
+    await page.goto('/strings-database?type=5&selectedId=12');
+    await expect(page.locator('#selected_value')).toHaveValue('Charisma');
+
+    await page.getByRole('button', { name: 'Create' }).click();
+    await expect(page.getByRole('button', { name: 'Preparing' })).toBeVisible();
+    await expect(page.getByLabel('String type')).toBeDisabled();
+    await expect(page.locator('.col-6.fade-in')).toHaveCount(0);
+
+    releaseScan();
+    await expect(page.getByLabel('String type')).toBeEnabled();
+    await expect(page.locator('#selected_id')).toHaveValue('3');
+    await expect(page.getByText('ID 3 is available for this type.', { exact: true })).toBeVisible();
+  });
+
   test('keeps new rows local until save and keeps delete confirmation visible for an empty type', async ({ page }) => {
     const api = await mockStringsDatabaseApis(page);
     await page.goto('/strings-database?type=29');
@@ -285,6 +327,24 @@ test.describe('Strings Database Editor', () => {
     await expect(page.getByText('Deleted successfully', { exact: true })).toBeVisible();
     await expect(page.locator('.col-6.fade-in')).toHaveCount(0);
     expect(api.getDeleteRequests()).toBe(1);
+  });
+
+  test('clears an exact-ID create search after deleting the newly created row', async ({ page }) => {
+    await mockStringsDatabaseApis(page);
+    await page.goto('/strings-database?type=5');
+
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.locator('#selected_value').fill('Temporary gap string');
+    await page.locator('.col-6.fade-in').getByRole('button', { name: 'Create' }).click();
+    await expect(page.locator('#db-string-search')).toHaveValue('3');
+    await expect(page.getByText('Showing 1-1 of 1 strings matching "3"', { exact: true })).toBeVisible();
+
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(page.locator('#db-string-search')).toHaveValue('');
+    await expect(page.getByText('Showing 1-5 of 5 strings', { exact: true })).toBeVisible();
+    await expect(page.locator('tbody tr')).toHaveCount(5);
   });
 
   test('saves an existing row through PATCH and refreshes its persisted value', async ({ page }) => {
@@ -337,6 +397,32 @@ test.describe('Strings Database Editor', () => {
     const searchRequest = listUrls[listUrls.length - 1];
     expect(searchRequest.searchParams.get('where')).toContain('value_like_Needle');
     expect(searchRequest.searchParams.get('limit')).toBe('50');
+  });
+
+  test('keeps a deep-linked selection visible on its paged result page', async ({ page }) => {
+    await mockStringsDatabaseApis(page);
+    await page.goto('/strings-database?type=6&selectedId=53');
+
+    await expect(page.getByText('Showing 51-55 of 55 strings', { exact: true })).toBeVisible();
+    await expect(page.getByText('Page 2 of 2', { exact: true })).toBeVisible();
+    await expect(page.locator('#string-53')).toBeVisible();
+    await expect(page.locator('#string-53')).toHaveClass(/pulsate-highlight-white/);
+    await expect(page.locator('#selected_value')).toHaveValue('Needle result 53');
+  });
+
+  test('preserves periods as part of text search phrases', async ({ page }) => {
+    const api = await mockStringsDatabaseApis(page);
+    await page.goto('/strings-database?type=28');
+
+    await page.locator('#db-string-search').fill('Fire. Bolt');
+    await page.getByRole('button', { name: 'Search' }).click();
+
+    await expect(page.getByText('Showing 1-1 of 1 strings matching "Fire. Bolt"', { exact: true })).toBeVisible();
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(page.locator('tbody')).toContainText('Fire. Bolt');
+    const searchRequests = api.getListUrls().map(requestUrl => new URL(requestUrl));
+    const searchRequest = searchRequests[searchRequests.length - 1];
+    expect(searchRequest.searchParams.get('where')).toContain('value_like_Fire\\. Bolt');
   });
 
   test('reports invalid type and missing-record deep links', async ({ page }) => {

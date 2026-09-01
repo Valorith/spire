@@ -18,6 +18,7 @@
                 :value="selectedType"
                 class="mt-3 form-control"
                 aria-label="String type"
+                :disabled="creatingSuggestion"
                 @change="changeSelectedType"
               >
                 <option value="-1">--- Select ---</option>
@@ -307,6 +308,7 @@
         idCheckTimeout: null,
         idCheckRequestToken: 0,
         listRequestToken: 0,
+        createSuggestionRequestToken: 0,
 
         error: '',
         notification: '',
@@ -478,13 +480,19 @@
         return contents ? contents.replace(/<br\s*\/?\s*>/gi, '\n') : ''
       },
 
+      escapeWhereValue (value) {
+        return String(value)
+          .replace(/\\/g, '\\\\')
+          .replace(/\./g, '\\.')
+      },
+
       addStringFilters (builder, search = this.appliedSearch) {
         builder.where('type', '=', this.selectedType)
         const term = String(search || '').trim()
         if (/^\d+$/.test(term)) {
           builder.where('id', '=', Number(term))
         } else if (term) {
-          builder.where('value', 'like', term)
+          builder.where('value', 'like', this.escapeWhereValue(term))
         }
         return builder
       },
@@ -555,6 +563,17 @@
         return null
       },
 
+      async findStringPage (type, id) {
+        const builder = new SpireQueryBuilder()
+          .where('type', '=', type)
+          .where('id', '<=', id)
+        const response = await DbStrApiClient.getDbStrsCount(builder.get())
+        const position = response.status === 200 && response.data
+          ? Number(response.data.count || 0)
+          : 0
+        return Math.max(1, Math.ceil(position / this.pageSize))
+      },
+
       async loadSelectedString (stringId, typeId) {
         let selected = this.strings.find(string => string.id === stringId && string.type === typeId)
         if (!selected) {
@@ -580,6 +599,10 @@
       },
 
       async changeSelectedType (value) {
+        if (this.creatingSuggestion) {
+          this.typeSelectRenderKey++
+          return
+        }
         const nextType = parseInt(value)
         if (nextType === this.selectedType) {
           return
@@ -630,13 +653,13 @@
         }
       },
 
-      async getLowestAvailableStringId () {
+      async getLowestAvailableStringId (type) {
         let candidateId = 1
         let lastSeenId = 0
 
         while (candidateId <= MAX_STRING_ID) {
           const builder = new SpireQueryBuilder()
-            .where('type', '=', this.selectedType)
+            .where('type', '=', type)
             .where('id', '>', lastSeenId)
             .select(['id', 'type'])
             .orderBy(['id'])
@@ -689,27 +712,37 @@
           return
         }
 
+        const creatingType = this.selectedType
+        const requestToken = ++this.createSuggestionRequestToken
+        this.resetSelections()
         this.creatingSuggestion = true
         this.error = ''
         this.notification = ''
         try {
-          const newId = await this.getLowestAvailableStringId()
+          const newId = await this.getLowestAvailableStringId(creatingType)
+          if (requestToken !== this.createSuggestionRequestToken || creatingType !== this.selectedType) {
+            return
+          }
           this.creatingString = true
           this.subSelectedId = newId
-          this.subSelectedType = this.selectedType
+          this.subSelectedType = creatingType
           this.originalSelectedStringObject = {}
           this.selectedStringObject = {
             id: newId,
-            type: this.selectedType,
+            type: creatingType,
             value: ''
           }
           this.idAvailability = 'idle'
           EditFormFieldUtil.resetFieldEditedStatus()
           await this.checkCreationIdAvailability()
         } catch (err) {
-          this.error = this.getApiError(err, err.message || 'Unable to suggest a string ID')
+          if (requestToken === this.createSuggestionRequestToken) {
+            this.error = this.getApiError(err, err.message || 'Unable to suggest a string ID')
+          }
         } finally {
-          this.creatingSuggestion = false
+          if (requestToken === this.createSuggestionRequestToken) {
+            this.creatingSuggestion = false
+          }
         }
       },
 
@@ -856,7 +889,13 @@
           )
 
           if (response.status === 200 && response.data) {
+            const deletedIdSearch = this.appliedSearch === String(deletedId)
             this.resetSelections()
+            if (deletedIdSearch) {
+              this.searchTerm = ''
+              this.appliedSearch = ''
+              this.currentPage = 1
+            }
             await this.loadStrings()
 
             if (this.strings.length > 0) {
@@ -872,6 +911,9 @@
       },
 
       selectString (string) {
+        if (this.creatingSuggestion) {
+          return false
+        }
         if (string.id === this.subSelectedId && string.type === this.subSelectedType) {
           return true
         }
@@ -919,6 +961,8 @@
       },
 
       async init () {
+        this.createSuggestionRequestToken++
+        this.creatingSuggestion = false
         this.loadQueryState()
         this.strings = []
         this.totalMatches = 0
@@ -929,6 +973,13 @@
 
         const selectedId = this.subSelectedId
         const selectedType = this.subSelectedType
+        if (selectedId >= 0) {
+          try {
+            this.currentPage = await this.findStringPage(selectedType, selectedId)
+          } catch (err) {
+            this.error = this.getApiError(err, 'Unable to locate the selected string in the list')
+          }
+        }
         await this.loadStrings()
 
         if (selectedId >= 0) {
@@ -956,6 +1007,7 @@
       this.clearIdCheckTimer()
       this.idCheckRequestToken++
       this.listRequestToken++
+      this.createSuggestionRequestToken++
       window.removeEventListener('beforeunload', this.warnUnsavedChanges)
     },
     beforeRouteUpdate (to, from, next) {

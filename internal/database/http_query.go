@@ -54,7 +54,7 @@ func (d *Resolver) QueryContext(model models.Modelable, c echo.Context) *gorm.DB
 
 	// where filters
 	whereParam := c.QueryParam("where")
-	for _, filter := range strings.Split(whereParam, whereDelimiter) {
+	for _, filter := range splitWhereFilters(whereParam) {
 		if len(filter) == 0 {
 			continue
 		}
@@ -85,7 +85,8 @@ func (d *Resolver) QueryContext(model models.Modelable, c echo.Context) *gorm.DB
 	// where or filters
 	whereOrParam := c.QueryParam("whereOr")
 	orWheres := d.Get(model, c).Model(&model)
-	for _, filter := range strings.Split(whereOrParam, whereDelimiter) {
+	whereOrFilters := splitWhereFilters(whereOrParam)
+	for _, filter := range whereOrFilters {
 		if len(filter) == 0 {
 			continue
 		}
@@ -93,7 +94,7 @@ func (d *Resolver) QueryContext(model models.Modelable, c echo.Context) *gorm.DB
 		orWheres = d.handleOrWheres(orWheres, filter)
 	}
 
-	if len(strings.Split(whereOrParam, whereDelimiter)) > 0 {
+	if len(whereOrFilters) > 0 {
 		query = query.Or(orWheres)
 	}
 
@@ -189,6 +190,35 @@ func (d *Resolver) QueryContext(model models.Modelable, c echo.Context) *gorm.DB
 	}
 
 	return query
+}
+
+// splitWhereFilters separates dot-delimited filters while allowing query
+// builders to escape literal periods and backslashes inside filter values.
+func splitWhereFilters(param string) []string {
+	filters := make([]string, 0)
+	var filter strings.Builder
+
+	for i := 0; i < len(param); i++ {
+		if param[i] == '\\' && i+1 < len(param) && (param[i+1] == '.' || param[i+1] == '\\') {
+			filter.WriteByte(param[i+1])
+			i++
+			continue
+		}
+		if param[i] == whereDelimiter[0] {
+			if filter.Len() > 0 {
+				filters = append(filters, filter.String())
+				filter.Reset()
+			}
+			continue
+		}
+		filter.WriteByte(param[i])
+	}
+
+	if filter.Len() > 0 {
+		filters = append(filters, filter.String())
+	}
+
+	return filters
 }
 
 func isInt(s string) bool {
