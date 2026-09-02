@@ -671,7 +671,7 @@ const AaRankPrereqClient = new AaRankPrereqApi(...SpireApi.cfg())
 const DbStrClient = new DbStrApi(...SpireApi.cfg())
 
 const DEFAULT_ABILITY = () => ({ id: 0, name: "", first_rank_id: 0, category: 0, charges: 0, classes: 0, deities: 0, drakkin_heritage: 0, enabled: 1, grant_only: 0, auto_grant_enabled: 0, races: 0, reset_on_death: 0, status: 0, type: 0 })
-const DEFAULT_RANK = (id = 0) => ({ id, cost: 0, desc_sid: 0, expansion: 0, level_req: 0, lower_hotkey_sid: 0, next_id: 0, prev_id: 0, recast_time: 0, spell: 0, spell_type: 0, title_sid: 0, upper_hotkey_sid: 0, effects: [], prereqs: [], _dirty: true, _isNew: true, _expanded: true })
+const DEFAULT_RANK = (id = 0) => ({ id, cost: 0, desc_sid: 0, expansion: 0, level_req: 0, lower_hotkey_sid: 0, next_id: -1, prev_id: -1, recast_time: 0, spell: 0, spell_type: 0, title_sid: 0, upper_hotkey_sid: 0, effects: [], prereqs: [], _dirty: true, _isNew: true, _expanded: true })
 
 export default {
   name: "AaEditor",
@@ -1201,9 +1201,9 @@ export default {
       // Include locally-created (unsaved) chain ranks in the search pool
       const localNewRanks = this.chainRanks.filter(r => r._isNew)
       const rankPool = [...this.allRanks, ...localNewRanks]
-      // Candidates: ranks with prev_id=0 not already owned by another ability
+      // EQEmu uses -1 for an empty rank link; accept legacy 0 values as well.
       const candidates = rankPool.filter(r =>
-        Number(r.prev_id || 0) === 0 && !usedFirstRankIds.has(Number(r.id))
+        [-1, 0].includes(Number(r.prev_id == null ? -1 : r.prev_id)) && !usedFirstRankIds.has(Number(r.id))
       )
       const toast = (msg, variant) => this.$bvToast.toast(msg, {
         title: 'First Rank Lookup',
@@ -1260,7 +1260,7 @@ export default {
       const idMap = new Map((this.allRanks || []).map(r => [Number(r.id), JSON.parse(JSON.stringify(r))]))
       const visited = new Set()
       let cursor = Number(this.selected.first_rank_id)
-      while (cursor && idMap.has(cursor) && !visited.has(cursor)) {
+      while (cursor > 0 && idMap.has(cursor) && !visited.has(cursor)) {
         const rank = idMap.get(cursor)
         visited.add(cursor)
         rank.effects = await this.fetchRankEffects(cursor)
@@ -1309,8 +1309,8 @@ export default {
       if (!confirm(`Remove rank ${rank.id}?`)) return
       const prev = this.chainRanks[idx - 1]
       const next = this.chainRanks[idx + 1]
-      if (prev) { prev.next_id = next ? Number(next.id) : 0; prev._dirty = true }
-      if (next) { next.prev_id = prev ? Number(prev.id) : 0; next._dirty = true }
+      if (prev) { prev.next_id = next ? Number(next.id) : -1; prev._dirty = true }
+      if (next) { next.prev_id = prev ? Number(prev.id) : -1; next._dirty = true }
       if (idx === 0) this.selected.first_rank_id = next ? Number(next.id) : 0
       if (rank._isNew) {
         this.chainRanks.splice(idx, 1)
@@ -1399,7 +1399,11 @@ export default {
       if (this.chainRanks.some(r => Number(r.id || 0) <= 0)) return "All rank IDs must be positive"
       if (this.chainRanks.some(r => Number(r.prev_id || 0) === Number(r.id) || Number(r.next_id || 0) === Number(r.id))) return "Rank cannot reference itself in prev_id/next_id"
       const ids = new Set(this.chainRanks.map(r => Number(r.id)))
-      const badLinks = this.chainRanks.some(r => Number(r.prev_id || 0) && !ids.has(Number(r.prev_id)) || Number(r.next_id || 0) && !ids.has(Number(r.next_id)))
+      const isInvalidLink = value => {
+        const id = Number(value == null ? -1 : value)
+        return id !== -1 && id !== 0 && !ids.has(id)
+      }
+      const badLinks = this.chainRanks.some(r => isInvalidLink(r.prev_id) || isInvalidLink(r.next_id))
       if (badLinks) return "All prev_id/next_id links must target a rank in this chain"
       const duplicateSlots = this.chainRanks.some(r => {
         const slots = (r.effects || []).map(f => Number(f.slot || 0)).filter(Boolean)
