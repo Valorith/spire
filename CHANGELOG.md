@@ -1,3 +1,7 @@
+## [Unreleased] (Beta) 9/3/2026
+
+* Fix AA Editor rank chain sentinel handling
+
 ## [5.6.0] (Beta) 9/1/2026
 
 * Improved ID management within the db strings editor.
