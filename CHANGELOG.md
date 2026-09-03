@@ -1,4 +1,4 @@
-## [Unreleased] (Beta) 9/3/2026
+## [5.6.1] (Beta) 9/3/2026
 
 * Fix AA Editor rank chain sentinel handling
 
