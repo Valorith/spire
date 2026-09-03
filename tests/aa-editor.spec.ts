@@ -81,13 +81,13 @@ const AA_ABILITIES = [
 
 const AA_RANKS = [
   { id: 100, cost: 3, desc_sid: 400, expansion: 0, level_req: 51,
-    lower_hotkey_sid: 0, next_id: 101, prev_id: 0, recast_time: 0,
+    lower_hotkey_sid: 0, next_id: 101, prev_id: -1, recast_time: 0,
     spell: 0, spell_type: 0, title_sid: 300, upper_hotkey_sid: 0 },
   { id: 101, cost: 3, desc_sid: 400, expansion: 0, level_req: 51,
-    lower_hotkey_sid: 0, next_id: 0, prev_id: 100, recast_time: 0,
+    lower_hotkey_sid: 0, next_id: -1, prev_id: 100, recast_time: 0,
     spell: 0, spell_type: 0, title_sid: 300, upper_hotkey_sid: 0 },
   { id: 200, cost: 3, desc_sid: 402, expansion: 0, level_req: 51,
-    lower_hotkey_sid: 0, next_id: 0, prev_id: 0, recast_time: 0,
+    lower_hotkey_sid: 0, next_id: -1, prev_id: -1, recast_time: 0,
     spell: 0, spell_type: 0, title_sid: 301, upper_hotkey_sid: 0 },
 ];
 
@@ -241,6 +241,22 @@ test.describe('AA Editor — Basic Tab Title & Description', () => {
 
     await expect(page.locator('input[placeholder="(no title)"]')).toHaveCount(0);
     await expect(page.locator('textarea[placeholder="(no description)"]')).toHaveCount(0);
+  });
+
+});
+
+test.describe('AA Editor — rank chain validation', () => {
+
+  test('saves an ability whose rank chain uses EQEmu -1 endpoint sentinels', async ({ page }) => {
+    await gotoAaEditor(page);
+
+    await page.locator('#aa-editor-table tbody tr').nth(0).click();
+    await page.locator('input[placeholder="AA ability name"]').fill('Combat Agility Updated');
+
+    await page.getByRole('button', { name: 'Save All' }).click();
+
+    await expect(page.getByText(/Saved AA ability 1 \(chain, effects, prereqs saved\)/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('All prev_id/next_id links must target a rank in this chain')).toHaveCount(0);
   });
 
 });
