@@ -33,6 +33,7 @@
 - [Why Spire?](#why-spire)
 - [Upgrade AkkStack to Valorith Spire](#upgrade-akkstack-to-valorith-spire)
 - [Using Spire - Locally](#using-spire---locally)
+  - [Updating a local Spire install](#updating-a-local-spire-install)
 - [Using Spire - Hosted](#using-spire---hosted)
 - [Using Spire - Locally, but Remote](#using-spire---locally-but-remote)
 - [Feature Requests](#feature-requests)
@@ -118,6 +119,29 @@ Place the executable in your EverQuest Emulator Server directory and simply run 
 That's it. No dependencies, no installations, no extra steps.
 
 Spire on your development server instantly.
+
+### Updating a local Spire install
+
+Spire release binaries are available for Windows and Linux. To update an existing
+local install to the highest published version, including beta releases, stop
+Spire, open a terminal in the directory containing the Spire executable, and run
+the command for your operating system. Relaunch Spire after the command finishes.
+
+The updater preserves the existing executable beside the replacement with a
+timestamped `.before-*` suffix. These commands require `curl.exe` on Windows or
+Python 3 on Linux.
+
+#### Windows PowerShell
+
+```powershell
+& { $ErrorActionPreference="Stop"; $assetName="spire-windows-amd64.exe.zip"; $json=& curl.exe -fsSL --retry 3 -H "Accept: application/vnd.github+json" -H "User-Agent: Spire-Updater" "https://api.github.com/repos/Valorith/spire/releases?per_page=100"; if ($LASTEXITCODE -ne 0) { throw "Could not load Spire releases." }; $release=ConvertFrom-Json -InputObject ($json -join "`n") | Where-Object { -not $_.draft -and ($_.assets.name -contains $assetName) } | Sort-Object { [version]($_.tag_name -replace "^v","") } -Descending | Select-Object -First 1; if (-not $release) { throw "No compatible Spire release was found." }; $url=($release.assets | Where-Object { $_.name -eq $assetName }).browser_download_url; $targetName=if (Test-Path ".\spire.exe") { "spire.exe" } elseif (Test-Path ".\spire-windows-amd64.exe") { "spire-windows-amd64.exe" } else { "spire.exe" }; $target=Join-Path (Get-Location).Path $targetName; $temp=Join-Path ([IO.Path]::GetTempPath()) ("spire-update-"+[guid]::NewGuid()); New-Item -ItemType Directory -Path $temp | Out-Null; try { $zip=Join-Path $temp $assetName; & curl.exe -fL --retry 3 --show-error --silent $url -o $zip; if ($LASTEXITCODE -ne 0) { throw "Could not download $assetName." }; Expand-Archive $zip -DestinationPath $temp -Force; if (Test-Path $target) { Copy-Item $target "$target.before-$(Get-Date -Format yyyyMMdd-HHmmss)" }; Move-Item (Join-Path $temp "spire-windows-amd64.exe") $target -Force; Write-Host "Installed Spire $($release.tag_name) to $target" } finally { Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue } }
+```
+
+#### Linux terminal
+
+```bash
+python3 -c 'import json,urllib.request,zipfile,tempfile,pathlib,shutil,os,datetime;A="spire-linux-amd64.zip";H={"Accept":"application/vnd.github+json","User-Agent":"Spire-Updater"};R=json.load(urllib.request.urlopen(urllib.request.Request("https://api.github.com/repos/Valorith/spire/releases?per_page=100",headers=H)));C=[(r,a) for r in R if not r.get("draft") for a in r.get("assets",[]) if a.get("name")==A];r,a=max(C,key=lambda x:tuple(map(int,x[0]["tag_name"].lstrip("v").split("."))));T=pathlib.Path("spire" if pathlib.Path("spire").exists() else "spire-linux-amd64" if pathlib.Path("spire-linux-amd64").exists() else "spire");D=tempfile.TemporaryDirectory();Z=pathlib.Path(D.name)/A;urllib.request.urlretrieve(a["browser_download_url"],Z);B=T.with_name(T.name+".before-"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")) if T.exists() else None;B and shutil.copy2(T,B);F=zipfile.ZipFile(Z);F.extract("spire-linux-amd64",D.name);F.close();N=T.with_name(T.name+".new");shutil.copy2(pathlib.Path(D.name)/"spire-linux-amd64",N);N.chmod(0o755);os.replace(N,T);D.cleanup();print("Installed Spire %s to %s"%(r["tag_name"],T))'
+```
 
 ![image](https://user-images.githubusercontent.com/3319450/192069875-ba916482-d28f-4b56-8819-7ce971781e87.png)
 
