@@ -236,7 +236,7 @@ func (a *AlternateCurrencyEditorController) listCurrencies(c echo.Context) error
 	}
 
 	var total int64
-	if err := base.Distinct("ac.id").Count(&total).Error; err != nil {
+	if err := base.Session(&gorm.Session{}).Distinct("ac.id").Count(&total).Error; err != nil {
 		return alternateCurrencyDatabaseError(c, err)
 	}
 
