@@ -24,7 +24,7 @@ jobs:
       - name: Build and verify workspace Node toolchain
         run: |
           docker build --file containers/workspace/Dockerfile --target node-runtime --tag node-toolchain-qa containers/workspace
-          docker run --rm --entrypoint sh node-toolchain-qa -c 'test "$(node --version)" = v22.23.4 && npm --version && npx --version && corepack --version && test ! -L /usr/local/bin/yarn'
+          docker run --rm --env "EXPECTED_NODE_VERSION=v$(cat .node-version)" --entrypoint sh node-toolchain-qa -c 'test "$(node --version)" = "$EXPECTED_NODE_VERSION" && npm --version && npx --version && corepack --version && test ! -L /usr/local/bin/yarn'
       - name: Build optional Railway frontend stage
         run: docker build --file Dockerfile.railway --target frontend --tag node-frontend-qa .
-      - run: docker run --rm --entrypoint node node-frontend-qa --version | grep -Fx v22.23.4
+      - run: docker run --rm --entrypoint node node-frontend-qa --version | grep -Fx "v$(cat .node-version)"
