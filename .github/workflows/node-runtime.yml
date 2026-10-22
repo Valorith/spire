@@ -1,0 +1,30 @@
+name: Node runtime validation
+
+on:
+  pull_request:
+    paths:
+      - '.node-version'
+      - 'Dockerfile.railway'
+      - 'containers/workspace/Dockerfile'
+      - 'frontend/package*.json'
+      - 'frontend/eqsage-embed/package*.json'
+      - '.github/workflows/node-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and verify workspace Node toolchain
+        run: |
+          docker build --file containers/workspace/Dockerfile --target node-runtime --tag node-toolchain-qa containers/workspace
+          docker run --rm --env "EXPECTED_NODE_VERSION=v$(cat .node-version)" --entrypoint sh node-toolchain-qa -c 'test "$(node --version)" = "$EXPECTED_NODE_VERSION" && npm --version && npx --version && corepack --version && test ! -L /usr/local/bin/yarn'
+      - name: Build optional Railway frontend stage
+        run: docker build --file Dockerfile.railway --target frontend --tag node-frontend-qa .
+      - run: docker run --rm --entrypoint node node-frontend-qa --version | grep -Fx "v$(cat .node-version)"

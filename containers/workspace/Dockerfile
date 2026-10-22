@@ -1,7 +1,18 @@
 #############################################
 # go workspace
 #############################################
-FROM debian:12-slim
+FROM node:22.23.4-bookworm-slim AS node-toolchain
+FROM debian:12-slim AS node-runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=node-toolchain /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-toolchain /usr/local/lib/node_modules/ /usr/local/lib/node_modules/
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
+
+FROM node-runtime AS workspace
 
 ARG PUID=1000
 ENV PUID ${PUID}
@@ -88,7 +99,7 @@ RUN go install github.com/google/wire/cmd/wire@latest
 #######################################################################
 # node
 #######################################################################
-RUN sudo apt-get update && sudo apt-get install -y curl sudo gnupg nodejs npm \
+RUN sudo apt-get update && sudo apt-get install -y curl sudo gnupg \
     && sudo rm -rf /var/lib/apt/lists/*
 
 RUN sudo npm install -g gh-release
