@@ -1,7 +1,10 @@
 #############################################
 # go workspace
 #############################################
+FROM node:22.23.4-bookworm-slim AS node-toolchain
 FROM debian:12-slim
+
+COPY --from=node-toolchain /usr/local/ /usr/local/
 
 ARG PUID=1000
 ENV PUID ${PUID}
@@ -32,6 +35,8 @@ RUN apt-get update && apt-get install -y \
     make \
     sudo \
     inotify-tools \
+    libatomic1 \
+    libstdc++6 \
     mariadb-client \
     zip \
     unzip \
@@ -88,7 +93,7 @@ RUN go install github.com/google/wire/cmd/wire@latest
 #######################################################################
 # node
 #######################################################################
-RUN sudo apt-get update && sudo apt-get install -y curl sudo gnupg nodejs npm \
+RUN sudo apt-get update && sudo apt-get install -y curl sudo gnupg \
     && sudo rm -rf /var/lib/apt/lists/*
 
 RUN sudo npm install -g gh-release
