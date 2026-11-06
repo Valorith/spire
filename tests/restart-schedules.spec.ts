@@ -80,6 +80,30 @@ test('creates, edits, pauses and deletes restart schedules', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'No restart schedules' })).toBeVisible();
 });
 
+test('schedule toggle thumb stays centered inside its track in both states', async ({ page }) => {
+  await mockServer(page);
+  await page.goto('/admin/restart-schedules');
+  const toggle = page.getByRole('switch', { name: 'Enable Daily restart', exact: true });
+  const assertThumb = async (enabled: boolean) => {
+    await expect(toggle).toHaveAttribute('aria-checked', String(enabled));
+    await expect.poll(() => toggle.evaluate((el, checked) => {
+      const track = el.getBoundingClientRect();
+      const thumb = el.querySelector('span')!.getBoundingClientRect();
+      return {
+        contained: thumb.left >= track.left && thumb.right <= track.right && thumb.top >= track.top && thumb.bottom <= track.bottom,
+        centered: Math.abs((thumb.top + thumb.bottom - track.top - track.bottom) / 2) < 0.5,
+        // The shell can zoom the workspace; compare rendered insets.
+        edgeAligned: Math.abs((checked ? track.right - thumb.right : thumb.left - track.left) - (track.height - thumb.height) / 2) < 0.5,
+      };
+    }, enabled)).toEqual({ contained: true, centered: true, edgeAligned: true });
+  };
+  await assertThumb(true);
+  await toggle.click();
+  await assertThumb(false);
+  await toggle.press('Space');
+  await assertThumb(true);
+});
+
 test('one-time restart uses the chosen time zone', async ({ page }) => {
   const server = await mockServer(page);
   await page.goto('/admin/restart-schedules');

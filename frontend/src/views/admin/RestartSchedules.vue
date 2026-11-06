@@ -372,10 +372,11 @@
 .restart-row-description { min-width: 0; }
 .restart-row-description h2 { font-size: 16px; font-weight: 600; margin: 0 0 7px; overflow-wrap: anywhere; }
 .restart-recurrence { color: #aeb8c8; font-size: 12px; overflow-wrap: anywhere; }
-.restart-workspace .restart-switch { display: block; flex-shrink: 0; margin-left: auto; width: 36px; height: 21px; padding: 3px; border: 1px solid #ffffff38; border-radius: 20px; background: #101a28; transition: background-color .2s; }
-.restart-switch > span { display: block; width: 13px; height: 13px; border-radius: 50%; background: #9aa6b6; transition: transform .2s, background-color .2s; }
-.restart-workspace .restart-switch[aria-checked="true"] { background: #d5b47333; border-color: #d5b47399; }
-.restart-switch[aria-checked="true"] > span { transform: translateX(14px); background: var(--restart-accent); }
+/* Keep EQ window button padding from displacing the switch thumb. */
+.restart-workspace .restart-row button.restart-switch { display: inline-flex; align-items: center; flex-shrink: 0; margin-left: auto; box-sizing: border-box; width: 36px; height: 21px; padding: 3px; border: 1px solid #ffffff38; border-radius: 20px; background: #101a28; transition: background-color .2s; }
+.restart-switch > span { display: block; flex: 0 0 13px; width: 13px; height: 13px; border-radius: 50%; background: #9aa6b6; transition: transform .2s, background-color .2s; }
+.restart-workspace .restart-row button.restart-switch[aria-checked="true"] { background: #d5b47333; border-color: #d5b47399; }
+.restart-switch[aria-checked="true"] > span { transform: translateX(15px); background: var(--restart-accent); }
 .restart-row-paused .restart-time { color: #8792a3; }
 .restart-row-bottom { display: flex; align-items: center; gap: 22px; margin-top: 16px; font-size: 12px; color: #9da9ba; }
 .restart-row-actions { display: flex; align-items: center; gap: 20px; margin-left: auto; }
