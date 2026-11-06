@@ -60,6 +60,10 @@ func (s Store) read() (State, error) {
 			if schedule.NextRun.IsZero() {
 				return state, errors.New("saved restart schedule has an empty next occurrence")
 			}
+			// One-time deadlines are absolute instants, independent of zone rules.
+			if schedule.OnceAt != nil && !schedule.NextRun.Equal(*schedule.OnceAt) {
+				return state, errors.New("saved one-time restart does not match its fixed deadline")
+			}
 		}
 	}
 	if run := state.Active; run != nil {

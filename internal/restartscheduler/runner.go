@@ -150,7 +150,7 @@ func (r *Runner) Step(now time.Time) error {
 		// it without executing the stale instant or blocking schedule management.
 		for i := range state.Schedules {
 			s := &state.Schedules[i]
-			if s.NextRun == nil {
+			if s.NextRun == nil || s.OnceAt != nil {
 				continue
 			}
 			next := s.Next(s.NextRun.Add(-time.Nanosecond))
