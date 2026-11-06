@@ -31,7 +31,7 @@ func TestServerPowerActionsRespectInstallation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := belongsToServer(tc.proc, root); got != tc.want {
-				t.Fatalf("belongsToServer = %v, want %v", got, tc.want)
+				t.Fatalf("belongsToServer = %v, want %v; root=%q cwd=%q exe=%q", got, tc.want, canonicalServerPath(root), canonicalServerPath(tc.proc.Cwd), canonicalServerPath(tc.proc.Exe))
 			}
 		})
 	}
@@ -51,6 +51,9 @@ func TestServerPowerScopeResolvesSymlinkedInstallation(t *testing.T) {
 	}
 	if serverLauncherDirectory(alias) != serverLauncherDirectory(root) {
 		t.Fatal("a symlink selected a different launcher clone directory")
+	}
+	if canonicalServerPath(filepath.Join(alias, "missing", "child")) != canonicalServerPath(filepath.Join(root, "missing", "child")) {
+		t.Fatal("an existing physical prefix was lost for a missing child")
 	}
 }
 

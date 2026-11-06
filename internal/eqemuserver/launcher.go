@@ -553,6 +553,10 @@ func canonicalServerPath(path string) string {
 	}
 	if physical, err := filepath.EvalSymlinks(path); err == nil {
 		path = physical
+	} else if parent := filepath.Dir(path); parent != path {
+		// Resolve the existing prefix even when a child does not exist yet.
+		// Windows temp paths can use a short alias for that existing prefix.
+		path = filepath.Join(canonicalServerPath(parent), filepath.Base(path))
 	}
 	path = filepath.Clean(path)
 	if runtime.GOOS == "windows" {
