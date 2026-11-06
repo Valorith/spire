@@ -115,20 +115,30 @@ func TestStorePersistsConflictsAndPause(t *testing.T) {
 
 func TestConcurrentStoreTransactions(t *testing.T) {
 	store := testStore(t)
+	deadline := time.Now().Add(10 * time.Second)
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := store.Save(daily(), time.Now()); err != nil {
-				t.Error(err)
+			for {
+				_, err := store.Save(daily(), time.Now())
+				// Busy is explicit backpressure, not an accepted write. Retry it
+				// so slow synced filesystems do not turn this into a speed test.
+				if errors.Is(err, ErrBusy) && time.Now().Before(deadline) {
+					continue
+				}
+				if err != nil {
+					t.Error(err)
+				}
+				return
 			}
 		}()
 	}
 	wg.Wait()
 	state := readState(t, store)
 	if len(state.Schedules) != 20 {
-		t.Fatalf("lost writes: %d schedules", len(state.Schedules))
+		t.Fatalf("persisted %d schedules, want 20", len(state.Schedules))
 	}
 	ids := map[string]bool{}
 	for _, s := range state.Schedules {
