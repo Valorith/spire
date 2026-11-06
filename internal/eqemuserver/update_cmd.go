@@ -70,12 +70,12 @@ func NewUpdateCommand(
 	i.command.PersistentFlags().StringVarP(&compileLocation, "compile-build-location", "l", "~/code/build", "Determines where the binaries should be built")
 	i.command.PersistentFlags().BoolVarP(&auto, "auto", "a", false, "Automatically update wihout prompts (default: false)")
 
-	i.command.Run = i.Handle
+	i.command.RunE = i.Handle
 
 	return i
 }
 
-func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
+func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) error {
 	if useReleaseBinaries {
 		fmt.Println("Setting to use release binaries")
 		c.settings.SetSetting(spire.SettingUpdateType, spire.UpdateTypeRelease)
@@ -210,11 +210,11 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 
 				if answer == "y" {
 					fmt.Println("Stopping server")
-					c.launcher.Stop()
+				} else {
+					return nil
 				}
 			} else {
 				fmt.Println("Stopping server")
-				c.launcher.Stop()
 			}
 		}
 
@@ -225,9 +225,9 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 				"https://github.com/EQEmu/Server/releases/download/v%s/eqemu-server-linux-x64.zip",
 				latestVersion.String(),
 			)
-			err := c.updater.InstallRelease(release)
+			err := c.installRelease(release, online)
 			if err != nil {
-				c.logger.Fatal().Err(err).Msg("Failed to install release")
+				return err
 			}
 
 			if !auto {
@@ -238,11 +238,15 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 
 				if answer == "y" {
 					fmt.Println("Starting server")
-					c.launcher.Start()
+					if err := c.launcher.StartLauncherProcess(); err != nil {
+						return err
+					}
 				}
 			} else {
 				fmt.Println("Starting server")
-				c.launcher.Start()
+				if err := c.launcher.StartLauncherProcess(); err != nil {
+					return err
+				}
 			}
 		} else {
 			fmt.Println("Server is already up to date")
@@ -290,7 +294,7 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 
 		if !found {
 			c.logger.Fatal().Msg("Invalid build tool")
-			return
+			return fmt.Errorf("invalid build tool")
 		}
 
 		cmd = exec.Command(info.BuildTool, "-j"+info.BuildCores)
@@ -303,6 +307,32 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 
 		c.LineBreak()
 	}
+	return nil
+}
+
+// Keep server power actions excluded until release extraction has completed.
+func (c *UpdateCommand) installRelease(release string, wasOnline bool) error {
+	unlock, err := c.launcher.lockPowerAction()
+	if err != nil {
+		return fmt.Errorf("cannot claim server power action; update aborted: %w", err)
+	}
+	defer unlock()
+	unlockStartup, err := c.launcher.lockStartup()
+	if err != nil {
+		return fmt.Errorf("cannot claim server executable access; update aborted: %w", err)
+	}
+	defer unlockStartup()
+	cfg, err := c.launcher.serverconfig.Get()
+	if err != nil {
+		return err
+	}
+	if wasOnline || cfg.Spire.LauncherStart {
+		c.launcher.SetStopTimer(0)
+		if err := c.launcher.stopProcessesUnlocked(); err != nil {
+			return fmt.Errorf("cannot stop server; update aborted: %w", err)
+		}
+	}
+	return c.updater.InstallRelease(release)
 }
 
 func (c *UpdateCommand) LineBreak() {

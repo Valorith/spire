@@ -2,6 +2,7 @@ package eqemuserverconfig
 
 import (
 	"encoding/json"
+	"github.com/EQEmuTools/spire/internal/atomicfile"
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
 	"os"
@@ -12,9 +13,14 @@ import (
 
 // Config is the struct type
 type Config struct {
-	logger   *logger.AppLogger
-	pathmgmt *pathmgmt.PathManagement
-	config   EQEmuConfigJson
+	logger           *logger.AppLogger
+	pathmgmt         *pathmgmt.PathManagement
+	config           EQEmuConfigJson
+	mutex            sync.Mutex
+	cachedJSON       []byte
+	cachedPath       string
+	lastModifiedTime time.Time
+	lastSize         int64
 }
 
 // NewConfig creates a new Config struct
@@ -198,14 +204,12 @@ type EQEmuConfigJson struct {
 	} `json:"spire,omitempty"`
 }
 
-var cachedConfig *EQEmuConfigJson
-var lastModifiedTime time.Time
-var mutex = &sync.Mutex{}
-
 // Get returns the eqemu config json
 // If the file has been modified since the last read, it will re-read the file
 // We utilize a cache to prevent reading the file on every call
 func (e *Config) Get() (EQEmuConfigJson, error) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
 	configFile := e.pathmgmt.GetEQEmuServerConfigFilePath()
 	if len(configFile) > 0 {
 		stat, err := os.Stat(configFile)
@@ -213,9 +217,9 @@ func (e *Config) Get() (EQEmuConfigJson, error) {
 			return EQEmuConfigJson{}, err
 		}
 
-		if stat.ModTime().After(lastModifiedTime) || lastModifiedTime.IsZero() {
+		if e.cachedPath != configFile || !stat.ModTime().Equal(e.lastModifiedTime) || stat.Size() != e.lastSize || e.cachedJSON == nil {
 			e.logger.Debug().Any("path", configFile).Msg("Reading eqemu config file")
-			body, err := os.ReadFile(e.pathmgmt.GetEQEmuServerConfigFilePath())
+			body, err := atomicfile.Read(configFile)
 			if err != nil {
 				return EQEmuConfigJson{}, err
 			}
@@ -226,16 +230,23 @@ func (e *Config) Get() (EQEmuConfigJson, error) {
 				return EQEmuConfigJson{}, err
 			}
 
-			e.setConfigDefaults(&config)
-
-			lastModifiedTime = stat.ModTime()
-			mutex.Lock()
-			cachedConfig = &config
-			mutex.Unlock()
+			if e.setConfigDefaults(&config) {
+				if err := e.saveLocked(config); err != nil {
+					return EQEmuConfigJson{}, err
+				}
+				return config, nil
+			}
+			e.cachedJSON = body
+			e.cachedPath = configFile
+			e.lastModifiedTime, e.lastSize = stat.ModTime(), stat.Size()
 
 			return config, nil
-		} else if cachedConfig != nil {
-			return *cachedConfig, nil
+		} else {
+			// Every caller owns its snapshot. Editing nested launcher settings must
+			// not mutate concurrent scheduler reads before Save is called.
+			var config EQEmuConfigJson
+			err := json.Unmarshal(e.cachedJSON, &config)
+			return config, err
 		}
 	}
 
@@ -249,6 +260,20 @@ func (e *Config) Exists() bool {
 
 // Save will save the config to the eqemu_config.json file
 func (e *Config) Save(c EQEmuConfigJson) error {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	return e.saveLocked(c)
+}
+
+func (e *Config) saveLocked(c EQEmuConfigJson) error {
+	if c.WebAdmin != nil {
+		webAdmin := *c.WebAdmin
+		c.WebAdmin = &webAdmin
+		if c.WebAdmin.Launcher != nil {
+			launcher := *c.WebAdmin.Launcher
+			c.WebAdmin.Launcher = &launcher
+		}
+	}
 	if c.WebAdmin != nil && c.WebAdmin.Discord != nil {
 		if len(c.WebAdmin.Discord.CrashLogWebhook) == 0 {
 			c.WebAdmin.Discord = nil
@@ -266,19 +291,19 @@ func (e *Config) Save(c EQEmuConfigJson) error {
 	}
 
 	path := filepath.Join(e.pathmgmt.GetEQEmuServerPath(), "eqemu_config.json")
-	err = os.WriteFile(path, file, 0755)
+	err = atomicfile.Write(path, file, 0755)
 	if err != nil {
 		return err
 	}
 
-	cachedConfig = &c
+	e.cachedJSON = nil
 
 	return nil
 }
 
 // setConfigDefaults will set the default values for the config
 // especially for pointer values
-func (e *Config) setConfigDefaults(c *EQEmuConfigJson) {
+func (e *Config) setConfigDefaults(c *EQEmuConfigJson) bool {
 	save := false
 	if c.WebAdmin == nil {
 		e.logger.Debug().Msg("Setting default web-admin config")
@@ -318,7 +343,5 @@ func (e *Config) setConfigDefaults(c *EQEmuConfigJson) {
 			}
 		}
 	}
-	if save {
-		e.Save(*c)
-	}
+	return save
 }

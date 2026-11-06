@@ -16,6 +16,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
+	"github.com/EQEmuTools/spire/internal/restartscheduler"
 	"github.com/EQEmuTools/spire/internal/spire"
 	"github.com/EQEmuTools/spire/internal/system"
 	"github.com/labstack/echo/v4"
@@ -107,6 +108,11 @@ func (a *Controller) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodPost, "eqemuserver/server/stop", a.serverStop, nil),
 		routes.RegisterRoute(http.MethodPost, "eqemuserver/server/restart", a.serverRestart, nil),
 		routes.RegisterRoute(http.MethodPost, "eqemuserver/server/stop-cancel", a.serverStopCancel, nil),
+		routes.RegisterRoute(http.MethodGet, "eqemuserver/server/restart-schedules", a.getRestartSchedules, nil),
+		routes.RegisterRoute(http.MethodPost, "eqemuserver/server/restart-schedules", a.saveRestartSchedule, nil),
+		routes.RegisterRoute(http.MethodPost, "eqemuserver/server/restart-schedules/preview", a.previewRestartSchedule, nil),
+		routes.RegisterRoute(http.MethodDelete, "eqemuserver/server/restart-schedules/:id", a.deleteRestartSchedule, nil),
+		routes.RegisterRoute(http.MethodPost, "eqemuserver/server/restart-schedules/runs/:id/cancel", a.cancelScheduledRestart, nil),
 		routes.RegisterRoute(http.MethodGet, "eqemuserver/get-websocket-auth", a.getWebsocketAuth, nil),
 		routes.RegisterRoute(http.MethodPost, "eqemuserver/server/process-kill/:pid", a.killProcess, nil),
 		routes.RegisterRoute(http.MethodGet, "eqemuserver/system-all", a.getSystemAll, nil),
@@ -706,11 +712,11 @@ func (a *Controller) getBuildCurrentBranch(c echo.Context) error {
 }
 
 type DashboardStatsResponse struct {
-	Accounts   int64  `json:"accounts"`
-	Characters int64  `json:"characters"`
-	Guilds     int64  `json:"guilds"`
-	Items      int64  `json:"items"`
-	Npcs       int64  `json:"npcs"`
+	Accounts   int64 `json:"accounts"`
+	Characters int64 `json:"characters"`
+	Guilds     int64 `json:"guilds"`
+	Items      int64 `json:"items"`
+	Npcs       int64 `json:"npcs"`
 }
 
 func (a *Controller) getDashboardStats(c echo.Context) error {
@@ -1190,6 +1196,9 @@ func (a *Controller) getServerLockedStatus(c echo.Context) error {
 func (a *Controller) serverStart(c echo.Context) error {
 	err := a.launcher.StartLauncherProcess()
 	if err != nil {
+		if errors.Is(err, restartscheduler.ErrBusy) {
+			return scheduleError(c, err)
+		}
 		return c.JSON(
 			http.StatusInternalServerError,
 			echo.Map{"error": fmt.Sprintf("Failed to start server [%v]", err.Error())},
@@ -1222,19 +1231,23 @@ func (a *Controller) serverStop(c echo.Context) error {
 		)
 	}
 
-	a.launcher.SetStopTimer(stop.Timer)
-	a.launcher.SetStopTypeStopping()
+	if stop.Timer < 0 || stop.Timer > 86400 {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid stop timer"})
+	}
 
 	timeToStop := time.Now().Add(time.Duration(stop.Timer) * time.Second)
 	remainingMinutes := timeToStop.Sub(time.Now()).Round(time.Minute).Minutes()
-	if stop.Timer > 0 {
-		a.userevent.LogUserEvent(c, auditlog.EventServerStop, fmt.Sprintf("Server will stop in [%v] minutes", remainingMinutes))
-	} else {
-		a.userevent.LogUserEvent(c, auditlog.EventServerStop, "Server stopped")
-	}
-
-	err = a.launcher.Stop()
+	err = a.launcher.powerAction(false, stop.Timer, func() {
+		if stop.Timer > 0 {
+			a.userevent.LogUserEvent(c, auditlog.EventServerStop, fmt.Sprintf("Server stop requested in [%v] minutes", remainingMinutes))
+		} else {
+			a.userevent.LogUserEvent(c, auditlog.EventServerStop, "Server stop requested")
+		}
+	})
 	if err != nil {
+		if errors.Is(err, restartscheduler.ErrBusy) {
+			return scheduleError(c, err)
+		}
 		return c.JSON(
 			http.StatusInternalServerError,
 			echo.Map{"error": fmt.Sprintf("Failed to stop server [%v]", err.Error())},
@@ -1254,19 +1267,26 @@ func (a *Controller) serverRestart(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Failed to bind stop options")
 	}
 
-	a.launcher.SetStopTypeRestarting()
-	a.launcher.SetStopTimer(stop.Timer)
+	if stop.Timer < 0 || stop.Timer > 86400 {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid restart timer"})
+	}
 
 	timeToStop := time.Now().Add(time.Duration(stop.Timer) * time.Second)
 	remainingMinutes := timeToStop.Sub(time.Now()).Round(time.Minute).Minutes()
-	if stop.Timer > 0 {
-		a.userevent.LogUserEvent(c, auditlog.EventServerRestart, fmt.Sprintf("Server will restart in [%v] minutes", remainingMinutes))
-	} else {
-		a.userevent.LogUserEvent(c, auditlog.EventServerRestart, "Server restarted")
-	}
-
-	err = a.launcher.Restart()
+	err = a.launcher.powerAction(true, stop.Timer, func() {
+		if stop.Timer > 0 {
+			a.userevent.LogUserEvent(c, auditlog.EventServerRestart, fmt.Sprintf("Server restart requested in [%v] minutes", remainingMinutes))
+		} else {
+			a.userevent.LogUserEvent(c, auditlog.EventServerRestart, "Server restart requested")
+		}
+	})
 	if err != nil {
+		if errors.Is(err, errPowerActionCancelled) {
+			return c.JSON(http.StatusOK, echo.Map{"cancelled": true, "message": "Server restart cancelled"})
+		}
+		if errors.Is(err, restartscheduler.ErrBusy) {
+			return scheduleError(c, err)
+		}
 		return c.JSON(
 			http.StatusInternalServerError,
 			echo.Map{"error": fmt.Sprintf("Failed to restart server [%v]", err.Error())},
@@ -1280,6 +1300,23 @@ func (a *Controller) serverRestart(c echo.Context) error {
 }
 
 func (a *Controller) serverStopCancel(c echo.Context) error {
+	if store, err := a.launcher.RestartScheduleStore(); err == nil {
+		state, err := store.View()
+		if err != nil {
+			// Only a manual timer can be cancelled without the durable store.
+			// A scheduled countdown may still restart after its data lock clears.
+			if a.launcher.GetStopTimer() == 0 {
+				return scheduleError(c, err)
+			}
+			a.logger.Error().Err(err).Msg("Cannot read restart schedules; cancelling manual stop timer")
+		} else if state.Active != nil {
+			if err = store.Cancel(state.Active.ID); err != nil {
+				return scheduleError(c, err)
+			}
+			a.userevent.LogUserEvent(c, auditlog.EventServerCancelRestart, "Cancelled scheduled restart: "+state.Active.ID)
+			return c.JSON(http.StatusOK, echo.Map{"message": "Scheduled restart cancellation requested"})
+		}
+	}
 	err := a.launcher.StopCancel()
 	if err != nil {
 		return c.JSON(

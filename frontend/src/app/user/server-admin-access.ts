@@ -92,6 +92,7 @@ interface AdminTool {
 // API dependencies, not instance-admin status, determine which tools can load.
 // Pages with multiple required datasets need each corresponding read grant.
 export const serverAdminTools: AdminTool[] = [
+  { path: ROUTE.ADMIN_RESTART_SCHEDULES, read: ['eqemuserver/server/restart-schedules'] },
   { path: ROUTE.ADMIN_PLAYERS_ONLINE, read: ['eqemuserver/client-list'] },
   { path: ROUTE.ADMIN_PLAYER_OPERATIONS, read: ['player-operations'] },
   { path: ROUTE.ADMIN_MAIL_PARCELS, read: ['mail-parcels-editor'] },

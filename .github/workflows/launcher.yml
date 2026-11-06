@@ -21,6 +21,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   launcher:
     name: Launcher on ${{ matrix.os }}
@@ -38,12 +42,12 @@ jobs:
       - name: Test faults, updates, and repeated restarts
         env:
           SPIRE_LAUNCHER_QA_REPORT: ${{ runner.temp }}/launcher-qa.json
-        run: go test -timeout=10m -tags=integration ./internal/updater ./internal/selfrestart ./internal/desktop ./internal/app ./internal/permissions -v
+        run: go test -timeout=10m -tags=integration ./internal/updater ./internal/selfrestart ./internal/desktop ./internal/app ./internal/permissions ./internal/restartscheduler ./internal/eqemuserver ./internal/eqemuserverconfig ./internal/websocket ./internal/telnet ./internal/atomicfile -v
       - name: Check for races
         if: runner.os == 'Linux'
         env:
           CGO_ENABLED: '1'
-        run: go test -race -timeout=10m ./internal/selfrestart ./internal/desktop ./internal/updater
+        run: go test -race -timeout=10m ./internal/selfrestart ./internal/desktop ./internal/updater ./internal/restartscheduler ./internal/eqemuserver ./internal/eqemuserverconfig ./internal/telnet
       - name: Save performance measurements
         if: always()
         uses: actions/upload-artifact@v4

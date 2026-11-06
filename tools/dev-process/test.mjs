@@ -20,7 +20,7 @@ async function alive(pid) {
     try {
       // A stopped orphan can await reaping by the container's init process.
       return !/\) Z /.test(await fs.readFile(`/proc/${pid}/stat`, 'utf8'));
-    } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+    } catch (error) { if (error.code === 'ENOENT' || error.code === 'ESRCH') return false; throw error; }
   }
   return true;
 }
@@ -101,8 +101,9 @@ foreach ($client in @($RootProcess, $ChildProcess)) {
 Write-Output 'Windowless console confirmed for parent and child.'
 `);
       const powershell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-      const consoleCheck = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(dir, 'console.ps1'), '-RootProcess', String(rootPid), '-ChildProcess', String(childPid)], { windowsHide: true, encoding: 'utf8', timeout: 10000 });
-      assert.equal(consoleCheck.status, 0, consoleCheck.stderr);
+      // A cold PowerShell/Add-Type startup can exceed 10 seconds on hosted CI.
+      const consoleCheck = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(dir, 'console.ps1'), '-RootProcess', String(rootPid), '-ChildProcess', String(childPid)], { windowsHide: true, encoding: 'utf8', timeout: 30000 });
+      assert.equal(consoleCheck.status, 0, consoleCheck.error?.stack || consoleCheck.stderr);
       assert.match(consoleCheck.stdout, /Windowless console confirmed/);
 
       const helper = (await fs.readdir(dir)).find(name => /^start-hidden-.*\.exe$/.test(name));

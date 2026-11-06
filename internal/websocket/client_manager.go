@@ -91,3 +91,16 @@ func (m *ClientManager) Broadcast(msgType string, message string) {
 
 	m.broadcast <- string(jsonData)
 }
+
+// TryBroadcast keeps background server operations independent of slow or
+// disconnected browser clients. The schedule API remains the durable status.
+func (m *ClientManager) TryBroadcast(msgType, message string) {
+	data, err := json.Marshal(Message{Type: msgType, Message: message})
+	if err != nil {
+		return
+	}
+	select {
+	case m.broadcast <- string(data):
+	default:
+	}
+}

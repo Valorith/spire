@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
@@ -16,15 +15,6 @@ import (
 )
 
 func TestSaveLauncherConfigPersistsOpcodeRepository(t *testing.T) {
-	resetConfigCache := func() {
-		mutex.Lock()
-		cachedConfig = nil
-		lastModifiedTime = time.Time{}
-		mutex.Unlock()
-	}
-	resetConfigCache()
-	t.Cleanup(resetConfigCache)
-
 	serverPath := t.TempDir()
 	appLogger := logger.NewAppLogger()
 	paths := pathmgmt.NewPathManagement(appLogger)
@@ -97,15 +87,6 @@ func TestSaveLauncherConfigPersistsOpcodeRepository(t *testing.T) {
 }
 
 func TestSavePersistsOptionalSpireUpdateChannel(t *testing.T) {
-	resetConfigCache := func() {
-		mutex.Lock()
-		cachedConfig = nil
-		lastModifiedTime = time.Time{}
-		mutex.Unlock()
-	}
-	resetConfigCache()
-	t.Cleanup(resetConfigCache)
-
 	serverPath := t.TempDir()
 	appLogger := logger.NewAppLogger()
 	paths := pathmgmt.NewPathManagement(appLogger)

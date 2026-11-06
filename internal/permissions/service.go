@@ -83,6 +83,7 @@ func (s *Service) RegisterManualResources() map[string][]string {
 			"eqemuserver/server/start",
 			"eqemuserver/server/stop",
 			"eqemuserver/server/restart",
+			"eqemuserver/server/restart-schedules",
 			"eqemuserver/server/stop-cancel",
 		},
 		"Server Process Stats": {"eqemuserver/server-stats"},

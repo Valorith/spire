@@ -30,7 +30,7 @@ const (
 	INHERIT_PARENT_AFFINITY          = 0x00010000
 )
 
-func (l *Launcher) startServerProcess(name string, args ...string) error {
+func (l *Launcher) startServerProcessUnlocked(name string, args ...string) error {
 	bin, err := exec.LookPath(filepath.Join(l.pathmgmt.GetEQEmuServerPath(), "bin", name))
 	if err != nil {
 		return err
@@ -76,8 +76,11 @@ func (l *Launcher) startLauncherProcess() error {
 		return err
 	}
 
-	// copy the binary to os tmp dir
-	tmpBin := filepath.Join(os.TempDir(), filepath.Base(bin))
+	cloneDir := serverLauncherDirectory(l.pathmgmt.GetEQEmuServerPath())
+	if err := os.MkdirAll(cloneDir, 0700); err != nil {
+		return err
+	}
+	tmpBin := filepath.Join(cloneDir, filepath.Base(bin))
 	if err := copyFile(bin, tmpBin); err != nil {
 		return err
 	}

@@ -1,0 +1,79 @@
+name: Restart schedule UI
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/restart-schedules-ui.yml'
+      - '.node-version'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.ts'
+      - 'frontend/package*.json'
+      - 'frontend/src/views/admin/RestartSchedules.vue'
+      - 'frontend/src/views/admin/components/ServerProcessButtonComponent.vue'
+      - 'frontend/src/app/api/spire-api.ts'
+      - 'frontend/src/app/user/server-admin-access.ts'
+      - 'frontend/src/components/layout/Navbar.vue'
+      - 'frontend/src/router.ts'
+      - 'frontend/src/routes.ts'
+      - 'tests/restart-schedules.spec.ts'
+      - 'tests/server-admin-access.spec.ts'
+      - 'tests/admin-header-layout.spec.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Restart schedules and permissions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_OPTIONS: --openssl-legacy-provider
+      VUE_APP_BACKEND_BASE_URL: http://127.0.0.1:8081
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:8081
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Install browser test dependencies
+        run: npm ci --ignore-scripts
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start frontend
+        working-directory: frontend
+        run: |
+          node --max_old_space_size=4096 node_modules/@vue/cli-service/bin/vue-cli-service.js serve --host=127.0.0.1 --port=8081 > "$RUNNER_TEMP/restart-schedules-ui.log" 2>&1 &
+          for attempt in $(seq 1 180); do
+            if curl --fail --silent --header 'Accept: text/html' http://127.0.0.1:8081/admin/restart-schedules > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/restart-schedules-ui.log"
+          exit 1
+      - name: Test schedules, permissions, and shared layout
+        run: npx playwright test tests/restart-schedules.spec.ts tests/server-admin-access.spec.ts tests/admin-header-layout.spec.ts --reporter=line
+      - name: Save browser results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restart-schedules-ui
+          path: |
+            test-results/
+            ${{ runner.temp }}/restart-schedules-ui.log

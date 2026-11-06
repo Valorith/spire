@@ -1,6 +1,7 @@
 package eqemuserver
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
+	"github.com/EQEmuTools/spire/internal/restartscheduler"
 	"github.com/EQEmuTools/spire/internal/rfsnotify"
 	"github.com/EQEmuTools/spire/internal/spire"
 	"github.com/EQEmuTools/spire/internal/websocket"
@@ -47,6 +49,9 @@ type Launcher struct {
 	watcher         *rfsnotify.RWatcher
 	websocketMgr    *websocket.ClientManager
 	crashLogWatcher *CrashLogWatcher
+	processList     func() ([]ProcessDetails, error)
+	processScan     func() ([]*process.Process, error)
+	rpcServerStart  func(int, chan<- error) error
 
 	// properties
 	configLastModified          time.Time
@@ -76,6 +81,7 @@ type Launcher struct {
 	currentOnlineStatics []string
 	currentProcessCounts map[string]int
 	stopTimer            int // timer in seconds to stop the server
+	stopCancelled        bool
 	stopType             string
 	bootedTotalDynamics  int
 	targetDynamics       int
@@ -191,38 +197,70 @@ func (l *Launcher) Process() {
 
 // StartLauncherProcess starts the launcher process
 func (l *Launcher) StartLauncherProcess() error {
-	cfg, _ := l.serverconfig.Get()
+	unlock, err := l.lockPowerAction()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return l.startLauncherUnlocked()
+}
+
+// The caller owns the power lock, including scheduled restart health checks.
+func (l *Launcher) startLauncherUnlocked() error {
+	if err := l.prepareLauncherStart(); err != nil {
+		return err
+	}
+	// Release the execution gate before the child acquires it for bootstrap.
+	return l.startLauncherProcess()
+}
+
+func (l *Launcher) prepareLauncherStart() error {
+	unlock, err := l.lockStartup()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := l.checkIfLauncherIsRunning(); err != nil {
+		return err
+	}
+	cfg, err := l.serverconfig.Get()
+	if err != nil {
+		return err
+	}
+	if cfg.WebAdmin == nil || cfg.WebAdmin.Launcher == nil {
+		return errors.New("server launcher configuration is unavailable")
+	}
 	cfg.WebAdmin.Launcher.IsRunning = false // shut off legacy launcher in-case it's running
 	cfg.Spire.LauncherStart = true
-	err := l.serverconfig.Save(cfg)
+	err = l.serverconfig.Save(cfg)
 	if err != nil {
 		return err
 
 	}
 
-	err = l.checkIfLauncherIsRunning()
-	if err != nil {
-		return err
-	}
-
-	err = l.startLauncherProcess()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
 // Start starts the launcher
 // Only call this from the launcher process itself
 func (l *Launcher) Start() error {
-	err := l.checkIfLauncherIsRunning()
-	if err != nil {
+	// Publish startup intent under the gate before network work. Stop/update
+	// can then disable this bootstrap; it must never enable itself again later.
+	if err := l.prepareLauncherStart(); err != nil {
 		return err
 	}
 
-	l.loadServerConfig()
+	if err := l.runManagedStartup(func() error {
+		l.loadServerConfig()
+		return nil
+	}); err != nil {
+		return err
+	}
 
-	cfg, _ := l.serverconfig.Get()
+	cfg, err := l.serverconfig.Get()
+	if err != nil {
+		return err
+	}
 
 	l.logger.Info().
 		Any("World name", cfg.Server.World.Longname).
@@ -237,18 +275,6 @@ func (l *Launcher) Start() error {
 		if l.isLauncherDistributedModeLeaf() {
 			l.isLeafNode = true
 			l.logger.Info().Msg("Server detected is a leaf node")
-			for {
-				err := l.rpcClientRegister()
-				if err != nil {
-					l.logger.Error().Err(err).Msg("Error registering leaf node")
-				} else {
-					break
-				}
-
-				l.logger.Info().Msg("Retrying registration in 1 second(s)")
-
-				time.Sleep(1 * time.Second)
-			}
 		}
 
 		if l.isLauncherDistributedModeRoot() {
@@ -270,16 +296,6 @@ func (l *Launcher) Start() error {
 					NodeType:         LauncherNodeTypeRoot,
 				},
 			)
-		}
-
-		if l.isLeafNode || l.isDistributedRoot {
-			// goroutine to start the rpc server
-			go func() {
-				err := l.StartRpcServer(3005)
-				if err != nil {
-					return
-				}
-			}()
 		}
 	}
 
@@ -334,10 +350,43 @@ func (l *Launcher) Start() error {
 		return err
 	}
 
-	cfg.Spire.LauncherStart = true
-	err = l.serverconfig.Save(cfg)
-	if err != nil {
+	if err := l.requireLauncherRunning(); err != nil {
 		return err
+	}
+	// Accept distributed work only after pre-boot executable setup has finished
+	// and released its gate, so the first RPC can start processes immediately.
+	if l.isLeafNode || l.isDistributedRoot {
+		ready := make(chan error, 1)
+		start := l.startRpcServer
+		if l.rpcServerStart != nil {
+			start = l.rpcServerStart
+		}
+		go func() {
+			if err := start(3005, ready); err != nil {
+				select {
+				case ready <- err:
+				default:
+				}
+				l.logger.Error().Err(err).Msg("Cannot start launcher RPC server")
+			}
+		}()
+		if err := <-ready; err != nil {
+			return err
+		}
+	}
+	if l.isLeafNode {
+		for {
+			if err := l.requireLauncherRunning(); err != nil {
+				return err
+			}
+			if err := l.rpcClientRegister(); err == nil {
+				break
+			} else {
+				l.logger.Error().Err(err).Msg("Error registering leaf node")
+			}
+			l.logger.Info().Msg("Retrying registration in 1 second(s)")
+			time.Sleep(time.Second)
+		}
 	}
 
 	return nil
@@ -345,7 +394,11 @@ func (l *Launcher) Start() error {
 
 // Restart stops and starts the launcher
 func (l *Launcher) Restart() error {
-	err := l.Stop()
+	return l.PowerAction(true, l.GetStopTimer())
+}
+
+func (l *Launcher) restartUnlocked() error {
+	err := l.stopUnlocked()
 	if err != nil {
 		return err
 	}
@@ -354,18 +407,26 @@ func (l *Launcher) Restart() error {
 
 	l.logger.Info().Msg("Restarting server launcher")
 
-	return l.StartLauncherProcess()
+	return l.startLauncherUnlocked()
 }
 
 // Stop stops the launcher
 func (l *Launcher) Stop() error {
-	l.logger.Info().Msg("Stopping server launcher")
+	return l.PowerAction(false, l.GetStopTimer())
+}
 
-	if l.stopTimer > 0 {
-		l.logger.Info().Msgf("Stopping server in %v minute(s)", l.stopTimer/60)
+func (l *Launcher) stopUnlocked() error {
+	l.logger.Info().Msg("Stopping server launcher")
+	timer, cancelled := l.stopTimerState()
+	if cancelled {
+		return errPowerActionCancelled
+	}
+
+	if timer > 0 {
+		l.logger.Info().Msgf("Stopping server in %v minute(s)", timer/60)
 
 		// message every minute
-		timeToStop := time.Now().Add(time.Duration(l.stopTimer) * time.Second)
+		timeToStop := time.Now().Add(time.Duration(timer) * time.Second)
 
 		l.MessageWorld(
 			fmt.Sprintf(
@@ -374,12 +435,11 @@ func (l *Launcher) Stop() error {
 			),
 		)
 
-		stopTimer := l.stopTimer
-
 		for {
-			if l.stopTimer == 0 {
+			currentTimer, cancelled := l.stopTimerState()
+			if cancelled || currentTimer == 0 {
 				l.logger.Info().Msg("Stop - Timer cancelled")
-				return nil
+				return errPowerActionCancelled
 			}
 
 			if time.Now().After(timeToStop) {
@@ -389,9 +449,9 @@ func (l *Launcher) Stop() error {
 				break
 			}
 
-			if l.stopTimer != stopTimer {
+			if currentTimer != timer {
 				l.logger.Info().Msg("Stop - Timer changed")
-				return nil
+				return errPowerActionCancelled
 			}
 
 			// message top of every minute
@@ -411,10 +471,38 @@ func (l *Launcher) Stop() error {
 		}
 	}
 
-	cfg, _ := l.serverconfig.Get()
+	unlock, err := l.lockStartup()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if _, cancelled := l.stopTimerState(); cancelled {
+		return errPowerActionCancelled
+	}
+	return l.stopProcessesUnlocked()
+}
+
+// The caller owns the execution gate. Release installation keeps it through
+// both process shutdown and extraction, without recursively claiming it here.
+func (l *Launcher) stopProcessesUnlocked() error {
+	// Refuse ambiguous ownership before changing flags or sending shutdown RPCs.
+	details, err := l.launcherProcesses()
+	if err != nil {
+		return err
+	}
+	if err := rejectUnscopedLaunchers(details); err != nil {
+		return err
+	}
+	cfg, err := l.serverconfig.Get()
+	if err != nil {
+		return err
+	}
+	if cfg.WebAdmin == nil || cfg.WebAdmin.Launcher == nil {
+		return errors.New("server launcher configuration is unavailable")
+	}
 	cfg.WebAdmin.Launcher.IsRunning = false // shut off legacy launcher in-case it's running
 	cfg.Spire.LauncherStart = false
-	err := l.serverconfig.Save(cfg)
+	err = l.serverconfig.Save(cfg)
 	if err != nil {
 		return err
 	}
@@ -430,9 +518,17 @@ func (l *Launcher) Stop() error {
 	}
 
 	// kill all server processes
-	processes, _ := process.Processes()
+	// The preflight list predates shutdown and must not be used as kill targets.
+	processes, err := l.scanProcesses()
+	if err != nil {
+		return err
+	}
+	serverPath := l.pathmgmt.GetEQEmuServerPath()
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
+		if !belongsToServer(proc, serverPath) {
+			continue
+		}
 		for _, s := range l.GetServerProcessNames() {
 			if s == proc.BaseProcessName {
 				l.logger.Debug().
@@ -456,9 +552,16 @@ func (l *Launcher) Stop() error {
 	// give the processes a second to terminate gracefully before killing
 	time.Sleep(1 * time.Second)
 
+	processes, err = l.scanProcesses()
+	if err != nil {
+		return err
+	}
 	for _, p := range processes {
+		proc := l.getProcessDetails(p)
+		if !belongsToServer(proc, serverPath) {
+			continue
+		}
 		for _, s := range l.GetServerProcessNames() {
-			proc := l.getProcessDetails(p)
 			if s == proc.BaseProcessName {
 				err := p.Kill()
 				if err != nil {
@@ -482,11 +585,63 @@ func (l *Launcher) Stop() error {
 		}
 	}
 
-	l.stopTimer = 0
+	l.SetStopTimer(0)
 
 	l.logger.Info().Msg("Stopped server launcher")
 
 	return nil
+}
+
+// Names alone cannot distinguish two EQEmu installations on the same host.
+// Prefer the working directory so shared binaries cannot identify another server.
+// Launcher clones have an installation-specific directory for OSes without Cwd.
+func belongsToServer(proc ProcessDetails, serverPath string) bool {
+	if serverPath == "" {
+		return false
+	}
+	serverPath = canonicalServerPath(serverPath)
+	if proc.Cwd != "" {
+		cwd := canonicalServerPath(proc.Cwd)
+		return cwd == serverPath || cwd == canonicalServerPath(filepath.Join(serverPath, "bin"))
+	}
+	if proc.Exe == "" {
+		return false
+	}
+	dir := canonicalServerPath(filepath.Dir(strings.TrimSuffix(proc.Exe, " (deleted)")))
+	return dir == serverPath || dir == canonicalServerPath(filepath.Join(serverPath, "bin")) ||
+		dir == canonicalServerPath(serverLauncherDirectory(serverPath))
+}
+
+// Canonical paths match gopsutil's physical paths even when Spire uses a symlink.
+func canonicalServerPath(path string) string {
+	if absolute, err := filepath.Abs(path); err == nil {
+		path = absolute
+	}
+	if physical, err := filepath.EvalSymlinks(path); err == nil {
+		path = physical
+	} else if parent := filepath.Dir(path); parent != path {
+		// Resolve the existing prefix even when a child does not exist yet.
+		// Windows temp paths can use a short alias for that existing prefix.
+		path = filepath.Join(canonicalServerPath(parent), filepath.Base(path))
+	}
+	path = filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		path = strings.ToLower(path)
+	}
+	return path
+}
+
+// Separate clone paths let Stop identify its launcher when Cwd is unavailable.
+func serverLauncherDirectory(serverPath string) string {
+	identity := sha256.Sum256([]byte(canonicalServerPath(serverPath)))
+	return filepath.Join(os.TempDir(), "spire-server-launchers", fmt.Sprintf("%x", identity))
+}
+
+// Older clones shared os.TempDir and cannot be assigned safely without Cwd.
+func unscopedLegacyLauncher(proc ProcessDetails) bool {
+	return proc.Cwd == "" && proc.Exe != "" &&
+		strings.Contains(proc.Cmdline, "eqemu-server:launcher start") &&
+		canonicalServerPath(filepath.Dir(proc.Exe)) == canonicalServerPath(os.TempDir())
 }
 
 // GetServerProcessNames returns a list of server process names
@@ -644,8 +799,8 @@ func (l *Launcher) Supervisor() error {
 	return nil
 }
 
-// startServerProcessSync starts a server process synchronously
-func (l *Launcher) startServerProcessSync(name string, args ...string) error {
+// The caller owns the execution gate until this process exits.
+func (l *Launcher) startServerProcessSyncUnlocked(name string, args ...string) error {
 	bin, err := exec.LookPath(filepath.Join(l.pathmgmt.GetEQEmuServerPath(), "bin", name))
 	if err != nil {
 		return err
@@ -733,7 +888,14 @@ func (l *Launcher) loadServerConfig() {
 func (l *Launcher) SetStopTimer(timer int) {
 	stopTimerMutex.Lock()
 	l.stopTimer = timer
+	l.stopCancelled = false
 	stopTimerMutex.Unlock()
+}
+
+func (l *Launcher) stopTimerState() (int, bool) {
+	stopTimerMutex.Lock()
+	defer stopTimerMutex.Unlock()
+	return l.stopTimer, l.stopCancelled
 }
 
 func (l *Launcher) GetStopTimer() int {
@@ -744,10 +906,14 @@ func (l *Launcher) GetStopTimer() int {
 }
 
 func (l *Launcher) SetStopTypeStopping() {
+	stopTimerMutex.Lock()
+	defer stopTimerMutex.Unlock()
 	l.stopType = "stopping"
 }
 
 func (l *Launcher) SetStopTypeRestarting() {
+	stopTimerMutex.Lock()
+	defer stopTimerMutex.Unlock()
 	l.stopType = "restarting"
 }
 
@@ -755,11 +921,18 @@ func (l *Launcher) SetStopTypeRestarting() {
 func (l *Launcher) StopCancel() error {
 	stopTimerMutex.Lock()
 	l.stopTimer = 0
+	l.stopCancelled = true
 	stopTimerMutex.Unlock()
 
 	l.emitStopTimer(time.Time{})
 
-	l.MessageWorld("[SERVER MESSAGE] Server shutdown cancelled")
+	message := "[SERVER MESSAGE] Server shutdown cancelled"
+	if l.websocketMgr != nil {
+		l.websocketMgr.TryBroadcast("notification", message)
+	}
+	if l.serverApi != nil {
+		_ = l.serverApi.MessageWorld(message)
+	}
 
 	return nil
 }
@@ -784,36 +957,11 @@ func (l *Launcher) ServerProcessLauncherWatchdog() {
 			}
 
 			if l.isRunning {
-				isLauncherRunning := false
-				processes, _ := process.Processes()
-				for _, p := range processes {
-					cmdline, err := p.Cmdline()
-					if err != nil {
-						if strings.Contains(err.Error(), "no such file or directory") {
-							continue
-						}
-
-						l.logger.Debug().
-							Any("error", err.Error()).
-							Any("pid", p.Pid).
-							Msg("Error getting process command line")
-					}
-
-					if strings.Contains(cmdline, "eqemu-server:launcher start") {
-						isLauncherRunning = true
-						break
-					}
-				}
-
-				if !isLauncherRunning {
-					l.logger.Debug().
-						Msg("Launcher process not running - starting")
-
-					err := l.startLauncherProcess()
-					if err != nil {
-						l.logger.Debug().
-							Any("error", err.Error()).
-							Msg("Error starting launcher process")
+				if err := l.ensureLauncherRunning(); err != nil {
+					if errors.Is(err, restartscheduler.ErrBusy) {
+						l.logger.Debug().Err(err).Msg("Server launcher action already in progress")
+					} else {
+						l.logger.Error().Err(err).Msg("Cannot safely start server launcher")
 					}
 				}
 			}
@@ -825,39 +973,12 @@ func (l *Launcher) ServerProcessLauncherWatchdog() {
 
 // checkIfLauncherIsRunning checks if the launcher is already running
 func (l *Launcher) checkIfLauncherIsRunning() error {
-	// check if the launcher is already running
-	processes, _ := process.Processes()
-	for _, p := range processes {
-		cmdline, err := p.Cmdline()
-		if err != nil {
-			if strings.Contains(err.Error(), "no such file or directory") {
-				continue
-			}
-
-			l.logger.Debug().
-				Any("error", err.Error()).
-				Any("pid", p.Pid).
-				Msg("Error getting process command line")
-		}
-
-		isRanFromGoRun := strings.Contains(cmdline, "go run")
-		if strings.Contains(cmdline, "eqemu-server:launcher start") && p.Pid != int32(os.Getpid()) && !isRanFromGoRun {
-			isRanFromAirWatcher := strings.Contains(cmdline, "air")
-			isRanFromAir := strings.Contains(cmdline, "/tmp/bin/app")
-			if isRanFromAirWatcher || isRanFromAir {
-				continue
-			}
-
-			l.logger.Debug().
-				Any("os.Getpid()", os.Getpid()).
-				Any("pid", p.Pid).
-				Any("cmdline", cmdline).
-				Msg("Launcher process already running")
-
-			fmt.Println("Launcher process already running")
-
-			return fmt.Errorf("launcher process already running")
-		}
+	running, err := l.launcherIsRunning()
+	if err != nil {
+		return err
+	}
+	if running {
+		return errors.New("launcher process already running")
 	}
 	return nil
 }
@@ -892,16 +1013,10 @@ func (l *Launcher) getProcessDetails(p *process.Process) ProcessDetails {
 		if strings.Contains(err.Error(), "no such file or directory") {
 			return ProcessDetails{}
 		}
-		if strings.Contains(err.Error(), "permission denied") {
-			return ProcessDetails{}
-		}
 		l.logger.Debug().
 			Any("error", err.Error()).
 			Any("pid", p.Pid).
 			Msg("Error getting process cwd")
-	}
-	if runtime.GOOS == "windows" {
-		cwd = strings.ReplaceAll(cwd, ".exe", "")
 	}
 
 	exe, err := p.Exe()
@@ -910,9 +1025,6 @@ func (l *Launcher) getProcessDetails(p *process.Process) ProcessDetails {
 			Any("error", err.Error()).
 			Any("pid", p.Pid).
 			Msg("Error getting process exe")
-	}
-	if runtime.GOOS == "windows" {
-		exe = strings.ReplaceAll(exe, ".exe", "")
 	}
 
 	baseProcessName := filepath.Base(exe)
@@ -1047,6 +1159,9 @@ func (l *Launcher) MessageWorld(message string) {
 
 // emitStopTimer emits the stop timer to the websocket
 func (l *Launcher) emitStopTimer(stopTime time.Time) {
+	stopTimerMutex.Lock()
+	stopType := l.stopType
+	stopTimerMutex.Unlock()
 	type StopTimer struct {
 		Time int64  `json:"time"`
 		Type string `json:"type"`
@@ -1054,7 +1169,7 @@ func (l *Launcher) emitStopTimer(stopTime time.Time) {
 
 	data := StopTimer{
 		Time: stopTime.Unix(),
-		Type: l.stopType,
+		Type: stopType,
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -1063,7 +1178,9 @@ func (l *Launcher) emitStopTimer(stopTime time.Time) {
 		return
 	}
 
-	l.websocketMgr.Broadcast("stopTimer", string(jsonData))
+	if l.websocketMgr != nil {
+		l.websocketMgr.TryBroadcast("stopTimer", string(jsonData))
+	}
 }
 
 type ZoneServerClient struct {
@@ -1380,7 +1497,7 @@ func (l *Launcher) pollProcessCounts() {
 	l.currentZoneDynamics = 0
 	l.currentZoneStatics = 0
 
-	processes, _ := process.Processes()
+	processes, _ := l.scanProcesses()
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
 		for _, s := range l.GetServerProcessNames() {

@@ -21,9 +21,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   background-process:
-    runs-on: ${{ matrix.os }}
+    # ARM64 runner allocation failed twice; keep the same macOS check on Intel.
+    # This standard image uses the same current macOS 26 release.
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false

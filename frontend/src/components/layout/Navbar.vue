@@ -657,6 +657,7 @@ export default {
           to: ROUTE.ADMIN_RELOAD
         },
         { label: "Server Update", labelIcon: "fa fa-upload mr-1", to: ROUTE.ADMIN_SERVER_UPDATE },
+        { label: "Restart Schedules", labelIcon: "fe fe-clock mr-1", to: ROUTE.ADMIN_RESTART_SCHEDULES },
 
       ],
       spellsAbilitiesNav: {

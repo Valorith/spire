@@ -107,6 +107,12 @@ export class SpireApi {
       return response;
     }, error => {
 
+      // Network failures have no HTTP response. Preserve the original error
+      // so callers can show a useful retry message.
+      if (!error.response) {
+        return Promise.reject(error);
+      }
+
       // check if jwt signature invalid
       // { "error": "Code=401, message=invalid or expired jwt, internal=signature is invalid" }
       if (error.response.data && error.response.data.error) {

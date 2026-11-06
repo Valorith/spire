@@ -8,6 +8,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/system"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/process"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -39,6 +40,10 @@ type LauncherDistributedNode struct {
 
 // StartRpcServer starts the HTTP RPC server for the launcher
 func (l *Launcher) StartRpcServer(port int) error {
+	return l.startRpcServer(port, nil)
+}
+
+func (l *Launcher) startRpcServer(port int, ready chan<- error) error {
 	e := echo.New()
 
 	// RPC routes
@@ -96,10 +101,18 @@ func (l *Launcher) StartRpcServer(port int) error {
 
 	// Custom HTTP server settings
 	s := &http.Server{
-		Addr:         "0.0.0.0:3005",
+		Addr:         fmt.Sprintf("0.0.0.0:%d", port),
 		ReadTimeout:  5 * time.Second, // Timeout for reading request data
 		WriteTimeout: 5 * time.Second, // Timeout for writing response
 		IdleTimeout:  5 * time.Second, // Timeout for keeping idle connections
+	}
+	listener, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		return err
+	}
+	e.Listener = listener
+	if ready != nil {
+		ready <- nil
 	}
 
 	go func() {

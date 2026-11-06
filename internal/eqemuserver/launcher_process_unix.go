@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-func (l *Launcher) startServerProcess(name string, args ...string) error {
+func (l *Launcher) startServerProcessUnlocked(name string, args ...string) error {
 	bin, err := exec.LookPath(filepath.Join(l.pathmgmt.GetEQEmuServerPath(), "bin", name))
 	if err != nil {
 		return err
@@ -54,14 +54,9 @@ func (l *Launcher) startLauncherProcess() error {
 		return err
 	}
 
-	// copy the binary to os tmp dir
-	tmpBin := filepath.Join(os.TempDir(), filepath.Base(bin)+"-launcher")
-	if err := copyFile(bin, tmpBin); err != nil {
-		return err
-	}
-
-	// chmod
-	if err := os.Chmod(tmpBin, 0755); err != nil {
+	cloneDir := serverLauncherDirectory(l.pathmgmt.GetEQEmuServerPath())
+	tmpBin, err := installLauncherClone(bin, cloneDir)
+	if err != nil {
 		return err
 	}
 
