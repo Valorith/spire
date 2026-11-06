@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func restartTestServer(t *testing.T) (*echo.Echo, *Controller) {
 	log := logger.NewAppLogger()
 	paths := pathmgmt.NewPathManagement(log)
 	paths.SetServerPath(t.TempDir())
-	c := &Controller{launcher: &Launcher{pathmgmt: paths}, userevent: auditlog.NewUserEvent(nil, cache.New(cache.NoExpiration, 0))}
+	c := &Controller{logger: log, launcher: &Launcher{pathmgmt: paths}, userevent: auditlog.NewUserEvent(nil, cache.New(cache.NoExpiration, 0))}
 	e := echo.New()
 	for _, route := range c.Routes() {
 		e.Add(route.Method(), "/api/v1/"+route.Route(), route.Handler())
@@ -127,5 +128,30 @@ func TestRejectedPowerActionDoesNotReportAnAcceptedRequest(t *testing.T) {
 		if !errors.Is(err, restartscheduler.ErrBusy) || claimed {
 			t.Fatalf("rejected action was audited as accepted: %v, claimed=%v", err, claimed)
 		}
+	}
+}
+
+func TestManualCountdownCanCancelWithUnreadableScheduleStore(t *testing.T) {
+	for _, locked := range []bool{false, true} {
+		t.Run(strconv.FormatBool(locked), func(t *testing.T) {
+			e, controller := restartTestServer(t)
+			store, _ := controller.launcher.RestartScheduleStore()
+			if locked {
+				release, err := restartscheduler.Lock(store.Path + ".lock")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer release()
+			} else if err := os.WriteFile(store.Path, []byte("{corrupt"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			controller.launcher.SetStopTimer(60)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/eqemuserver/server/stop-cancel", nil)
+			recorder := httptest.NewRecorder()
+			e.ServeHTTP(recorder, req)
+			if recorder.Code != http.StatusOK || controller.launcher.GetStopTimer() != 0 {
+				t.Fatalf("manual cancellation failed: status=%d, timer=%d", recorder.Code, controller.launcher.GetStopTimer())
+			}
+		})
 	}
 }

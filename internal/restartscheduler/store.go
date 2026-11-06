@@ -60,10 +60,6 @@ func (s Store) read() (State, error) {
 			if schedule.NextRun.IsZero() {
 				return state, errors.New("saved restart schedule has an empty next occurrence")
 			}
-			next := schedule.Next(schedule.NextRun.Add(-time.Nanosecond))
-			if next == nil || !next.Equal(*schedule.NextRun) {
-				return state, errors.New("saved restart time does not match its schedule")
-			}
 		}
 	}
 	if run := state.Active; run != nil {

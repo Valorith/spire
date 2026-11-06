@@ -1,6 +1,7 @@
 package eqemuserver
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -457,6 +458,12 @@ func (l *Launcher) stopUnlocked() error {
 	serverPath := l.pathmgmt.GetEQEmuServerPath()
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
+		if unscopedLegacyLauncher(proc) {
+			return fmt.Errorf("cannot identify legacy launcher PID %d; stop that launcher before restarting this installation", p.Pid)
+		}
+	}
+	for _, p := range processes {
+		proc := l.getProcessDetails(p)
 		if !belongsToServer(proc, serverPath) {
 			continue
 		}
@@ -520,27 +527,51 @@ func (l *Launcher) stopUnlocked() error {
 }
 
 // Names alone cannot distinguish two EQEmu installations on the same host.
-// Prefer the working directory, including for launchers copied into os.TempDir.
-// If the OS cannot expose it, accept only this installation's own executable.
+// Prefer the working directory so shared binaries cannot identify another server.
+// Launcher clones have an installation-specific directory for OSes without Cwd.
 func belongsToServer(proc ProcessDetails, serverPath string) bool {
 	if serverPath == "" {
 		return false
 	}
-	equalPath := func(a, b string) bool {
-		a, b = filepath.Clean(a), filepath.Clean(b)
-		if runtime.GOOS == "windows" {
-			return strings.EqualFold(a, b)
-		}
-		return a == b
-	}
+	serverPath = canonicalServerPath(serverPath)
 	if proc.Cwd != "" {
-		return equalPath(proc.Cwd, serverPath)
+		cwd := canonicalServerPath(proc.Cwd)
+		return cwd == serverPath || cwd == canonicalServerPath(filepath.Join(serverPath, "bin"))
 	}
 	if proc.Exe == "" {
 		return false
 	}
-	dir := filepath.Dir(proc.Exe)
-	return equalPath(dir, serverPath) || equalPath(dir, filepath.Join(serverPath, "bin"))
+	dir := canonicalServerPath(filepath.Dir(strings.TrimSuffix(proc.Exe, " (deleted)")))
+	return dir == serverPath || dir == canonicalServerPath(filepath.Join(serverPath, "bin")) ||
+		dir == canonicalServerPath(serverLauncherDirectory(serverPath))
+}
+
+// Canonical paths match gopsutil's physical paths even when Spire uses a symlink.
+func canonicalServerPath(path string) string {
+	if absolute, err := filepath.Abs(path); err == nil {
+		path = absolute
+	}
+	if physical, err := filepath.EvalSymlinks(path); err == nil {
+		path = physical
+	}
+	path = filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		path = strings.ToLower(path)
+	}
+	return path
+}
+
+// Separate clone paths let Stop identify its launcher when Cwd is unavailable.
+func serverLauncherDirectory(serverPath string) string {
+	identity := sha256.Sum256([]byte(canonicalServerPath(serverPath)))
+	return filepath.Join(os.TempDir(), "spire-server-launchers", fmt.Sprintf("%x", identity))
+}
+
+// Older clones shared os.TempDir and cannot be assigned safely without Cwd.
+func unscopedLegacyLauncher(proc ProcessDetails) bool {
+	return proc.Cwd == "" && proc.Exe != "" &&
+		strings.Contains(proc.Cmdline, "eqemu-server:launcher start") &&
+		canonicalServerPath(filepath.Dir(proc.Exe)) == canonicalServerPath(os.TempDir())
 }
 
 // GetServerProcessNames returns a list of server process names
@@ -817,7 +848,13 @@ func (l *Launcher) StopCancel() error {
 
 	l.emitStopTimer(time.Time{})
 
-	l.MessageWorld("[SERVER MESSAGE] Server shutdown cancelled")
+	message := "[SERVER MESSAGE] Server shutdown cancelled"
+	if l.websocketMgr != nil {
+		l.websocketMgr.TryBroadcast("notification", message)
+	}
+	if l.serverApi != nil {
+		_ = l.serverApi.MessageWorld(message)
+	}
 
 	return nil
 }
@@ -858,6 +895,9 @@ func (l *Launcher) ServerProcessLauncherWatchdog() {
 					}
 
 					if strings.Contains(cmdline, "eqemu-server:launcher start") {
+						if !belongsToServer(l.getProcessDetails(p), l.pathmgmt.GetEQEmuServerPath()) {
+							continue
+						}
 						isLauncherRunning = true
 						break
 					}
@@ -900,6 +940,9 @@ func (l *Launcher) checkIfLauncherIsRunning() error {
 
 		isRanFromGoRun := strings.Contains(cmdline, "go run")
 		if strings.Contains(cmdline, "eqemu-server:launcher start") && p.Pid != int32(os.Getpid()) && !isRanFromGoRun {
+			if !belongsToServer(l.getProcessDetails(p), l.pathmgmt.GetEQEmuServerPath()) {
+				continue
+			}
 			isRanFromAirWatcher := strings.Contains(cmdline, "air")
 			isRanFromAir := strings.Contains(cmdline, "/tmp/bin/app")
 			if isRanFromAirWatcher || isRanFromAir {
@@ -950,16 +993,10 @@ func (l *Launcher) getProcessDetails(p *process.Process) ProcessDetails {
 		if strings.Contains(err.Error(), "no such file or directory") {
 			return ProcessDetails{}
 		}
-		if strings.Contains(err.Error(), "permission denied") {
-			return ProcessDetails{}
-		}
 		l.logger.Debug().
 			Any("error", err.Error()).
 			Any("pid", p.Pid).
 			Msg("Error getting process cwd")
-	}
-	if runtime.GOOS == "windows" {
-		cwd = strings.ReplaceAll(cwd, ".exe", "")
 	}
 
 	exe, err := p.Exe()
@@ -968,9 +1005,6 @@ func (l *Launcher) getProcessDetails(p *process.Process) ProcessDetails {
 			Any("error", err.Error()).
 			Any("pid", p.Pid).
 			Msg("Error getting process exe")
-	}
-	if runtime.GOOS == "windows" {
-		exe = strings.ReplaceAll(exe, ".exe", "")
 	}
 
 	baseProcessName := filepath.Base(exe)
@@ -1124,7 +1158,9 @@ func (l *Launcher) emitStopTimer(stopTime time.Time) {
 		return
 	}
 
-	l.websocketMgr.Broadcast("stopTimer", string(jsonData))
+	if l.websocketMgr != nil {
+		l.websocketMgr.TryBroadcast("stopTimer", string(jsonData))
+	}
 }
 
 type ZoneServerClient struct {

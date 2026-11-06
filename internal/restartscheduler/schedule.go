@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	_ "time/tzdata" // Servers and Windows installs need not provide zoneinfo files.
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -52,7 +53,7 @@ type State struct {
 
 func (s *Schedule) Validate(now time.Time) error {
 	s.Name = strings.TrimSpace(s.Name)
-	if s.Name == "" || len(s.Name) > 80 {
+	if s.Name == "" || utf8.RuneCountInString(s.Name) > 80 {
 		return errors.New("name must contain 1 to 80 characters")
 	}
 	if s.Timezone == "" || s.Timezone == "Local" {

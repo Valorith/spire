@@ -1302,9 +1302,8 @@ func (a *Controller) serverStopCancel(c echo.Context) error {
 	if store, err := a.launcher.RestartScheduleStore(); err == nil {
 		state, err := store.View()
 		if err != nil {
-			return scheduleError(c, err)
-		}
-		if state.Active != nil {
+			a.logger.Error().Err(err).Msg("Cannot read restart schedules; cancelling manual stop timer")
+		} else if state.Active != nil {
 			if err = store.Cancel(state.Active.ID); err != nil {
 				return scheduleError(c, err)
 			}

@@ -70,12 +70,12 @@ func NewUpdateCommand(
 	i.command.PersistentFlags().StringVarP(&compileLocation, "compile-build-location", "l", "~/code/build", "Determines where the binaries should be built")
 	i.command.PersistentFlags().BoolVarP(&auto, "auto", "a", false, "Automatically update wihout prompts (default: false)")
 
-	i.command.Run = i.Handle
+	i.command.RunE = i.Handle
 
 	return i
 }
 
-func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
+func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) error {
 	if useReleaseBinaries {
 		fmt.Println("Setting to use release binaries")
 		c.settings.SetSetting(spire.SettingUpdateType, spire.UpdateTypeRelease)
@@ -210,11 +210,17 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 
 				if answer == "y" {
 					fmt.Println("Stopping server")
-					c.launcher.Stop()
+					if err := c.launcher.Stop(); err != nil {
+						return fmt.Errorf("cannot stop server; update aborted: %w", err)
+					}
+				} else {
+					return nil
 				}
 			} else {
 				fmt.Println("Stopping server")
-				c.launcher.Stop()
+				if err := c.launcher.Stop(); err != nil {
+					return fmt.Errorf("cannot stop server; update aborted: %w", err)
+				}
 			}
 		}
 
@@ -290,7 +296,7 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 
 		if !found {
 			c.logger.Fatal().Msg("Invalid build tool")
-			return
+			return fmt.Errorf("invalid build tool")
 		}
 
 		cmd = exec.Command(info.BuildTool, "-j"+info.BuildCores)
@@ -303,6 +309,7 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) {
 
 		c.LineBreak()
 	}
+	return nil
 }
 
 func (c *UpdateCommand) LineBreak() {

@@ -3,6 +3,7 @@ package restartscheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -20,6 +21,7 @@ type Runner struct {
 	Store            Store
 	Executor         Executor
 	LogError         func(error)
+	LogInfo          func(string)
 	release          func()
 	recovered        bool
 	startedAt        time.Time
@@ -84,6 +86,7 @@ func (r *Runner) Step(now time.Time) error {
 	var countdown *Run
 	var execute bool
 	var clear, cancelled bool
+	var recalculated []string
 	hadLock := r.release != nil
 	err := r.Store.Update(func(state *State) (bool, error) {
 		changed := false
@@ -143,6 +146,23 @@ func (r *Runner) Step(now time.Time) error {
 		}
 		// Each due occurrence is consumed even when the server is stopped or busy.
 		// Missed occurrences are recorded once, then advanced directly into the future.
+		// Zoneinfo updates can move a previously valid UTC occurrence. Reconcile
+		// it without executing the stale instant or blocking schedule management.
+		for i := range state.Schedules {
+			s := &state.Schedules[i]
+			if s.NextRun == nil {
+				continue
+			}
+			next := s.Next(s.NextRun.Add(-time.Nanosecond))
+			if next == nil || !next.Equal(*s.NextRun) {
+				s.NextRun = s.Next(now)
+				s.Revision++
+				recalculated = append(recalculated, s.Name)
+			}
+		}
+		if len(recalculated) != 0 {
+			return true, nil
+		}
 		sort.SliceStable(state.Schedules, func(i, j int) bool {
 			a, b := state.Schedules[i].NextRun, state.Schedules[j].NextRun
 			return a != nil && (b == nil || a.Before(*b))
@@ -193,6 +213,11 @@ func (r *Runner) Step(now time.Time) error {
 		return err
 	}
 	r.recovered = true
+	if r.LogInfo != nil {
+		for _, name := range recalculated {
+			r.LogInfo(fmt.Sprintf("Recalculated restart schedule %q using current time zone rules", name))
+		}
+	}
 	if clear {
 		r.Executor.ClearCountdown(cancelled)
 		if r.release != nil {

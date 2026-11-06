@@ -45,7 +45,7 @@ func TestMissingActiveStateDoesNotLeaveServerPowerLocked(t *testing.T) {
 }
 
 func TestWellFormedCorruptStateCannotTriggerRestart(t *testing.T) {
-	for _, kind := range []string{"unknown phase", "missing deadline", "missing schedule", "missing next occurrence", "wrong next occurrence"} {
+	for _, kind := range []string{"unknown phase", "missing deadline", "missing schedule", "missing next occurrence"} {
 		t.Run(kind, func(t *testing.T) {
 			r, e, now := newRunner(t)
 			state := readState(t, r.Store)
@@ -67,10 +67,6 @@ func TestWellFormedCorruptStateCannotTriggerRestart(t *testing.T) {
 			case "missing next occurrence":
 				state.Active = nil
 				state.Schedules[0].NextRun = nil
-			case "wrong next occurrence":
-				state.Active = nil
-				wrong := due.Add(time.Minute)
-				state.Schedules[0].NextRun = &wrong
 			}
 			data, err := json.Marshal(state)
 			if err != nil {

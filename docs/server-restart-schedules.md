@@ -8,8 +8,10 @@ Spire's **HTTP server must remain running**. Run Spire as a service for unattend
 
 - Recurring schedules follow local calendar time in the selected IANA time zone. Time zone data is bundled, including on Windows.
 - A time skipped by the spring daylight saving change is skipped for that day. A repeated autumn time runs once, at its first occurrence.
+- If installed time-zone rules change, pending occurrences are recalculated and logged before scheduling continues. Schedule management remains available.
 - Warnings start before the restart time and repeat each minute through world chat and marquee. Delivery failures are logged; an unavailable world connection does not prevent recovery of the server.
 - A stopped launcher stays stopped. Restarts target processes belonging to this server installation. Overlapping manual actions and scheduled restarts are skipped, with the reason recorded in history.
+- Launcher copies use installation-specific temporary directories. If an older shared temporary launcher has an unreadable working directory, the restart fails with its PID so that process can be stopped before retrying.
 - Future countdowns resume after Spire restarts. Missed restarts are skipped instead of being replayed when Spire returns, including after host sleep or a suspended process. A running scheduler allows a 30-second timing tolerance.
 - Once shutdown has begun, cancellation is unavailable. Spire uses the world telnet address and port in `eqemu_config.json` for announcements and waits up to two minutes for the new world to answer before reporting success or a health-check failure.
 - If Spire stops after claiming a restart, that attempt is marked **Interrupted** and is not repeated. Check server status before taking further action.

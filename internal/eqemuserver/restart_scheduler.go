@@ -40,9 +40,11 @@ func (l *Launcher) RunRestartScheduler(ctx context.Context) {
 	world := telnet.NewClient(l.logger)
 	executor := &restartExecutor{launcher: l, world: world, ctx: ctx}
 	defer func() { executor.world.Close() }()
-	runner := restartscheduler.Runner{Store: store, Executor: executor, LogError: func(err error) {
-		l.logger.Error().Err(err).Msg("Restart scheduler")
-	}}
+	runner := restartscheduler.Runner{
+		Store: store, Executor: executor,
+		LogError: func(err error) { l.logger.Error().Err(err).Msg("Restart scheduler") },
+		LogInfo:  func(message string) { l.logger.Info().Msg(message) },
+	}
 	runner.Run(ctx)
 }
 

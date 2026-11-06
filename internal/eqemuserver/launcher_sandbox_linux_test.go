@@ -35,8 +35,8 @@ func TestActualStopRespectsInstallationInSandbox(t *testing.T) {
 		}
 		return NewLauncher(appLog, cfg, nil, paths, nil, nil, nil), cfg, root
 	}
-	startWorld := func(root string) (*exec.Cmd, chan struct{}) {
-		if err := os.MkdirAll(filepath.Join(root, "bin"), 0700); err != nil {
+	startProcess := func(root, binary string, launcher bool) (*exec.Cmd, chan struct{}) {
+		if err := os.MkdirAll(filepath.Dir(binary), 0700); err != nil {
 			t.Fatal(err)
 		}
 		exe, err := os.Executable()
@@ -47,11 +47,13 @@ func TestActualStopRespectsInstallationInSandbox(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		binary := filepath.Join(root, "bin", "world")
 		if err := os.WriteFile(binary, data, 0700); err != nil {
 			t.Fatal(err)
 		}
 		cmd := exec.Command(binary, "-test.run=^TestSandboxWorldHelper$", "-test.timeout=1m")
+		if launcher {
+			cmd.Args = append(cmd.Args, "eqemu-server:launcher", "start")
+		}
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(), "SPIRE_SANDBOX_WORLD_HELPER=1")
 		if err := cmd.Start(); err != nil {
@@ -69,7 +71,7 @@ func TestActualStopRespectsInstallationInSandbox(t *testing.T) {
 		})
 		deadline := time.Now().Add(5 * time.Second)
 		for {
-			if _, err := os.Stat(filepath.Join(root, ".world-ready")); err == nil {
+			if _, err := os.Stat(filepath.Join(root, filepath.Base(binary)+".ready")); err == nil {
 				break
 			}
 			if time.Now().After(deadline) {
@@ -81,8 +83,16 @@ func TestActualStopRespectsInstallationInSandbox(t *testing.T) {
 	}
 	launcher, aConfig, aRoot := makeInstallation()
 	_, bConfig, bRoot := makeInstallation()
-	_, aDone := startWorld(aRoot)
-	other, bDone := startWorld(bRoot)
+	_, aDone := startProcess(aRoot, filepath.Join(aRoot, "bin", "world"), false)
+	other, bDone := startProcess(bRoot, filepath.Join(bRoot, "bin", "world"), false)
+	otherLauncher, otherLauncherDone := startProcess(bRoot, filepath.Join(serverLauncherDirectory(bRoot), "spire-launcher"), true)
+	if err := launcher.checkIfLauncherIsRunning(); err != nil {
+		t.Fatalf("another installation's launcher prevented startup: %v", err)
+	}
+	_, ownLauncherDone := startProcess(aRoot, filepath.Join(serverLauncherDirectory(aRoot), "spire-launcher"), true)
+	if err := launcher.checkIfLauncherIsRunning(); err == nil {
+		t.Fatal("own existing launcher was not detected")
+	}
 	if err := launcher.Stop(); err != nil {
 		t.Fatal(err)
 	}
@@ -92,12 +102,25 @@ func TestActualStopRespectsInstallationInSandbox(t *testing.T) {
 		t.Fatal("selected installation was not stopped")
 	}
 	select {
+	case <-ownLauncherDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("selected installation's cloned launcher was not stopped")
+	}
+	select {
 	case <-bDone:
 		t.Fatal("another installation's world was stopped")
 	default:
 	}
 	if err := other.Process.Signal(syscall.Signal(0)); err != nil {
 		t.Fatalf("other installation is not alive: %v", err)
+	}
+	select {
+	case <-otherLauncherDone:
+		t.Fatal("another installation's cloned launcher was stopped")
+	default:
+	}
+	if err := otherLauncher.Process.Signal(syscall.Signal(0)); err != nil {
+		t.Fatalf("other installation's launcher is not alive: %v", err)
 	}
 	a, err := aConfig.Get()
 	if err != nil {
@@ -116,7 +139,7 @@ func TestSandboxWorldHelper(t *testing.T) {
 	if os.Getenv("SPIRE_SANDBOX_WORLD_HELPER") != "1" {
 		t.Skip("sandbox subprocess helper")
 	}
-	if err := os.WriteFile(".world-ready", []byte("ready"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Base(os.Args[0])+".ready", []byte("ready"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(time.Minute)

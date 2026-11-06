@@ -54,8 +54,11 @@ func (l *Launcher) startLauncherProcess() error {
 		return err
 	}
 
-	// copy the binary to os tmp dir
-	tmpBin := filepath.Join(os.TempDir(), filepath.Base(bin)+"-launcher")
+	cloneDir := serverLauncherDirectory(l.pathmgmt.GetEQEmuServerPath())
+	if err := os.MkdirAll(cloneDir, 0700); err != nil {
+		return err
+	}
+	tmpBin := filepath.Join(cloneDir, filepath.Base(bin)+"-launcher")
 	if err := copyFile(bin, tmpBin); err != nil {
 		return err
 	}
