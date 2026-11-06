@@ -49,6 +49,7 @@ type Launcher struct {
 	websocketMgr    *websocket.ClientManager
 	crashLogWatcher *CrashLogWatcher
 	processList     func() ([]ProcessDetails, error)
+	processScan     func() ([]*process.Process, error)
 
 	// properties
 	configLastModified          time.Time
@@ -436,10 +437,6 @@ func (l *Launcher) stopUnlocked() error {
 	if err := rejectUnscopedLaunchers(details); err != nil {
 		return err
 	}
-	processes, err := process.Processes()
-	if err != nil {
-		return err
-	}
 	cfg, err := l.serverconfig.Get()
 	if err != nil {
 		return err
@@ -465,6 +462,11 @@ func (l *Launcher) stopUnlocked() error {
 	}
 
 	// kill all server processes
+	// The preflight list predates shutdown and must not be used as kill targets.
+	processes, err := l.scanProcesses()
+	if err != nil {
+		return err
+	}
 	serverPath := l.pathmgmt.GetEQEmuServerPath()
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
@@ -494,6 +496,10 @@ func (l *Launcher) stopUnlocked() error {
 	// give the processes a second to terminate gracefully before killing
 	time.Sleep(1 * time.Second)
 
+	processes, err = l.scanProcesses()
+	if err != nil {
+		return err
+	}
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
 		if !belongsToServer(proc, serverPath) {

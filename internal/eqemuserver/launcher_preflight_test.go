@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 func preflightTestLauncher(t *testing.T, running bool) *Launcher {
@@ -88,5 +89,29 @@ func TestLauncherPreflightPropagatesScanErrors(t *testing.T) {
 	cfg, err := l.serverconfig.Get()
 	if err != nil || !cfg.Spire.LauncherStart || !cfg.WebAdmin.Launcher.IsRunning {
 		t.Fatalf("failed process inspection changed server flags: %+v, %v", cfg.Spire, err)
+	}
+}
+
+func TestStopUsesFreshProcessSnapshotsAfterShutdown(t *testing.T) {
+	l := preflightTestLauncher(t, true)
+	scans := 0
+	l.processScan = func() ([]*process.Process, error) {
+		scans++
+		cfg, err := l.serverconfig.Get()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The first scan is ownership preflight. Targets for termination and
+		// forced kill must be collected separately after disabling both launchers.
+		if scans > 1 && (cfg.Spire.LauncherStart || cfg.WebAdmin.Launcher.IsRunning) {
+			t.Error("captured kill targets while a launcher could still spawn processes")
+		}
+		return nil, nil
+	}
+	if err := l.stopUnlocked(); err != nil {
+		t.Fatal(err)
+	}
+	if scans != 3 {
+		t.Fatalf("expected preflight and two fresh shutdown scans, got %d", scans)
 	}
 }

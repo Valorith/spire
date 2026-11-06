@@ -55,16 +55,8 @@ func (l *Launcher) startLauncherProcess() error {
 	}
 
 	cloneDir := serverLauncherDirectory(l.pathmgmt.GetEQEmuServerPath())
-	if err := os.MkdirAll(cloneDir, 0700); err != nil {
-		return err
-	}
-	tmpBin := filepath.Join(cloneDir, filepath.Base(bin)+"-launcher")
-	if err := copyFile(bin, tmpBin); err != nil {
-		return err
-	}
-
-	// chmod
-	if err := os.Chmod(tmpBin, 0755); err != nil {
+	tmpBin, err := installLauncherClone(bin, cloneDir)
+	if err != nil {
 		return err
 	}
 

@@ -12,7 +12,7 @@ func (l *Launcher) launcherProcesses() ([]ProcessDetails, error) {
 	if l.processList != nil {
 		return l.processList()
 	}
-	processes, err := process.Processes()
+	processes, err := l.scanProcesses()
 	if err != nil {
 		return nil, fmt.Errorf("cannot inspect launcher processes: %w", err)
 	}
@@ -25,6 +25,13 @@ func (l *Launcher) launcherProcesses() ([]ProcessDetails, error) {
 		details = append(details, l.getProcessDetails(p))
 	}
 	return details, nil
+}
+
+func (l *Launcher) scanProcesses() ([]*process.Process, error) {
+	if l.processScan != nil {
+		return l.processScan()
+	}
+	return process.Processes()
 }
 
 // An old shared-temp launcher cannot be assigned to an installation without Cwd.
