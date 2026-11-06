@@ -84,7 +84,7 @@ func prepareBootstrapFixture(t *testing.T) (*Launcher, string) {
 	return l, root
 }
 
-func TestBootstrapOwnsExtractionGateBeforeEnablingLauncher(t *testing.T) {
+func TestBootstrapOwnsExtractionGateDuringExecutableSetup(t *testing.T) {
 	for _, parentPower := range []bool{false, true} {
 		t.Run(map[bool]string{false: "direct startup", true: "scheduled child handoff"}[parentPower], func(t *testing.T) {
 			l, root := prepareBootstrapFixture(t)
@@ -122,8 +122,8 @@ func TestBootstrapOwnsExtractionGateBeforeEnablingLauncher(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 			cfg, err := l.serverconfig.Get()
-			if err != nil || cfg.Spire.LauncherStart {
-				t.Fatalf("bootstrap enabled launcher too soon: %v", err)
+			if err != nil || !cfg.Spire.LauncherStart {
+				t.Fatalf("bootstrap did not publish startup intent before setup: %v", err)
 			}
 			if release, err := l.lockStartup(); !errors.Is(err, restartscheduler.ErrBusy) {
 				if err == nil {
@@ -132,8 +132,8 @@ func TestBootstrapOwnsExtractionGateBeforeEnablingLauncher(t *testing.T) {
 				t.Fatalf("bootstrap did not own extraction gate: %v", err)
 			}
 			if !parentPower {
-				// No updater is supplied: extraction must not be reached even
-				// though the startup flag is still false in this race window.
+				// No updater is supplied: extraction must not be reached while
+				// the shared-memory executable is accessing the installation.
 				command := &UpdateCommand{launcher: l}
 				for _, online := range []bool{false, true} {
 					if err := command.installRelease("unused", online); !errors.Is(err, restartscheduler.ErrBusy) {

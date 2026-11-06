@@ -27,6 +27,13 @@ func (l *Launcher) runManagedStartup(start func() error) error {
 		return err
 	}
 	defer unlock()
+	if err := l.requireLauncherRunning(); err != nil {
+		return err
+	}
+	return start()
+}
+
+func (l *Launcher) requireLauncherRunning() error {
 	cfg, err := l.serverconfig.Get()
 	if err != nil {
 		return err
@@ -34,7 +41,7 @@ func (l *Launcher) runManagedStartup(start func() error) error {
 	if !cfg.Spire.LauncherStart {
 		return errLauncherStopped
 	}
-	return start()
+	return nil
 }
 
 func (l *Launcher) startServerProcess(name string, args ...string) error {

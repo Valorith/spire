@@ -9,6 +9,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
+	"github.com/EQEmuTools/spire/internal/restartscheduler"
 	"github.com/EQEmuTools/spire/internal/rfsnotify"
 	"github.com/EQEmuTools/spire/internal/spire"
 	"github.com/EQEmuTools/spire/internal/websocket"
@@ -50,6 +51,7 @@ type Launcher struct {
 	crashLogWatcher *CrashLogWatcher
 	processList     func() ([]ProcessDetails, error)
 	processScan     func() ([]*process.Process, error)
+	rpcServerStart  func(int) error
 
 	// properties
 	configLastModified          time.Time
@@ -241,19 +243,23 @@ func (l *Launcher) prepareLauncherStart() error {
 // Start starts the launcher
 // Only call this from the launcher process itself
 func (l *Launcher) Start() error {
-	unlock, err := l.lockStartup()
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	err = l.checkIfLauncherIsRunning()
-	if err != nil {
+	// Publish startup intent under the gate before network work. Stop/update
+	// can then disable this bootstrap; it must never enable itself again later.
+	if err := l.prepareLauncherStart(); err != nil {
 		return err
 	}
 
-	l.loadServerConfig()
+	if err := l.runManagedStartup(func() error {
+		l.loadServerConfig()
+		return nil
+	}); err != nil {
+		return err
+	}
 
-	cfg, _ := l.serverconfig.Get()
+	cfg, err := l.serverconfig.Get()
+	if err != nil {
+		return err
+	}
 
 	l.logger.Info().
 		Any("World name", cfg.Server.World.Longname).
@@ -269,6 +275,9 @@ func (l *Launcher) Start() error {
 			l.isLeafNode = true
 			l.logger.Info().Msg("Server detected is a leaf node")
 			for {
+				if err := l.requireLauncherRunning(); err != nil {
+					return err
+				}
 				err := l.rpcClientRegister()
 				if err != nil {
 					l.logger.Error().Err(err).Msg("Error registering leaf node")
@@ -302,16 +311,6 @@ func (l *Launcher) Start() error {
 				},
 			)
 		}
-
-		if l.isLeafNode || l.isDistributedRoot {
-			// goroutine to start the rpc server
-			go func() {
-				err := l.StartRpcServer(3005)
-				if err != nil {
-					return
-				}
-			}()
-		}
 	}
 
 	l.pollProcessCounts()
@@ -337,7 +336,7 @@ func (l *Launcher) Start() error {
 		if !serverOnline {
 			g.Go(func() error {
 				l.logger.Info().Msg("Starting shared memory")
-				err := l.startServerProcessSyncUnlocked(sharedMemoryProcessName)
+				err := l.startServerProcessSync(sharedMemoryProcessName)
 				if err != nil {
 					return err
 				}
@@ -365,10 +364,21 @@ func (l *Launcher) Start() error {
 		return err
 	}
 
-	cfg.Spire.LauncherStart = true
-	err = l.serverconfig.Save(cfg)
-	if err != nil {
+	if err := l.requireLauncherRunning(); err != nil {
 		return err
+	}
+	// Accept distributed work only after pre-boot executable setup has finished
+	// and released its gate, so the first RPC can start processes immediately.
+	if l.isLeafNode || l.isDistributedRoot {
+		start := l.StartRpcServer
+		if l.rpcServerStart != nil {
+			start = l.rpcServerStart
+		}
+		go func() {
+			if err := start(3005); err != nil {
+				l.logger.Error().Err(err).Msg("Cannot start launcher RPC server")
+			}
+		}()
 	}
 
 	return nil
@@ -381,9 +391,6 @@ func (l *Launcher) Restart() error {
 
 func (l *Launcher) restartUnlocked() error {
 	err := l.stopUnlocked()
-	if errors.Is(err, errPowerActionCancelled) {
-		return nil
-	}
 	if err != nil {
 		return err
 	}
@@ -929,7 +936,11 @@ func (l *Launcher) ServerProcessLauncherWatchdog() {
 
 			if l.isRunning {
 				if err := l.ensureLauncherRunning(); err != nil {
-					l.logger.Debug().Err(err).Msg("Cannot start server launcher")
+					if errors.Is(err, restartscheduler.ErrBusy) {
+						l.logger.Debug().Err(err).Msg("Server launcher action already in progress")
+					} else {
+						l.logger.Error().Err(err).Msg("Cannot safely start server launcher")
+					}
 				}
 			}
 

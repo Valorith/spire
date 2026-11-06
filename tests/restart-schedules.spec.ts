@@ -166,6 +166,18 @@ test('manual restart reports a schedule conflict without claiming success', asyn
   await expect(page.getByText('Server has been restarted!', { exact: true })).toHaveCount(0);
 });
 
+test('manual restart reports cancellation without claiming success', async ({ page }) => {
+  await mockServer(page, { powerControls: true });
+  await page.route('**/api/v1/eqemuserver/server/restart', route => route.fulfill({ json: { cancelled: true, message: 'Server restart cancelled' } }));
+  await page.goto('/admin/restart-schedules');
+  await page.getByRole('link', { name: /Offline/ }).click();
+  await page.getByRole('link', { name: /Restart \[r\]/ }).click();
+  await page.getByRole('button', { name: /Restart Server$/ }).click();
+  await expect(page.locator('.toastify').filter({ hasText: 'Server restart has been cancelled' })).toBeVisible();
+  await expect(page.getByText('Server has been restarted!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Launcher Error', { exact: true })).toHaveCount(0);
+});
+
 test('desktop and mobile schedule editors fit the workspace', async ({ page }, testInfo) => {
   await mockServer(page);
   await page.goto('/admin/restart-schedules');

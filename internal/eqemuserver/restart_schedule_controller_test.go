@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/pathmgmt"
 	"github.com/EQEmuTools/spire/internal/restartscheduler"
+	"github.com/EQEmuTools/spire/internal/telnet"
+	"github.com/EQEmuTools/spire/internal/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/patrickmn/go-cache"
 )
@@ -128,6 +131,68 @@ func TestRejectedPowerActionDoesNotReportAnAcceptedRequest(t *testing.T) {
 		if !errors.Is(err, restartscheduler.ErrBusy) || claimed {
 			t.Fatalf("rejected action was audited as accepted: %v, claimed=%v", err, claimed)
 		}
+	}
+}
+
+func TestManualRestartCancellationDoesNotReportRestartSuccess(t *testing.T) {
+	e, controller := restartTestServer(t)
+	l := preflightTestLauncher(t, true)
+	controller.launcher = l
+	l.processList = func() ([]ProcessDetails, error) {
+		t.Error("cancelled countdown reached process control")
+		return nil, errors.New("unexpected process control")
+	}
+	world := telnet.NewClientWithAddress(l.logger, "127.0.0.1:0")
+	t.Cleanup(world.Close)
+	l.serverApi = &Client{logger: l.logger, pool: []*telnet.Client{world}}
+	// No sockets or clients are registered. This drains the existing manual
+	// countdown broadcasts for the lifetime of this test process.
+	l.websocketMgr = websocket.NewClientManager(l.logger)
+	go l.websocketMgr.Start()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/eqemuserver/server/restart", strings.NewReader(`{"timer":60}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	recorder := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { e.ServeHTTP(recorder, req); close(done) }()
+	t.Cleanup(func() {
+		_ = l.StopCancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("manual countdown did not finish")
+		}
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for l.GetStopTimer() != 60 {
+		if time.Now().After(deadline) {
+			t.Fatal("countdown never started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel := httptest.NewRecorder()
+	e.ServeHTTP(cancel, httptest.NewRequest(http.MethodPost, "/api/v1/eqemuserver/server/stop-cancel", nil))
+	if cancel.Code != http.StatusOK {
+		t.Fatalf("cancellation failed: %s", cancel.Body.String())
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("restart request did not finish after cancellation")
+	}
+	var response struct {
+		Cancelled bool   `json:"cancelled"`
+		Message   string `json:"message"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusOK || !response.Cancelled || response.Message != "Server restart cancelled" {
+		t.Fatalf("cancelled restart reported the wrong outcome: %d %s", recorder.Code, recorder.Body.String())
+	}
+	if unlock, err := l.lockPowerAction(); err != nil {
+		t.Fatalf("cancelled restart retained its power lock: %v", err)
+	} else {
+		unlock()
 	}
 }
 

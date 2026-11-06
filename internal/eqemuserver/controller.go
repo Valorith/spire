@@ -1281,6 +1281,9 @@ func (a *Controller) serverRestart(c echo.Context) error {
 		}
 	})
 	if err != nil {
+		if errors.Is(err, errPowerActionCancelled) {
+			return c.JSON(http.StatusOK, echo.Map{"cancelled": true, "message": "Server restart cancelled"})
+		}
 		if errors.Is(err, restartscheduler.ErrBusy) {
 			return scheduleError(c, err)
 		}

@@ -482,8 +482,15 @@ export default {
     },
     async restartServer() {
       try {
-        await SpireApi.v1().post('eqemuserver/server/restart', { timer: this.delayedRestart })
+        const { data } = await SpireApi.v1().post('eqemuserver/server/restart', { timer: this.delayedRestart })
         this.delayedRestart = 0;
+        if (data && data.cancelled) {
+          if (!this.cancelledRestart) {
+            this.notify('Server Restart Cancelled', 'Server restart has been cancelled')
+          }
+          this.notifyProcessChange()
+          return
+        }
       } catch (e) {
         this.notify("Launcher Error", (e.response && e.response.data && e.response.data.error) || "Unable to restart server");
         return;
