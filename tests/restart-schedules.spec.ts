@@ -199,7 +199,7 @@ test('manual restart reports cancellation without claiming success', async ({ pa
   await page.getByRole('button', { name: /Restart Server$/ }).click();
   await expect(page.locator('.toastify').filter({ hasText: 'Server restart has been cancelled' })).toBeVisible();
   await expect(page.getByText('Server has been restarted!', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Launcher Error', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.toastify')).toHaveCount(1);
 });
 
 test('desktop and mobile schedule editors fit the workspace', async ({ page }, testInfo) => {

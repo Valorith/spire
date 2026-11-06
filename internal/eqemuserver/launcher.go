@@ -51,7 +51,7 @@ type Launcher struct {
 	crashLogWatcher *CrashLogWatcher
 	processList     func() ([]ProcessDetails, error)
 	processScan     func() ([]*process.Process, error)
-	rpcServerStart  func(int) error
+	rpcServerStart  func(int, chan<- error) error
 
 	// properties
 	configLastModified          time.Time
@@ -81,6 +81,7 @@ type Launcher struct {
 	currentOnlineStatics []string
 	currentProcessCounts map[string]int
 	stopTimer            int // timer in seconds to stop the server
+	stopCancelled        bool
 	stopType             string
 	bootedTotalDynamics  int
 	targetDynamics       int
@@ -274,21 +275,6 @@ func (l *Launcher) Start() error {
 		if l.isLauncherDistributedModeLeaf() {
 			l.isLeafNode = true
 			l.logger.Info().Msg("Server detected is a leaf node")
-			for {
-				if err := l.requireLauncherRunning(); err != nil {
-					return err
-				}
-				err := l.rpcClientRegister()
-				if err != nil {
-					l.logger.Error().Err(err).Msg("Error registering leaf node")
-				} else {
-					break
-				}
-
-				l.logger.Info().Msg("Retrying registration in 1 second(s)")
-
-				time.Sleep(1 * time.Second)
-			}
 		}
 
 		if l.isLauncherDistributedModeRoot() {
@@ -370,15 +356,37 @@ func (l *Launcher) Start() error {
 	// Accept distributed work only after pre-boot executable setup has finished
 	// and released its gate, so the first RPC can start processes immediately.
 	if l.isLeafNode || l.isDistributedRoot {
-		start := l.StartRpcServer
+		ready := make(chan error, 1)
+		start := l.startRpcServer
 		if l.rpcServerStart != nil {
 			start = l.rpcServerStart
 		}
 		go func() {
-			if err := start(3005); err != nil {
+			if err := start(3005, ready); err != nil {
+				select {
+				case ready <- err:
+				default:
+				}
 				l.logger.Error().Err(err).Msg("Cannot start launcher RPC server")
 			}
 		}()
+		if err := <-ready; err != nil {
+			return err
+		}
+	}
+	if l.isLeafNode {
+		for {
+			if err := l.requireLauncherRunning(); err != nil {
+				return err
+			}
+			if err := l.rpcClientRegister(); err == nil {
+				break
+			} else {
+				l.logger.Error().Err(err).Msg("Error registering leaf node")
+			}
+			l.logger.Info().Msg("Retrying registration in 1 second(s)")
+			time.Sleep(time.Second)
+		}
 	}
 
 	return nil
@@ -409,12 +417,16 @@ func (l *Launcher) Stop() error {
 
 func (l *Launcher) stopUnlocked() error {
 	l.logger.Info().Msg("Stopping server launcher")
+	timer, cancelled := l.stopTimerState()
+	if cancelled {
+		return errPowerActionCancelled
+	}
 
-	if l.GetStopTimer() > 0 {
-		l.logger.Info().Msgf("Stopping server in %v minute(s)", l.GetStopTimer()/60)
+	if timer > 0 {
+		l.logger.Info().Msgf("Stopping server in %v minute(s)", timer/60)
 
 		// message every minute
-		timeToStop := time.Now().Add(time.Duration(l.GetStopTimer()) * time.Second)
+		timeToStop := time.Now().Add(time.Duration(timer) * time.Second)
 
 		l.MessageWorld(
 			fmt.Sprintf(
@@ -423,10 +435,9 @@ func (l *Launcher) stopUnlocked() error {
 			),
 		)
 
-		stopTimer := l.GetStopTimer()
-
 		for {
-			if l.GetStopTimer() == 0 {
+			currentTimer, cancelled := l.stopTimerState()
+			if cancelled || currentTimer == 0 {
 				l.logger.Info().Msg("Stop - Timer cancelled")
 				return errPowerActionCancelled
 			}
@@ -438,7 +449,7 @@ func (l *Launcher) stopUnlocked() error {
 				break
 			}
 
-			if l.GetStopTimer() != stopTimer {
+			if currentTimer != timer {
 				l.logger.Info().Msg("Stop - Timer changed")
 				return errPowerActionCancelled
 			}
@@ -465,6 +476,9 @@ func (l *Launcher) stopUnlocked() error {
 		return err
 	}
 	defer unlock()
+	if _, cancelled := l.stopTimerState(); cancelled {
+		return errPowerActionCancelled
+	}
 	return l.stopProcessesUnlocked()
 }
 
@@ -874,7 +888,14 @@ func (l *Launcher) loadServerConfig() {
 func (l *Launcher) SetStopTimer(timer int) {
 	stopTimerMutex.Lock()
 	l.stopTimer = timer
+	l.stopCancelled = false
 	stopTimerMutex.Unlock()
+}
+
+func (l *Launcher) stopTimerState() (int, bool) {
+	stopTimerMutex.Lock()
+	defer stopTimerMutex.Unlock()
+	return l.stopTimer, l.stopCancelled
 }
 
 func (l *Launcher) GetStopTimer() int {
@@ -900,6 +921,7 @@ func (l *Launcher) SetStopTypeRestarting() {
 func (l *Launcher) StopCancel() error {
 	stopTimerMutex.Lock()
 	l.stopTimer = 0
+	l.stopCancelled = true
 	stopTimerMutex.Unlock()
 
 	l.emitStopTimer(time.Time{})
