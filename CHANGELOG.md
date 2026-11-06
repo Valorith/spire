@@ -1,3 +1,7 @@
+## [Unreleased] 11/6/2026
+
+* Server Restart Scheduler now available!
+
 ## [5.7.3] 9/16/2026
 
 **Race/Model Viewer**
