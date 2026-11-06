@@ -48,6 +48,7 @@ type Launcher struct {
 	watcher         *rfsnotify.RWatcher
 	websocketMgr    *websocket.ClientManager
 	crashLogWatcher *CrashLogWatcher
+	processList     func() ([]ProcessDetails, error)
 
 	// properties
 	configLastModified          time.Time
@@ -192,6 +193,9 @@ func (l *Launcher) Process() {
 
 // StartLauncherProcess starts the launcher process
 func (l *Launcher) StartLauncherProcess() error {
+	if err := l.checkIfLauncherIsRunning(); err != nil {
+		return err
+	}
 	cfg, err := l.serverconfig.Get()
 	if err != nil {
 		return err
@@ -205,11 +209,6 @@ func (l *Launcher) StartLauncherProcess() error {
 	if err != nil {
 		return err
 
-	}
-
-	err = l.checkIfLauncherIsRunning()
-	if err != nil {
-		return err
 	}
 
 	err = l.startLauncherProcess()
@@ -429,6 +428,18 @@ func (l *Launcher) stopUnlocked() error {
 		}
 	}
 
+	// Refuse ambiguous ownership before changing flags or sending shutdown RPCs.
+	details, err := l.launcherProcesses()
+	if err != nil {
+		return err
+	}
+	if err := rejectUnscopedLaunchers(details); err != nil {
+		return err
+	}
+	processes, err := process.Processes()
+	if err != nil {
+		return err
+	}
 	cfg, err := l.serverconfig.Get()
 	if err != nil {
 		return err
@@ -454,14 +465,7 @@ func (l *Launcher) stopUnlocked() error {
 	}
 
 	// kill all server processes
-	processes, _ := process.Processes()
 	serverPath := l.pathmgmt.GetEQEmuServerPath()
-	for _, p := range processes {
-		proc := l.getProcessDetails(p)
-		if unscopedLegacyLauncher(proc) {
-			return fmt.Errorf("cannot identify legacy launcher PID %d; stop that launcher before restarting this installation", p.Pid)
-		}
-	}
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
 		if !belongsToServer(proc, serverPath) {
@@ -883,31 +887,10 @@ func (l *Launcher) ServerProcessLauncherWatchdog() {
 			}
 
 			if l.isRunning {
-				isLauncherRunning := false
-				processes, _ := process.Processes()
-				for _, p := range processes {
-					cmdline, err := p.Cmdline()
-					if err != nil {
-						if strings.Contains(err.Error(), "no such file or directory") {
-							continue
-						}
-
-						l.logger.Debug().
-							Any("error", err.Error()).
-							Any("pid", p.Pid).
-							Msg("Error getting process command line")
-					}
-
-					if strings.Contains(cmdline, "eqemu-server:launcher start") {
-						if !belongsToServer(l.getProcessDetails(p), l.pathmgmt.GetEQEmuServerPath()) {
-							continue
-						}
-						isLauncherRunning = true
-						break
-					}
-				}
-
-				if !isLauncherRunning {
+				isLauncherRunning, err := l.launcherIsRunning()
+				if err != nil {
+					l.logger.Error().Err(err).Msg("Cannot safely start server launcher")
+				} else if !isLauncherRunning {
 					l.logger.Debug().
 						Msg("Launcher process not running - starting")
 
@@ -927,42 +910,12 @@ func (l *Launcher) ServerProcessLauncherWatchdog() {
 
 // checkIfLauncherIsRunning checks if the launcher is already running
 func (l *Launcher) checkIfLauncherIsRunning() error {
-	// check if the launcher is already running
-	processes, _ := process.Processes()
-	for _, p := range processes {
-		cmdline, err := p.Cmdline()
-		if err != nil {
-			if strings.Contains(err.Error(), "no such file or directory") {
-				continue
-			}
-
-			l.logger.Debug().
-				Any("error", err.Error()).
-				Any("pid", p.Pid).
-				Msg("Error getting process command line")
-		}
-
-		isRanFromGoRun := strings.Contains(cmdline, "go run")
-		if strings.Contains(cmdline, "eqemu-server:launcher start") && p.Pid != int32(os.Getpid()) && !isRanFromGoRun {
-			if !belongsToServer(l.getProcessDetails(p), l.pathmgmt.GetEQEmuServerPath()) {
-				continue
-			}
-			isRanFromAirWatcher := strings.Contains(cmdline, "air")
-			isRanFromAir := strings.Contains(cmdline, "/tmp/bin/app")
-			if isRanFromAirWatcher || isRanFromAir {
-				continue
-			}
-
-			l.logger.Debug().
-				Any("os.Getpid()", os.Getpid()).
-				Any("pid", p.Pid).
-				Any("cmdline", cmdline).
-				Msg("Launcher process already running")
-
-			fmt.Println("Launcher process already running")
-
-			return fmt.Errorf("launcher process already running")
-		}
+	running, err := l.launcherIsRunning()
+	if err != nil {
+		return err
+	}
+	if running {
+		return errors.New("launcher process already running")
 	}
 	return nil
 }

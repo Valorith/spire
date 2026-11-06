@@ -1302,6 +1302,11 @@ func (a *Controller) serverStopCancel(c echo.Context) error {
 	if store, err := a.launcher.RestartScheduleStore(); err == nil {
 		state, err := store.View()
 		if err != nil {
+			// Only a manual timer can be cancelled without the durable store.
+			// A scheduled countdown may still restart after its data lock clears.
+			if a.launcher.GetStopTimer() == 0 {
+				return scheduleError(c, err)
+			}
 			a.logger.Error().Err(err).Msg("Cannot read restart schedules; cancelling manual stop timer")
 		} else if state.Active != nil {
 			if err = store.Cancel(state.Active.ID); err != nil {

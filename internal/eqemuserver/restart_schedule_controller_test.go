@@ -172,3 +172,43 @@ func TestManualCountdownCanCancelWithUnreadableScheduleStore(t *testing.T) {
 		})
 	}
 }
+
+func TestScheduledCountdownCancellationDoesNotClaimSuccessWhenStoreLocked(t *testing.T) {
+	e, controller := restartTestServer(t)
+	store, _ := controller.launcher.RestartScheduleStore()
+	saved, err := store.Save(restartscheduler.Schedule{Name: "Scheduled", Enabled: true, Timezone: "UTC", Time: "04:00", Days: []int{0}}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update(func(s *restartscheduler.State) (bool, error) {
+		s.Active = &restartscheduler.Run{ID: "scheduled-run", ScheduleID: saved.ID, Name: saved.Name, RestartAt: time.Now().Add(time.Minute), Status: "countdown"}
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	release, err := restartscheduler.Lock(store.Path + ".lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func() *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		e.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/eqemuserver/server/stop-cancel", nil))
+		return recorder
+	}
+	recorder := request()
+	release()
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("unconfirmed scheduled cancellation reported status %d: %s", recorder.Code, recorder.Body.String())
+	}
+	state, err := store.View()
+	if err != nil || state.Active == nil || state.Active.CancelRequested {
+		t.Fatalf("failed cancellation changed the countdown: %+v, %v", state.Active, err)
+	}
+	if recorder = request(); recorder.Code != http.StatusOK {
+		t.Fatalf("retry failed after lock release: %d: %s", recorder.Code, recorder.Body.String())
+	}
+	state, err = store.View()
+	if err != nil || state.Active == nil || !state.Active.CancelRequested {
+		t.Fatalf("successful retry was not persisted: %+v, %v", state.Active, err)
+	}
+}
