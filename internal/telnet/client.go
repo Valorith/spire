@@ -13,6 +13,7 @@ import (
 
 // Client is a telnet client
 type Client struct {
+	address   string
 	debugging bool
 	t         *telnet.Conn
 	logger    *logger.AppLogger
@@ -21,7 +22,13 @@ type Client struct {
 
 // NewClient creates a new telnet client
 func NewClient(logger *logger.AppLogger) *Client {
+	return NewClientWithAddress(logger, "127.0.0.1:9000")
+}
+
+// NewClientWithAddress binds a connection to the selected server installation.
+func NewClientWithAddress(logger *logger.AppLogger, address string) *Client {
 	return &Client{
+		address:   address,
 		debugging: env.GetInt("TELNET_DEBUG", "0") >= 3,
 		logger:    logger,
 	}
@@ -48,7 +55,7 @@ func (c *Client) Connect() error {
 		d = 100 * time.Millisecond
 	}
 
-	c.t, err = telnet.DialTimeout("tcp", "127.0.0.1:9000", d)
+	c.t, err = telnet.DialTimeout("tcp", c.address, d)
 	if err != nil {
 		return err
 	}

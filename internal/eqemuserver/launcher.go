@@ -191,10 +191,16 @@ func (l *Launcher) Process() {
 
 // StartLauncherProcess starts the launcher process
 func (l *Launcher) StartLauncherProcess() error {
-	cfg, _ := l.serverconfig.Get()
+	cfg, err := l.serverconfig.Get()
+	if err != nil {
+		return err
+	}
+	if cfg.WebAdmin == nil || cfg.WebAdmin.Launcher == nil {
+		return errors.New("server launcher configuration is unavailable")
+	}
 	cfg.WebAdmin.Launcher.IsRunning = false // shut off legacy launcher in-case it's running
 	cfg.Spire.LauncherStart = true
-	err := l.serverconfig.Save(cfg)
+	err = l.serverconfig.Save(cfg)
 	if err != nil {
 		return err
 
@@ -345,7 +351,14 @@ func (l *Launcher) Start() error {
 
 // Restart stops and starts the launcher
 func (l *Launcher) Restart() error {
-	err := l.Stop()
+	return l.PowerAction(true, l.GetStopTimer())
+}
+
+func (l *Launcher) restartUnlocked() error {
+	err := l.stopUnlocked()
+	if errors.Is(err, errPowerActionCancelled) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -359,13 +372,17 @@ func (l *Launcher) Restart() error {
 
 // Stop stops the launcher
 func (l *Launcher) Stop() error {
+	return l.PowerAction(false, l.GetStopTimer())
+}
+
+func (l *Launcher) stopUnlocked() error {
 	l.logger.Info().Msg("Stopping server launcher")
 
-	if l.stopTimer > 0 {
-		l.logger.Info().Msgf("Stopping server in %v minute(s)", l.stopTimer/60)
+	if l.GetStopTimer() > 0 {
+		l.logger.Info().Msgf("Stopping server in %v minute(s)", l.GetStopTimer()/60)
 
 		// message every minute
-		timeToStop := time.Now().Add(time.Duration(l.stopTimer) * time.Second)
+		timeToStop := time.Now().Add(time.Duration(l.GetStopTimer()) * time.Second)
 
 		l.MessageWorld(
 			fmt.Sprintf(
@@ -374,12 +391,12 @@ func (l *Launcher) Stop() error {
 			),
 		)
 
-		stopTimer := l.stopTimer
+		stopTimer := l.GetStopTimer()
 
 		for {
-			if l.stopTimer == 0 {
+			if l.GetStopTimer() == 0 {
 				l.logger.Info().Msg("Stop - Timer cancelled")
-				return nil
+				return errPowerActionCancelled
 			}
 
 			if time.Now().After(timeToStop) {
@@ -389,9 +406,9 @@ func (l *Launcher) Stop() error {
 				break
 			}
 
-			if l.stopTimer != stopTimer {
+			if l.GetStopTimer() != stopTimer {
 				l.logger.Info().Msg("Stop - Timer changed")
-				return nil
+				return errPowerActionCancelled
 			}
 
 			// message top of every minute
@@ -411,10 +428,16 @@ func (l *Launcher) Stop() error {
 		}
 	}
 
-	cfg, _ := l.serverconfig.Get()
+	cfg, err := l.serverconfig.Get()
+	if err != nil {
+		return err
+	}
+	if cfg.WebAdmin == nil || cfg.WebAdmin.Launcher == nil {
+		return errors.New("server launcher configuration is unavailable")
+	}
 	cfg.WebAdmin.Launcher.IsRunning = false // shut off legacy launcher in-case it's running
 	cfg.Spire.LauncherStart = false
-	err := l.serverconfig.Save(cfg)
+	err = l.serverconfig.Save(cfg)
 	if err != nil {
 		return err
 	}
@@ -431,8 +454,12 @@ func (l *Launcher) Stop() error {
 
 	// kill all server processes
 	processes, _ := process.Processes()
+	serverPath := l.pathmgmt.GetEQEmuServerPath()
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
+		if !belongsToServer(proc, serverPath) {
+			continue
+		}
 		for _, s := range l.GetServerProcessNames() {
 			if s == proc.BaseProcessName {
 				l.logger.Debug().
@@ -457,8 +484,11 @@ func (l *Launcher) Stop() error {
 	time.Sleep(1 * time.Second)
 
 	for _, p := range processes {
+		proc := l.getProcessDetails(p)
+		if !belongsToServer(proc, serverPath) {
+			continue
+		}
 		for _, s := range l.GetServerProcessNames() {
-			proc := l.getProcessDetails(p)
 			if s == proc.BaseProcessName {
 				err := p.Kill()
 				if err != nil {
@@ -482,11 +512,35 @@ func (l *Launcher) Stop() error {
 		}
 	}
 
-	l.stopTimer = 0
+	l.SetStopTimer(0)
 
 	l.logger.Info().Msg("Stopped server launcher")
 
 	return nil
+}
+
+// Names alone cannot distinguish two EQEmu installations on the same host.
+// Prefer the working directory, including for launchers copied into os.TempDir.
+// If the OS cannot expose it, accept only this installation's own executable.
+func belongsToServer(proc ProcessDetails, serverPath string) bool {
+	if serverPath == "" {
+		return false
+	}
+	equalPath := func(a, b string) bool {
+		a, b = filepath.Clean(a), filepath.Clean(b)
+		if runtime.GOOS == "windows" {
+			return strings.EqualFold(a, b)
+		}
+		return a == b
+	}
+	if proc.Cwd != "" {
+		return equalPath(proc.Cwd, serverPath)
+	}
+	if proc.Exe == "" {
+		return false
+	}
+	dir := filepath.Dir(proc.Exe)
+	return equalPath(dir, serverPath) || equalPath(dir, filepath.Join(serverPath, "bin"))
 }
 
 // GetServerProcessNames returns a list of server process names
@@ -744,10 +798,14 @@ func (l *Launcher) GetStopTimer() int {
 }
 
 func (l *Launcher) SetStopTypeStopping() {
+	stopTimerMutex.Lock()
+	defer stopTimerMutex.Unlock()
 	l.stopType = "stopping"
 }
 
 func (l *Launcher) SetStopTypeRestarting() {
+	stopTimerMutex.Lock()
+	defer stopTimerMutex.Unlock()
 	l.stopType = "restarting"
 }
 
@@ -1047,6 +1105,9 @@ func (l *Launcher) MessageWorld(message string) {
 
 // emitStopTimer emits the stop timer to the websocket
 func (l *Launcher) emitStopTimer(stopTime time.Time) {
+	stopTimerMutex.Lock()
+	stopType := l.stopType
+	stopTimerMutex.Unlock()
 	type StopTimer struct {
 		Time int64  `json:"time"`
 		Type string `json:"type"`
@@ -1054,7 +1115,7 @@ func (l *Launcher) emitStopTimer(stopTime time.Time) {
 
 	data := StopTimer{
 		Time: stopTime.Unix(),
-		Type: l.stopType,
+		Type: stopType,
 	}
 
 	jsonData, err := json.Marshal(data)

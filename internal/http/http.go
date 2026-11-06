@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -126,6 +127,9 @@ func (c *Server) Serve(port uint) error {
 	}
 
 	go c.websocketClientManager.Start()
+	schedulerContext, stopScheduler := context.WithCancel(context.Background())
+	defer stopScheduler()
+	go c.launcher.RunRestartScheduler(schedulerContext)
 
 	go func() {
 		c.launcher.ServerProcessLauncherWatchdog()

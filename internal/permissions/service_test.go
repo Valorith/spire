@@ -114,6 +114,10 @@ func TestServerUtilityPermissions(t *testing.T) {
 		{"Server Database Backup", "/api/v1/backup/mysql-dump-download/test.sql", http.MethodGet},
 		{"Server Process Management", "/api/v1/admin/launcherconfig", http.MethodGet},
 		{"Server Process Management", "/api/v1/admin/launcherconfig", http.MethodPost},
+		{"Server Process Management", "/api/v1/eqemuserver/server/restart-schedules", http.MethodGet},
+		{"Server Process Management", "/api/v1/eqemuserver/server/restart-schedules", http.MethodPost},
+		{"Server Process Management", "/api/v1/eqemuserver/server/restart-schedules/preview", http.MethodPost},
+		{"Server Process Management", "/api/v1/eqemuserver/server/restart-schedules/runs/123/cancel", http.MethodPost},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
 			cache := gocache.New(gocache.NoExpiration, 0)
@@ -129,6 +133,29 @@ func TestServerUtilityPermissions(t *testing.T) {
 			context := e.NewContext(httptest.NewRequest(tc.method, tc.path, nil), httptest.NewRecorder())
 			if !service.CanAccessResource(context, models.User{ID: 2}, 1) {
 				t.Fatal("the tool's named permission must authorize its endpoint")
+			}
+		})
+	}
+}
+
+func TestReadOnlyRestartPermissionCannotMutateSchedules(t *testing.T) {
+	cache := gocache.New(gocache.NoExpiration, 0)
+	service := &Service{cache: cache}
+	cache.Set("user-permissions-2", userPermissions{connectionID: 1, permissions: []Resource{{RouteMatchPrefixes: service.RegisterManualResources()["Server Process Management"], CanRead: true}}}, gocache.NoExpiration)
+	for _, tc := range []struct {
+		method, path string
+		want         bool
+	}{
+		{http.MethodGet, "/api/v1/eqemuserver/server/restart-schedules", true},
+		{http.MethodPost, "/api/v1/eqemuserver/server/restart-schedules", false},
+		{http.MethodPost, "/api/v1/eqemuserver/server/restart-schedules/preview", false},
+		{http.MethodPost, "/api/v1/eqemuserver/server/restart-schedules/runs/1/cancel", false},
+		{http.MethodDelete, "/api/v1/eqemuserver/server/restart-schedules/1?revision=1", false},
+	} {
+		t.Run(tc.method+tc.path, func(t *testing.T) {
+			c := echo.New().NewContext(httptest.NewRequest(tc.method, tc.path, nil), httptest.NewRecorder())
+			if got := service.CanAccessResource(c, models.User{ID: 2}, 1); got != tc.want {
+				t.Fatalf("access = %v, want %v", got, tc.want)
 			}
 		})
 	}
