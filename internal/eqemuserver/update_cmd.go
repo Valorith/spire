@@ -238,11 +238,15 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) error {
 
 				if answer == "y" {
 					fmt.Println("Starting server")
-					c.launcher.Start()
+					if err := c.launcher.StartLauncherProcess(); err != nil {
+						return err
+					}
 				}
 			} else {
 				fmt.Println("Starting server")
-				c.launcher.Start()
+				if err := c.launcher.StartLauncherProcess(); err != nil {
+					return err
+				}
 			}
 		} else {
 			fmt.Println("Server is already up to date")
@@ -313,13 +317,18 @@ func (c *UpdateCommand) installRelease(release string, wasOnline bool) error {
 		return fmt.Errorf("cannot claim server power action; update aborted: %w", err)
 	}
 	defer unlock()
+	unlockStartup, err := c.launcher.lockStartup()
+	if err != nil {
+		return fmt.Errorf("cannot claim server executable access; update aborted: %w", err)
+	}
+	defer unlockStartup()
 	cfg, err := c.launcher.serverconfig.Get()
 	if err != nil {
 		return err
 	}
 	if wasOnline || cfg.Spire.LauncherStart {
 		c.launcher.SetStopTimer(0)
-		if err := c.launcher.stopUnlocked(); err != nil {
+		if err := c.launcher.stopProcessesUnlocked(); err != nil {
 			return fmt.Errorf("cannot stop server; update aborted: %w", err)
 		}
 	}

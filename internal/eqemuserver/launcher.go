@@ -194,6 +194,29 @@ func (l *Launcher) Process() {
 
 // StartLauncherProcess starts the launcher process
 func (l *Launcher) StartLauncherProcess() error {
+	unlock, err := l.lockPowerAction()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return l.startLauncherUnlocked()
+}
+
+// The caller owns the power lock, including scheduled restart health checks.
+func (l *Launcher) startLauncherUnlocked() error {
+	if err := l.prepareLauncherStart(); err != nil {
+		return err
+	}
+	// Release the execution gate before the child acquires it for bootstrap.
+	return l.startLauncherProcess()
+}
+
+func (l *Launcher) prepareLauncherStart() error {
+	unlock, err := l.lockStartup()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := l.checkIfLauncherIsRunning(); err != nil {
 		return err
 	}
@@ -212,17 +235,18 @@ func (l *Launcher) StartLauncherProcess() error {
 
 	}
 
-	err = l.startLauncherProcess()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
 // Start starts the launcher
 // Only call this from the launcher process itself
 func (l *Launcher) Start() error {
-	err := l.checkIfLauncherIsRunning()
+	unlock, err := l.lockStartup()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	err = l.checkIfLauncherIsRunning()
 	if err != nil {
 		return err
 	}
@@ -313,7 +337,7 @@ func (l *Launcher) Start() error {
 		if !serverOnline {
 			g.Go(func() error {
 				l.logger.Info().Msg("Starting shared memory")
-				err := l.startServerProcessSync(sharedMemoryProcessName)
+				err := l.startServerProcessSyncUnlocked(sharedMemoryProcessName)
 				if err != nil {
 					return err
 				}
@@ -368,7 +392,7 @@ func (l *Launcher) restartUnlocked() error {
 
 	l.logger.Info().Msg("Restarting server launcher")
 
-	return l.StartLauncherProcess()
+	return l.startLauncherUnlocked()
 }
 
 // Stop stops the launcher
@@ -429,6 +453,17 @@ func (l *Launcher) stopUnlocked() error {
 		}
 	}
 
+	unlock, err := l.lockStartup()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return l.stopProcessesUnlocked()
+}
+
+// The caller owns the execution gate. Release installation keeps it through
+// both process shutdown and extraction, without recursively claiming it here.
+func (l *Launcher) stopProcessesUnlocked() error {
 	// Refuse ambiguous ownership before changing flags or sending shutdown RPCs.
 	details, err := l.launcherProcesses()
 	if err != nil {
@@ -743,8 +778,8 @@ func (l *Launcher) Supervisor() error {
 	return nil
 }
 
-// startServerProcessSync starts a server process synchronously
-func (l *Launcher) startServerProcessSync(name string, args ...string) error {
+// The caller owns the execution gate until this process exits.
+func (l *Launcher) startServerProcessSyncUnlocked(name string, args ...string) error {
 	bin, err := exec.LookPath(filepath.Join(l.pathmgmt.GetEQEmuServerPath(), "bin", name))
 	if err != nil {
 		return err
@@ -893,19 +928,8 @@ func (l *Launcher) ServerProcessLauncherWatchdog() {
 			}
 
 			if l.isRunning {
-				isLauncherRunning, err := l.launcherIsRunning()
-				if err != nil {
-					l.logger.Error().Err(err).Msg("Cannot safely start server launcher")
-				} else if !isLauncherRunning {
-					l.logger.Debug().
-						Msg("Launcher process not running - starting")
-
-					err := l.startLauncherProcess()
-					if err != nil {
-						l.logger.Debug().
-							Any("error", err.Error()).
-							Msg("Error starting launcher process")
-					}
+				if err := l.ensureLauncherRunning(); err != nil {
+					l.logger.Debug().Err(err).Msg("Cannot start server launcher")
 				}
 			}
 
@@ -1440,7 +1464,7 @@ func (l *Launcher) pollProcessCounts() {
 	l.currentZoneDynamics = 0
 	l.currentZoneStatics = 0
 
-	processes, _ := process.Processes()
+	processes, _ := l.scanProcesses()
 	for _, p := range processes {
 		proc := l.getProcessDetails(p)
 		for _, s := range l.GetServerProcessNames() {

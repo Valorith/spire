@@ -1194,13 +1194,11 @@ func (a *Controller) getServerLockedStatus(c echo.Context) error {
 }
 
 func (a *Controller) serverStart(c echo.Context) error {
-	unlock, err := a.launcher.lockPowerAction()
+	err := a.launcher.StartLauncherProcess()
 	if err != nil {
-		return scheduleError(c, err)
-	}
-	defer unlock()
-	err = a.launcher.StartLauncherProcess()
-	if err != nil {
+		if errors.Is(err, restartscheduler.ErrBusy) {
+			return scheduleError(c, err)
+		}
 		return c.JSON(
 			http.StatusInternalServerError,
 			echo.Map{"error": fmt.Sprintf("Failed to start server [%v]", err.Error())},

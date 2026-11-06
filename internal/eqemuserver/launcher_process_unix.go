@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-func (l *Launcher) startServerProcess(name string, args ...string) error {
+func (l *Launcher) startServerProcessUnlocked(name string, args ...string) error {
 	bin, err := exec.LookPath(filepath.Join(l.pathmgmt.GetEQEmuServerPath(), "bin", name))
 	if err != nil {
 		return err

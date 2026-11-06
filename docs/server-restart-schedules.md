@@ -19,7 +19,7 @@ Spire's **HTTP server must remain running**. Run Spire as a service for unattend
 
 ## Storage and access
 
-Schedules, active countdowns, and the last 100 results are stored in `spire-restart-schedules.json` beside the server configuration. Include this file in server backups. Writes use a synced temporary file and atomic replacement. OS file locks protect concurrent updates, elect one scheduler, and serialize server power actions. Do not delete the adjacent `.lock`, `.runner.lock`, or `.power.lock` files while Spire is running; OS locks are released automatically on process exit.
+Schedules, active countdowns, and the last 100 results are stored in `spire-restart-schedules.json` beside the server configuration. Include this file in server backups. Writes use a synced temporary file and atomic replacement. OS file locks protect concurrent updates, elect one scheduler, and serialize server power actions. A separate execution gate prevents launcher bootstrap, supervised process startup, and shared-memory reloads from overlapping release extraction. It lets a scheduled child start while its parent holds the power lock for world-health verification. Do not delete the adjacent `.lock`, `.runner.lock`, `.power.lock`, or `.startup.lock` files while Spire is running; OS locks are released automatically on process exit.
 
 The scheduler checks a maximum of 32 schedules once per second, writes only on state changes, and does not query the database. Browser polling slows when the page is hidden, and editing uses revision checks to prevent stale saves.
 
