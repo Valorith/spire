@@ -210,17 +210,11 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) error {
 
 				if answer == "y" {
 					fmt.Println("Stopping server")
-					if err := c.launcher.Stop(); err != nil {
-						return fmt.Errorf("cannot stop server; update aborted: %w", err)
-					}
 				} else {
 					return nil
 				}
 			} else {
 				fmt.Println("Stopping server")
-				if err := c.launcher.Stop(); err != nil {
-					return fmt.Errorf("cannot stop server; update aborted: %w", err)
-				}
 			}
 		}
 
@@ -231,9 +225,9 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) error {
 				"https://github.com/EQEmu/Server/releases/download/v%s/eqemu-server-linux-x64.zip",
 				latestVersion.String(),
 			)
-			err := c.updater.InstallRelease(release)
+			err := c.installRelease(release, online)
 			if err != nil {
-				c.logger.Fatal().Err(err).Msg("Failed to install release")
+				return err
 			}
 
 			if !auto {
@@ -310,6 +304,26 @@ func (c *UpdateCommand) Handle(_ *cobra.Command, args []string) error {
 		c.LineBreak()
 	}
 	return nil
+}
+
+// Keep server power actions excluded until release extraction has completed.
+func (c *UpdateCommand) installRelease(release string, wasOnline bool) error {
+	unlock, err := c.launcher.lockPowerAction()
+	if err != nil {
+		return fmt.Errorf("cannot claim server power action; update aborted: %w", err)
+	}
+	defer unlock()
+	cfg, err := c.launcher.serverconfig.Get()
+	if err != nil {
+		return err
+	}
+	if wasOnline || cfg.Spire.LauncherStart {
+		c.launcher.SetStopTimer(0)
+		if err := c.launcher.stopUnlocked(); err != nil {
+			return fmt.Errorf("cannot stop server; update aborted: %w", err)
+		}
+	}
+	return c.updater.InstallRelease(release)
 }
 
 func (c *UpdateCommand) LineBreak() {

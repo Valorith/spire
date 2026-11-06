@@ -131,6 +131,23 @@ func TestRejectedPowerActionDoesNotReportAnAcceptedRequest(t *testing.T) {
 	}
 }
 
+func TestReleaseUpdateRejectsBusyPowerBeforeTouchingFiles(t *testing.T) {
+	_, controller := restartTestServer(t)
+	release, err := controller.launcher.lockPowerAction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	// No updater or config reader is supplied: neither may be reached while
+	// another process owns the countdown or power-action lock.
+	command := &UpdateCommand{launcher: controller.launcher}
+	for _, online := range []bool{false, true} {
+		if err := command.installRelease("unused", online); !errors.Is(err, restartscheduler.ErrBusy) {
+			t.Fatalf("release installation was allowed during a power action: %v", err)
+		}
+	}
+}
+
 func TestManualCountdownCanCancelWithUnreadableScheduleStore(t *testing.T) {
 	for _, locked := range []bool{false, true} {
 		t.Run(strconv.FormatBool(locked), func(t *testing.T) {
