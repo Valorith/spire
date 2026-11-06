@@ -470,6 +470,11 @@ const router = new Router({
           meta: {title: "Server Update"},
         },
         {
+          path: ROUTE.ADMIN_RESTART_SCHEDULES,
+          component: () => import('./views/admin/RestartSchedules.vue'),
+          meta: {title: "Restart Schedules"},
+        },
+        {
           path: ROUTE.ADMIN_CLIENT_FILE_DOWNLOADS,
           component: () => import('./views/admin/tools/ClientAssets.vue'),
           meta: {title: "Client Asset Management"},

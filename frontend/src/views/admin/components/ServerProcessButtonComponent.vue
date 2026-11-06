@@ -485,7 +485,8 @@ export default {
         await SpireApi.v1().post('eqemuserver/server/restart', { timer: this.delayedRestart })
         this.delayedRestart = 0;
       } catch (e) {
-        console.log(e)
+        this.notify("Launcher Error", (e.response && e.response.data && e.response.data.error) || "Unable to restart server");
+        return;
       }
 
       if (this.delayedRestart > 0) {
@@ -508,7 +509,9 @@ export default {
       try {
         await SpireApi.v1().post('eqemuserver/server/stop-cancel')
       } catch (e) {
-        console.log(e)
+        this.cancelledRestart = false;
+        this.notify("Launcher Error", (e.response && e.response.data && e.response.data.error) || "Unable to cancel restart");
+        return;
       }
 
       this.notify("Server Restart Cancelled", "Server stop or restart has been cancelled");

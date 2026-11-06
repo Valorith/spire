@@ -18,6 +18,7 @@ export const ROUTE = {
   ADMIN_CONFIG_PLAYER_EVENT_LOGS: "/admin/player-event-logs/settings",
   ADMIN_FILE_LOGS: "/admin/file-logs",
   ADMIN_SERVER_UPDATE: "/admin/server-update",
+  ADMIN_RESTART_SCHEDULES: "/admin/restart-schedules",
   ADMIN_DATABASE_BACKUP: "/admin/database-backup",
   ADMIN_RELOAD: "/admin/server-reload",
   ADMIN_BACKUPS: "/admin/backups",
