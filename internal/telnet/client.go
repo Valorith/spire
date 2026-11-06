@@ -140,6 +140,8 @@ func (c *Client) sendln(s string) error {
 type CommandConfig struct {
 	Command     string // the command to send
 	EnforceJson bool   // error the connection if the response is not a json
+	// Emote and marquee commands can acknowledge with only a console prompt.
+	AllowEmptyResponse bool
 }
 
 // Command sends a command to the telnet server and returns the output
@@ -181,9 +183,13 @@ func (c *Client) Command(cmd CommandConfig) (string, error) {
 
 	var data []byte
 	var output string
+	delimiter := linebreak
+	if cmd.AllowEmptyResponse {
+		delimiter = "> "
+	}
 	for {
 		start := time.Now()
-		data, err = c.t.ReadUntil(linebreak)
+		data, err = c.t.ReadUntil(delimiter)
 		c.debug("Read operation took %v", time.Since(start))
 		if err != nil {
 			c.logger.Debug().Err(err).Msg("Warning - Failed to read from telnet, this may mean World API is down and not accepting connections.")
@@ -192,8 +198,11 @@ func (c *Client) Command(cmd CommandConfig) (string, error) {
 
 		output += string(data)
 
-		if strings.Contains(output, linebreak) {
-			output = strings.Replace(output, linebreak, "", 1)
+		if strings.Contains(output, delimiter) {
+			output = strings.Replace(output, delimiter, "", 1)
+			if cmd.AllowEmptyResponse {
+				output = strings.TrimSpace(output)
+			}
 			if c.debugging {
 				c.logger.DebugVvv().
 					Any("response", output).

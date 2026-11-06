@@ -165,7 +165,7 @@ func (e *restartExecutor) messageWorld(message string) {
 	e.launcher.websocketMgr.TryBroadcast("notification", message)
 	e.launcher.logger.Info().Str("message", message).Msg("Scheduled restart announcement")
 	for _, command := range []string{"emote world 15 " + message, "wwmarquee 15 " + message} {
-		if _, err := e.world.Command(telnet.CommandConfig{Command: command}); err != nil {
+		if _, err := e.world.Command(telnet.CommandConfig{Command: command, AllowEmptyResponse: true}); err != nil {
 			e.launcher.logger.Warn().Err(err).Msg("Could not send scheduled restart announcement to world")
 			return
 		}
