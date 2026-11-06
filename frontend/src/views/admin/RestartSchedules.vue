@@ -1,12 +1,5 @@
 <template>
   <section class="restart-workspace" aria-labelledby="restart-title">
-    <header class="restart-heading">
-      <h1 id="restart-title">Restart schedules</h1>
-      <button v-if="canEdit" type="button" class="btn btn-primary" @click="newSchedule">
-        <i class="fe fe-plus" aria-hidden="true"></i> Add schedule
-      </button>
-    </header>
-
     <div v-if="error || loadError" class="restart-error" role="alert">
       <span>{{ error || loadError }}</span>
       <button type="button" class="btn btn-sm btn-outline-light" @click="error = ''; load()">Retry</button>
@@ -29,6 +22,12 @@
 
     <div class="restart-columns" :class="{ 'restart-columns-editing': draft }">
       <eq-window-simple class="restart-list-window" :padding="0">
+        <header class="restart-heading">
+          <h1 id="restart-title">Restart schedules</h1>
+          <button v-if="canEdit" type="button" class="btn btn-primary" @click="newSchedule">
+            <i class="fe fe-plus" aria-hidden="true"></i> Add schedule
+          </button>
+        </header>
         <div v-if="loading" class="restart-empty" role="status"><b-spinner small/> Loading schedules</div>
         <template v-else>
           <div v-if="upcoming && !active" class="restart-next">
@@ -351,12 +350,12 @@
 
 <style scoped>
 .restart-workspace { --restart-accent: #d5b473; color: #e5e8ed; padding-bottom: 30px; }
-.restart-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 22px; }
+.restart-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0; padding: 20px 24px; border-bottom: 1px solid #ffffff18; }
 .restart-heading h1 { font-size: 25px; font-weight: 600; letter-spacing: -.5px; margin: 0; }
 .restart-heading .btn { white-space: nowrap; }
 .restart-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
 .restart-columns-editing { grid-template-columns: minmax(0, 1fr) 370px; }
-.restart-list-window, .restart-editor-window { min-width: 0; padding: 0; }
+.restart-list-window, .restart-editor-window { min-width: 0; margin-top: 0; padding: 0; }
 .restart-active { padding: 0; }
 .restart-list-window::before, .restart-editor-window::before, .restart-active::before { inset: 0; width: 100%; height: 100%; padding: 0; box-sizing: border-box; border-radius: inherit; }
 .restart-next { display: flex; align-items: center; gap: 15px; padding: 24px; border-bottom: 1px solid #ffffff18; }
@@ -455,7 +454,7 @@ button:focus-visible { outline: 2px solid var(--restart-accent); outline-offset:
   .restart-active-content { flex-wrap: wrap; }
 }
 @media (max-width: 480px) {
-  .restart-heading { flex-wrap: wrap; }
+  .restart-heading { flex-wrap: wrap; padding: 20px 16px; }
   .restart-row, .restart-next, .restart-history { padding: 20px 16px; }
   .restart-row-main { flex-wrap: wrap; gap: 12px; }
   .restart-time { font-size: 32px; min-width: 80px; }
