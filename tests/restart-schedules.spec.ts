@@ -166,7 +166,7 @@ test('manual restart reports a schedule conflict without claiming success', asyn
   await expect(page.getByText('Server has been restarted!', { exact: true })).toHaveCount(0);
 });
 
-test('desktop and mobile schedule editors fit the workspace', async ({ page }) => {
+test('desktop and mobile schedule editors fit the workspace', async ({ page }, testInfo) => {
   await mockServer(page);
   await page.goto('/admin/restart-schedules');
   await page.getByRole('button', { name: 'Add schedule', exact: true }).click();
@@ -186,10 +186,10 @@ test('desktop and mobile schedule editors fit the workspace', async ({ page }) =
       expect(geometry.right).toBeLessThanOrEqual(geometry.parentRight);
       expect(geometry.overflow).toBeLessThanOrEqual(1);
     }
-    if (viewport.width === 1440) await page.screenshot({ path: 'tmp/restart-qa-round2/desktop.png' });
-    if (viewport.width === 1024) await page.screenshot({ path: 'tmp/restart-qa-round2/tablet.png' });
+    if (viewport.width === 1440) await page.screenshot({ path: testInfo.outputPath('desktop.png') });
+    if (viewport.width === 1024) await page.screenshot({ path: testInfo.outputPath('tablet.png') });
   }
-  await page.screenshot({ path: 'tmp/restart-qa-round2/mobile.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true });
 });
 
 test('network failures show an actionable preview error', async ({ page }) => {
@@ -285,7 +285,7 @@ test('keyboard controls select repeat days and submit without server shortcuts',
   await expect(page.getByRole('heading', { name: 'Keyboard scheduler', exact: true })).toBeVisible();
 });
 
-test('narrow mobile one-time fields and long-name deletion fit the screen', async ({ page }) => {
+test('narrow mobile one-time fields and long-name deletion fit the screen', async ({ page }, testInfo) => {
   await mockServer(page);
   await page.setViewportSize({ width: 320, height: 740 });
   await page.goto('/admin/restart-schedules');
@@ -305,7 +305,7 @@ test('narrow mobile one-time fields and long-name deletion fit the screen', asyn
     expect(geometry.right).toBeLessThanOrEqual(geometry.parentRight);
     expect(geometry.overflow).toBeLessThanOrEqual(1);
   }
-  await page.screenshot({ path: 'tmp/restart-qa-round2/mobile-once.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('mobile-once.png'), fullPage: true });
   await page.getByRole('button', { name: 'Save schedule', exact: true }).click();
   const row = page.getByTestId('schedule-new');
   await expect(page.locator('.restart-editor-window')).toHaveCount(0);
@@ -314,8 +314,35 @@ test('narrow mobile one-time fields and long-name deletion fit the screen', asyn
   await expect(row.getByRole('button', { name: 'Keep schedule', exact: true })).toBeVisible();
   const overflow = await page.locator('.restart-workspace').evaluate(el => el.scrollWidth - el.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
-  await page.screenshot({ path: 'tmp/restart-qa-round2/mobile-delete.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('mobile-delete.png'), fullPage: true });
   await row.getByRole('button', { name: 'Keep schedule', exact: true }).click();
   await expect(row.getByRole('button', { name: 'Keep schedule', exact: true })).toHaveCount(0);
   await expect(row.getByRole('heading', { name: 'W'.repeat(80), exact: true })).toBeVisible();
+});
+
+test('one-time dates stay within the current draft', async ({ page }) => {
+  await mockServer(page);
+  await page.goto('/admin/restart-schedules');
+  await page.getByRole('button', { name: 'Add schedule', exact: true }).click();
+  await page.getByRole('button', { name: 'Once', exact: true }).click();
+  await page.getByLabel('Date', { exact: true }).fill('2027-01-12');
+  await page.getByRole('button', { name: 'Close schedule editor', exact: true }).click();
+  await page.getByRole('button', { name: 'Add schedule', exact: true }).click();
+  await page.getByRole('button', { name: 'Once', exact: true }).click();
+  await expect(page.getByLabel('Date', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Save schedule', exact: true })).toBeDisabled();
+  await page.getByLabel('Date', { exact: true }).fill('2027-01-13');
+  await page.getByRole('button', { name: 'Once', exact: true }).click();
+  await expect(page.getByLabel('Date', { exact: true })).toHaveValue('2027-01-13');
+  await page.getByRole('button', { name: 'Daily', exact: true }).click();
+  await page.getByRole('button', { name: 'Once', exact: true }).click();
+  await expect(page.getByLabel('Date', { exact: true })).toHaveValue('');
+  await page.getByLabel('Date', { exact: true }).fill('2027-01-14');
+  await page.getByRole('button', { name: 'Save schedule', exact: true }).click();
+  await page.getByTestId('schedule-new').getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByLabel('Date', { exact: true })).toHaveValue('2027-01-14');
+  await page.getByRole('button', { name: 'Close schedule editor', exact: true }).click();
+  await page.getByTestId('schedule-nightly').getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('button', { name: 'Once', exact: true }).click();
+  await expect(page.getByLabel('Date', { exact: true })).toHaveValue('');
 });

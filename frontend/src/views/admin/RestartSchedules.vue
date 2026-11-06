@@ -261,11 +261,13 @@
       newSchedule () {
         if (this.busy) return
         this.error = ''
+        this.onceDate = ''
         this.preset = 'daily'
         this.draft = { id: '', name: 'Daily restart', enabled: true, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', time: '04:00', days: [...allDays], warning_minutes: 10, revision: 0 }
         this.$nextTick(() => { this.$refs.nameInput.focus(); this.$refs.nameInput.select() })
       },
       edit (s) {
+        this.onceDate = ''
         this.preset = s.once_at ? 'once' : (s.days.length === 7 ? 'daily' : (s.days.join(',') === '1,2,3,4,5' ? 'weekdays' : 'weekly'))
         this.draft = clone(s)
         if (s.once_at) {
@@ -276,9 +278,11 @@
         }
         this.$nextTick(() => this.$refs.nameInput.focus())
       },
-      closeEditor () { this.draft = null; this.preview = []; this.previewError = ''; this.previewVersion++ },
+      closeEditor () { this.draft = null; this.onceDate = ''; this.preview = []; this.previewError = ''; this.previewVersion++ },
       setPreset (value) {
+        if (value === this.preset) return
         const usedDefaultName = this.draft.name === defaultNames[this.preset]
+        this.onceDate = ''
         this.preset = value
         this.draft.once_at = null
         this.draft.days = value === 'daily' ? [...allDays] : value === 'weekdays' ? [1, 2, 3, 4, 5] : value === 'weekly' ? [0] : []

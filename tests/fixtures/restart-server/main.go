@@ -37,9 +37,16 @@ func (s simulator) Restart() error            { return nil }
 func main() {
 	port := flag.Int("port", 3021, "loopback port")
 	flag.Parse()
-	root, err := os.MkdirTemp("", "spire-restart-qa-*")
+	if err := run(*port, os.TempDir()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(port int, tempDir string) error {
+	root, err := os.MkdirTemp(tempDir, "spire-restart-qa-*")
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer os.RemoveAll(root)
 	log := logger.NewAppLogger()
@@ -67,10 +74,11 @@ func main() {
 	e.GET("/api/v1/eqemuserver/get-lock-status", func(c echo.Context) error { return c.JSON(http.StatusOK, echo.Map{"locked": false}) })
 	e.Any("/api/v1/*", func(c echo.Context) error { return c.JSON(http.StatusOK, []any{}) })
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := restartscheduler.Runner{Store: store, Executor: simulator{store: store}, LogError: func(err error) { log.Error().Err(err).Msg("QA scheduler") }}
-	go runner.Run(ctx)
-	metadata, _ := json.Marshal(map[string]string{"url": fmt.Sprintf("http://127.0.0.1:%d", *port), "root": root})
+	runnerDone := make(chan struct{})
+	go func() { defer close(runnerDone); runner.Run(ctx) }()
+	defer func() { cancel(); <-runnerDone }()
+	metadata, _ := json.Marshal(map[string]string{"url": fmt.Sprintf("http://127.0.0.1:%d", port), "root": root})
 	fmt.Println(string(metadata))
-	e.Logger.Fatal(e.Start(fmt.Sprintf("127.0.0.1:%d", *port)))
+	return e.Start(fmt.Sprintf("127.0.0.1:%d", port))
 }

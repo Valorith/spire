@@ -64,7 +64,7 @@ test('real API persists edits, pause and deletion across page reloads', async ({
   } finally { await cleanSchedule(request, id); }
 });
 
-test('real runner countdown cancels and records history through the UI', async ({ page, request }) => {
+test('real runner countdown cancels and records history through the UI', async ({ page, request }, testInfo) => {
   await verifyFixture(request);
   const name = `QA countdown ${Date.now()}`;
   const created = await request.post(api, { data: { name, enabled: true, timezone: 'UTC', days: [], once_at: new Date(Date.now() + 90000).toISOString(), warning_minutes: 5 } });
@@ -83,7 +83,7 @@ test('real runner countdown cancels and records history through the UI', async (
     await expect(history.getByText('Cancelled', { exact: true })).toBeVisible();
     await page.reload();
     await expect(history.getByText('Cancelled', { exact: true })).toBeVisible();
-    await page.screenshot({ path: 'tmp/restart-qa-round2/cancellation.png', fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('desktop-cancellation.png'), fullPage: true });
     expect(errors).toEqual([]);
   } finally { await cleanSchedule(request, id); }
 });
