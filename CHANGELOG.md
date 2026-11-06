@@ -1,4 +1,4 @@
-## [Unreleased] 11/6/2026
+## [5.8.0] 11/6/2026
 
 * Server Restart Scheduler now available!
 
