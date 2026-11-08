@@ -7,132 +7,45 @@
     :bold-title="true"
   >
 
-    <div class="row align-items-center">
-
-      <!-- Server Metrics -->
-      <div class="col-lg-12 col-sm-12 pl-0 pr-0 ml-0 text-center">
-        <div
-          class="row align-items-center admin-header"
-        >
-
-          <!-- Server Metrics -->
-          <div v-if="serverStats.length" class="col-lg-2 col-sm-12 mt-3-mobile pl-0 pr-0">
-            <div class="row" v-for="(metric, index) in serverStats.filter((e) => e.value !== '')" :key="index" style="height: 15px;">
-              <!-- Left Label -->
-              <div class="col-lg-6 col-3 p-0 m-0 text-right">
-                  <span class="small font-weight-bold" style="font-size: 12px; ">
-                    {{ metric.label }}
-                  </span>
-              </div>
-
-              <!-- Right Value -->
-              <div class="col-lg-6 col-3 p-0 m-0 pl-3 text-left">
-
-                <span
-                  v-if="metric.label !== 'Locked' && metric.label !== 'World'"
-                  class="small" :style="'font-size: 12px;' + (metric.color ? 'color: ' + metric.color : '')"
-                >
-                    {{ metric.value ? metric.value.toLocaleString() : 0 }}
-                  </span>
-
-                <!-- Server Lock -->
-                <a
-                  href="javascript:void(0)"
-                  v-if="metric.label === 'Locked' && canWrite('eqemuserver/toggle-server-lock')"
-                  class="small font-weight-bold text-muted"
-                  style="font-size: 12px;"
-                  @click="toggleServerLock"
-                >
-                  <span v-if="serverLocked" class="text-danger">
-                    <i class="fa fa-lock mr-1"></i> Locked
-                  </span>
-                  <span v-else class="text-success">
-                    <i class="fa fa-unlock mr-1"></i> Unlocked
-                  </span>
-                </a>
-                <span v-else-if="metric.label === 'Locked'" class="small">
+    <div class="admin-header">
+      <div v-if="serverStats.length || canRead('eqemuserver/dashboard-stats')" class="admin-header-summary">
+        <dl v-if="serverStats.length" class="admin-header-stats" aria-label="World status">
+          <div v-for="metric in serverStats.filter((entry) => entry.value !== '')" :key="metric.label" class="admin-header-stat">
+            <dt>{{ metric.label }}</dt>
+            <dd>
+              <server-process-button-component v-if="metric.label === 'World' && canManageProcesses()"
+                                               :server-status="metric.value" class="d-inline-block" style="z-index: 1000" />
+              <template v-else-if="metric.label === 'Locked'">
+                <a v-if="canWrite('eqemuserver/toggle-server-lock')" href="javascript:void(0)" class="font-weight-bold"
+                   :class="serverLocked ? 'text-danger' : 'text-success'" @click="toggleServerLock">
+                  <i class="fa mr-1" :class="serverLocked ? 'fa-lock' : 'fa-unlock'" aria-hidden="true"></i>
                   {{ serverLocked ? 'Locked' : 'Unlocked' }}
-                </span>
-
-                <!-- Server Process Button -->
-                <div v-if="metric.label === 'World'">
-                  <server-process-button-component
-                    v-if="canManageProcesses()"
-                    style="z-index:1000"
-                    :server-status="metric.value"
-                    class="d-inline-block mr-3"
-                  />
-                  <span v-else class="small">{{ metric.value }}</span>
-                </div>
-
-              </div>
-            </div>
+                </a>
+                <span v-else>{{ serverLocked ? 'Locked' : 'Unlocked' }}</span>
+              </template>
+              <span v-else :style="{ color: metric.color }">{{ metric.value ? metric.value.toLocaleString() : 0 }}</span>
+            </dd>
           </div>
-
-          <!-- Dash Stats -->
-          <div v-if="canRead('eqemuserver/dashboard-stats')" class="col-lg-1 col-sm-12 mt-3-mobile pl-0 pr-0">
-            <div class="row" v-for="(metric, index) in dashStats" :key="index" style="height: 15px;">
-              <!-- Left Label -->
-              <div class="col-lg-6 col-3 p-0 m-0 text-right">
-                  <span class="small font-weight-bold" style="font-size: 12px; ">
-                    {{ metric.label }}
-                  </span>
-              </div>
-
-              <!-- Right Value -->
-              <div class="col-lg-6 col-3 p-0 m-0 pl-3 text-left">
-
-                <span
-                  class="small" style="font-size: 12px;"
-                >
-                    {{ metric.value ? metric.value.toLocaleString() : 0 }}
-                  </span>
-
-              </div>
-            </div>
+        </dl>
+        <dl v-if="canRead('eqemuserver/dashboard-stats')" class="admin-header-stats" aria-label="Database totals">
+          <div v-for="metric in dashStats" :key="metric.label" class="admin-header-stat">
+            <dt>{{ metric.label }}</dt>
+            <dd>{{ metric.value }}</dd>
           </div>
+        </dl>
+      </div>
 
-          <!-- Resource Metrics -->
-          <div
-            v-for="(host, hostIndex) in hostMetrics"
-            :key="'host-metrics-' + hostIndex"
-            class="col-xl-3 col-lg-4 col-sm-12 mt-3-mobile admin-host-metrics"
-            data-testid="admin-host-metrics"
-          >
-            <!-- Render Metrics Dynamically -->
-            <div
-              v-for="(metric, metricIndex) in host"
-              :key="metricIndex"
-              class="admin-host-metric"
-              :class="{ 'admin-host-metric--identity': typeof metric.percent === 'undefined' }"
-              data-testid="admin-host-metric"
-            >
-              <span class="admin-host-metric__label">
-                {{ metric.label }}
-              </span>
-
-              <div
-                v-if="typeof metric.percent !== 'undefined'"
-                class="admin-host-metric__progress"
-              >
-                <eq-progress-bar
-                  style="opacity: .95;"
-                  :percent="metric.percent"
-                  :show-percent="false"
-                  :color="metric.color"
-                />
-              </div>
-
-              <span
-                class="admin-host-metric__value"
+      <div v-for="(host, hostIndex) in hostMetrics" :key="'host-metrics-' + hostIndex"
+           class="admin-host-metrics" data-testid="admin-host-metrics">
+        <div v-for="metric in host" :key="metric.label" class="admin-host-metric"
+             :class="{ 'admin-host-metric--identity': typeof metric.percent === 'undefined' }" data-testid="admin-host-metric">
+          <span class="admin-host-metric__label">{{ metric.label }}</span>
+          <div v-if="typeof metric.percent !== 'undefined'" class="admin-host-metric__progress">
+            <eq-progress-bar style="opacity: .95;" :percent="metric.percent" :show-percent="false" :color="metric.color" />
+          </div>
+          <span class="admin-host-metric__value"
                 :class="{ 'admin-host-metric__value--host': typeof metric.percent === 'undefined' }"
-                :title="typeof metric.percent === 'undefined' ? metric.value : null"
-              >
-                {{ metric.value }}
-              </span>
-            </div>
-          </div>
-
+                :title="typeof metric.percent === 'undefined' ? metric.value : null">{{ metric.value }}</span>
         </div>
       </div>
     </div>
@@ -578,15 +491,48 @@ export default {
 </script>
 
 <style scoped>
-.admin-header-window .text-muted {
+.admin-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 28px;
+}
 
+.admin-header-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  min-width: 0;
+}
+
+.admin-header-stats {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 9px;
+  align-items: baseline;
+  margin: 0;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.admin-header-stat {
+  display: contents;
+}
+
+.admin-header-stats dt {
+  text-align: right;
+}
+
+.admin-header-stats dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .admin-host-metrics {
-  display: inline-block;
-  min-width: 0;
-  padding-left: 12px !important;
-  padding-right: 12px !important;
+  flex: 0 1 290px;
+  min-width: min(100%, 230px);
+  max-width: 100%;
 }
 
 .admin-host-metric {
@@ -633,11 +579,17 @@ export default {
   width: 100%;
 }
 
-@media (max-width: 991.98px) {
+@media (max-width: 575.98px) {
+  .admin-header {
+    gap: 12px;
+  }
+
+  .admin-header-summary {
+    gap: 10px 18px;
+  }
+
   .admin-host-metrics {
-    margin-left: auto;
-    margin-right: auto;
-    max-width: 360px;
+    flex-basis: 100%;
   }
 }
 </style>

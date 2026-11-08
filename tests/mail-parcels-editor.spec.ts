@@ -376,10 +376,17 @@ test.describe('Mail & Parcels Editor', () => {
     await dialog.locator('#gm-parcel-note').fill('Two independent parcel messages.');
     await dialog.locator('#gm-parcel-reason').fill('Validating atomic multi-parcel GM delivery');
     await dialog.getByRole('button', { name: /Review 2 parcels/ }).click();
-    await expect(dialog.getByText('2 separate parcel messages for CodexCourier')).toBeVisible();
+    await expect(dialog.getByText('2 parcels for CodexCourier')).toBeVisible();
     const send = dialog.getByRole('button', { name: /Send parcels/ });
+    const confirmation = dialog.getByRole('checkbox', { name: 'Confirm delivery' });
     await expect(send).toBeDisabled();
-    await dialog.locator('#gm-parcel-confirmation').fill('SEND 2 PARCELS TO CodexCourier');
+    await confirmation.check();
+    await expect(send).toBeEnabled();
+    await dialog.getByRole('button', { name: 'Back', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Review 2 parcels' }).click();
+    await expect(confirmation).not.toBeChecked();
+    await expect(send).toBeDisabled();
+    await confirmation.check();
     await expect(send).toBeEnabled();
     await send.click();
 

@@ -1,0 +1,947 @@
+diff --git a/common/net/console_server.cpp b/common/net/console_server.cpp
+index a737c5a4d6356869bf92c76ee64e766aafdad099..24989530a8f44e78bc0b7003531588e62726ed0a 100644
+--- a/common/net/console_server.cpp
++++ b/common/net/console_server.cpp
+@@ -28,6 +28,13 @@ void EQ::Net::ConsoleServer::RegisterLogin(ConsoleServerLoginCallback fn)
+ }
+ 
+ EQ::Net::ConsoleServerConnection *EQ::Net::ConsoleServer::FindByAccountName(const std::string &acct_name) {
++	if (Strings::ToLower(acct_name) == "gamemaster") {
++		for (auto &entry : m_connections) {
++			if (entry.second->IsSupportChat()) {
++				return entry.second.get();
++			}
++		}
++	}
+ 	for (auto &iter : m_connections) {
+ 		if (iter.second->UserName().compare(acct_name) == 0) {
+ 			return iter.second.get();
+diff --git a/common/net/console_server_connection.cpp b/common/net/console_server_connection.cpp
+index 88be73d964fa2e2c400e147ce167e80483eb1484..caec2138405a506e1c3bda0ff2b6db524c588032 100644
+--- a/common/net/console_server_connection.cpp
++++ b/common/net/console_server_connection.cpp
+@@ -112,8 +112,27 @@ void EQ::Net::ConsoleServerConnection::QueueMessage(const std::string &msg)
+ 	}
+ }
+ 
++bool EQ::Net::ConsoleServerConnection::IsLocalAdmin() const
++{
++	const auto address = m_connection->RemoteIP();
++	return m_user_id == 0 && (address == "127.0.0.1" || address == "::ffff:127.0.0.1");
++}
++
++bool EQ::Net::ConsoleServerConnection::EnableSupportChat()
++{
++	if (!IsLocalAdmin()) {
++		return false;
++	}
++	auto *current = m_parent->FindByAccountName(PlayerSupportConsoleName);
++	if (current && current != this) {
++		return false;
++	}
++	m_support_chat = true;
++	return true;
++}
++
+ bool EQ::Net::ConsoleServerConnection::SendChannelMessage(const ServerChannelMessage_Struct* scm, std::function<void(void)> onTell) {
+-	if (!m_accept_messages) {
++	if (!m_accept_messages || m_support_chat) {
+ 		return false;
+ 	}
+ 
+diff --git a/common/net/console_server_connection.h b/common/net/console_server_connection.h
+index ba9f47ff526295d2cc93a7c10c60b3276ce4a578..7f5e352e0933efb071a3051ce4a81db90f72d1e6 100644
+--- a/common/net/console_server_connection.h
++++ b/common/net/console_server_connection.h
+@@ -21,6 +21,7 @@ namespace EQ
+ 
+ 		const int MaxConsoleLineLength = 512;
+ 		const int ConsoleLoginStatus = 50;
++		constexpr char PlayerSupportConsoleName[] = "GameMaster";
+ 		class ConsoleServer;
+ 		class ConsoleServerConnection
+ 		{
+@@ -41,8 +42,11 @@ namespace EQ
+ 			std::string UserName() const { return m_user; }
+ 			int UserId() const { return m_user_id; }
+ 			int Admin() const { return m_admin; }
++			bool IsLocalAdmin() const;
+ 
+ 			bool AcceptMessages() const { return m_accept_messages; }
++			bool IsSupportChat() const { return m_support_chat; }
++			bool EnableSupportChat();
+ 			void SetAcceptMessages(bool v) { m_accept_messages = v; }
+ 			void QueueMessage(const std::string &msg);
+ 			bool SendChannelMessage(const ServerChannelMessage_Struct* scm, std::function<void(void)> onTell);
+@@ -59,6 +63,7 @@ namespace EQ
+ 			int m_user_id;
+ 			int m_admin;
+ 			bool m_accept_messages;
++			bool m_support_chat = false;
+ 
+ 			size_t m_cursor;
+ 			char m_line[MaxConsoleLineLength];
+diff --git a/world/console.cpp b/world/console.cpp
+index 364d40375917f3a9c0794dac6b523423d4a75779..5d0a1062f247411078872463fd8501b6ea8d2b6f 100644
+--- a/world/console.cpp
++++ b/world/console.cpp
+@@ -21,9 +21,12 @@
+ #include "console.h"
+ 
+ #include "common/md5.h"
++#include "common/repositories/character_parcels_repository.h"
+ #include "common/strings.h"
++#include "common/util/uuid.h"
+ #include "common/zone_store.h"
+ #include "world/clientlist.h"
++#include "world/cliententry.h"
+ #include "world/eqemu_api_world_data_service.h"
+ #include "world/login_server_list.h"
+ #include "world/login_server.h"
+@@ -35,6 +38,12 @@
+ 
+ #include "fmt/format.h"
+ 
++#include <algorithm>
++#include <chrono>
++#include <cmath>
++#include <cstring>
++#include <unordered_map>
++
+ /**
+  * @param username
+  * @param password
+@@ -373,6 +382,393 @@ void ConsoleTell(
+ 	ZSList::Instance()->SendChannelMessage(tmpname, to.c_str(), ChatChannel_Tell, 0, Strings::Join(join_args, " ").c_str());
+ }
+ 
++namespace {
++
++using SupportChatClock = std::chrono::steady_clock;
++
++struct PendingPlayerSupportTell {
++	std::string console_id;
++	uint32 account_id;
++	uint32 character_id;
++	std::unique_ptr<ServerPacket> packet;
++	SupportChatClock::time_point expires;
++};
++
++std::unordered_map<std::string, PendingPlayerSupportTell> pending_support_tells;
++
++void RejectPlayerSupportTell(ClientListEntry &sender, const std::string &decision)
++{
++	const char *message = "Game Master messaging is unavailable right now. Please try again.";
++	if (decision == "no_petition") {
++		message = "This character has no active petition. Use /petition before messaging Game Master.";
++	} else if (decision == "messages_off") {
++		message = "Messaging is turned off for your petition. A Game Master must enable it before you can reply.";
++	} else if (decision == "invalid") {
++		message = "Your message was empty or too long. Please shorten it and try again.";
++	} else if (decision == "timeout") {
++		message = "Game Master could not confirm your message. Please try again.";
++	}
++	const auto from = fmt::format("*{}", EQ::Net::PlayerSupportConsoleName);
++	ZSList::Instance()->SendChannelMessageRaw(from.c_str(), sender.name(), ChatChannel_Tell, 0, message);
++}
++
++void FinishPlayerSupportTell(const PendingPlayerSupportTell &tell, const std::string &decision)
++{
++	auto *sender = ClientList::Instance()->FindCLEByCharacterID(tell.character_id);
++	if (!sender || sender->AccountID() != tell.account_id || sender->Online() != CLE_Status::InZone || !sender->Server()) {
++		return;
++	}
++	if (tell.expires <= SupportChatClock::now()) {
++		RejectPlayerSupportTell(*sender, "timeout");
++	} else if (decision == "accepted") {
++		auto *message = reinterpret_cast<ServerChannelMessage_Struct *>(tell.packet->pBuffer);
++		strn0cpy(message->deliverto, sender->name(), sizeof(message->deliverto));
++		message->chan_num = ChatChannel_TellEcho;
++		message->noreply = true;
++		sender->Server()->SendPacket(tell.packet.get());
++	} else {
++		RejectPlayerSupportTell(*sender, decision);
++	}
++}
++
++}
++
++void QueuePlayerSupportTell(EQ::Net::ConsoleServerConnection *connection, ClientListEntry &sender, ServerPacket &packet)
++{
++	if (!connection || !connection->IsSupportChat()) {
++		const auto result = database.QueryDatabase(fmt::format(
++			"SELECT p.dib FROM petitions p "
++			"JOIN character_data ch ON ch.id = p.petid AND ch.name = p.charname "
++			"JOIN account acct ON acct.id = ch.account_id AND acct.name = p.accountname "
++			"WHERE ch.id = {} AND ch.account_id = {} AND ch.deleted_at IS NULL LIMIT 1",
++			sender.CharID(), sender.AccountID()
++		));
++		RejectPlayerSupportTell(sender, result.Success() && result.RowCount() == 0 ? "no_petition" : "unavailable");
++		return;
++	}
++
++	const auto *message = reinterpret_cast<const ServerChannelMessage_Struct *>(packet.pBuffer);
++	const auto available = packet.size - offsetof(ServerChannelMessage_Struct, message);
++	const auto *end = static_cast<const char *>(std::memchr(message->message, '\0', available));
++	if (!end || end == message->message || end - message->message > 4096) {
++		RejectPlayerSupportTell(sender, "invalid");
++		return;
++	}
++	if (pending_support_tells.size() >= 128) {
++		RejectPlayerSupportTell(sender, "unavailable");
++		return;
++	}
++
++	const auto request_id = EQ::Util::UUID::Generate().ToString();
++	pending_support_tells.emplace(request_id, PendingPlayerSupportTell{
++		connection->GetUUID(), sender.AccountID(), sender.CharID(),
++		std::unique_ptr<ServerPacket>(packet.Copy()), SupportChatClock::now() + std::chrono::seconds(8)
++	});
++	Json::Value event;
++	event["kind"] = "tell";
++	event["request_id"] = request_id;
++	event["account_id"] = sender.AccountID();
++	event["character_id"] = sender.CharID();
++	event["character"] = sender.name();
++	event["text"] = std::string(message->message, end);
++	Json::StreamWriterBuilder writer;
++	writer["indentation"] = "";
++	connection->SendLine("SPIRE_SUPPORT " + Json::writeString(writer, event));
++}
++
++void ProcessPlayerSupportTells()
++{
++	if (pending_support_tells.empty()) {
++		return;
++	}
++	const auto now = SupportChatClock::now();
++	static auto next_check = now;
++	if (now < next_check) {
++		return;
++	}
++	next_check = now + std::chrono::seconds(1);
++	for (auto it = pending_support_tells.begin(); it != pending_support_tells.end();) {
++		if (it->second.expires <= now) {
++			FinishPlayerSupportTell(it->second, "timeout");
++			it = pending_support_tells.erase(it);
++		} else {
++			++it;
++		}
++	}
++}
++
++static void ConsoleSupportChat(
++	EQ::Net::ConsoleServerConnection *connection,
++	const std::string &,
++	const std::vector<std::string> &args
++)
++{
++	Json::Value response;
++	if (args.size() == 1 && args[0] == "listen") {
++		response["kind"] = connection->EnableSupportChat() ? "ready" : "busy";
++		response["protocol"] = 2;
++	} else if (!connection->IsSupportChat()) {
++		return;
++	} else if (args.size() == 3 && args[0] == "decision") {
++		auto it = pending_support_tells.find(args[1]);
++		if (it != pending_support_tells.end() && it->second.console_id == connection->GetUUID()) {
++			FinishPlayerSupportTell(it->second, args[2]);
++			pending_support_tells.erase(it);
++		}
++		return;
++	} else if (args.size() == 1 && args[0] == "ping") {
++		response["kind"] = "pong";
++	} else if (args.size() == 5 && args[0] == "send" && args[1].size() <= 64) {
++		response["request_id"] = args[1];
++		response["kind"] = "unreachable";
++		const auto account_id = Strings::ToUnsignedInt(args[2]);
++		const auto character_id = Strings::ToUnsignedInt(args[3]);
++		const auto &hex = args[4];
++		std::string message;
++		const std::string digits = "0123456789abcdef";
++		if (!hex.empty() && hex.size() <= 400 && hex.size() % 2 == 0) {
++			for (size_t i = 0; i < hex.size(); i += 2) {
++				const auto high = digits.find(hex[i]);
++				const auto low = digits.find(hex[i + 1]);
++				if (high == std::string::npos || low == std::string::npos || high * 16 + low < 32 || high * 16 + low > 126) {
++					message.clear();
++					break;
++				}
++				message.push_back(static_cast<char>(high * 16 + low));
++			}
++		}
++		auto *recipient = character_id ? ClientList::Instance()->FindCLEByCharacterID(character_id) : nullptr;
++		if (!message.empty() && recipient && account_id && recipient->AccountID() == account_id &&
++			recipient->Online() == CLE_Status::InZone && recipient->Server() && !recipient->TellsOff()) {
++			const auto from = fmt::format("*{}", EQ::Net::PlayerSupportConsoleName);
++			ZSList::Instance()->SendChannelMessageRaw(from.c_str(), recipient->name(), ChatChannel_Tell, 0, message.c_str());
++			response["kind"] = "sent";
++		}
++	} else {
++		return;
++	}
++	Json::StreamWriterBuilder writer;
++	writer["indentation"] = "";
++	connection->SendLine("SPIRE_SUPPORT " + Json::writeString(writer, response));
++}
++
++static uint16 SupportZonePort(ZoneServer *zone_server)
++{
++	if (!zone_server || (zone_server->GetIP() != "127.0.0.1" && zone_server->GetIP() != "::ffff:127.0.0.1")) {
++		return 0;
++	}
++	return zone_server->GetCPort();
++}
++
++static void SendSupportMoveResult(EQ::Net::ConsoleServerConnection *connection, const char *status, uint16 port = 0)
++{
++	connection->SendLine(fmt::format("{{\"status\":\"{}\",\"port\":{}}}", status, port));
++}
++
++static void ConsoleSupportLocation(
++	EQ::Net::ConsoleServerConnection *connection,
++	const std::string &,
++	const std::vector<std::string> &args
++)
++{
++	if (!connection->IsLocalAdmin() || args.size() != 2) {
++		SendSupportMoveResult(connection, "stale");
++		return;
++	}
++	const auto character_id = Strings::ToUnsignedInt(args[0]);
++	const auto account_id = Strings::ToUnsignedInt(args[1]);
++	auto *client = character_id ? ClientList::Instance()->FindCLEByCharacterID(character_id) : nullptr;
++	if (!account_id || (client && client->AccountID() != account_id)) {
++		SendSupportMoveResult(connection, "stale");
++	} else if (!client || client->Online() < CLE_Status::Zoning) {
++		SendSupportMoveResult(connection, "offline");
++	} else if (client->Online() != CLE_Status::InZone || !client->Server() || client->Server()->IsBootingUp()) {
++		SendSupportMoveResult(connection, "busy");
++	} else if (const auto port = SupportZonePort(client->Server())) {
++		SendSupportMoveResult(connection, "zone", port);
++	} else {
++		SendSupportMoveResult(connection, "unavailable");
++	}
++}
++
++static void ConsoleSupportMove(
++	EQ::Net::ConsoleServerConnection *connection,
++	const std::string &,
++	const std::vector<std::string> &args
++)
++{
++	auto reply = [connection](const char *status, uint16 port = 0) {
++		SendSupportMoveResult(connection, status, port);
++	};
++	const bool player_position = args.size() == 11;
++	if (!connection->IsLocalAdmin() || (args.size() != 6 && !player_position) ||
++		!std::all_of(args.begin(), args.begin() + (player_position ? 7 : 6), [](const auto &arg) {
++			return !arg.empty() && arg.find_first_not_of("0123456789") == std::string::npos;
++		})) {
++		reply("stale");
++		return;
++	}
++	const auto character_id = Strings::ToUnsignedInt(args[0]);
++	const auto account_id = Strings::ToUnsignedInt(args[1]);
++	const auto corpse_id = Strings::ToUnsignedInt(args[2]);
++	const auto source_zone = Strings::ToUnsignedInt(args[3]);
++	const auto source_instance = Strings::ToUnsignedInt(args[4]);
++	const auto destination = Strings::ToUnsignedInt(args[5]);
++	const auto *target = ZoneStore::Instance()->GetZone(destination);
++	if (!character_id || !account_id || !source_zone || source_zone > UINT16_MAX || source_instance > UINT16_MAX ||
++		(corpse_id == 0 && args[2] != "0") || (source_instance == 0 && args[4] != "0") ||
++		!target || target->version != 0) {
++		reply("stale");
++		return;
++	}
++	uint32 destination_instance = 0;
++	float x = target->safe_x, y = target->safe_y, z = target->safe_z, heading = target->safe_heading;
++	if (player_position) {
++		destination_instance = Strings::ToUnsignedInt(args[6]);
++		auto read_float = [](const std::string &value, float &coordinate) {
++			try {
++				size_t parsed = 0;
++				coordinate = std::stof(value, &parsed);
++				return parsed == value.size() && std::isfinite(coordinate);
++			} catch (const std::exception &) {
++				return false;
++			}
++		};
++		auto *owner = ClientList::Instance()->FindCLEByCharacterID(character_id);
++		if (!corpse_id || destination_instance > UINT16_MAX || (destination_instance == 0 && args[6] != "0") ||
++			!read_float(args[7], x) || !read_float(args[8], y) || !read_float(args[9], z) || !read_float(args[10], heading) ||
++			!owner || owner->AccountID() != account_id || owner->Online() != CLE_Status::InZone ||
++			owner->zone() != destination || owner->instance() != destination_instance || !SupportZonePort(owner->Server())) {
++			reply("busy");
++			return;
++		}
++	}
++
++	ZoneServer *source = nullptr;
++	if (corpse_id) {
++		source = source_instance ? ZSList::Instance()->FindByInstanceID(source_instance)
++		                         : ZSList::Instance()->FindByZoneID(source_zone);
++	} else {
++		auto *client = ClientList::Instance()->FindCLEByCharacterID(character_id);
++		if (client && client->Online() >= CLE_Status::Zoning) {
++			if (client->AccountID() != account_id || client->zone() != source_zone ||
++				client->instance() != source_instance) {
++				reply("stale");
++				return;
++			}
++			if (client->Online() != CLE_Status::InZone || !client->Server()) {
++				reply("busy");
++				return;
++			}
++			source = client->Server();
++		}
++	}
++	if (source) {
++		if (source->IsBootingUp() || source->GetZoneID() != source_zone ||
++			source->GetInstanceID() != source_instance) {
++			reply("busy");
++		} else if (const auto port = SupportZonePort(source)) {
++			reply("zone", port);
++		} else {
++			reply("unavailable");
++		}
++		return;
++	}
++
++	const auto position = fmt::format(
++		"zone_id = {}, x = {}, y = {}, z = {}, heading = {}",
++		destination, x, y, z, heading
++	);
++	if (!corpse_id && !database.TransactionBegin().Success()) {
++		reply("unavailable");
++		return;
++	}
++	auto result = corpse_id ? database.QueryDatabase(fmt::format(
++		"UPDATE character_corpses SET {}, instance_id = {} WHERE id = {} AND charid = {} "
++		"AND zone_id = {} AND instance_id = {} AND is_buried = 0",
++		position, destination_instance, corpse_id, character_id, source_zone, source_instance
++	)) : database.QueryDatabase(fmt::format(
++		"UPDATE character_data SET {}, zone_instance = 0 WHERE id = {} AND account_id = {} "
++		"AND zone_id = {} AND zone_instance = {} AND deleted_at IS NULL",
++		position, character_id, account_id, source_zone, source_instance
++	));
++	if (!result.Success() || result.RowsAffected() != 1) {
++		if (!corpse_id) {
++			database.TransactionRollback();
++		}
++		reply("stale");
++		return;
++	}
++	if (!corpse_id) {
++		const auto queued = database.QueryDatabase(fmt::format(
++			"INSERT INTO data_buckets (`key`, `value`, expires, character_id) "
++			"VALUES ('spire:character-move-notice', '1', 0, {}) "
++			"ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), expires = VALUES(expires)",
++			character_id
++		));
++		if (!queued.Success()) {
++			database.TransactionRollback();
++			reply("unavailable");
++			return;
++		}
++		if (!database.TransactionCommit().Success()) {
++			database.TransactionRollback();
++			reply("unconfirmed");
++			return;
++		}
++	} else if (!player_position) {
++		auto *zone = ZSList::Instance()->FindByZoneID(destination);
++		if (zone && !zone->IsBootingUp()) {
++			ServerPacket packet(ServerOP_SpawnPlayerCorpse, sizeof(SpawnPlayerCorpse_Struct));
++			auto *spawn = reinterpret_cast<SpawnPlayerCorpse_Struct *>(packet.pBuffer);
++			spawn->player_corpse_id = corpse_id;
++			spawn->zone_id = destination;
++			zone->SendPacket(&packet);
++		}
++	}
++	reply("saved");
++}
++
++static void ConsoleParcelNotify(
++	EQ::Net::ConsoleServerConnection *connection,
++	const std::string &,
++	const std::vector<std::string> &args
++)
++{
++	if (!connection->IsLocalAdmin() || args.size() < 2 || args.size() > 21) {
++		connection->SendLine("invalid");
++		return;
++	}
++	const auto character_id = Strings::ToUnsignedInt(args[0]);
++	auto *recipient = character_id ? ClientList::Instance()->FindCLEByCharacterID(character_id) : nullptr;
++	if (!recipient || recipient->Online() != CLE_Status::InZone || !recipient->Server()) {
++		connection->SendLine("offline");
++		return;
++	}
++
++	std::vector<std::string> parcel_ids;
++	for (size_t i = 1; i < args.size(); ++i) {
++		const auto id = Strings::ToUnsignedInt(args[i]);
++		if (!id) {
++			connection->SendLine("invalid");
++			return;
++		}
++		parcel_ids.push_back(std::to_string(id));
++	}
++	const auto parcels = CharacterParcelsRepository::GetWhere(
++		database, fmt::format("char_id = {} AND id IN ({})", character_id, Strings::Join(parcel_ids, ","))
++	);
++	for (const auto &parcel : parcels) {
++		ServerPacket packet(ServerOP_ParcelDelivery, sizeof(Parcel_Struct));
++		auto *delivery = reinterpret_cast<Parcel_Struct *>(packet.pBuffer);
++		*delivery = {};
++		delivery->item_slot = parcel.slot_id;
++		strn0cpy(delivery->send_to, recipient->name(), sizeof(delivery->send_to));
++		recipient->Server()->SendPacket(&packet);
++	}
++	connection->SendLine(parcels.empty() ? "gone" : "ok");
++}
++
+ /**
+  * @param connection
+  * @param command
+@@ -1389,10 +1785,14 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
+ 	console->RegisterCall("md5", 50, "md5", std::bind(ConsoleMd5, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+ 	console->RegisterCall("ooc", 50, "ooc [message]", std::bind(ConsoleOOC, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+ 	console->RegisterCall("ping", 50, "ping", std::bind(ConsoleNull, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
++	console->RegisterCall("parcelnotify", 200, "parcelnotify [character id] [parcel ids]", ConsoleParcelNotify);
+ 	console->RegisterCall("reloadworld", 200, "reloadworld", std::bind(ConsoleReloadWorld, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+ 	console->RegisterCall("reloadzonequests", 200, "reloadzonequests [zone_short_name]", std::bind(ConsoleReloadZoneQuests, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+ 	console->RegisterCall("setpass", 200, "setpass [account_name] [new_password]", std::bind(ConsoleSetPass, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+ 	console->RegisterCall("signalcharbyname", 50, "signalcharbyname charname ID", std::bind(ConsoleSignalCharByName, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
++	console->RegisterCall("supportchat", 200, "supportchat", ConsoleSupportChat);
++	console->RegisterCall("supportmove", 200, "supportmove [character] [account] [corpse or 0] [source zone] [source instance] [destination]", ConsoleSupportMove);
++	console->RegisterCall("supportlocation", 200, "supportlocation [character] [account]", ConsoleSupportLocation);
+ 	console->RegisterCall("tell", 50, "tell [name] [message]", std::bind(ConsoleTell, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+ 	console->RegisterCall("unlock", 150, "unlock", std::bind(ConsoleUnlock, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+ 	console->RegisterCall("uptime", 50, "uptime [zone_server_id]", std::bind(ConsoleUptime, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+diff --git a/world/console.h b/world/console.h
+index b8d4d3d866b03a24b410009a09ed98c496c35ee3..197cbb702e66626fce6eaea44a2312c5676e1253 100644
+--- a/world/console.h
++++ b/world/console.h
+@@ -2,4 +2,9 @@
+ 
+ #include "common/net/console_server.h"
+ 
++class ClientListEntry;
++class ServerPacket;
++
+ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer> &console);
++void QueuePlayerSupportTell(EQ::Net::ConsoleServerConnection *connection, ClientListEntry &sender, ServerPacket &packet);
++void ProcessPlayerSupportTells();
+diff --git a/world/main.cpp b/world/main.cpp
+index 46aff97a049230602199f86b09255932235e8d30..336f91e619e91ceac992fd47a1a7360df450ddda 100644
+--- a/world/main.cpp
++++ b/world/main.cpp
+@@ -356,6 +356,8 @@ int main(int argc, char **argv)
+ 			return;
+ 		}
+ 
++		ProcessPlayerSupportTells();
++
+ 		eqs = nullptr;
+ 
+ 		//give the stream identifier a chance to do its work....
+diff --git a/world/zoneserver.cpp b/world/zoneserver.cpp
+index 7de8f2143871aa6ac3cadb1ff54d129e058e22d4..2ca2a5298e44ae1756c240e0314fa34c0597d87e 100644
+--- a/world/zoneserver.cpp
++++ b/world/zoneserver.cpp
+@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ #include "world/client.h"
+ #include "world/cliententry.h"
+ #include "world/clientlist.h"
++#include "world/console.h"
+ #include "world/dynamic_zone_manager.h"
+ #include "world/dynamic_zone.h"
+ #include "world/lfplist.h"
+@@ -434,7 +435,18 @@ void ZoneServer::HandleMessage(uint16 opcode, const EQ::Net::Packet &p) {
+ 			}
+ 
+ 			if (scm->chan_num == ChatChannel_Tell || scm->chan_num == ChatChannel_TellEcho) {
+-				if (scm->deliverto[0] == '*') {
++				const bool console_tell = scm->deliverto[0] == '*';
++				// The client strips the console prefix when it builds a /reply.
++				const auto *tell_target = scm->deliverto + (console_tell ? 1 : 0);
++				if (strcasecmp(tell_target, EQ::Net::PlayerSupportConsoleName) == 0) {
++					auto *sender = ClientList::Instance()->FindCharacter(scm->from);
++					if (scm->chan_num == ChatChannel_Tell && sender && sender->Server() == this && sender->CharID() && sender->AccountID()) {
++						auto *connection = console ? console->FindByAccountName(EQ::Net::PlayerSupportConsoleName) : nullptr;
++						QueuePlayerSupportTell(connection, *sender, *pack);
++					}
++					break;
++				}
++				if (console_tell) {
+ 					if (console) {
+ 						auto con = console->FindByAccountName(&scm->deliverto[1]);
+ 						if (
+diff --git a/zone/api_service.cpp b/zone/api_service.cpp
+index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..a8ccbe27e6a685dd75cbf848535371764d64cbc6 100644
+--- a/zone/api_service.cpp
++++ b/zone/api_service.cpp
+@@ -22,6 +22,7 @@
+ 
+ #include "common/eqemu_logsys.h"
+ #include "common/net/websocket_server.h"
++#include "common/zone_store.h"
+ #include "zone/client.h"
+ #include "zone/corpse.h"
+ #include "zone/doors.h"
+@@ -30,6 +31,7 @@
+ #include "zone/zone.h"
+ #include "zone/zonedb.h"
+ 
++#include <cmath>
+ #include <memory>
+ 
+ extern Zone *zone;
+@@ -893,6 +895,158 @@ void RegisterApiLogEvent(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+ 	);
+ }
+ 
++static bool IsLocalSupportRequest(EQ::Net::WebsocketServerConnection *connection)
++{
++	return zone && connection->GetAccountID() == 0 && connection->RemoteIP() == "127.0.0.1";
++}
++
++static Client *GetSupportClient(const Json::Value &params)
++{
++	if (!params["character_id"].isUInt() || !params["account_id"].isUInt()) {
++		return nullptr;
++	}
++	auto *client = entity_list.GetClientByCharID(params["character_id"].asUInt());
++	return client && client->AccountID() == params["account_id"].asUInt() && client->Connected() ? client : nullptr;
++}
++
++static Json::Value ApiGetSupportLocation(EQ::Net::WebsocketServerConnection *connection, Json::Value params)
++{
++	Json::Value response;
++	response["status"] = "offline";
++	if (!IsLocalSupportRequest(connection) || !params.isObject()) {
++		return response;
++	}
++	if (auto *client = GetSupportClient(params)) {
++		const auto &position = client->GetPosition();
++		response["status"] = "located";
++		auto &location = response["location"];
++		location["zone_id"] = zone->GetZoneID();
++		location["instance_id"] = zone->GetInstanceID();
++		location["x"] = position.x;
++		location["y"] = position.y;
++		location["z"] = position.z;
++		location["heading"] = position.w;
++	}
++	return response;
++}
++
++static Json::Value ApiFinishSupportCorpseMove(EQ::Net::WebsocketServerConnection *connection, Json::Value params)
++{
++	Json::Value response;
++	response["status"] = "stale";
++	if (!IsLocalSupportRequest(connection) || !params.isObject() || !params["corpse_id"].isUInt() ||
++		!params["character_id"].isUInt() || !params["player_position"].isObject()) {
++		return response;
++	}
++	const auto &location = params["player_position"];
++	if (!location["zone_id"].isUInt() || !location["instance_id"].isUInt() ||
++		location["zone_id"].asUInt() != zone->GetZoneID() || location["instance_id"].asUInt() != zone->GetInstanceID()) {
++		return response;
++	}
++	const auto corpse_id = params["corpse_id"].asUInt();
++	const auto character_id = params["character_id"].asUInt();
++	if (!corpse_id || !character_id) {
++		return response;
++	}
++	auto *corpse = entity_list.GetCorpseByDBID(corpse_id);
++	if (!corpse) {
++		const auto owned = database.QueryDatabase(fmt::format(
++			"SELECT id FROM character_corpses WHERE id = {} AND charid = {} "
++			"AND zone_id = {} AND instance_id = {} AND is_buried = 0",
++			corpse_id, character_id, zone->GetZoneID(), zone->GetInstanceID()
++		));
++		if (!owned.Success() || owned.RowCount() != 1) {
++			return response;
++		}
++		corpse = database.LoadCharacterCorpse(corpse_id, true);
++		if (corpse) {
++			corpse->Spawn();
++		}
++	}
++	if (corpse && corpse->GetCharID() == character_id) {
++		response["status"] = "spawned";
++		if (auto *client = GetSupportClient(params)) {
++			client->Message(Chat::Yellow, "A Game Master moved your corpse to your location.");
++			response["status"] = "notified";
++		}
++	}
++	return response;
++}
++
++static Json::Value ApiMoveSupportTarget(EQ::Net::WebsocketServerConnection *connection, Json::Value params)
++{
++	Json::Value response;
++	response["status"] = "stale";
++	if (!IsLocalSupportRequest(connection) || !params.isObject()) {
++		return response;
++	}
++	for (const auto *field : {"character_id", "account_id", "corpse_id", "source_zone", "source_instance", "destination"}) {
++		if (!params[field].isUInt()) {
++			return response;
++		}
++	}
++	if (params["source_zone"].asUInt() != zone->GetZoneID() ||
++		params["source_instance"].asUInt() != zone->GetInstanceID()) {
++		return response;
++	}
++	const auto character_id = params["character_id"].asUInt();
++	const auto account_id = params["account_id"].asUInt();
++	const auto corpse_id = params["corpse_id"].asUInt();
++	const auto destination = params["destination"].asUInt();
++	const auto *target = ZoneStore::Instance()->GetZone(destination);
++	if (!character_id || !account_id || !target || target->version != 0) {
++		return response;
++	}
++
++	if (corpse_id) {
++		auto *corpse = entity_list.GetCorpseByDBID(corpse_id);
++		if (!corpse || corpse->GetCharID() != character_id) {
++			return response;
++		}
++		if (corpse->IsBeingLooted()) {
++			response["status"] = "busy";
++			return response;
++		}
++		glm::vec4 position(target->safe_x, target->safe_y, target->safe_z, target->safe_heading);
++		uint16 instance = 0;
++		const auto &location = params["player_position"];
++		const bool to_player = !location.isNull();
++		if (to_player) {
++			if (!location.isObject() || !location["zone_id"].isUInt() || location["zone_id"].asUInt() != destination ||
++				!location["instance_id"].isUInt() || location["instance_id"].asUInt() > UINT16_MAX) {
++				return response;
++			}
++			instance = location["instance_id"].asUInt();
++			for (const auto *field : {"x", "y", "z", "heading"}) {
++				if (!location[field].isNumeric() || !std::isfinite(location[field].asFloat())) {
++					return response;
++				}
++			}
++			position = glm::vec4(location["x"].asFloat(), location["y"].asFloat(), location["z"].asFloat(), location["heading"].asFloat());
++			if (destination == zone->GetZoneID() && instance == zone->GetInstanceID()) {
++				auto *client = GetSupportClient(params);
++				if (!client) {
++					response["status"] = "offline";
++					return response;
++				}
++				position = client->GetPosition();
++			}
++		}
++		if (corpse->MoveForSupport(destination, instance, position, !to_player)) {
++			response["status"] = "moved";
++		}
++	} else {
++		if (auto *client = GetSupportClient(params)) {
++			const bool same_zone = destination == zone->GetZoneID() && zone->GetInstanceID() == 0;
++			client->Message(Chat::Yellow, "You have been moved by a Game Master");
++			client->MovePC(destination, 0, target->safe_x, target->safe_y, target->safe_z, target->safe_heading, 3,
++				same_zone ? SummonPC : ZoneSolicited);
++			response["status"] = same_zone ? "moved" : "requested";
++		}
++	}
++	return response;
++}
++
+ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+ {
+ 	server->SetLoginHandler(CheckLogin);
+@@ -901,6 +1055,9 @@ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+ 	server->SetMethodHandler("get_npc_list_detail", &ApiGetNpcListDetail, 50);
+ 	server->SetMethodHandler("get_door_list_detail", &ApiGetDoorListDetail, 50);
+ 	server->SetMethodHandler("get_corpse_list_detail", &ApiGetCorpseListDetail, 50);
++	server->SetMethodHandler("move_support_target", &ApiMoveSupportTarget, 200);
++	server->SetMethodHandler("get_support_location", &ApiGetSupportLocation, 200);
++	server->SetMethodHandler("finish_support_corpse_move", &ApiFinishSupportCorpseMove, 200);
+ 	server->SetMethodHandler("get_object_list_detail", &ApiGetObjectListDetail, 50);
+ 	server->SetMethodHandler("get_mob_list_detail", &ApiGetMobListDetail, 50);
+ 	server->SetMethodHandler("get_client_list_detail", &ApiGetClientListDetail, 50);
+diff --git a/zone/client.cpp b/zone/client.cpp
+index f361a00092e8c1fb8b0c3aee59677dda3969b0af..0b6c1da88e053829c2998cab3f656bf8a8051fa9 100644
+--- a/zone/client.cpp
++++ b/zone/client.cpp
+@@ -1537,7 +1537,7 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+ 				target_name[x] = '\0';
+ 			}
+ 
+-			if(!worldserver.SendChannelMessage(this, target_name, chan_num, 0, language, lang_skill, message))
++			if(!worldserver.SendChannelMessageRaw(this, target_name, chan_num, 0, language, lang_skill, message))
+ 				Message(0, "Error: World server disconnected");
+ 		break;
+ 	}
+diff --git a/zone/client_packet.cpp b/zone/client_packet.cpp
+index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..4414e4a55ac4ee11693d5ccba572212950dcf64d 100644
+--- a/zone/client_packet.cpp
++++ b/zone/client_packet.cpp
+@@ -547,6 +547,13 @@ void Client::CompleteConnect()
+ 	UpdateWho();
+ 	client_state = CLIENT_CONNECTED;
+ 	SendAllPackets();
++	const auto support_notice = database.QueryDatabase(fmt::format(
++		"DELETE FROM data_buckets WHERE `key` = 'spire:character-move-notice' AND character_id = {}",
++		CharacterID()
++	));
++	if (support_notice.Success() && support_notice.RowsAffected() > 0) {
++		Message(Chat::Yellow, "You have been moved by a Game Master");
++	}
+ 	hpupdate_timer.Start();
+ 	autosave_timer.Start();
+ 	SetDuelTarget(0);
+diff --git a/zone/corpse.cpp b/zone/corpse.cpp
+index a2bd14970730e5d32130d9029e0d3ba936ed8f30..b2edb709adb71e63ff2ce6014dc2fb69a59efd55 100644
+--- a/zone/corpse.cpp
++++ b/zone/corpse.cpp
+@@ -2153,6 +2153,35 @@ void Corpse::SendWorldSpawnPlayerCorpseInZone(uint32_t zone_id)
+ 	worldserver.SendPacket(pack.get());
+ }
+ 
++bool Corpse::MoveForSupport(uint32 destination, uint16 instance, const glm::vec4 &position, bool world_spawn)
++{
++	const auto corpse_id = m_corpse_db_id;
++	if (!IsPlayerCorpse() || !corpse_id || IsBeingLooted() || !zone ||
++		!Save() || m_corpse_db_id != corpse_id) {
++		return false;
++	}
++
++	const auto result = database.QueryDatabase(fmt::format(
++		"UPDATE character_corpses SET zone_id = {}, instance_id = {}, x = {}, y = {}, z = {}, heading = {} "
++		"WHERE id = {} AND charid = {} AND zone_id = {} AND instance_id = {} AND is_buried = 0",
++		destination, instance, position.x, position.y, position.z, position.w, corpse_id, GetCharID(),
++		zone->GetZoneID(), zone->GetInstanceID()
++	));
++	if (!result.Success() || result.RowsAffected() != 1) {
++		return false;
++	}
++	if (destination == zone->GetZoneID() && zone->GetInstanceID() == instance) {
++		GMMove(position);
++	} else {
++		if (world_spawn) {
++			SendWorldSpawnPlayerCorpseInZone(destination);
++		}
++		m_corpse_db_id = 0;
++		m_player_corpse_depop = true;
++	}
++	return true;
++}
++
+ bool Corpse::MovePlayerCorpseToGraveyard()
+ {
+ 	if (IsPlayerCorpse() && zone && zone->HasGraveyard()) {
+diff --git a/zone/corpse.h b/zone/corpse.h
+index 2dbfc3986b8c0c06e83ca75774937b4336c0148f..8c8693e237cd45a04528ea91865ec55a524af385 100644
+--- a/zone/corpse.h
++++ b/zone/corpse.h
+@@ -106,6 +106,7 @@ public:
+ 	virtual void DepopPlayerCorpse();
+ 	bool Process();
+ 	bool Save();
++	bool MoveForSupport(uint32 destination, uint16 instance, const glm::vec4 &position, bool world_spawn);
+ 
+ 	uint32 GetCharID() { return m_character_id; }
+ 
+diff --git a/zone/worldserver.cpp b/zone/worldserver.cpp
+index 070fae004d3f861dbccd2d37db361951bfc434b1..a603365d830f8810cf2848b0cef6f20dec8cef33 100644
+--- a/zone/worldserver.cpp
++++ b/zone/worldserver.cpp
+@@ -1699,7 +1699,10 @@ void WorldServer::HandleMessage(uint16 opcode, const EQ::Net::Packet &p)
+ 	}
+ 	case ServerOP_SpawnPlayerCorpse: {
+ 		auto   *s = (SpawnPlayerCorpse_Struct *) pack->pBuffer;
+-		Corpse *c = database.LoadCharacterCorpse(s->player_corpse_id);
++		if (entity_list.GetCorpseByDBID(s->player_corpse_id)) {
++			break;
++		}
++		Corpse *c = database.LoadCharacterCorpse(s->player_corpse_id, true);
+ 		if (c) {
+ 			c->Spawn();
+ 		}
+@@ -4609,6 +4612,16 @@ bool WorldServer::SendChannelMessage(Client* from, const char* to, uint8 chan_nu
+ 	va_end(argptr);
+ 	buffer[length - 1] = '\0';
+ 
++	const bool sent = SendChannelMessageRaw(from, to, chan_num, guilddbid, language, lang_skill, buffer);
++	safe_delete_array(buffer);
++	return sent;
++}
++
++bool WorldServer::SendChannelMessageRaw(Client* from, const char* to, uint8 chan_num, uint32 guilddbid, uint8 language, uint8 lang_skill, const char* message) {
++	if (!worldserver.Connected()) {
++		return false;
++	}
++	const auto length = strlen(message) + 1;
+ 	auto pack = new ServerPacket(ServerOP_ChannelMessage, sizeof(ServerChannelMessage_Struct) + length);
+ 	ServerChannelMessage_Struct* scm = (ServerChannelMessage_Struct*)pack->pBuffer;
+ 
+@@ -4634,11 +4647,10 @@ bool WorldServer::SendChannelMessage(Client* from, const char* to, uint8 chan_nu
+ 	scm->language = language;
+ 	scm->lang_skill = lang_skill;
+ 	scm->queued = 0;
+-	strcpy(scm->message, buffer);
++	strcpy(scm->message, message);
+ 
+ 	bool ret = SendPacket(pack);
+ 	safe_delete(pack);
+-	safe_delete_array(buffer);
+ 	return ret;
+ }
+ 
+diff --git a/zone/worldserver.h b/zone/worldserver.h
+index 7699d3f331a3acf480910fd0ccc74a99ccc0cb85..54454c56b663e281fe7539f6f72cb6f099f41481 100644
+--- a/zone/worldserver.h
++++ b/zone/worldserver.h
+@@ -42,6 +42,7 @@ public:
+ 	void HandleMessage(uint16 opcode, const EQ::Net::Packet &p);
+ 
+ 	bool SendChannelMessage(Client* from, const char* to, uint8 chan_num, uint32 guilddbid, uint8 language, uint8 lang_skill, const char* message, ...);
++	bool SendChannelMessageRaw(Client* from, const char* to, uint8 chan_num, uint32 guilddbid, uint8 language, uint8 lang_skill, const char* message);
+ 	bool SendEmoteMessage(const char* to, uint32 to_guilddbid, uint32 type, const char* message, ...);
+ 	bool SendEmoteMessage(const char* to, uint32 to_guilddbid, int16 to_minstatus, uint32 type, const char* message, ...);
+ 	bool SendVoiceMacro(Client* From, uint32 Type, char* Target, uint32 MacroNumber, uint32 GroupOrRaidID = 0);
+diff --git a/zone/zonedb.cpp b/zone/zonedb.cpp
+index 879ac6043a946b14d64194d41541673317348935..3b260c1f4b0ae38f5aac8ac49ea280e94b41d015 100644
+--- a/zone/zonedb.cpp
++++ b/zone/zonedb.cpp
+@@ -3754,7 +3754,7 @@ bool ZoneDatabase::UnburyCharacterCorpse(uint32 corpse_id, uint32 zone_id, uint1
+ 	return CharacterCorpsesRepository::UnburyCorpse(*this, corpse_id, zone_id, instance_id, position);
+ }
+ 
+-Corpse* ZoneDatabase::LoadCharacterCorpse(uint32 corpse_id)
++Corpse* ZoneDatabase::LoadCharacterCorpse(uint32 corpse_id, bool require_local_location)
+ {
+ 	if (!corpse_id) {
+ 		return nullptr;
+@@ -3764,6 +3764,9 @@ Corpse* ZoneDatabase::LoadCharacterCorpse(uint32 corpse_id)
+ 	if (!e.id) {
+ 		return nullptr;
+ 	}
++	if (require_local_location && (!zone || e.zone_id != zone->GetZoneID() || e.instance_id != zone->GetInstanceID() || e.is_buried)) {
++		return nullptr;
++	}
+ 
+ 	auto c = Corpse::LoadCharacterCorpse(e, glm::vec4(e.x, e.y, e.z, e.heading));
+ 
+diff --git a/zone/zonedb.h b/zone/zonedb.h
+index 4e4198f08d0e3c5868729b3911a616837e0c19e3..6129700d46ce99bb9f7a4767cd7df3896b986b95 100644
+--- a/zone/zonedb.h
++++ b/zone/zonedb.h
+@@ -499,7 +499,7 @@ public:
+ 	uint32 GetCharacterCorpseItemAt(uint32 corpse_id, uint16 slot_id);
+ 	bool GetDecayTimes(npcDecayTimes_Struct* npc_decay_times);
+ 	uint32 GetFirstCorpseID(uint32 character_id);
+-	Corpse* LoadCharacterCorpse(uint32 corpse_id);
++	Corpse* LoadCharacterCorpse(uint32 corpse_id, bool require_local_location = false);
+ 	bool LoadCharacterCorpses(uint32 zone_id, uint16 instance_id);
+ 	void MarkCorpseAsResurrected(uint32 corpse_id);
+ 	uint32 SaveCharacterCorpse(uint32 character_id, const std::string& name, uint32 zone_id, uint16 instance_id, const CharacterCorpseEntry& c, const glm::vec4& position, uint32 guild_consent_id);

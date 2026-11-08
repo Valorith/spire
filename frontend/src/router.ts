@@ -382,6 +382,11 @@ const router = new Router({
           meta: {title: "Player Operations"},
         },
         {
+          path: 'player-support',
+          component: () => import('./views/admin/player-support/PlayerSupport.vue'),
+          meta: {title: "Player Support"},
+        },
+        {
           path: 'inventory-keyring',
           component: () => import('./views/admin/inventory-keyring/InventoryKeyringEditor.vue'),
           meta: {title: "Inventory & Keyring"},

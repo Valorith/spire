@@ -540,6 +540,7 @@ export default {
       adminNavs: [
         { label: "Server Admin", labelIcon: "ra ra-eye-shield mr-1", to: ROUTE.ADMIN_ROOT, exact: true },
         { label: "Players Online", labelIcon: "ra ra-double-team mr-1", to: ROUTE.ADMIN_PLAYERS_ONLINE },
+        { label: "Player Support", labelIcon: "fe fe-inbox mr-1", to: ROUTE.ADMIN_PLAYER_SUPPORT },
         {
           label: "Player Operations",
           labelIcon: "ra ra-player mr-1",

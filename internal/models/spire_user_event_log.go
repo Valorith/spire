@@ -11,6 +11,9 @@ type UserEventLog struct {
 	EventName                  string                    `json:"event_name" db:"event_name" gorm:"index:server_database_connection_id_event"`
 	Data                       string                    `json:"data" db:"data"`
 	CreatedAt                  time.Time                 `json:"created_at" gorm:"Column:created_at"`
+	SupportCaseID              *uint                     `json:"-" gorm:"index"`
+	SupportDeliveryKey         *string                   `json:"-" gorm:"size:96;uniqueIndex"`
+	SupportDeliveryState       string                    `json:"-" gorm:"size:16"`
 	ServerDatabaseConnection   *ServerDatabaseConnection `json:"database_connection,omitempty" gorm:"foreignKey:ServerDatabaseConnectionId;association_foreignkey:Id"`
 	User                       *User                     `json:"user,omitempty" gorm:"foreignKey:ID;references:UserId"`
 }

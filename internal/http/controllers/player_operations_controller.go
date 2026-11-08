@@ -890,10 +890,16 @@ func (p *PlayerOperationsController) relocateCharacter(c echo.Context) error {
 		if current.ZoneID != request.ExpectedZoneID {
 			return playerOperationsConflict("Character location changed; refresh before moving")
 		}
-		return tx.Table("character_data").Where("id = ?", id).Updates(map[string]interface{}{
+		if err := tx.Table("character_data").Where("id = ?", id).Updates(map[string]interface{}{
 			"zone_id": request.ZoneID, "zone_instance": 0,
 			"x": x, "y": y, "z": z, "heading": heading,
-		}).Error
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Exec(
+			"INSERT INTO data_buckets (`key`, `value`, expires, character_id) VALUES ('spire:character-move-notice', '1', 0, ?) "+
+				"ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), expires = VALUES(expires)", id,
+		).Error
 	}); err != nil {
 		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Character", err)

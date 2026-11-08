@@ -874,47 +874,7 @@
       </div>
     </b-modal>
 
-    <b-modal
-      ref="itemLookupModal"
-      modal-class="mail-parcels-editor-modal item-lookup-modal"
-      title="Choose item"
-      hide-footer
-      @shown="focusItemLookup"
-      @hidden="resetItemLookup"
-    >
-      <div class="spire-editor-search">
-        <i class="fa fa-search"></i>
-        <input
-          id="mail-parcels-item-lookup"
-          v-model="itemSearch"
-          class="form-control form-control-sm"
-          :placeholder="itemLookup.scope.indexOf('augment') >= 0 ? 'Search augment name or exact item ID…' : 'Search item name or exact ID…'"
-          @input="queueItemSearch"
-        >
-      </div>
-      <div v-if="itemLookupCanClear" class="item-lookup-clear">
-        <button type="button" @click="clearItemLookupTarget"><i class="fa fa-times mr-1"></i>Clear this augment slot</button>
-      </div>
-      <div v-if="searchingItems" class="lookup-state"><i class="fa fa-spinner fa-spin mr-1"></i>Searching items…</div>
-      <div v-else-if="itemResults.length" class="item-lookup-results">
-        <button v-for="item in itemResults" :key="'lookup-item-' + item.id" type="button" @click="selectLookupItem(item)">
-          <span class="item-lookup-results__icon">
-            <span v-if="item.icon" :class="'item-' + item.icon + '-sm'"></span>
-            <i v-else class="ra ra-wooden-box"></i>
-          </span>
-          <span>
-            <strong>{{ item.name }}</strong>
-            <small>
-              #{{ item.id }} · {{ item.augment_type ? 'Augment type ' + item.augment_type : (item.bag_slots ? item.bag_slots + '-slot container' : 'Item') }}
-              · {{ item.no_drop === 0 ? 'No-drop' : 'Droppable' }}
-            </small>
-          </span>
-          <i class="fa fa-chevron-right"></i>
-        </button>
-      </div>
-      <div v-else-if="itemSearchComplete" class="lookup-state">No matching items.</div>
-      <div v-else class="lookup-state">Start typing to search the live item catalog.</div>
-    </b-modal>
+    <mail-parcels-item-lookup ref="itemLookup" @selected="selectLookupItem" />
 
     <b-modal
       ref="contentModal"
@@ -1219,243 +1179,43 @@
       </div>
     </b-modal>
 
-    <b-modal
-      ref="gmParcelModal"
-      modal-class="mail-parcels-editor-modal gm-delivery-modal"
-      title="GM Send Parcels"
-      size="xl"
-      hide-footer
-      @hidden="resetGMParcelComposer"
-    >
-      <div class="gm-workflow-steps" aria-label="GM parcel workflow">
-        <span :class="{ active: gmParcelDraft.step === 'compose' }"><b>1</b> Compose</span>
-        <span :class="{ active: gmParcelDraft.step === 'review' }"><b>2</b> Review</span>
-        <span :class="{ active: gmParcelDraft.step === 'result' }"><b>3</b> Result</span>
-      </div>
-
-      <template v-if="gmParcelDraft.step === 'compose'">
-        <div class="gm-parcel-rule">
-          <i class="ra ra-wooden-box"></i>
-          <span>
-            <strong>One selected item creates one parcel message</strong>
-            <small>A batch of {{ gmParcelDraft.items.length }} item{{ gmParcelDraft.items.length === 1 ? '' : 's' }} will reserve and create {{ gmParcelDraft.items.length }} separate parcel{{ gmParcelDraft.items.length === 1 ? '' : 's' }} atomically.</small>
-          </span>
-        </div>
-
-        <div class="spire-editor-grid spire-editor-grid--two mt-3">
-          <div class="gm-recipient-builder">
-            <div class="spire-editor-field">
-              <label for="gm-parcel-character-search">Recipient character</label>
-              <div class="spire-editor-search">
-                <i class="fa fa-search"></i>
-                <input
-                  id="gm-parcel-character-search"
-                  v-model="gmCharacterSearch"
-                  class="form-control form-control-sm"
-                  placeholder="Search character name or exact ID…"
-                  @input="queueGMCharacterSearch('parcel')"
-                >
-              </div>
-            </div>
-            <div v-if="gmCharacterResults.length" class="reference-results">
-              <button
-                v-for="character in gmCharacterResults"
-                :key="'gm-parcel-character-' + character.id"
-                type="button"
-                @click="selectGMParcelRecipient(character)"
+    <gm-parcel-composer ref="gmParcelComposer" :recipient="gmParcelRecipient" @close="resetGMParcelComposer" @sent="refreshParcelDelivery">
+      <template #recipient>
+        <div v-if="!gmParcelRecipient" class="gm-recipient-builder">
+          <div class="spire-editor-field">
+            <label for="gm-parcel-character-search">Recipient character</label>
+            <div class="spire-editor-search">
+              <i class="fa fa-search"></i>
+              <input
+                id="gm-parcel-character-search"
+                v-model="gmCharacterSearch"
+                class="form-control form-control-sm"
+                placeholder="Search character name or exact ID…"
+                @input="queueGMCharacterSearch('parcel')"
               >
-                <span><strong>{{ character.name }}</strong><small>Level {{ character.level }} · Character #{{ character.id }}</small></span>
-                <span>{{ character.parcel_count }}/{{ summary.parcel_capacity }} parcels</span>
-              </button>
-            </div>
-            <div v-if="gmParcelDraft.recipient" class="selected-reference-card">
-              <span class="selected-reference-card__icon"><i class="ra ra-player"></i></span>
-              <span>
-                <strong>{{ gmParcelDraft.recipient.name }}</strong>
-                <small>Character #{{ gmParcelDraft.recipient.id }} · {{ gmParcelDraft.recipient.parcel_count || 0 }}/{{ summary.parcel_capacity }} slots used</small>
-              </span>
-              <button type="button" aria-label="Change parcel recipient" @click="focusGMCharacterSearch">
-                <i class="fa fa-pencil"></i>
-              </button>
             </div>
           </div>
-          <div class="spire-editor-grid spire-editor-grid--two">
-            <div class="spire-editor-field">
-              <label for="gm-parcel-from">Sender name</label>
-              <input id="gm-parcel-from" v-model="gmParcelDraft.from_name" class="form-control form-control-sm" maxlength="64" placeholder="Server Staff">
-            </div>
-            <div class="spire-editor-field">
-              <label for="gm-parcel-sent-at">Sent at</label>
-              <input id="gm-parcel-sent-at" v-model="gmParcelDraft.sent_at" class="form-control form-control-sm" type="datetime-local" step="1">
-            </div>
-            <div class="spire-editor-field spire-editor-grid-span">
-              <label for="gm-parcel-note">Parcel note</label>
-              <textarea id="gm-parcel-note" v-model="gmParcelDraft.note" class="form-control" rows="3" maxlength="1024" placeholder="Player-visible delivery context…"></textarea>
-            </div>
-          </div>
-        </div>
-
-        <div class="gm-parcel-lines">
-          <div class="gm-parcel-lines__heading">
-            <div><span class="context-label">Parcel messages</span><strong>Items to deliver</strong></div>
-            <b-button size="sm" variant="outline-warning" :disabled="gmParcelDraft.items.length >= 20" @click="addGMParcelLine">
-              <i class="fa fa-plus mr-1"></i>Add parcel
-            </b-button>
-          </div>
-          <article v-for="(line, lineIndex) in gmParcelDraft.items" :key="line.client_key" class="gm-parcel-line">
-            <div class="gm-parcel-line__number">{{ lineIndex + 1 }}</div>
-            <div class="gm-parcel-line__main">
-              <button class="item-selector" type="button" @click="openItemLookup('gm-parcel-item', -1, lineIndex)">
-                <span class="item-selector__icon">
-                  <span v-if="line.item && line.item.icon" :class="'item-' + line.item.icon"></span>
-                  <i v-else class="ra ra-wooden-box"></i>
-                </span>
-                <span>
-                  <strong>{{ line.item ? line.item.name : 'Choose an item' }}</strong>
-                  <small>{{ line.item ? itemConfigurationSummary(line.item) : 'Search the live item catalog by name or exact ID' }}</small>
-                </span>
-                <i class="fa fa-search"></i>
-              </button>
-              <div class="gm-parcel-line__configuration">
-                <div class="spire-editor-field">
-                  <label :for="'gm-parcel-quantity-' + line.client_key">Quantity</label>
-                  <input
-                    :id="'gm-parcel-quantity-' + line.client_key"
-                    v-model.number="line.quantity"
-                    class="form-control form-control-sm"
-                    type="number"
-                    min="1"
-                    :max="line.item && line.item.stackable && line.item.stack_size > 0 ? line.item.stack_size : 1"
-                    :disabled="Boolean(line.item && !line.item.stackable)"
-                  >
-                </div>
-              </div>
-              <div v-if="line.item && gmParcelSocketOptions(line).length" class="gm-parcel-augments">
-                <span class="context-label">Compatible augments</span>
-                <button
-                  v-for="socket in gmParcelSocketOptions(line)"
-                  :key="line.client_key + '-augment-' + socket.index"
-                  type="button"
-                  @click="openItemLookup('gm-parcel-augment', socket.index, lineIndex)"
-                >
-                  <b>{{ socket.index + 1 }}</b>
-                  <span><strong>{{ line.augment_refs[socket.index] ? line.augment_refs[socket.index].name : 'Empty socket' }}</strong><small>Type {{ socket.type }}</small></span>
-                  <i class="fa fa-chevron-right"></i>
-                </button>
-              </div>
-            </div>
+          <div v-if="gmCharacterResults.length" class="reference-results">
             <button
-              class="gm-parcel-line__remove"
+              v-for="character in gmCharacterResults"
+              :key="'gm-parcel-character-' + character.id"
               type="button"
-              :disabled="gmParcelDraft.items.length === 1"
-              :aria-label="'Remove parcel ' + (lineIndex + 1)"
-              @click="removeGMParcelLine(lineIndex)"
-            ><i class="fa fa-trash"></i></button>
-          </article>
-        </div>
-
-        <div class="spire-editor-field mt-3">
-          <label for="gm-parcel-reason">Required audit reason</label>
-          <textarea
-            id="gm-parcel-reason"
-            v-model="gmParcelDraft.reason"
-            class="form-control"
-            rows="2"
-            maxlength="240"
-            placeholder="Ticket, reimbursement, event reward, or support reason…"
-          ></textarea>
-          <span class="spire-editor-field-help">8–240 characters. Recipient, item, slot, quantity, augment, and result IDs are recorded.</span>
-        </div>
-      </template>
-
-      <template v-else-if="gmParcelDraft.step === 'review'">
-        <div class="gm-parcel-rule">
-          <i class="fa fa-database"></i>
-          <span>
-            <strong>{{ gmParcelDraft.items.length }} separate parcel message{{ gmParcelDraft.items.length === 1 ? '' : 's' }} for {{ gmParcelDraft.recipient.name }}</strong>
-            <small>Every item consumes one parcel slot. Capacity and every item/augment are revalidated before any parcel is written.</small>
-          </span>
-        </div>
-        <div class="gm-parcel-review-list">
-          <article v-for="(line, index) in gmParcelDraft.items" :key="'review-' + line.client_key">
-            <span class="gm-parcel-review-list__icon">
-              <span v-if="line.item.icon" :class="'item-' + line.item.icon"></span>
-              <i v-else class="ra ra-wooden-box"></i>
-            </span>
-            <span>
-              <strong>Parcel {{ index + 1 }} · {{ line.item.name }}</strong>
-              <small>
-                Item #{{ line.item.id }} · quantity {{ line.quantity }}
-                <template v-if="line.augment_refs.some(Boolean)"> · {{ line.augment_refs.filter(Boolean).length }} augment{{ line.augment_refs.filter(Boolean).length === 1 ? '' : 's' }}</template>
-              </small>
-            </span>
-            <span class="delivery-status-chip delivery-status-chip--queued"><i class="fa fa-clock-o"></i>Queued after send</span>
-          </article>
-        </div>
-        <div class="gm-confirmation">
-          <div>
-            <i class="fa fa-shield"></i>
-            <span><strong>Confirm atomic parcel delivery</strong><small>No sender inventory is consumed. All parcel messages succeed together or none are created.</small></span>
+              @click="selectGMParcelRecipient(character)"
+            >
+              <span><strong>{{ character.name }}</strong><small>Level {{ character.level }} · Character #{{ character.id }}</small></span>
+              <span>{{ character.parcel_count }}/{{ summary.parcel_capacity }} parcels</span>
+            </button>
           </div>
-          <label for="gm-parcel-confirmation">Type {{ gmParcelExpectedConfirmation }}</label>
-          <input id="gm-parcel-confirmation" v-model="gmParcelDraft.confirmation" class="form-control form-control-sm" autocomplete="off">
+        </div>
+        <div v-else class="gm-parcel-recipient">
+          <i class="ra ra-player" aria-hidden="true"></i>
+          <span>To <strong>{{ gmParcelRecipient.name }}</strong></span>
+          <b-button size="sm" variant="outline-secondary" aria-label="Change parcel recipient" @click="changeGMParcelRecipient">
+            Change
+          </b-button>
         </div>
       </template>
-
-      <div v-else class="gm-delivery-result" role="status">
-        <span class="gm-delivery-result__icon"><i class="fa fa-check"></i></span>
-        <div>
-          <span class="context-label">Delivery complete</span>
-          <h4>{{ gmParcelDraft.result.parcel_count }} separate parcel{{ gmParcelDraft.result.parcel_count === 1 ? '' : 's' }} queued for {{ gmParcelDraft.result.character_name }}</h4>
-          <p>Audit event #{{ gmParcelDraft.result.audit_id }} · The recipient may need to reopen the parcel merchant or relog.</p>
-        </div>
-        <div class="gm-parcel-result-list">
-          <span v-for="delivery in gmParcelDraft.result.deliveries" :key="'result-parcel-' + delivery.parcel.id">
-            <b>#{{ delivery.parcel.id }}</b>{{ delivery.parcel.item_name }} · slot {{ delivery.parcel.slot_id }}
-            · player event #{{ delivery.player_event_log_id }}
-            <em class="delivery-status-chip delivery-status-chip--queued"><i class="fa fa-clock-o"></i>Queued for pickup</em>
-          </span>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <b-button
-          v-if="gmParcelDraft.step === 'compose'"
-          size="sm"
-          variant="outline-secondary"
-          @click="$refs.gmParcelModal.hide()"
-        >Cancel</b-button>
-        <b-button
-          v-if="gmParcelDraft.step === 'review'"
-          size="sm"
-          variant="outline-secondary"
-          :disabled="gmParcelDraft.busy"
-          @click="gmParcelDraft.step = 'compose'"
-        ><i class="fa fa-angle-left mr-1"></i>Back</b-button>
-        <b-button
-          v-if="gmParcelDraft.step === 'compose'"
-          size="sm"
-          variant="outline-warning"
-          :disabled="!canReviewGMParcels"
-          @click="reviewGMParcels"
-        >Review {{ gmParcelDraft.items.length }} parcel{{ gmParcelDraft.items.length === 1 ? '' : 's' }}<i class="fa fa-angle-right ml-1"></i></b-button>
-        <b-button
-          v-if="gmParcelDraft.step === 'review'"
-          size="sm"
-          variant="outline-warning"
-          :disabled="!canSendGMParcels || gmParcelDraft.busy"
-          @click="sendGMParcels"
-        >
-          <i :class="gmParcelDraft.busy ? 'fa fa-spinner fa-spin mr-1' : 'fa fa-paper-plane mr-1'"></i>Send parcels
-        </b-button>
-        <b-button
-          v-if="gmParcelDraft.step === 'result'"
-          size="sm"
-          variant="outline-warning"
-          @click="$refs.gmParcelModal.hide()"
-        >Done</b-button>
-      </div>
-    </b-modal>
+    </gm-parcel-composer>
 
     <transition name="mail-parcels-notification">
       <div
@@ -1474,6 +1234,9 @@
 <script>
   import ContentArea from '../../../components/layout/ContentArea.vue'
   import EqWindow from '../../../components/eq-ui/EQWindow.vue'
+  import GmParcelComposer from './GMParcelComposer.vue'
+  import MailParcelsItemLookup from './MailParcelsItemLookup.vue'
+  import { localDateTimeValue, sqlDateTime } from './delivery-date'
   import { SpireApi } from '../../../app/api/spire-api'
 
   const MAIL_TABS = ['Message', 'Delivery', 'Audit']
@@ -1555,25 +1318,6 @@
     }
   }
 
-  let gmParcelLineSequence = 0
-
-  function emptyGMParcelLine () {
-    gmParcelLineSequence += 1
-    return {
-      client_key: `parcel-${gmParcelLineSequence}`,
-      item_id: 0,
-      item: null,
-      augment_1: 0,
-      augment_2: 0,
-      augment_3: 0,
-      augment_4: 0,
-      augment_5: 0,
-      augment_6: 0,
-      augment_refs: [null, null, null, null, null, null],
-      quantity: 1
-    }
-  }
-
   function emptyGMMailDraft () {
     return {
       audience: 'direct',
@@ -1592,31 +1336,9 @@
     }
   }
 
-  function emptyGMParcelDraft () {
-    return {
-      recipient: null,
-      from_name: 'Server Staff',
-      note: '',
-      sent_at: localDateTimeValue(new Date()),
-      reason: '',
-      confirmation: '',
-      items: [emptyGMParcelLine()],
-      step: 'compose',
-      busy: false,
-      result: null
-    }
-  }
-
-  function localDateTimeValue (date) {
-    const value = date instanceof Date ? date : new Date(date)
-    if (Number.isNaN(value.getTime())) return ''
-    const pad = number => String(number).padStart(2, '0')
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`
-  }
-
   export default {
     name: 'MailParcelsEditor',
-    components: { ContentArea, EqWindow },
+    components: { ContentArea, EqWindow, GmParcelComposer, MailParcelsItemLookup },
     data () {
       const requestedMode = this.$route.query.mode === 'parcels' ? 'parcels' : 'mail'
       const tabs = requestedMode === 'mail' ? MAIL_TABS : PARCEL_TABS
@@ -1676,14 +1398,9 @@
         contentDraft: emptyContent(),
         selectedContentItem: null,
         contentAugmentRefs: [null, null, null, null, null, null],
-        itemLookup: { scope: '', index: -1, lineIndex: -1 },
-        itemSearch: '',
-        itemSearchTimer: null,
-        itemResults: [],
-        searchingItems: false,
-        itemSearchComplete: false,
+        itemLookup: { scope: '', index: -1 },
         gmMailDraft: emptyGMMailDraft(),
-        gmParcelDraft: emptyGMParcelDraft(),
+        gmParcelRecipient: null,
         gmCharacterSearch: '',
         gmCharacterSearchTimer: null,
         gmCharacterResults: [],
@@ -1737,7 +1454,7 @@
           current.timestamp = Math.floor(new Date(this.mailSentAt).getTime() / 1000)
         }
         if (this.mode === 'parcels') {
-          current.sent_date = this.sqlDateTime(this.parcelSentAt)
+          current.sent_date = sqlDateTime(this.parcelSentAt)
         }
         return JSON.stringify(current) !== JSON.stringify(original)
       },
@@ -1791,9 +1508,6 @@
         return Number(this.contentDraft.item_id) > 0 &&
           Number(this.contentDraft.quantity) > 0 &&
           this.contentDraft.reason.trim().length >= 8
-      },
-      itemLookupCanClear () {
-        return this.itemLookup.scope.indexOf('augment') >= 0
       },
       deleteExpectedConfirmation () {
         if (this.deleteKind === 'mail') return `MAIL #${this.editModel ? this.editModel.msg_id : 0}`
@@ -1850,27 +1564,6 @@
       canSendGMMail () {
         return this.canReviewGMMail &&
           this.gmMailDraft.confirmation.trim() === this.gmMailExpectedConfirmation
-      },
-      gmParcelExpectedConfirmation () {
-        if (!this.gmParcelDraft.recipient) return ''
-        const count = this.gmParcelDraft.items.length
-        const noun = count === 1 ? 'PARCEL' : 'PARCELS'
-        return `SEND ${count} ${noun} TO ${this.gmParcelDraft.recipient.name}`
-      },
-      canReviewGMParcels () {
-        if (!this.gmParcelDraft.recipient ||
-          !this.gmParcelDraft.from_name.trim() ||
-          this.gmParcelDraft.reason.trim().length < 8 ||
-          !this.gmParcelDraft.sent_at) return false
-        return this.gmParcelDraft.items.length > 0 && this.gmParcelDraft.items.every(line => {
-          if (!line.item || Number(line.item_id) <= 0 || Number(line.quantity) <= 0) return false
-          if (!Number(line.item.stackable) && Number(line.quantity) !== 1) return false
-          return !Number(line.item.stack_size) || Number(line.quantity) <= Number(line.item.stack_size)
-        })
-      },
-      canSendGMParcels () {
-        return this.canReviewGMParcels &&
-          this.gmParcelDraft.confirmation.trim() === this.gmParcelExpectedConfirmation
       }
     },
     watch: {
@@ -1907,7 +1600,6 @@
       clearTimeout(this.searchTimer)
       clearTimeout(this.characterSearchTimer)
       clearTimeout(this.gmCharacterSearchTimer)
-      clearTimeout(this.itemSearchTimer)
       clearTimeout(this.notification.timer)
     },
     beforeRouteLeave (to, from, next) {
@@ -2054,78 +1746,24 @@
       openGMParcelComposer () {
         this.resetGMParcelComposer()
         this.gmCharacterContext = 'parcel'
-        this.$refs.gmParcelModal.show()
+        this.$refs.gmParcelComposer.open()
       },
       resetGMParcelComposer () {
-        clearTimeout(this.gmCharacterSearchTimer)
-        this.gmParcelDraft = emptyGMParcelDraft()
+        this.gmParcelRecipient = null
         this.resetGMCharacterSearch()
       },
       selectGMParcelRecipient (character) {
-        this.gmParcelDraft.recipient = clone(character)
+        this.gmParcelRecipient = clone(character)
         this.gmCharacterSearch = ''
         this.gmCharacterResults = []
       },
-      addGMParcelLine () {
-        if (this.gmParcelDraft.items.length < 20) this.gmParcelDraft.items.push(emptyGMParcelLine())
+      changeGMParcelRecipient () {
+        this.resetGMParcelComposer()
+        this.focusGMCharacterSearch()
       },
-      removeGMParcelLine (index) {
-        if (this.gmParcelDraft.items.length > 1) this.gmParcelDraft.items.splice(index, 1)
-      },
-      gmParcelSocketOptions (line) {
-        if (!line.item) return []
-        return Array.from({ length: 6 }, (_, index) => ({
-          index,
-          type: Number(line.item[`augment_slot_${index + 1}_type`] || 0)
-        })).filter(socket => socket.type > 0)
-      },
-      itemConfigurationSummary (item) {
-        const details = [`Item #${item.id}`]
-        if (Number(item.stackable)) details.push(`stackable to ${Number(item.stack_size).toLocaleString()}`)
-        else details.push('non-stackable')
-        const sockets = Array.from({ length: 6 }, (_, index) => Number(item[`augment_slot_${index + 1}_type`] || 0)).filter(Boolean)
-        if (sockets.length) details.push(`${sockets.length} augment socket${sockets.length === 1 ? '' : 's'}`)
-        if (Number(item.evolving_level) > 0) details.push('evolving')
-        return details.join(' · ')
-      },
-      reviewGMParcels () {
-        if (!this.canReviewGMParcels) return
-        this.gmParcelDraft.confirmation = ''
-        this.gmParcelDraft.step = 'review'
-      },
-      async sendGMParcels () {
-        if (!this.canSendGMParcels || this.gmParcelDraft.busy) return
-        this.gmParcelDraft.busy = true
-        try {
-          const payload = {
-            character_id: Number(this.gmParcelDraft.recipient.id),
-            from_name: this.gmParcelDraft.from_name.trim(),
-            note: this.gmParcelDraft.note,
-            sent_date: this.sqlDateTime(this.gmParcelDraft.sent_at),
-            reason: this.gmParcelDraft.reason.trim(),
-            confirmation: this.gmParcelDraft.confirmation.trim(),
-            items: this.gmParcelDraft.items.map(line => ({
-              client_key: line.client_key,
-              item_id: Number(line.item_id),
-              augment_1: Number(line.augment_1 || 0),
-              augment_2: Number(line.augment_2 || 0),
-              augment_3: Number(line.augment_3 || 0),
-              augment_4: Number(line.augment_4 || 0),
-              augment_5: Number(line.augment_5 || 0),
-              augment_6: Number(line.augment_6 || 0),
-              quantity: Number(line.quantity)
-            }))
-          }
-          const response = await SpireApi.v1().put('/mail-parcels-editor/parcel/send', payload)
-          this.gmParcelDraft.result = response.data
-          this.gmParcelDraft.step = 'result'
-          await this.loadSummary()
-          if (this.mode === 'parcels') await this.loadDirectory(1)
-        } catch (error) {
-          this.notify(this.apiError(error, 'Could not send GM parcels.'), 'error')
-        } finally {
-          this.gmParcelDraft.busy = false
-        }
+      async refreshParcelDelivery () {
+        await this.loadSummary()
+        if (this.mode === 'parcels') await this.loadDirectory(1)
       },
       async loadSummary () {
         try {
@@ -2268,7 +1906,7 @@
           ? new Date(Number(record.sent_timestamp) * 1000)
           : new Date(String(record.sent_date || '').replace(' ', 'T'))
         this.parcelSentAt = localDateTimeValue(sentInstant)
-        this.editModel.sent_date = this.sqlDateTime(this.parcelSentAt)
+        this.editModel.sent_date = sqlDateTime(this.parcelSentAt)
         this.originalModel = clone(this.editModel)
         this.selectedCharacter = {
           id: Number(record.character_id),
@@ -2371,7 +2009,7 @@
             this.selectedId = Number(response.data.msg_id)
           } else {
             const payload = Object.assign({}, pick(this.editModel, PARCEL_FIELDS), {
-              sent_date: this.sqlDateTime(this.parcelSentAt),
+              sent_date: sqlDateTime(this.parcelSentAt),
               reason: this.operationReason.trim()
             })
             response = this.isCreating
@@ -2453,63 +2091,14 @@
           this.operationBusy = false
         }
       },
-      openItemLookup (scope, index, lineIndex = -1) {
-        this.itemLookup = { scope, index, lineIndex }
-        this.itemSearch = ''
-        this.itemResults = []
-        this.itemSearchComplete = false
-        this.$refs.itemLookupModal.show()
-      },
-      focusItemLookup () {
-        this.$nextTick(() => {
-          const input = document.getElementById('mail-parcels-item-lookup')
-          if (input) input.focus()
-        })
-      },
-      resetItemLookup () {
-        clearTimeout(this.itemSearchTimer)
-        this.itemLookup = { scope: '', index: -1, lineIndex: -1 }
-        this.itemSearch = ''
-        this.itemResults = []
-        this.itemSearchComplete = false
-      },
-      queueItemSearch () {
-        clearTimeout(this.itemSearchTimer)
-        this.itemSearchTimer = setTimeout(() => this.searchItems(), 250)
-      },
-      async searchItems () {
-        if (!this.itemSearch.trim()) {
-          this.itemResults = []
-          this.itemSearchComplete = false
-          return
-        }
-        this.searchingItems = true
-        try {
-          const params = { q: this.itemSearch.trim() }
-          if (this.itemLookup.scope.indexOf('augment') >= 0) {
-            params.scope = 'augment'
-            if (this.itemLookup.scope === 'gm-parcel-augment') {
-              const line = this.gmParcelDraft.items[this.itemLookup.lineIndex]
-              if (line && line.item) {
-                params.socket_type = Number(line.item[`augment_slot_${this.itemLookup.index + 1}_type`] || 0)
-              }
-            }
-          }
-          const response = await SpireApi.v1().get('/mail-parcels-editor/items', { params })
-          this.itemResults = response.data.data || []
-          this.itemSearchComplete = true
-        } catch (error) {
-          this.itemResults = []
-          this.itemSearchComplete = true
-          this.notify(this.apiError(error, 'Item search failed.'), 'error')
-        } finally {
-          this.searchingItems = false
-        }
+      openItemLookup (scope, index) {
+        this.itemLookup = { scope, index }
+        this.$refs.itemLookup.open(scope.includes('augment'))
       },
       selectLookupItem (item) {
         const scope = this.itemLookup.scope
         const index = this.itemLookup.index
-        const lineIndex = this.itemLookup.lineIndex
+        const itemId = item ? Number(item.id) : 0
         if (scope === 'parcel') {
           this.selectedItem = clone(item)
           this.editModel.item_id = Number(item.id)
@@ -2517,7 +2106,7 @@
           this.editModel.item_icon = Number(item.icon || 0)
         } else if (scope === 'parcel-augment') {
           this.$set(this.augmentRefs, index, clone(item))
-          this.$set(this.editModel, `augment_${index + 1}`, Number(item.id))
+          this.$set(this.editModel, `augment_${index + 1}`, itemId)
         } else if (scope === 'content') {
           this.selectedContentItem = clone(item)
           this.contentDraft.item_id = Number(item.id)
@@ -2525,43 +2114,8 @@
           this.contentDraft.item_icon = Number(item.icon || 0)
         } else if (scope === 'content-augment') {
           this.$set(this.contentAugmentRefs, index, clone(item))
-          this.$set(this.contentDraft, `augment_${index + 1}`, Number(item.id))
-        } else if (scope === 'gm-parcel-item') {
-          const line = this.gmParcelDraft.items[lineIndex]
-          if (!line) return
-          line.item = clone(item)
-          line.item_id = Number(item.id)
-          line.quantity = Number(item.stackable) ? Math.max(1, Math.min(Number(line.quantity) || 1, Number(item.stack_size) || 1)) : 1
-          for (let augmentIndex = 0; augmentIndex < 6; augmentIndex++) {
-            this.$set(line.augment_refs, augmentIndex, null)
-            this.$set(line, `augment_${augmentIndex + 1}`, 0)
-          }
-        } else if (scope === 'gm-parcel-augment') {
-          const line = this.gmParcelDraft.items[lineIndex]
-          if (!line) return
-          this.$set(line.augment_refs, index, clone(item))
-          this.$set(line, `augment_${index + 1}`, Number(item.id))
+          this.$set(this.contentDraft, `augment_${index + 1}`, itemId)
         }
-        this.$refs.itemLookupModal.hide()
-      },
-      clearItemLookupTarget () {
-        const scope = this.itemLookup.scope
-        const index = this.itemLookup.index
-        const lineIndex = this.itemLookup.lineIndex
-        if (scope === 'parcel-augment') {
-          this.$set(this.augmentRefs, index, null)
-          this.$set(this.editModel, `augment_${index + 1}`, 0)
-        } else if (scope === 'content-augment') {
-          this.$set(this.contentAugmentRefs, index, null)
-          this.$set(this.contentDraft, `augment_${index + 1}`, 0)
-        } else if (scope === 'gm-parcel-augment') {
-          const line = this.gmParcelDraft.items[lineIndex]
-          if (line) {
-            this.$set(line.augment_refs, index, null)
-            this.$set(line, `augment_${index + 1}`, 0)
-          }
-        }
-        this.$refs.itemLookupModal.hide()
       },
       async resolveItem (id) {
         if (!Number(id)) return null
@@ -2705,12 +2259,6 @@
         if (Number(timestamp) > 0) return this.formatDateTime(new Date(Number(timestamp) * 1000))
         if (!value) return 'No sent time'
         return this.formatDateTime(String(value).replace(' ', 'T'))
-      },
-      sqlDateTime (value) {
-        if (!value) return ''
-        const date = new Date(value)
-        if (Number.isNaN(date.getTime())) return ''
-        return date.toISOString()
       },
       openItemEditor (id) {
         if (Number(id) > 0) this.$router.push(`/item/${id}`)
@@ -2941,8 +2489,7 @@
     grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.2fr);
   }
 
-  .reference-results,
-  .item-lookup-results {
+  .reference-results {
     background: rgba(0, 0, 0, 0.75);
     border: 1px solid rgba(210, 170, 69, 0.35);
     box-shadow: 0 14px 28px rgba(0, 0, 0, 0.42);
@@ -2952,8 +2499,7 @@
     z-index: 4;
   }
 
-  .reference-results > button,
-  .item-lookup-results > button {
+  .reference-results > button {
     align-items: center;
     background: rgba(8, 16, 23, 0.94);
     border: 0;
@@ -2968,68 +2514,19 @@
     width: 100%;
   }
 
-  .reference-results > button:hover,
-  .item-lookup-results > button:hover {
+  .reference-results > button:hover {
     background: rgba(210, 170, 69, 0.14);
   }
 
   .reference-results strong,
-  .reference-results small,
-  .item-lookup-results strong,
-  .item-lookup-results small {
+  .reference-results small {
     display: block;
   }
 
-  .reference-results small,
-  .item-lookup-results small {
+  .reference-results small {
     color: #7d8993;
     font-size: 8px;
     margin-top: 2px;
-  }
-
-  .selected-reference-card {
-    align-items: center;
-    background: rgba(8, 17, 24, 0.85);
-    border: 1px solid rgba(210, 170, 69, 0.32);
-    display: grid;
-    gap: 9px;
-    grid-template-columns: 34px minmax(0, 1fr) auto;
-    margin-top: 8px;
-    padding: 8px;
-  }
-
-  .selected-reference-card__icon {
-    align-items: center;
-    background: rgba(210, 170, 69, 0.12);
-    color: #e0ba51;
-    display: flex;
-    height: 34px;
-    justify-content: center;
-    width: 34px;
-  }
-
-  .selected-reference-card strong,
-  .selected-reference-card small {
-    display: block;
-  }
-
-  .selected-reference-card strong {
-    color: #e2e4e6;
-    font-size: 11px;
-  }
-
-  .selected-reference-card small {
-    color: #7d8993;
-    font-size: 8px;
-    margin-top: 2px;
-  }
-
-  .selected-reference-card > button {
-    background: transparent;
-    border: 0;
-    color: #c9a84a;
-    height: 30px;
-    width: 30px;
   }
 
   .status-editor {
@@ -3087,55 +2584,6 @@
   .status-editor__options button.legacy {
     border-color: rgba(194, 118, 55, 0.56);
     color: #e7a766;
-  }
-
-  .item-selector {
-    align-items: center;
-    background: rgba(5, 13, 20, 0.84);
-    border: 1px solid rgba(178, 191, 204, 0.25);
-    color: #cdd2d6;
-    display: grid;
-    gap: 10px;
-    grid-template-columns: 40px minmax(0, 1fr) auto;
-    min-height: 50px;
-    padding: 7px 9px;
-    text-align: left;
-    width: 100%;
-  }
-
-  .item-selector:hover {
-    border-color: rgba(210, 170, 69, 0.58);
-  }
-
-  .item-selector__icon,
-  .item-lookup-results__icon {
-    align-items: center;
-    background: rgba(210, 170, 69, 0.1);
-    border: 1px solid rgba(210, 170, 69, 0.22);
-    display: flex;
-    height: 38px;
-    justify-content: center;
-    width: 38px;
-  }
-
-  .item-selector strong,
-  .item-selector small {
-    display: block;
-  }
-
-  .item-selector strong {
-    color: #e1e4e6;
-    font-size: 11px;
-  }
-
-  .item-selector small {
-    color: #7e8992;
-    font-size: 8px;
-    margin-top: 2px;
-  }
-
-  .item-selector > i {
-    color: #c9a84b;
   }
 
   .parcel-item-selection {
@@ -3607,49 +3055,8 @@
     color: #e35c5c;
   }
 
-  .modal-actions {
-    display: flex;
-    gap: 7px;
-    justify-content: flex-end;
-    margin-top: 16px;
-  }
-
-  .lookup-state {
-    color: #89949d;
-    font-size: 9px;
-    min-height: 120px;
-    padding: 34px 10px;
-    text-align: center;
-  }
-
-  .item-lookup-results {
-    margin-top: 9px;
-  }
-
-  .item-lookup-results > button {
-    display: grid;
-    gap: 9px;
-    grid-template-columns: 38px minmax(0, 1fr) auto;
-  }
-
-  .item-lookup-clear {
-    margin-top: 7px;
-    text-align: right;
-  }
-
-  .item-lookup-clear button {
-    background: transparent;
-    border: 0;
-    color: #bf9d44;
-    font-size: 8px;
-  }
-
   .augment-section--modal {
     margin-top: 14px;
-  }
-
-  .spire-editor-grid-span {
-    grid-column: 1 / -1;
   }
 
   .context-label {
@@ -3791,8 +3198,7 @@
     padding: 8px;
   }
 
-  .gm-broadcast-preview,
-  .gm-parcel-rule {
+  .gm-broadcast-preview {
     align-items: center;
     background: rgba(210, 170, 69, 0.08);
     border: 1px solid rgba(210, 170, 69, 0.29);
@@ -3804,33 +3210,23 @@
     padding: 8px 10px;
   }
 
-  .gm-parcel-rule {
-    grid-template-columns: 34px minmax(0, 1fr);
-    margin-top: 0;
-  }
-
-  .gm-broadcast-preview > i,
-  .gm-parcel-rule > i {
+  .gm-broadcast-preview > i {
     color: #d7b64f;
     font-size: 18px;
     text-align: center;
   }
 
   .gm-broadcast-preview strong,
-  .gm-broadcast-preview small,
-  .gm-parcel-rule strong,
-  .gm-parcel-rule small {
+  .gm-broadcast-preview small {
     display: block;
   }
 
-  .gm-broadcast-preview strong,
-  .gm-parcel-rule strong {
+  .gm-broadcast-preview strong {
     color: #e1c46b;
     font-size: 10px;
   }
 
-  .gm-broadcast-preview small,
-  .gm-parcel-rule small {
+  .gm-broadcast-preview small {
     color: #858f98;
     font-size: 8px;
     margin-top: 2px;
@@ -3871,16 +3267,14 @@
     padding: 13px;
   }
 
-  .gm-review-card h4,
-  .gm-delivery-result h4 {
+  .gm-review-card h4 {
     color: #e4c86f;
     font-family: Georgia, "Times New Roman", serif;
     font-size: 15px;
     margin: 4px 0;
   }
 
-  .gm-review-card p,
-  .gm-delivery-result p {
+  .gm-review-card p {
     color: #89949c;
     font-size: 8px;
     margin: 0;
@@ -3891,250 +3285,13 @@
     min-height: 150px;
   }
 
-  .gm-confirmation {
-    background: rgba(210, 170, 69, 0.07);
-    border: 1px solid rgba(210, 170, 69, 0.28);
-    margin-top: 12px;
-    padding: 11px;
-  }
-
   .gm-confirmation--danger {
     background: rgba(143, 38, 38, 0.1);
     border-color: rgba(217, 70, 70, 0.4);
   }
 
-  .gm-confirmation > div {
-    align-items: center;
-    display: grid;
-    gap: 9px;
-    grid-template-columns: 28px minmax(0, 1fr);
-    margin-bottom: 9px;
-  }
-
-  .gm-confirmation > div > i {
-    color: #deb957;
-    font-size: 17px;
-    text-align: center;
-  }
-
   .gm-confirmation--danger > div > i {
     color: #e36f6f;
-  }
-
-  .gm-confirmation strong,
-  .gm-confirmation small {
-    display: block;
-  }
-
-  .gm-confirmation strong {
-    color: #dce0e2;
-    font-size: 10px;
-  }
-
-  .gm-confirmation small {
-    color: #818c95;
-    font-size: 8px;
-    margin-top: 2px;
-  }
-
-  .gm-confirmation label {
-    color: #cdb058;
-    font-size: 8px;
-    margin-bottom: 4px;
-  }
-
-  .gm-delivery-result {
-    align-items: center;
-    background:
-      radial-gradient(circle at 12% 20%, rgba(67, 168, 113, 0.13), transparent 34%),
-      rgba(5, 13, 20, 0.82);
-    border: 1px solid rgba(92, 191, 136, 0.34);
-    display: grid;
-    gap: 13px;
-    grid-template-columns: 54px minmax(0, 1fr);
-    min-height: 190px;
-    padding: 18px;
-  }
-
-  .gm-delivery-result__icon {
-    align-items: center;
-    border: 1px solid rgba(92, 191, 136, 0.45);
-    color: #71d4a2;
-    display: flex;
-    font-size: 22px;
-    height: 52px;
-    justify-content: center;
-    width: 52px;
-  }
-
-  .gm-parcel-lines {
-    border-top: 1px solid rgba(178, 191, 204, 0.14);
-    margin-top: 16px;
-    padding-top: 12px;
-  }
-
-  .gm-parcel-lines__heading {
-    align-items: flex-end;
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 7px;
-  }
-
-  .gm-parcel-lines__heading strong {
-    color: #d9dde0;
-    display: block;
-    font-size: 10px;
-  }
-
-  .gm-parcel-line {
-    align-items: start;
-    background: rgba(5, 13, 20, 0.75);
-    border: 1px solid rgba(178, 191, 204, 0.14);
-    display: grid;
-    gap: 8px;
-    grid-template-columns: 25px minmax(0, 1fr) 28px;
-    margin-bottom: 6px;
-    padding: 7px;
-  }
-
-  .gm-parcel-line__number {
-    align-items: center;
-    background: rgba(210, 170, 69, 0.12);
-    color: #d9b84f;
-    display: flex;
-    font-size: 9px;
-    height: 25px;
-    justify-content: center;
-  }
-
-  .gm-parcel-line__configuration {
-    display: grid;
-    gap: 7px;
-    grid-template-columns: repeat(2, minmax(0, 130px));
-    margin-top: 7px;
-  }
-
-  .gm-parcel-line__remove {
-    background: rgba(128, 37, 37, 0.11);
-    border: 1px solid rgba(214, 76, 76, 0.28);
-    color: #d66565;
-    height: 28px;
-  }
-
-  .gm-parcel-line__remove:disabled {
-    cursor: not-allowed;
-    opacity: 0.35;
-  }
-
-  .gm-parcel-augments {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 7px;
-  }
-
-  .gm-parcel-augments > .context-label {
-    flex-basis: 100%;
-  }
-
-  .gm-parcel-augments > button {
-    align-items: center;
-    background: rgba(0, 0, 0, 0.23);
-    border: 1px solid rgba(210, 170, 69, 0.23);
-    color: #89939b;
-    display: grid;
-    gap: 6px;
-    grid-template-columns: 20px minmax(80px, 1fr) auto;
-    min-width: 150px;
-    padding: 4px;
-    text-align: left;
-  }
-
-  .gm-parcel-augments b {
-    align-items: center;
-    background: rgba(210, 170, 69, 0.12);
-    color: #d8b650;
-    display: flex;
-    height: 20px;
-    justify-content: center;
-  }
-
-  .gm-parcel-augments strong,
-  .gm-parcel-augments small {
-    display: block;
-  }
-
-  .gm-parcel-augments strong {
-    color: #d0d4d7;
-    font-size: 8px;
-  }
-
-  .gm-parcel-augments small {
-    color: #747f88;
-    font-size: 7px;
-  }
-
-  .gm-parcel-review-list,
-  .gm-parcel-result-list {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    margin-top: 10px;
-  }
-
-  .gm-parcel-review-list article {
-    align-items: center;
-    background: rgba(5, 13, 20, 0.76);
-    border: 1px solid rgba(178, 191, 204, 0.14);
-    display: grid;
-    gap: 8px;
-    grid-template-columns: 38px minmax(0, 1fr) auto;
-    padding: 7px;
-  }
-
-  .gm-parcel-review-list__icon {
-    align-items: center;
-    background: rgba(210, 170, 69, 0.1);
-    display: flex;
-    height: 36px;
-    justify-content: center;
-    width: 36px;
-  }
-
-  .gm-parcel-review-list strong,
-  .gm-parcel-review-list small {
-    display: block;
-  }
-
-  .gm-parcel-review-list strong {
-    color: #d7dbde;
-    font-size: 9px;
-  }
-
-  .gm-parcel-review-list small {
-    color: #7b8690;
-    font-size: 7px;
-    margin-top: 2px;
-  }
-
-  .gm-parcel-result-list {
-    grid-column: 1 / -1;
-  }
-
-  .gm-parcel-result-list > span {
-    align-items: center;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(178, 191, 204, 0.13);
-    color: #cdd2d5;
-    display: grid;
-    font-size: 8px;
-    gap: 7px;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    padding: 6px;
-  }
-
-  .gm-parcel-result-list b {
-    color: #d7b64f;
   }
 
   @media (max-width: 1050px) {
@@ -4210,36 +3367,6 @@
     .gm-audience-switch,
     .gm-review-grid {
       grid-template-columns: 1fr;
-    }
-
-    .gm-parcel-line {
-      grid-template-columns: 22px minmax(0, 1fr) 28px;
-    }
-
-    .gm-parcel-line__configuration {
-      grid-template-columns: 1fr;
-    }
-
-    .gm-parcel-review-list article,
-    .gm-parcel-result-list > span {
-      grid-template-columns: 36px minmax(0, 1fr);
-    }
-
-    .gm-parcel-review-list .delivery-status-chip,
-    .gm-parcel-result-list .delivery-status-chip {
-      grid-column: 2;
-    }
-
-    .gm-delivery-result {
-      align-items: start;
-      grid-template-columns: 42px minmax(0, 1fr);
-      padding: 12px;
-    }
-
-    .gm-delivery-result__icon {
-      font-size: 17px;
-      height: 40px;
-      width: 40px;
     }
   }
 </style>

@@ -216,7 +216,15 @@ type WorldClientList struct {
 }
 
 func (c *Client) GetWorldClientList() (WorldClientList, error) {
-	o, err := c.GetTelnetClient().Command(telnet.CommandConfig{Command: "api get_client_list", EnforceJson: true})
+	return ReadWorldClientList(c.GetTelnetClient(), false)
+}
+
+func ReadWorldClientList(client *telnet.Client, full bool) (WorldClientList, error) {
+	command := "api get_client_list"
+	if full {
+		command += " full"
+	}
+	o, err := client.Command(telnet.CommandConfig{Command: command, EnforceJson: true})
 	if err != nil {
 		return WorldClientList{}, err
 	}

@@ -12,8 +12,12 @@ import (
 
 	"github.com/EQEmuTools/spire/internal/auditlog"
 	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
+	"github.com/EQEmuTools/spire/internal/http/request"
 	"github.com/EQEmuTools/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/models"
+	"github.com/EQEmuTools/spire/internal/playersupport"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -53,6 +57,8 @@ const (
 type MailParcelsEditorController struct {
 	db       *database.Resolver
 	auditLog *auditlog.UserEvent
+	config   *eqemuserverconfig.Config
+	log      *logger.AppLogger
 }
 
 type mailParcelsPage struct {
@@ -359,8 +365,10 @@ func (e mailParcelsConflictError) Error() string {
 func NewMailParcelsEditorController(
 	db *database.Resolver,
 	auditLog *auditlog.UserEvent,
+	config *eqemuserverconfig.Config,
+	log *logger.AppLogger,
 ) *MailParcelsEditorController {
-	return &MailParcelsEditorController{db: db, auditLog: auditLog}
+	return &MailParcelsEditorController{db: db, auditLog: auditLog, config: config, log: log}
 }
 
 func (m *MailParcelsEditorController) Routes() []*routes.Route {
@@ -528,6 +536,10 @@ func (m *MailParcelsEditorController) sendDirectMail(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid GM mail payload: %v", err)})
 	}
+	return m.deliverDirectMail(c, nil, input)
+}
+
+func (m *MailParcelsEditorController) deliverDirectMail(c echo.Context, db *gorm.DB, input gmMailSendInput) error {
 	if err := validateGMMailInput(input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
@@ -541,13 +553,20 @@ func (m *MailParcelsEditorController) sendDirectMail(c echo.Context) error {
 		})
 	}
 
-	db := m.db.Get(models.Mail{}, c)
+	if db == nil {
+		db = m.db.Get(models.Mail{}, c)
+	}
 	result := gmMailSendResult{Audience: "direct", Recipients: []mailParcelsCharacterReference{}}
 	var auditID uint
 	err := db.Transaction(func(tx *gorm.DB) error {
 		recipients, err := loadGMDirectRecipients(tx, characterIDs)
 		if err != nil {
 			return err
+		}
+		if delivery := supportDeliveryFromContext(c); delivery != nil {
+			if len(recipients) != 1 || recipients[0].Name != delivery.Character || recipients[0].AccountID != delivery.AccountID {
+				return mailParcelsConflict("The petition character has changed")
+			}
 		}
 		expected := gmMailConfirmation("direct", len(recipients))
 		if strings.TrimSpace(input.Confirmation) != expected {
@@ -562,8 +581,7 @@ func (m *MailParcelsEditorController) sendDirectMail(c echo.Context) error {
 		result.AuditID = auditID
 		return err
 	})
-	if err != nil {
-		m.discardAudit(c, auditID)
+	if err := m.finishDelivery(c, auditID, err); err != nil {
 		return mailParcelsMutationError(c, err, "GM direct message")
 	}
 	return c.JSON(http.StatusCreated, result)
@@ -851,6 +869,10 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": fmt.Sprintf("Invalid GM parcel payload: %v", err)})
 	}
+	return m.deliverGMParcels(c, nil, nil, input)
+}
+
+func (m *MailParcelsEditorController) deliverGMParcels(c echo.Context, db, itemDB *gorm.DB, input gmParcelSendInput) error {
 	normalizedSentDate, err := normalizeParcelSentDate(input.SentDate)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
@@ -860,14 +882,22 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 
-	db := m.db.Get(models.CharacterParcel{}, c)
-	itemDB := m.db.Get(models.Item{}, c)
+	if db == nil {
+		db = m.db.Get(models.CharacterParcel{}, c)
+		itemDB = m.db.Get(models.Item{}, c)
+	}
 	result := gmParcelSendResult{Deliveries: []gmParcelSendDelivery{}}
+	recordIDs := make([]uint, 0, len(input.Items))
 	var auditID uint
 	err = db.Transaction(func(tx *gorm.DB) error {
 		character, err := loadLockedGMRecipient(tx, input.CharacterID)
 		if err != nil {
 			return err
+		}
+		if delivery := supportDeliveryFromContext(c); delivery != nil {
+			if character.Name != delivery.Character || character.AccountID != delivery.AccountID {
+				return mailParcelsConflict("The petition character has changed")
+			}
 		}
 		expected := gmParcelConfirmation(len(input.Items), character.Name)
 		if strings.TrimSpace(input.Confirmation) != expected {
@@ -890,7 +920,6 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 		if sentDate == "" {
 			sentDate = time.Now().Format(mailParcelsSQLDateTime)
 		}
-		recordIDs := make([]uint, 0, len(input.Items))
 		itemMetadata := make([]map[string]interface{}, 0, len(input.Items))
 		for index, line := range input.Items {
 			item, err := ensureParcelItemChanges(itemDB, line.ItemID, gmParcelItemAugments(line), 0, nil)
@@ -969,9 +998,11 @@ func (m *MailParcelsEditorController) sendGMParcels(c echo.Context) error {
 		result.AuditID = auditID
 		return err
 	})
-	if err != nil {
-		m.discardAudit(c, auditID)
+	if err := m.finishDelivery(c, auditID, err); err != nil {
 		return mailParcelsMutationError(c, err, "GM parcel batch")
+	}
+	if selected := worldDatabase(db); selected != "" && selected == worldDatabase(m.db.GetEqemuDb()) {
+		playersupport.NotifyParcelDelivery(m.config, m.log, result.CharacterID, recordIDs)
 	}
 	return c.JSON(http.StatusCreated, result)
 }
@@ -2319,6 +2350,17 @@ func (m *MailParcelsEditorController) writeAudit(
 	if err != nil {
 		return 0, err
 	}
+	if delivery := supportDeliveryFromContext(c); delivery != nil {
+		event := models.UserEventLog{
+			UserId: request.GetUser(c).ID, ServerDatabaseConnectionId: delivery.ConnectionID,
+			EventName: eventName, Data: string(data), SupportCaseID: &delivery.CaseID,
+			SupportDeliveryKey: &delivery.Key, SupportDeliveryState: "pending",
+		}
+		if err := m.db.GetSpireDb().WithContext(c.Request().Context()).Create(&event).Error; err != nil {
+			return 0, mailParcelsConflict("Could not record this delivery. Refresh the case before retrying.")
+		}
+		return event.ID, nil
+	}
 	id, err := m.auditLog.LogEditorEvent(c, eventName, string(data))
 	if err != nil {
 		return 0, fmt.Errorf("could not persist the required audit record: %w", err)
@@ -2327,6 +2369,25 @@ func (m *MailParcelsEditorController) writeAudit(
 		return 0, errors.New("could not persist the required audit record")
 	}
 	return id, nil
+}
+
+func (m *MailParcelsEditorController) finishDelivery(c echo.Context, auditID uint, err error) error {
+	if supportDeliveryFromContext(c) != nil && auditID > 0 {
+		// Once the audit is persisted a commit error can be ambiguous. Retain
+		// the idempotency key and surface the receipt for manual verification.
+		if err == nil {
+			result := m.db.GetSpireDb().Model(&models.UserEventLog{}).
+				Where("id = ?", auditID).Update("support_delivery_state", "sent")
+			if result.Error == nil && result.RowsAffected == 1 {
+				return nil
+			}
+		}
+		return mailParcelsConflict("Delivery needs verification. Check the case activity before sending again.")
+	}
+	if err != nil {
+		m.discardAudit(c, auditID)
+	}
+	return err
 }
 
 func (m *MailParcelsEditorController) discardAudit(c echo.Context, id uint) {

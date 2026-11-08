@@ -1,0 +1,419 @@
+package playersupport
+
+import (
+	"bufio"
+	"context"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/EQEmuTools/spire/internal/eqemuserver"
+	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
+	"github.com/EQEmuTools/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/telnet"
+)
+
+const Identity = "GameMaster"
+const MaxMessage = 200
+const framePrefix = "SPIRE_SUPPORT "
+const protocolVersion = 2
+
+type TellDecision string
+
+const (
+	TellAccepted    TellDecision = "accepted"
+	TellNoPetition  TellDecision = "no_petition"
+	TellMessagesOff TellDecision = "messages_off"
+	TellUnavailable TellDecision = "unavailable"
+	TellInvalid     TellDecision = "invalid"
+)
+
+var inboundRequestID = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
+
+var ErrUnavailable = errors.New("Live chat unavailable")
+var ErrDeliveryUnknown = errors.New("World did not confirm delivery")
+
+type Frame struct {
+	Kind        string `json:"kind"`
+	Protocol    int    `json:"protocol"`
+	RequestID   string `json:"request_id"`
+	AccountID   uint   `json:"account_id"`
+	CharacterID uint   `json:"character_id"`
+	Character   string `json:"character"`
+	Text        string `json:"text"`
+}
+
+type Presence struct {
+	Known      bool
+	Accounts   map[uint]bool
+	Characters map[uint]bool
+}
+
+type World struct {
+	address func() string
+	logger  *logger.AppLogger
+	receive func(Frame) TellDecision
+
+	rosterMu     sync.Mutex
+	rosterAddr   string
+	rosterClient *telnet.Client
+	roster       Presence
+	rosterUntil  time.Time
+
+	mu          sync.Mutex
+	conn        *session
+	retryAfter  time.Time
+	maintaining bool
+	change      chan struct{}
+}
+
+func NewWorld(config *eqemuserverconfig.Config, log *logger.AppLogger, receive func(Frame) TellDecision) *World {
+	return &World{address: func() string {
+		return loopbackConsoleAddress(config)
+	}, logger: log, receive: receive, change: make(chan struct{})}
+}
+
+func loopbackConsoleAddress(config *eqemuserverconfig.Config) string {
+	if config == nil || !config.Exists() {
+		return ""
+	}
+	cfg, err := config.Get()
+	if err != nil {
+		return ""
+	}
+	host, port := cfg.Server.World.Telnet.IP, cfg.Server.World.Telnet.Port
+	if host == "" || host == "localhost" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+	if host != "127.0.0.1" {
+		return ""
+	}
+	if port == "" {
+		port = "9000"
+	}
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return ""
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// NotifyParcelDelivery refreshes the online client's parcel queue. The caller
+// has already committed the parcels, so an unavailable World must not turn
+// the send into an error or invite a retry.
+func NotifyParcelDelivery(config *eqemuserverconfig.Config, log *logger.AppLogger, characterID uint, parcelIDs []uint) {
+	address := loopbackConsoleAddress(config)
+	if address == "" || len(parcelIDs) == 0 {
+		return
+	}
+	command := []string{"parcelnotify", strconv.FormatUint(uint64(characterID), 10)}
+	for _, id := range parcelIDs {
+		command = append(command, strconv.FormatUint(uint64(id), 10))
+	}
+	client := telnet.NewClientWithAddress(log, address)
+	defer client.Close()
+	reply, err := client.Command(telnet.CommandConfig{Command: strings.Join(command, " "), AllowEmptyResponse: true})
+	switch reply {
+	case "ok", "offline", "gone":
+	default:
+		log.Debug().Err(err).Uint("character_id", characterID).Msg("World did not confirm parcel notification")
+	}
+}
+
+// Roster shares one short-lived snapshot across queues and browsers.
+func (w *World) Roster() Presence {
+	addr := w.address()
+	if addr == "" {
+		return Presence{}
+	}
+	w.rosterMu.Lock()
+	defer w.rosterMu.Unlock()
+	if addr != w.rosterAddr {
+		if w.rosterClient != nil {
+			w.rosterClient.Close()
+		}
+		w.rosterAddr = addr
+		w.rosterClient = telnet.NewClientWithAddress(w.logger, addr)
+		w.rosterUntil = time.Time{}
+	}
+	if time.Now().Before(w.rosterUntil) {
+		return w.roster
+	}
+	// World only includes login status and tells_off in its full roster.
+	rows, err := eqemuserver.ReadWorldClientList(w.rosterClient, true)
+	w.roster = Presence{}
+	w.rosterUntil = time.Now().Add(8 * time.Second)
+	if err == nil && rows.Method == "get_client_list" {
+		w.roster = presenceFromRoster(rows)
+	}
+	return w.roster
+}
+
+func presenceFromRoster(rows eqemuserver.WorldClientList) Presence {
+	const online, inZone = 2, 5 // CLE_Status in EQEmu.
+	result := Presence{Known: true, Accounts: map[uint]bool{}, Characters: map[uint]bool{}}
+	for _, row := range rows.Data {
+		if row.Online >= online && row.Online <= inZone && row.AccountID > 0 {
+			result.Accounts[uint(row.AccountID)] = true
+			if row.Online == inZone && row.CharacterID > 0 && row.TellsOff == 0 {
+				result.Characters[uint(row.CharacterID)] = true
+			}
+		}
+	}
+	return result
+}
+
+func (w *World) Changes() <-chan struct{} {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.change
+}
+
+func (w *World) Notify() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.notifyLocked()
+}
+
+func (w *World) notifyLocked() {
+	close(w.change)
+	w.change = make(chan struct{})
+}
+
+// Ready negotiates the dedicated console stream when support chat is opened.
+func (w *World) Ready() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.connectLocked() != nil
+}
+
+func (w *World) Resume() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.maintaining {
+		w.maintaining = true
+		go w.maintain()
+	}
+}
+
+func (w *World) connectLocked() *session {
+	addr := w.address()
+	if w.conn != nil {
+		if w.conn.addr == addr {
+			return w.conn
+		}
+		w.conn.Close()
+		w.conn = nil
+	}
+	if addr == "" || time.Now().Before(w.retryAfter) {
+		return nil
+	}
+	w.retryAfter = time.Now().Add(8 * time.Second)
+	conn, err := openSession(addr)
+	if err != nil {
+		return nil
+	}
+	w.conn = conn
+	w.notifyLocked()
+	go w.read(conn)
+	if !w.maintaining {
+		w.maintaining = true
+		go w.maintain()
+	}
+	return conn
+}
+
+func (w *World) maintain() {
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+	for {
+		w.mu.Lock()
+		conn := w.connectLocked()
+		w.mu.Unlock()
+		if conn != nil && conn.write("supportchat ping") != nil {
+			conn.Close()
+		}
+		<-ticker.C
+	}
+}
+
+func (w *World) read(conn *session) {
+	defer func() {
+		conn.Close()
+		close(conn.done)
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		if w.conn == conn {
+			w.conn = nil
+			w.notifyLocked()
+		}
+	}()
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(50 * time.Second))
+		if !conn.scan.Scan() {
+			return
+		}
+		frame, ok := parseFrame(conn.scan.Text())
+		if !ok {
+			continue
+		}
+		switch frame.Kind {
+		case "tell":
+			if !inboundRequestID.MatchString(frame.RequestID) {
+				continue
+			}
+			decision := TellUnavailable
+			if frame.CharacterID != 0 && frame.AccountID != 0 && w.receive != nil {
+				decision = w.receive(frame)
+			}
+			if err := conn.write("supportchat decision " + frame.RequestID + " " + string(decision)); err != nil {
+				return
+			}
+		case "sent", "unreachable":
+			conn.mu.Lock()
+			result := conn.pending[frame.RequestID]
+			conn.mu.Unlock()
+			if result != nil {
+				select {
+				case result <- frame:
+				default:
+				}
+			}
+		}
+	}
+}
+
+func ValidateMessage(text string) bool {
+	if len(text) == 0 || len(text) > MaxMessage {
+		return false
+	}
+	for _, b := range []byte(text) {
+		if b < 32 || b > 126 {
+			return false
+		}
+	}
+	return true
+}
+
+// Send waits for World to accept or reject the tell. A lost acknowledgement is
+// ambiguous, so callers retain the request key and do not replay the tell.
+func (w *World) Send(ctx context.Context, id string, accountID, characterID uint, text string) error {
+	w.mu.Lock()
+	conn := w.connectLocked()
+	w.mu.Unlock()
+	if conn == nil {
+		return ErrUnavailable
+	}
+	result := make(chan Frame, 1)
+	conn.mu.Lock()
+	conn.pending[id] = result
+	conn.mu.Unlock()
+	defer func() {
+		conn.mu.Lock()
+		delete(conn.pending, id)
+		conn.mu.Unlock()
+	}()
+	command := fmt.Sprintf("supportchat send %s %d %d %s", id, accountID, characterID, hex.EncodeToString([]byte(text)))
+	if err := conn.write(command); err != nil {
+		conn.Close()
+		return ErrDeliveryUnknown
+	}
+	timeout := time.NewTimer(3 * time.Second)
+	defer timeout.Stop()
+	var reply Frame
+	select {
+	case reply = <-result:
+	case <-timeout.C:
+	case <-conn.done:
+	case <-ctx.Done():
+	}
+	if reply.Kind == "" {
+		select {
+		case reply = <-result:
+		default:
+			return ErrDeliveryUnknown
+		}
+	}
+	if reply.Kind == "sent" {
+		return nil
+	}
+	return errors.New("Character cannot receive tells right now")
+}
+
+type session struct {
+	net.Conn
+	addr    string
+	scan    *bufio.Scanner
+	done    chan struct{}
+	mu      sync.Mutex
+	pending map[string]chan Frame
+	writeMu sync.Mutex
+}
+
+func openSession(addr string) (*session, error) {
+	socket, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := startSession(addr, socket)
+	if err != nil {
+		socket.Close()
+	}
+	return conn, err
+}
+
+func startSession(addr string, socket net.Conn) (*session, error) {
+	conn := &session{Conn: socket, addr: addr, scan: bufio.NewScanner(socket), done: make(chan struct{}), pending: map[string]chan Frame{}}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	local := false
+	for conn.scan.Scan() {
+		if strings.Contains(conn.scan.Text(), "assuming admin") {
+			local = true
+			break
+		}
+	}
+	if !local {
+		return nil, ErrUnavailable
+	}
+	if err := conn.write("echo off\nsupportchat listen"); err != nil {
+		return nil, err
+	}
+	for conn.scan.Scan() {
+		line := conn.scan.Text()
+		frame, ok := parseFrame(line)
+		if ok && frame.Kind == "ready" {
+			if frame.Protocol != protocolVersion {
+				return nil, ErrUnavailable
+			}
+			return conn, nil
+		}
+		if (ok && frame.Kind == "busy") || strings.Contains(line, "Command not found: supportchat") {
+			break
+		}
+	}
+	return nil, ErrUnavailable
+}
+
+func (s *session) write(command string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_ = s.SetWriteDeadline(time.Now().Add(time.Second))
+	_, err := s.Write([]byte(command + "\n"))
+	return err
+}
+
+func parseFrame(line string) (Frame, bool) {
+	_, body, found := strings.Cut(line, framePrefix)
+	var frame Frame
+	if !found || json.Unmarshal([]byte(body), &frame) != nil {
+		return Frame{}, false
+	}
+	return frame, true
+}

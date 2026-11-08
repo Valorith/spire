@@ -95,6 +95,7 @@ export const serverAdminTools: AdminTool[] = [
   { path: ROUTE.ADMIN_RESTART_SCHEDULES, read: ['eqemuserver/server/restart-schedules'] },
   { path: ROUTE.ADMIN_PLAYERS_ONLINE, read: ['eqemuserver/client-list'] },
   { path: ROUTE.ADMIN_PLAYER_OPERATIONS, read: ['player-operations'] },
+  { path: ROUTE.ADMIN_PLAYER_SUPPORT, read: ['player-support'] },
   { path: ROUTE.ADMIN_MAIL_PARCELS, read: ['mail-parcels-editor'] },
   { path: ROUTE.ADMIN_INVENTORY_KEYRING, read: ['inventory-keyring'] },
   { path: ROUTE.ADMIN_CHAT_ADMINISTRATION, read: ['chat-administration'] },
