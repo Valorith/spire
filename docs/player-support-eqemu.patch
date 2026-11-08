@@ -580,7 +580,7 @@ index 7de8f2143871aa6ac3cadb1ff54d129e058e22d4..2ca2a5298e44ae1756c240e0314fa34c
  						auto con = console->FindByAccountName(&scm->deliverto[1]);
  						if (
 diff --git a/zone/api_service.cpp b/zone/api_service.cpp
-index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..a8ccbe27e6a685dd75cbf848535371764d64cbc6 100644
+index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..f7bb9d1e7608e27c3a48d31704885b5bd8b83561 100644
 --- a/zone/api_service.cpp
 +++ b/zone/api_service.cpp
 @@ -22,6 +22,7 @@
@@ -599,13 +599,15 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..a8ccbe27e6a685dd75cbf84853537176
  #include <memory>
  
  extern Zone *zone;
-@@ -893,6 +895,158 @@ void RegisterApiLogEvent(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+@@ -893,6 +895,160 @@ void RegisterApiLogEvent(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  	);
  }
  
 +static bool IsLocalSupportRequest(EQ::Net::WebsocketServerConnection *connection)
 +{
-+	return zone && connection->GetAccountID() == 0 && connection->RemoteIP() == "127.0.0.1";
++	const auto address = connection->RemoteIP();
++	// Dual-stack listeners report IPv4 loopback as an IPv4-mapped address.
++	return zone && connection->GetAccountID() == 0 && (address == "127.0.0.1" || address == "::ffff:127.0.0.1");
 +}
 +
 +static Client *GetSupportClient(const Json::Value &params)
@@ -758,7 +760,7 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..a8ccbe27e6a685dd75cbf84853537176
  void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  {
  	server->SetLoginHandler(CheckLogin);
-@@ -901,6 +1055,9 @@ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+@@ -901,6 +1057,9 @@ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  	server->SetMethodHandler("get_npc_list_detail", &ApiGetNpcListDetail, 50);
  	server->SetMethodHandler("get_door_list_detail", &ApiGetDoorListDetail, 50);
  	server->SetMethodHandler("get_corpse_list_detail", &ApiGetCorpseListDetail, 50);
