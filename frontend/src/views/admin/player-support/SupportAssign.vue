@@ -61,7 +61,7 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
-import { avatarStyle, initials } from './support-ui'
+import { assignableStaff, avatarStyle, initials } from './support-ui'
 
 export default {
   name: 'SupportAssign',
@@ -121,7 +121,7 @@ export default {
       this.loadError = ''
       try {
         const { data } = await SpireApi.v1().get('player-support/staff', this.params())
-        this.staff = (data && data.staff) || []
+        this.staff = assignableStaff(data && data.staff)
       } catch (error) {
         this.loadError = this.errorText(error)
       } finally {

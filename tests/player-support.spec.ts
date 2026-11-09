@@ -1001,6 +1001,32 @@ test('keeps batch Assign disabled until the staff list loads', async ({ page }) 
   await expect.poll(() => writes.find(write => write.path === '/batch')?.input).toMatchObject({ action: 'assign', assignee_id: 5 });
 });
 
+test('never offers the id-0 user of an install without authentication as an assignee', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support']);
+  // Without Spire authentication the staff list is the signed-in user, as id 0, which the server reads as "unassign".
+  await page.route('**/api/v1/player-support/staff**', route => route.fulfill({ json: { staff: [{ id: 0, name: 'Game Master' }] } }));
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Change assignee' }).click();
+  const assign = page.getByRole('dialog', { name: 'Assign case' });
+  await expect(assign.getByRole('button', { name: 'Take it myself' })).toBeVisible();
+  await expect(assign.getByRole('button', { name: /^Nobody/ })).toBeVisible();
+  await expect(assign.getByRole('status')).toHaveCount(0);
+  await expect(assign.getByRole('button', { name: /Game Master/ })).toHaveCount(0);
+  await assign.getByRole('button', { name: 'Cancel' }).click();
+  await expect(assign).toBeHidden();
+
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Select case #731, Aranel' }).check();
+  await page.getByRole('group', { name: 'Selected cases' }).getByRole('button', { name: 'Assign…' }).click();
+  const batch = page.getByRole('dialog', { name: 'Assign 1 case' });
+  await expect(batch.getByLabel('Assign to')).toBeEnabled();
+  await expect(batch.getByLabel('Assign to').locator('option')).toHaveText(['Nobody']);
+  await expect(batch.getByText('No staff to choose from. Nobody unassigns the cases; Claim takes them yourself.')).toBeVisible();
+  await batch.getByRole('button', { name: 'Assign', exact: true }).click();
+  await expect(batch).toBeHidden();
+  await expect.poll(() => writes.find(write => write.path === '/batch')?.input).toMatchObject({ action: 'assign', assignee_id: 0 });
+});
+
 test('shows the newest account note on the case and adds and deletes notes', async ({ page }) => {
   const writes = await mockSupport(page, ['player-support'], { id: 7 }, { notes: [
     { id: 4, text: 'Known to exaggerate losses.', author: 'Pat', created_at: '2026-11-08T12:00:00Z' },

@@ -145,6 +145,13 @@ export function fitsTell (text) {
   return text.length > 0 && text.length <= 200 && !/[^\x20-\x7E]/.test(text)
 }
 
+// The staff a case can be assigned to. Without Spire authentication the list
+// holds only the signed-in user, as id 0, which the server reads as
+// "unassign"; "Take it myself" and Claim already cover that user.
+export function assignableStaff (staff) {
+  return (staff || []).filter(member => member && member.id)
+}
+
 // Case categories, in their fixed order. `hint` is the triage line shown on a
 // case with that category; `tools` names the buttons beside it (the page
 // decides which ones the viewer may use).

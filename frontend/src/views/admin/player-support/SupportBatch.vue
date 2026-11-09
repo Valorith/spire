@@ -10,6 +10,7 @@
       <p v-else-if="loadError" class="support-feedback is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ loadError }}
         <button type="button" class="support-link" @click="loadStaff">Try again</button>
       </p>
+      <p v-else-if="loaded && !staff.length" class="support-feedback">No staff to choose from. Nobody unassigns the cases; Claim takes them yourself.</p>
     </template>
 
     <template v-else-if="mode === 'category'">
@@ -45,7 +46,7 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
-import { supportCategories } from './support-ui'
+import { assignableStaff, supportCategories } from './support-ui'
 
 // The small dialogs behind "Assign…", "Category…" and "Resolve…": one value
 // for every selected case (count), or for the open case (count 0, category only).
@@ -102,7 +103,7 @@ export default {
       this.loadError = ''
       try {
         const { data } = await SpireApi.v1().get('player-support/staff', { params: { connection_id: this.connectionId } })
-        this.staff = (data && data.staff) || []
+        this.staff = assignableStaff(data && data.staff)
         this.loaded = true
       } catch (error) {
         this.loadError = (error.response && error.response.data && error.response.data.error) || 'Staff could not be loaded.'
