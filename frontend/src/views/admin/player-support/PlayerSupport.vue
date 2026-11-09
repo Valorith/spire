@@ -511,7 +511,11 @@
             <option v-for="reply in resolveReplies.others" :key="reply.id" :value="reply.id">{{ reply.title }}</option>
           </optgroup>
         </select>
-        <p v-if="resolveReplyRecord && record" class="support-resolve-hint">
+        <p v-if="resolveUnconfirmedReply && record" class="support-callout is-warning support-resolve-warning" role="alert">
+          <i class="fe fe-alert-triangle" aria-hidden="true"></i>
+          <span>This reply may have reached {{ record.character }}, but its delivery was not confirmed. Check the conversation and in-game mail before sending it again.</span>
+        </p>
+        <p v-else-if="resolveReplyRecord && record" class="support-resolve-hint">
           Sent as a tell if {{ record.online_character || record.character }} is in game with messages on, otherwise by in-game mail to {{ record.character }}.
         </p>
       </template>
@@ -530,8 +534,11 @@
       </p>
       <template #modal-footer="{ cancel }">
         <button type="button" class="support-button" :disabled="resolveBusy" @click="cancel()">Cancel</button>
-        <button type="button" class="support-button is-primary" :disabled="resolveBusy" @click="resolveCase">
-          <i :class="resolveReplyRecord ? 'fe fe-send' : 'fe fe-check-circle'" aria-hidden="true"></i> {{ resolveReplyRecord ? 'Send and resolve' : 'Resolve case' }}
+        <button v-if="resolveUnconfirmedReply" type="button" class="support-button" :disabled="resolveBusy" @click="resolveCase(true)">
+          <i class="fe fe-send" aria-hidden="true"></i> Send again and resolve
+        </button>
+        <button type="button" class="support-button is-primary" :disabled="resolveBusy" @click="resolveCase(false)">
+          <i :class="resolveReplyRecord && !resolveUnconfirmedReply ? 'fe fe-send' : 'fe fe-check-circle'" aria-hidden="true"></i> {{ resolveAction }}
         </button>
       </template>
     </b-modal>
@@ -666,6 +673,27 @@ const deliveryKinds = ['parcel', 'pending', 'character_move', 'corpse_move', 'pe
 const heartbeatEvery = 15000
 const composeEvery = 5000
 
+// A saved reply send that got no answer (no response, or a gateway error) may
+// still have reached the player. So may a mail that Mail & Parcels recorded
+// but could not confirm.
+function replyUnconfirmed (error) {
+  const response = error && error.response
+  if (!response) return Boolean(error && error.config)
+  const message = (response.data && response.data.error) || ''
+  if (response.status === 502 || response.status === 504) return true
+  // Spire's own 503s refuse before anything is sent and say why; one without
+  // that message came from a proxy in front of Spire.
+  if (response.status === 503) return !message
+  return response.status === 409 && /needs verification/.test(message)
+}
+
+// Mail & Parcels' answer to a repeated request ID: the first send arrived.
+// A repeated live chat send already answers like the first one.
+function replyAlreadySent (error) {
+  const response = error && error.response
+  return Boolean(response && response.status === 409 && /already recorded/.test((response.data && response.data.error) || ''))
+}
+
 export default {
   name: 'PlayerSupport',
   components: {
@@ -767,6 +795,9 @@ export default {
       resolveError: '',
       resolveSentId: null,
       resolveRequestId: '',
+      // Saved reply IDs whose send from the Resolve dialog was not confirmed,
+      // by case, so reopening the dialog cannot repeat the send unseen.
+      resolveUnconfirmed: {},
       resolutionPhrases: ['Restored the missing item', 'Moved the character to safety', 'Recovered the corpse', 'Explained how it works', 'No action needed']
     }
   },
@@ -832,6 +863,15 @@ export default {
     },
     resolveReplyRecord () {
       return this.resolveReply === '' ? null : this.replies.find(reply => reply.id === this.resolveReply) || null
+    },
+    // The chosen reply, when its last send to this case was not confirmed.
+    resolveUnconfirmedReply () {
+      const reply = this.resolveReplyRecord
+      return reply && this.resolveUnconfirmed[this.resolveMemoKey(this.selectedKey)] === reply.id ? reply : null
+    },
+    resolveAction () {
+      if (this.resolveUnconfirmedReply) return 'Resolve without sending again'
+      return this.resolveReplyRecord ? 'Send and resolve' : 'Resolve case'
     },
     closeHint () {
       const record = this.record
@@ -971,6 +1011,8 @@ export default {
       this.resolveError = ''
       this.resolveSentId = null
       this.resolveRequestId = newRequestId()
+      const unconfirmed = this.resolveUnconfirmed[this.resolveMemoKey(this.selectedKey)]
+      if (unconfirmed && this.replies.some(reply => reply.id === unconfirmed)) this.resolveReply = unconfirmed
     },
     // A different reply is a different send.
     resolveReply () { this.resolveRequestId = newRequestId() }
@@ -1510,21 +1552,41 @@ export default {
       this.composeTimer = setTimeout(this.heartbeat, wait)
     },
 
+    resolveMemoKey (key) { return `${this.connectionId}/${key}` },
     // Resolve, after sending the chosen saved reply when there is one. The case
-    // is resolved only after the reply went out.
-    async resolveCase () {
+    // is resolved only after the reply went out, or, when its delivery was not
+    // confirmed, once staff choose to resolve without sending it again.
+    async resolveCase (again = false) {
       if (!this.record || this.resolveBusy || !this.canWrite) return
       const key = this.selectedKey
+      const memo = this.resolveMemoKey(key)
       const character = this.record.character
       const reply = this.resolveReplyRecord
+      const unconfirmed = Boolean(this.resolveUnconfirmedReply)
       this.resolveBusy = true
       this.resolveError = ''
       try {
         let text = this.resolution.trim()
-        if (reply) {
+        if (reply && unconfirmed && !again) {
+          text = text ? `${text}\nSaved reply delivery not confirmed: ${reply.title}` : `Saved reply delivery not confirmed: ${reply.title}`
+        } else if (reply) {
           if (this.resolveSentId !== reply.id) {
-            await this.sendSavedReply(reply)
+            // Sending again is a new send, never a replay of the unconfirmed one.
+            if (unconfirmed) this.resolveRequestId = newRequestId()
+            try {
+              await this.sendSavedReply(reply)
+            } catch (error) {
+              if (replyUnconfirmed(error)) {
+                // Never retried on its own: staff check the conversation first.
+                this.$set(this.resolveUnconfirmed, memo, reply.id)
+                if (!this.resolveOpen) this.notice = { error: true, text: `The reply to ${character} may have been sent, but its delivery was not confirmed. The case was not resolved.` }
+                await this.loadDetail(key, true)
+                return
+              }
+              if (!replyAlreadySent(error)) throw error
+            }
             this.resolveSentId = reply.id
+            this.$delete(this.resolveUnconfirmed, memo)
             // The send is recorded on the case; resolve at the revision it left.
             await this.loadDetail(key, true)
           }
@@ -1535,6 +1597,7 @@ export default {
         const close = Boolean(this.record.native_open && !this.record.checked_out && this.closeInGame)
         const response = await this.caseAction(key, this.record.revision, 'resolve', { text, close_in_game: close })
         const petition = response && response.data && response.data.petition
+        this.$delete(this.resolveUnconfirmed, memo)
         this.resolveOpen = false
         this.notice = petition && petition.message
           ? { error: false, tone: ['checked_out', 'unconfirmed'].includes(petition.status) ? 'warning' : null, text: `${character}’s case resolved. ${petition.message}` }
@@ -1872,7 +1935,7 @@ button.support-stat:hover { border-color: var(--support-border-strong); backgrou
 .support-quick { margin-bottom: var(--support-space-2); }
 .support-resolve-hint { margin: 6px 0 0; color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.5; }
 .support-resolve-close { margin-top: var(--support-space-4); }
-.support-resolve-error { margin: var(--support-space-3) 0 0; }
+.support-resolve-error, .support-resolve-warning { margin: var(--support-space-3) 0 0; }
 .support-modal .modal-footer > .support-subject-clear { margin-right: auto; }
 
 /* Wide, tall screens: the workspace fills the window and each pane scrolls. */

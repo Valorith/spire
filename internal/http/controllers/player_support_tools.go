@@ -87,8 +87,8 @@ func (s supportScope) accountHistory(view supportCaseView) ([]supportHistoryCase
 
 // ---------------------------------------------------------------------------
 // Merge: fold an earlier case from the same account into this one. The
-// earlier case's timeline, deliveries and conversation move here, and it is
-// resolved with a pointer to this case.
+// earlier case's timeline, deliveries, conversation and linked bug reports
+// move here, and it is resolved with a pointer to this case.
 
 func (p *PlayerSupportController) merge(c echo.Context) error {
 	scope, err := p.scope(c, false)
@@ -149,6 +149,9 @@ func (p *PlayerSupportController) merge(c echo.Context) error {
 				return step.Error
 			}
 		}
+		if err := supportMoveCaseLinks(tx, from.ID, record.ID); err != nil {
+			return err
+		}
 		// One conversation per account: keep it on the case that stays open.
 		var chat models.PlayerSupportChat
 		if tx.Where("case_id = ?", from.ID).Take(&chat).Error == nil {
@@ -172,6 +175,32 @@ func (p *PlayerSupportController) merge(c echo.Context) error {
 	p.world.Notify()
 	p.publishCaseStatus(c, scope, target.SourceKey)
 	return c.NoContent(http.StatusNoContent)
+}
+
+// supportMoveCaseLinks moves a merged case's links, such as linked bug
+// reports, to the case that stays. A link both cases have would break the
+// unique index, so the merged case's copy is dropped first. The target's links
+// are read up front because MySQL rejects a subquery on the table it changes.
+func supportMoveCaseLinks(tx *gorm.DB, from, to uint) error {
+	var existing []models.PlayerSupportCaseLink
+	if err := tx.Select("kind, ref_id").Where("case_id = ?", to).Find(&existing).Error; err != nil {
+		return err
+	}
+	var kinds []string
+	refs := map[string][]uint{}
+	for _, link := range existing {
+		if refs[link.Kind] == nil {
+			kinds = append(kinds, link.Kind)
+		}
+		refs[link.Kind] = append(refs[link.Kind], link.RefID)
+	}
+	for _, kind := range kinds {
+		if err := tx.Where("case_id = ? AND kind = ? AND ref_id IN ?", from, kind, refs[kind]).
+			Delete(&models.PlayerSupportCaseLink{}).Error; err != nil {
+			return err
+		}
+	}
+	return tx.Model(&models.PlayerSupportCaseLink{}).Where("case_id = ?", from).Update("case_id", to).Error
 }
 
 // ---------------------------------------------------------------------------

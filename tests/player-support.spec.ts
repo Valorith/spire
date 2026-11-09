@@ -815,6 +815,126 @@ test('mails a saved reply before resolving, and keeps the case open when the mai
   expect(writes[1].input).toMatchObject({ text: 'Sent saved reply: Item restored', close_in_game: true, revision: 0 });
 });
 
+async function mockOfflineReply(page: Page) {
+  const writes = await mockSupport(page, ['player-support', 'mail-parcels-editor'], { id: 7 }, {
+    character_presence: 'offline', account_presence: 'offline',
+    replies: [{ id: 1, title: 'Item restored', body: 'Hi {character}, your item is at the parcel merchant.', resolves: true }],
+  });
+  await page.route(`**${endpoint}/${caseKey}/chat?*`, route => route.request().method() === 'GET'
+    ? route.fulfill({ json: { state: 'offline', active: false, mail_to: 'Aranel', cursor: 0, messages: [] } })
+    : route.fallback());
+  return writes;
+}
+
+const unconfirmedReply = 'This reply may have reached Aranel, but its delivery was not confirmed. Check the conversation and in-game mail before sending it again.';
+
+test('never repeats a saved reply whose delivery was not confirmed, and resolves without sending again', async ({ page }) => {
+  const writes = await mockOfflineReply(page);
+  const sends: string[] = [];
+  await page.route(`**${endpoint}/${caseKey}/reply?*`, route => {
+    sends.push(route.request().postDataJSON().request_id);
+    return sends.length === 1 ? route.abort() : route.fallback();
+  });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+  const select = dialog.getByLabel('Send a saved reply first (optional)');
+  await select.selectOption({ label: 'Item restored' });
+  await dialog.getByRole('button', { name: 'Send and resolve' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(unconfirmedReply);
+  await expect(dialog.locator('.support-callout.is-warning')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Send and resolve' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Send again and resolve' })).toBeVisible();
+  expect(writes.some(write => write.input.action === 'resolve')).toBe(false);
+
+  // Closing and reopening keeps the reply chosen and the warning up.
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  await expect(select).toHaveValue('1');
+  await expect(dialog.getByRole('alert')).toHaveText(unconfirmedReply);
+
+  // Another reply choice is a normal send; choosing this one again warns again.
+  await select.selectOption({ label: 'No reply' });
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Resolve case' })).toBeVisible();
+  await select.selectOption({ label: 'Item restored' });
+  await expect(dialog.getByRole('alert')).toHaveText(unconfirmedReply);
+
+  await dialog.getByRole('button', { name: 'Resolve without sending again' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Aranel’s case resolved.')).toBeVisible();
+  expect(sends).toHaveLength(1);
+  expect(writes.map(write => write.input.action || write.path.split('/').pop())).toEqual(['resolve']);
+  expect(writes[0].input).toMatchObject({ text: 'Saved reply delivery not confirmed: Item restored', close_in_game: true });
+});
+
+test('sends an unconfirmed saved reply again only when asked, with a new request ID', async ({ page }) => {
+  const writes = await mockOfflineReply(page);
+  await page.route(`**${endpoint}/${caseKey}/reply?*`, route => route.fulfill({ status: 504, body: 'Gateway Timeout' }), { times: 1 });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+  await dialog.getByLabel('Send a saved reply first (optional)').selectOption({ label: 'Item restored' });
+  const first = page.waitForRequest(request => request.url().includes('/reply?'));
+  await dialog.getByRole('button', { name: 'Send and resolve' }).click();
+  const firstId = (await first).postDataJSON().request_id;
+  await expect(dialog.getByRole('alert')).toHaveText(unconfirmedReply);
+
+  await dialog.getByRole('button', { name: 'Send again and resolve' }).click();
+  await expect(dialog).toBeHidden();
+  expect(writes.map(write => write.input.action || write.path.split('/').pop())).toEqual(['reply', 'resolve']);
+  expect(writes[0].input.request_id).toMatch(/^[a-f0-9]{32}$/);
+  expect(writes[0].input.request_id).not.toBe(firstId);
+  expect(writes[1].input).toMatchObject({ text: 'Sent saved reply: Item restored' });
+});
+
+test('treats the duplicate answer to a retried saved reply as sent and resolves', async ({ page }) => {
+  const writes = await mockOfflineReply(page);
+  const sends: string[] = [];
+  await page.route(`**${endpoint}/${caseKey}/reply?*`, route => {
+    sends.push(route.request().postDataJSON().request_id);
+    return sends.length === 1
+      ? route.fulfill({ status: 500, json: { error: 'Player Support database request failed' } })
+      : route.fulfill({ status: 409, json: { error: 'This delivery was already recorded. Check case activity.' } });
+  });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+  await dialog.getByLabel('Send a saved reply first (optional)').selectOption({ label: 'Item restored' });
+  const send = dialog.getByRole('button', { name: 'Send and resolve' });
+  await send.click();
+  await expect(dialog.getByRole('alert')).toHaveText('Player Support database request failed');
+  await send.click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Aranel’s case resolved.')).toBeVisible();
+  expect(sends).toHaveLength(2);
+  expect(sends[1]).toBe(sends[0]);
+  expect(writes.map(write => write.input.action)).toEqual(['resolve']);
+  expect(writes[0].input).toMatchObject({ text: 'Sent saved reply: Item restored' });
+});
+
+test('keeps batch Assign disabled until the staff list loads', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support']);
+  await page.route('**/api/v1/player-support/staff**', route => route.fulfill({ status: 500, json: { error: 'Player Support database request failed' } }), { times: 1 });
+  await page.goto('/admin/player-support');
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Select case #731, Aranel' }).check();
+  await page.getByRole('group', { name: 'Selected cases' }).getByRole('button', { name: 'Assign…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Assign 1 case' });
+  await expect(dialog.getByRole('alert')).toContainText('Player Support database request failed');
+  await expect(dialog.getByLabel('Assign to')).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Assign', exact: true })).toBeDisabled();
+
+  await dialog.getByRole('button', { name: 'Try again' }).click();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(dialog.getByLabel('Assign to')).toBeEnabled();
+  await dialog.getByLabel('Assign to').selectOption({ label: 'Pat' });
+  await dialog.getByRole('button', { name: 'Assign', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => writes.find(write => write.path === '/batch')?.input).toMatchObject({ action: 'assign', assignee_id: 5 });
+});
+
 test('shows the newest account note on the case and adds and deletes notes', async ({ page }) => {
   const writes = await mockSupport(page, ['player-support'], { id: 7 }, { notes: [
     { id: 4, text: 'Known to exaggerate losses.', author: 'Pat', created_at: '2026-11-08T12:00:00Z' },

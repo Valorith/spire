@@ -2,12 +2,14 @@
   <b-modal visible centered modal-class="support-modal" :title="title" @shown="focusField" @hidden="$emit('close')">
     <template v-if="mode === 'assign'">
       <label for="support-batch-assignee" class="batch-first-label">Assign to</label>
-      <select id="support-batch-assignee" ref="field" v-model.number="assignee" class="support-field" :disabled="loading">
+      <select id="support-batch-assignee" ref="field" v-model.number="assignee" class="support-field" :disabled="!loaded">
         <option :value="0">Nobody</option>
         <option v-for="member in staff" :key="member.id" :value="member.id">{{ member.name }}{{ me && member.id === me.id ? ' (you)' : '' }}</option>
       </select>
       <p v-if="loading" class="support-feedback" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Loading staff…</p>
-      <p v-else-if="loadError" class="support-feedback is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ loadError }}</p>
+      <p v-else-if="loadError" class="support-feedback is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ loadError }}
+        <button type="button" class="support-link" @click="loadStaff">Try again</button>
+      </p>
     </template>
 
     <template v-else-if="mode === 'category'">
@@ -62,6 +64,9 @@ export default {
       categories: supportCategories,
       staff: [],
       loading: false,
+      // Set only once the staff list has loaded, so a failed load can never
+      // leave Assign enabled with the default "Nobody" selected.
+      loaded: false,
       loadError: '',
       assignee: 0,
       category: this.value,
@@ -82,7 +87,7 @@ export default {
       return `Resolve ${this.cases}`
     },
     ready () {
-      if (this.mode === 'assign') return !this.loading
+      if (this.mode === 'assign') return this.loaded && !this.loading
       if (this.mode === 'category') return this.count > 0 || this.category !== this.value
       return true
     }
@@ -94,9 +99,11 @@ export default {
     focusField () { if (this.$refs.field) this.$refs.field.focus() },
     async loadStaff () {
       this.loading = true
+      this.loadError = ''
       try {
         const { data } = await SpireApi.v1().get('player-support/staff', { params: { connection_id: this.connectionId } })
         this.staff = (data && data.staff) || []
+        this.loaded = true
       } catch (error) {
         this.loadError = (error.response && error.response.data && error.response.data.error) || 'Staff could not be loaded.'
       } finally {
