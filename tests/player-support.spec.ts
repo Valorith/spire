@@ -5,10 +5,11 @@ const endpoint = '/api/v1/player-support/cases';
 const caseKey = '731-' + submitted;
 
 async function mockSupport(page: Page, write: string[], connection = { id: 7 }, overrides: Record<string, unknown> = {}) {
-  const record = {
+  const record: Record<string, any> = {
     key: caseKey, petition_id: 100, character_id: 100, character: 'Aranel', account: 'norrathguide',
     zone: 'sebilis', message: 'My Fungi Tunic disappeared after a trade.', urgency: 2, submitted_at: submitted,
     status: 'open', owner: '', mine: false, native_open: true, checked_out: false, revision: 0, account_presence: 'online',
+    category: '', suggested_category: '', escalated: false, subject_character: '', age_state: 'fresh', follow_up: false, viewers: [], account_notes: 0,
   };
   Object.assign(record, overrides);
   const otherCase = {
@@ -25,7 +26,7 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
   // A stock World answers without the Player Support patch.
   const companion = (overrides.companion as string) || 'ready';
   const history = (overrides.history as object[]) || [];
-  const replies: { id: number; title: string; body: string }[] = (overrides.replies as { id: number; title: string; body: string }[]) || [];
+  const replies: { id: number; title: string; body: string; resolves?: boolean }[] = (overrides.replies as typeof replies) || [];
   const settings = { available: true, discord_webhook_id: 0, webhooks: [{ id: 4, name: 'gm-alerts' }] };
   const filedAt = submitted;
   const events = [
@@ -37,6 +38,14 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
       created_at: new Date((filedAt + 300) * 1000).toISOString() },
   ];
   const tunic = { id: 2730, name: 'Fungus Covered Scale Tunic', icon: 590, stackable: 0, stack_size: 1 };
+  // Workflow: staff list, account notes, presence, batch results and the in-game close.
+  const staff = [{ id: 2, name: 'Guide' }, { id: 5, name: 'Pat' }, { id: 6, name: 'Valorith' }];
+  const notes: { id: number; text: string; author: string; created_at: string }[] = (overrides.notes as typeof notes) || [];
+  const viewers = (overrides.viewers as object[]) || [];
+  const features = (overrides.features as object) || { patch: 2 };
+  const batchErrors = (overrides.batchErrors as Record<string, string>) || {};
+  const summary = { active: 2, urgent: 2, unassigned: 1, waiting: 0, mine: 0, attention: 0, overdue: 0, follow_up: 0, escalated: 0, ...(overrides.summary as object || {}) };
+  record.account_notes = notes.length;
   let active = false;
   const writes: { path: string; connection: string | null; input: Record<string, unknown> }[] = [];
   await page.addInitScript(() => localStorage.setItem(`spire-web-access-token-${location.host}`, 'test-session'));
@@ -84,13 +93,25 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
       }
       return route.fulfill({ status: 204 });
     }
+    // Presence is a heartbeat, not a change to the case: not recorded in writes.
+    if (path.endsWith('/presence')) return route.fulfill({ json: { viewers } });
+    if (path.includes('/account-notes')) {
+      writes.push({ path, connection: url.searchParams.get('connection_id'), input: request.method() === 'DELETE' ? {} : request.postDataJSON() });
+      if (request.method() === 'POST') {
+        notes.unshift({ id: 10 + writes.length, text: request.postDataJSON().text, author: 'Guide', created_at: new Date().toISOString() });
+      } else {
+        const id = Number(path.split('/').pop());
+        notes.splice(0, notes.length, ...notes.filter(note => note.id !== id));
+      }
+      record.account_notes = notes.length;
+      return route.fulfill({ status: request.method() === 'POST' ? 201 : 200, json: { notes } });
+    }
     if (request.method() === 'GET') {
       if (path === endpoint) {
         const filter = url.searchParams.get('filter');
-        const cases = filter === 'unassigned' ? [otherCase] : [record, otherCase];
+        const cases = filter === 'unassigned' ? [otherCase] : filter === 'attention' ? [record] : [record, otherCase];
         return route.fulfill({ json: {
-          connection_id: connection.id, cases, total: cases.length,
-          summary: { active: 2, urgent: 2, unassigned: 1, waiting: 0, mine: 0 }, companion,
+          connection_id: connection.id, cases, total: cases.length, summary, companion, features,
         } });
       }
       if (path.endsWith('/recovery')) return route.fulfill({ json: {
@@ -115,7 +136,7 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
         time_index: filedAt - 7200, snapshot_items: 31, missing: [{ item: tunic, augments: [null, null, null, null, null, null], had: 1, has: 0, missing: 1 }],
       } });
       if (path.endsWith('/corpses/42')) return route.fulfill({ json: { items: [{ id: 2730, icon: 590, name: 'Fungus Covered Scale Tunic' }] } });
-      return route.fulfill({ json: { case: record, activity, history } });
+      return route.fulfill({ json: { case: record, activity, history, account_notes: notes, viewers, features } });
     }
     const input = request.postDataJSON();
     writes.push({ path, connection: url.searchParams.get('connection_id'), input });
@@ -139,17 +160,53 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
         deliveries: [{ parcel: { id: 42, item_name: 'Fungus Covered Scale Tunic', slot_id: 1 }, player_event_log_id: 58 }],
       } });
     }
+    if (path.endsWith('/reply')) {
+      activity.push({ key: 'delivery-reply-' + writes.length, kind: 'reply', text: input.subject, actor: 'Guide', created_at: new Date().toISOString() });
+      return route.fulfill({ status: 201, json: { audit_id: 982 } });
+    }
+    if (input.revision !== undefined && input.revision !== record.revision) {
+      return route.fulfill({ status: 409, json: { error: 'The case changed. Refresh it before trying again.' } });
+    }
+    const entry = (kind: string, text: string) => activity.push({ key: kind + '-' + writes.length, kind, text, actor: 'Guide', created_at: new Date().toISOString() });
+    let petition = null;
     if (input.action === 'resolve') {
       record.status = 'resolved';
+      record.escalated = false;
       active = false;
+      if (input.close_in_game) {
+        petition = { status: 'closed', message: 'Removed from the in-game queue. The player can file a new petition.' };
+        entry('petition_close', 'Cleared petition #100 in game\n' + petition.message);
+      }
     } else if (input.action === 'reopen') {
       record.status = 'open';
-    } else if (input.action === 'claim') {
+    } else if (input.action === 'claim' || input.action === 'take') {
+      if (input.action === 'take') entry('take', record.owner ? 'Took over the case from ' + record.owner : 'Took the case');
       record.owner = 'Guide';
       record.mine = true;
+    } else if (input.action === 'assign') {
+      const member = staff.find(item => item.id === input.assignee_id);
+      record.owner = member ? member.name : '';
+      record.mine = Boolean(member && member.id === 2);
+      entry('assign', member ? 'Assigned the case to ' + member.name : 'Unassigned the case');
+    } else if (input.action === 'escalate' || input.action === 'deescalate') {
+      record.escalated = input.action === 'escalate';
+      entry(input.action, (record.escalated ? 'Escalated the case' : 'Cleared the escalation') + (input.text ? '\n' + input.text : ''));
+    } else if (input.action === 'categorize') {
+      record.category = input.category;
+      record.suggested_category = '';
+      entry('categorize', 'Category: ' + input.category);
+    } else if (input.action === 'subject') {
+      record.subject_character = input.subject;
     }
     record.revision++;
-    return route.fulfill({ status: 204 });
+    return petition ? route.fulfill({ json: { petition } }) : route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/v1/player-support/staff**', route => route.fulfill({ json: { staff } }));
+  await page.route('**/api/v1/player-support/batch**', async route => {
+    const input = route.request().postDataJSON();
+    writes.push({ path: '/batch', connection: new URL(route.request().url()).searchParams.get('connection_id'), input });
+    return route.fulfill({ json: { results: input.cases.map((item: { key: string }) => batchErrors[item.key]
+      ? { key: item.key, ok: false, error: batchErrors[item.key] } : { key: item.key, ok: true }) } });
   });
   await page.route('**/api/v1/player-support/replies**', async route => {
     const request = route.request();
@@ -596,7 +653,7 @@ test('shares saved replies as quick replies and manages them', async ({ page }) 
   await page.getByRole('button', { name: 'Saved replies' }).click();
   const manager = page.locator('.modal.show');
   await manager.getByLabel('Title').fill('Need details');
-  await manager.getByLabel(/^Reply/).fill('Can you tell me which zone you were in?');
+  await manager.getByRole('textbox', { name: /^Reply/ }).fill('Can you tell me which zone you were in?');
   await manager.getByRole('button', { name: 'Add reply' }).click();
   await expect.poll(() => writes.find(write => write.path.endsWith('/replies'))?.input).toMatchObject({ title: 'Need details' });
 });
@@ -618,4 +675,217 @@ test('sets petition alerts and shows support insights', async ({ page }) => {
   const insights = page.locator('.modal.show');
   await expect(insights.getByText('14 min')).toBeVisible();
   await expect(insights.getByRole('row', { name: /Valorith/ })).toBeVisible();
+});
+
+test('resolves and clears the in-game petition by default, or leaves it when unticked', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+  const close = dialog.getByRole('checkbox', { name: 'Also clear petition #100 in game' });
+  await expect(close).toBeChecked();
+  await expect(dialog.getByText('Removes it from the database. Zones refresh their petition list on the next petition.')).toBeVisible();
+  await expect(dialog.getByText(/in-game after resolving it here/)).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Resolve case' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Removed from the in-game queue. The player can file a new petition.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /In-game petition/ })).toBeVisible();
+  expect(writes.find(write => write.input.action === 'resolve')?.input).toMatchObject({ close_in_game: true });
+
+  await page.getByRole('button', { name: 'Reopen', exact: true }).click();
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  await close.uncheck();
+  await dialog.getByRole('button', { name: 'Resolve case' }).click();
+  await expect(dialog).toBeHidden();
+  expect(writes.filter(write => write.input.action === 'resolve')[1].input).toMatchObject({ close_in_game: false });
+});
+
+test('cannot clear a petition that is checked out in game', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { checked_out: true, last_gm: 'Valorith' });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+  const close = dialog.getByRole('checkbox', { name: 'Also clear petition #100 in game' });
+  await expect(close).toBeDisabled();
+  await expect(close).not.toBeChecked();
+  await expect(dialog.getByText('Checked out in game by Valorith; clear it there.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Resolve case' }).click();
+  await expect(dialog).toBeHidden();
+  expect(writes[0].input).toMatchObject({ action: 'resolve', close_in_game: false });
+});
+
+test('takes over a case, assigns it from the staff list, and escalates it', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { owner: 'Valorith' });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Take over' }).click();
+  await expect(page.getByRole('button', { name: 'Release' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Took over/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Change assignee' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Assign case' });
+  await expect(dialog.getByRole('button', { name: 'Pat' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Take it myself' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Guide' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Pat' }).click();
+  await expect(dialog.getByRole('button', { name: 'Pat' })).toHaveAttribute('aria-pressed', 'true');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Assigned the case to Pat')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Change assignee' }).click();
+  await dialog.getByRole('checkbox', { name: 'Escalate to senior staff' }).check();
+  const save = dialog.getByRole('button', { name: 'Save' });
+  await expect(save).toBeDisabled();
+  await dialog.getByLabel(/^Reason/).fill('Possible duplication exploit');
+  await save.click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.support-case-meta').getByText('Escalated', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Aranel / }).getByText('Escalated', { exact: true })).toBeVisible();
+  expect(writes.map(write => write.input.action)).toEqual(['take', 'assign', 'escalate']);
+  expect(writes[1].input).toMatchObject({ assignee_id: 5, revision: 1 });
+  expect(writes[2].input).toMatchObject({ text: 'Possible duplication exploit', revision: 2 });
+});
+
+test('applies the suggested category and opens its tool from the hint', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { suggested_category: 'corpse' });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('group', { name: 'Suggested category' }).getByRole('button', { name: 'Suggested: Corpse or death' }).click();
+  const hint = page.getByRole('note').filter({ hasText: 'Find the corpse, move it to the player, or restore its experience.' });
+  await expect(hint).toBeVisible();
+  await expect(page.locator('.support-case-meta').getByText('Corpse or death')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Suggested category' })).toHaveCount(0);
+  await hint.getByRole('button', { name: 'Corpses' }).click();
+  await expect(page.getByRole('dialog', { name: 'Aranel · Recovery' })).toBeVisible();
+  expect(writes[0].input).toMatchObject({ action: 'categorize', category: 'corpse' });
+});
+
+test('flags overdue and follow-up cases and filters what needs attention', async ({ page }) => {
+  await mockSupport(page, ['player-support'], { id: 7 }, {
+    age_state: 'overdue',
+    otherCase: { status: 'waiting', age_state: 'fresh', follow_up: true },
+    summary: { attention: 2, overdue: 1, follow_up: 1, waiting: 1 },
+  });
+  await page.goto('/admin/player-support');
+  await expect(page.getByRole('button', { name: /^Aranel / }).getByText('Overdue', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Thornwick / }).getByText('Follow up', { exact: true })).toBeVisible();
+  const summary = page.getByRole('group', { name: 'Queue at a glance' });
+  const attention = summary.getByRole('button', { name: /Needs attention/ });
+  await expect(attention.locator('strong')).toHaveText('2');
+  const request = page.waitForRequest(item => item.url().includes('/player-support/cases?') && new URL(item.url()).searchParams.get('filter') === 'attention');
+  await attention.click();
+  await request;
+  await expect(attention).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: /^Thornwick / })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Aranel / })).toBeVisible();
+});
+
+test('mails a saved reply before resolving, and keeps the case open when the mail fails', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support', 'mail-parcels-editor'], { id: 7 }, {
+    character_presence: 'offline', account_presence: 'offline',
+    replies: [
+      { id: 1, title: 'Item restored', body: 'Hi {character}, your item is at the parcel merchant.', resolves: true },
+      { id: 2, title: 'Need details', body: 'Which zone were you in?' },
+    ],
+  });
+  await page.route(`**${endpoint}/${caseKey}/chat?*`, route => route.request().method() === 'GET'
+    ? route.fulfill({ json: { state: 'offline', active: false, mail_to: 'Aranel', cursor: 0, messages: [] } })
+    : route.fallback());
+  await page.route(`**${endpoint}/${caseKey}/reply?*`, route => route.fulfill({ status: 503, json: { error: 'Mail delivery is unavailable right now.' } }), { times: 1 });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+  const select = dialog.getByLabel('Send a saved reply first (optional)');
+  await expect(select.locator('optgroup[label="Reply and resolve"] option')).toHaveText(['Item restored']);
+  await expect(select.locator('optgroup[label="Saved replies"] option')).toHaveText(['Need details']);
+  await select.selectOption({ label: 'Item restored' });
+  await expect(dialog.getByText('Sent as a tell if Aranel is in game with messages on, otherwise by in-game mail to Aranel.')).toBeVisible();
+  const send = dialog.getByRole('button', { name: 'Send and resolve' });
+  await send.click();
+  await expect(dialog.getByRole('alert')).toHaveText('Mail delivery is unavailable right now.');
+  expect(writes.some(write => write.input.action === 'resolve')).toBe(false);
+  await expect(page.getByRole('button', { name: 'Resolve case', exact: true })).toBeVisible();
+
+  await send.click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Aranel’s case resolved.')).toBeVisible();
+  expect(writes.map(write => write.input.action || write.path.split('/').pop())).toEqual(['reply', 'resolve']);
+  expect(writes[0].input).toMatchObject({
+    subject: 'Response to your petition', body: 'Hi Aranel, your item is at the parcel merchant.', confirmation: 'SEND TO 1 CHARACTER',
+    request_id: expect.stringMatching(/^[a-f0-9]{32}$/),
+  });
+  expect(writes[1].input).toMatchObject({ text: 'Sent saved reply: Item restored', close_in_game: true, revision: 0 });
+});
+
+test('shows the newest account note on the case and adds and deletes notes', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { notes: [
+    { id: 4, text: 'Known to exaggerate losses.', author: 'Pat', created_at: '2026-11-08T12:00:00Z' },
+    { id: 3, text: 'Prefers mail over tells.', author: 'Valorith', created_at: '2026-11-01T12:00:00Z' },
+  ] });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  const strip = page.locator('.support-notes-strip');
+  await expect(strip).toContainText('Known to exaggerate losses.');
+  await expect(strip).toContainText('— Pat');
+  await expect(page.getByRole('button', { name: /^Aranel / }).getByText('2 account notes')).toBeAttached();
+  await strip.getByRole('button', { name: '+1 more' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Account notes · norrathguide' });
+  await expect(dialog.getByText('Shown on every case from this account. Staff only.')).toBeVisible();
+  await expect(dialog.getByText('Prefers mail over tells.')).toBeVisible();
+  await dialog.getByLabel('New note').fill('Asked for a name change twice.');
+  await dialog.getByRole('button', { name: 'Add note' }).click();
+  await expect(dialog.getByText('Asked for a name change twice.')).toBeVisible();
+  await dialog.getByRole('listitem').filter({ hasText: 'Prefers mail over tells.' }).getByRole('button', { name: 'Delete note' }).click();
+  await expect(dialog.getByText('Delete this note? It is removed from every case.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Yes, delete' }).click();
+  await expect(dialog.getByText('Prefers mail over tells.')).toHaveCount(0);
+  expect(writes[0]).toMatchObject({ path: `${endpoint}/${caseKey}/account-notes`, connection: '7', input: { text: 'Asked for a name change twice.' } });
+  expect(writes[1].path).toBe(`${endpoint}/${caseKey}/account-notes/3`);
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(strip).toContainText('Asked for a name change twice.');
+});
+
+test('shows who else is writing and asks before sending a tell over them', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { viewers: [{ name: 'Pat', composing: true }] });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await expect(page.getByLabel('Petition detail').getByText('Pat is writing to the player')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Aranel / }).locator('[title="Pat is writing to the player"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Live chat', exact: true }).click();
+  await page.getByLabel('Tell Aranel').fill('I am on it.');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Another GM is on this case' });
+  await expect(confirm.getByText('Pat is also writing to Aranel.')).toBeVisible();
+  expect(writes).toHaveLength(0);
+  await confirm.getByRole('button', { name: 'Send anyway' }).click();
+  await expect(page.getByRole('log', { name: 'Chat messages' }).getByText('I am on it.')).toBeVisible();
+  expect(writes[0].input).toMatchObject({ action: 'send', text: 'I am on it.' });
+});
+
+test('claims selected cases in one batch and reports each failure', async ({ page }) => {
+  const otherKey = '730-' + submitted;
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { batchErrors: { [otherKey]: 'The case changed. Refresh it before trying again.' } });
+  await page.goto('/admin/player-support');
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Select case #731, Aranel' }).check();
+  await page.getByRole('checkbox', { name: 'Select case #730, Thornwick' }).check();
+  const bar = page.getByRole('group', { name: 'Selected cases' });
+  await expect(bar.getByText('2 selected')).toBeVisible();
+  await bar.getByRole('button', { name: 'Claim' }).click();
+  const notice = page.getByRole('alert').filter({ hasText: '1 of 2 updated' });
+  await expect(notice).toContainText('#730: The case changed. Refresh it before trying again.');
+  await expect(bar).toHaveCount(0);
+  expect(writes[0]).toMatchObject({
+    path: '/batch', connection: '7',
+    input: { action: 'claim', cases: [{ key: caseKey, revision: 0 }, { key: otherKey, revision: 0 }] },
+  });
+});
+
+test('saves the Reply and resolve choice with a saved reply', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Saved replies' }).click();
+  const manager = page.locator('.modal.show');
+  await manager.getByLabel('Title').fill('Item restored');
+  await manager.getByRole('textbox', { name: /^Reply/ }).fill('Hi {character}, your item is at the parcel merchant.');
+  await manager.getByRole('checkbox', { name: 'Reply and resolve' }).check();
+  await manager.getByRole('button', { name: 'Add reply' }).click();
+  await expect.poll(() => writes.find(write => write.path.endsWith('/replies'))?.input).toMatchObject({ title: 'Item restored', resolves: true });
+  await expect(manager.getByText('Reply and resolve', { exact: true }).first()).toBeVisible();
 });
