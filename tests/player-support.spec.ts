@@ -914,6 +914,72 @@ test('treats the duplicate answer to a retried saved reply as sent and resolves'
   expect(writes[0].input).toMatchObject({ text: 'Sent saved reply: Item restored' });
 });
 
+// The player is in game with messages on, so the saved reply goes as a tell.
+// Each tell is answered with the next delivery; once they run out, the shared
+// mock answers the older empty 204.
+async function mockTellReply(page: Page, deliveries: string[]) {
+  const writes = await mockSupport(page, ['player-support', 'mail-parcels-editor'], { id: 7 }, {
+    replies: [{ id: 1, title: 'Item restored', body: 'Hi {character}, your item is at the parcel merchant.', resolves: true }],
+  });
+  const sends: string[] = [];
+  await page.route(`**${endpoint}/${caseKey}/chat?*`, route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { state: 'ready', active: true, recipient: 'Aranel', cursor: 0, messages: [] } });
+    sends.push(route.request().postDataJSON().request_id);
+    const delivery = deliveries[sends.length - 1];
+    return delivery ? route.fulfill({ json: { delivery } }) : route.fallback();
+  });
+  return { writes, sends };
+}
+
+const isCaseDetail = (request: { method(): string; url(): string }) =>
+  request.method() === 'GET' && new URL(request.url()).pathname === `${endpoint}/${caseKey}`;
+
+test('keeps the case open when World refuses the saved reply tell, and sends it again as a new tell', async ({ page }) => {
+  const { writes, sends } = await mockTellReply(page, ['failed']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+  await dialog.getByLabel('Send a saved reply first (optional)').selectOption({ label: 'Item restored' });
+  const send = dialog.getByRole('button', { name: 'Send and resolve' });
+  const reload = page.waitForRequest(isCaseDetail);
+  await send.click();
+  await expect(dialog.getByRole('alert')).toHaveText('The reply was not delivered to Aranel, so the case was not resolved. You can try again.');
+  await reload;
+  await expect(dialog.locator('.support-callout.is-warning')).toHaveCount(0);
+  expect(writes.some(write => write.input.action === 'resolve')).toBe(false);
+  expect(sends).toHaveLength(1);
+
+  await send.click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Aranel’s case resolved.')).toBeVisible();
+  expect(sends).toHaveLength(2);
+  expect(sends[1]).toMatch(/^[a-f0-9]{32}$/);
+  expect(sends[1]).not.toBe(sends[0]);
+  expect(writes.map(write => write.input.action)).toEqual(['send', 'resolve']);
+  expect(writes[1].input).toMatchObject({ text: 'Sent saved reply: Item restored', close_in_game: true });
+});
+
+for (const delivery of ['unconfirmed', 'pending']) {
+  test(`keeps the case open and sends nothing again when the saved reply tell is ${delivery}`, async ({ page }) => {
+    const { writes, sends } = await mockTellReply(page, [delivery]);
+    await page.goto(`/admin/player-support?case=${caseKey}`);
+    await page.getByRole('button', { name: 'Resolve case', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Resolve case' });
+    await dialog.getByLabel('Send a saved reply first (optional)').selectOption({ label: 'Item restored' });
+    const reload = page.waitForRequest(isCaseDetail);
+    await dialog.getByRole('button', { name: 'Send and resolve' }).click();
+    await expect(dialog.getByRole('alert')).toHaveText(unconfirmedReply);
+    await reload;
+    await expect(dialog.locator('.support-callout.is-warning')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Send and resolve' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Send again and resolve' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Resolve without sending again' })).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(sends).toHaveLength(1);
+    expect(writes.some(write => write.input.action === 'resolve')).toBe(false);
+  });
+}
+
 test('keeps batch Assign disabled until the staff list loads', async ({ page }) => {
   const writes = await mockSupport(page, ['player-support']);
   await page.route('**/api/v1/player-support/staff**', route => route.fulfill({ status: 500, json: { error: 'Player Support database request failed' } }), { times: 1 });

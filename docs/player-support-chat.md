@@ -111,7 +111,7 @@ The button stays disabled with the reason until all of these hold. The player is
   | Updated patch | World removes the petition and every zone refreshes its list. The player can file a new petition right away. |
   | Patch without `supportfeatures`, no patch, or a server Spire does not run beside | Spire deletes the petition from the database. A zone that already loaded it keeps it until the next petition is filed or withdrawn, so `/petition` may still say one is open until then. With the earlier patch, `#petition` already sees the change. |
 
-- **Reply and resolve:** a saved reply can be marked **Reply and resolve** in **Replies**. The Resolve dialog can send any saved reply first: as a tell when the player is in game with messages on, and by in-game mail otherwise. The case is resolved only after the reply was sent; if the send fails, the dialog stays open with the error.
+- **Reply and resolve:** a saved reply can be marked **Reply and resolve** in **Replies**. The Resolve dialog can send any saved reply first: as a tell when the player is in game with messages on, and by in-game mail otherwise. The case is resolved only after the reply was sent; if the send fails, including a tell that World refuses, the dialog stays open with the error and the next try is a new send. If delivery was not confirmed, the dialog says so and does not send the reply again on its own: check the conversation, then choose **Send again and resolve** or **Resolve without sending again**.
 
 ### Select mode
 

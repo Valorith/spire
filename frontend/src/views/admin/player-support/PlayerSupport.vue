@@ -1573,17 +1573,28 @@ export default {
           if (this.resolveSentId !== reply.id) {
             // Sending again is a new send, never a replay of the unconfirmed one.
             if (unconfirmed) this.resolveRequestId = newRequestId()
+            let delivery = 'sent'
             try {
-              await this.sendSavedReply(reply)
+              delivery = await this.sendSavedReply(reply)
             } catch (error) {
-              if (replyUnconfirmed(error)) {
-                // Never retried on its own: staff check the conversation first.
-                this.$set(this.resolveUnconfirmed, memo, reply.id)
-                if (!this.resolveOpen) this.notice = { error: true, text: `The reply to ${character} may have been sent, but its delivery was not confirmed. The case was not resolved.` }
-                await this.loadDetail(key, true)
-                return
-              }
-              if (!replyAlreadySent(error)) throw error
+              if (replyUnconfirmed(error)) delivery = 'unconfirmed'
+              else if (!replyAlreadySent(error)) throw error
+            }
+            if (delivery === 'unconfirmed' || delivery === 'pending') {
+              // Never retried on its own: staff check the conversation first.
+              this.$set(this.resolveUnconfirmed, memo, reply.id)
+              if (!this.resolveOpen) this.notice = { error: true, text: `The reply to ${character} may have been sent, but its delivery was not confirmed. The case was not resolved.` }
+              await this.loadDetail(key, true)
+              return
+            }
+            if (delivery === 'failed') {
+              // The next try is a new send: this request ID would only answer
+              // "failed" again. It may go by mail if the player has left.
+              this.resolveRequestId = newRequestId()
+              this.resolveError = `The reply was not delivered to ${character}, so the case was not resolved. You can try again.`
+              if (!this.resolveOpen) this.notice = { error: true, text: this.resolveError }
+              await this.loadDetail(key, true)
+              return
             }
             this.resolveSentId = reply.id
             this.$delete(this.resolveUnconfirmed, memo)
@@ -1613,6 +1624,7 @@ export default {
       }
     },
     // A tell when live chat is ready and the reply fits; otherwise in-game mail.
+    // Returns the delivery.
     async sendSavedReply (reply) {
       const record = this.record
       const body = fillReply(reply.body, record)
@@ -1624,14 +1636,16 @@ export default {
         chat = null
       }
       if (chat && chat.state === 'ready' && chat.active && fitsTell(body)) {
-        await SpireApi.v1().put(url + '/chat', { action: 'send', text: body, request_id: this.resolveRequestId }, this.params())
-        return
+        const response = await SpireApi.v1().put(url + '/chat', { action: 'send', text: body, request_id: this.resolveRequestId }, this.params())
+        // "sent", "mail", "failed", "unconfirmed" or "pending". An empty answer
+        // is the older 204, which did not report the outcome, so it counts as sent.
+        return (response && response.data && response.data.delivery) || 'sent'
       }
       if (this.canDeliver) {
         await SpireApi.v1().put(url + '/reply', {
           subject: 'Response to your petition', body, request_id: this.resolveRequestId, confirmation: 'SEND TO 1 CHARACTER'
         }, this.params())
-        return
+        return 'mail'
       }
       const reason = record.checked_out
         ? 'the petition is checked out in game.'

@@ -251,11 +251,12 @@ func (p *PlayerSupportController) updateChat(c echo.Context) error {
 	if !view.NativeOpen || view.Status == "resolved" || view.CheckedOut || !p.localWorld(scope) {
 		return supportError(c, echo.NewHTTPError(http.StatusConflict, "Live chat is unavailable for this case"))
 	}
+	var delivery string
 	switch input.Action {
 	case "start":
 		err = p.startChat(scope, view)
 	case "send":
-		err = p.sendChat(scope, view, input)
+		delivery, err = p.sendChat(scope, view, input)
 	default:
 		err = echo.NewHTTPError(http.StatusBadRequest, "Unknown chat action")
 	}
@@ -263,7 +264,28 @@ func (p *PlayerSupportController) updateChat(c echo.Context) error {
 		return supportError(c, err)
 	}
 	p.publishCaseStatus(c, scope, view.SourceKey)
+	if input.Action == "send" {
+		return c.JSON(http.StatusOK, supportChatSent{Delivery: delivery})
+	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// supportChatSent answers a send with the message's delivery: "sent", "mail",
+// "failed", "unconfirmed", or "pending" while a repeated request is still
+// being delivered, or its outcome could not be recorded.
+type supportChatSent struct {
+	Delivery string `json:"delivery"`
+}
+
+// tellDelivery records how World answered a tell.
+func tellDelivery(err error) string {
+	switch {
+	case err == nil:
+		return "sent"
+	case errors.Is(err, playersupport.ErrDeliveryUnknown):
+		return "unconfirmed"
+	}
+	return "failed"
 }
 
 // chatRecipient picks the account's character that can receive a tell now.
@@ -382,14 +404,16 @@ func companionChatError(status playersupport.CompanionStatus) error {
 // because no character on the account was in game.
 const supportOfflineMailPrefix = "This message was sent to you in response to your petition while you were offline: "
 
-func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseView, input supportChatInput) error {
+// sendChat returns the message's delivery. A repeated request ID returns the
+// delivery recorded for the first request without sending again.
+func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseView, input supportChatInput) (string, error) {
 	text := strings.TrimSpace(input.Text)
 	if !supportRequestKey.MatchString(input.RequestID) || !playersupport.ValidateMessage(text) {
-		return echo.NewHTTPError(http.StatusBadRequest, "Enter up to 200 printable ASCII characters")
+		return "", echo.NewHTTPError(http.StatusBadRequest, "Enter up to 200 printable ASCII characters")
 	}
 	accountID, err := chatAccount(scope, view)
 	if err != nil {
-		return err
+		return "", err
 	}
 	// A player in game gets a tell. With no character on the account in a
 	// zone, the message is mailed to the character that filed the petition.
@@ -448,8 +472,11 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 		}
 		return tx.Create(&entry).Error
 	})
-	if err != nil || duplicate {
-		return err
+	if err != nil {
+		return "", err
+	}
+	if duplicate {
+		return entry.Delivery, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -470,15 +497,15 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 		if err := scope.eqemu.WithContext(ctx).Table("mail").Create(&row).Error; err != nil {
 			outcome = "failed"
 		}
-	} else if err := p.world.Send(scope.spire.Statement.Context, *entry.RequestKey, accountID, online.ID, text); err != nil {
-		outcome = "failed"
-		if errors.Is(err, playersupport.ErrDeliveryUnknown) {
-			outcome = "unconfirmed"
-		}
+	} else {
+		outcome = tellDelivery(p.world.Send(scope.spire.Statement.Context, *entry.RequestKey, accountID, online.ID, text))
 	}
 	err = p.db.GetSpireDb().WithContext(ctx).Model(&entry).Update("delivery", outcome).Error
 	p.world.Notify()
-	return err
+	if err != nil {
+		return "", err
+	}
+	return outcome, nil
 }
 
 func (p *PlayerSupportController) receiveChat(frame playersupport.Frame) playersupport.TellDecision {
