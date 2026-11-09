@@ -1,4 +1,4 @@
-## [Unreleased] (Beta) 11/9/2026
+## [5.9.0] (Beta) 11/9/2026
 
 **Player Support (new Server Admin tool)**
 * Work in-game petitions in one inbox: claim, wait and resolve cases, add private notes, and record a resolution summary. Cases keep the original petition after EQEmu clears it.
