@@ -65,3 +65,44 @@ func isSupportConflict(err error) bool {
 	var response *echo.HTTPError
 	return errors.As(err, &response) && response.Code == http.StatusConflict
 }
+
+func TestPlayerSupportMoveInputModes(t *testing.T) {
+	base := supportMoveInput{SourceZone: 183, RequestID: "0123456789abcdef0123456789abcdef"}
+	point := &supportCoordinates{X: 10, Y: -20, Z: 3.5, Heading: 128}
+	cases := []struct {
+		name  string
+		edit  func(*supportMoveInput)
+		valid bool
+	}{
+		{"safe point", func(in *supportMoveInput) { in.Destination = 202 }, true},
+		{"safe point without zone", func(in *supportMoveInput) {}, false},
+		{"coordinates", func(in *supportMoveInput) { in.Destination = 202; in.Coordinates = point }, true},
+		{"coordinates without zone", func(in *supportMoveInput) { in.Coordinates = point }, false},
+		{"coordinates for corpse", func(in *supportMoveInput) { in.Destination = 202; in.CorpseID = 4; in.Coordinates = point }, false},
+		{"coordinates out of range", func(in *supportMoveInput) {
+			in.Destination = 202
+			in.Coordinates = &supportCoordinates{X: 200000}
+		}, false},
+		{"heading out of range", func(in *supportMoveInput) {
+			in.Destination = 202
+			in.Coordinates = &supportCoordinates{Heading: 512}
+		}, false},
+		{"player", func(in *supportMoveInput) { in.TargetCharacter = 9 }, true},
+		{"player with zone", func(in *supportMoveInput) { in.TargetCharacter = 9; in.Destination = 202 }, false},
+		{"player for corpse", func(in *supportMoveInput) { in.TargetCharacter = 9; in.CorpseID = 4 }, false},
+		{"corpse to petitioner", func(in *supportMoveInput) { in.CorpseID = 4; in.ToPlayer = true }, true},
+		{"corpse to petitioner with coordinates", func(in *supportMoveInput) {
+			in.CorpseID = 4
+			in.ToPlayer = true
+			in.Coordinates = point
+		}, false},
+		{"bad request id", func(in *supportMoveInput) { in.Destination = 202; in.RequestID = "x" }, false},
+	}
+	for _, test := range cases {
+		input := base
+		test.edit(&input)
+		if got := input.valid(); got != test.valid {
+			t.Errorf("%s: valid() = %v, want %v", test.name, got, test.valid)
+		}
+	}
+}

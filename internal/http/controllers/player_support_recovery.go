@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -162,6 +163,88 @@ type supportMoveInput struct {
 	ToPlayer       bool   `json:"to_player"`
 	Reason         string `json:"reason"`
 	RequestID      string `json:"request_id"`
+	// Character moves only: exact coordinates in the destination zone, or
+	// another character whose location becomes the destination.
+	Coordinates     *supportCoordinates `json:"coordinates"`
+	TargetCharacter uint                `json:"target_character"`
+}
+
+type supportCoordinates struct {
+	X       float64 `json:"x"`
+	Y       float64 `json:"y"`
+	Z       float64 `json:"z"`
+	Heading float64 `json:"heading"`
+}
+
+const supportCoordinateLimit = 100000
+
+func (input supportMoveInput) valid() bool {
+	if input.SourceZone == 0 || input.SourceZone > 65535 || input.SourceInstance > 65535 ||
+		input.Destination > 65535 || input.CorpseID > 1<<32-1 || !supportRequestKey.MatchString(input.RequestID) {
+		return false
+	}
+	switch {
+	case input.ToPlayer:
+		return input.CorpseID != 0 && input.Destination == 0 && input.Coordinates == nil && input.TargetCharacter == 0
+	case input.TargetCharacter != 0:
+		return input.CorpseID == 0 && input.Destination == 0 && input.Coordinates == nil
+	case input.Coordinates != nil:
+		point := input.Coordinates
+		for _, value := range []float64{point.X, point.Y, point.Z} {
+			if math.IsNaN(value) || math.Abs(value) > supportCoordinateLimit {
+				return false
+			}
+		}
+		return input.CorpseID == 0 && input.Destination != 0 && !math.IsNaN(point.Heading) && point.Heading >= 0 && point.Heading < 512
+	default:
+		return input.Destination != 0
+	}
+}
+
+// supportMoveDestination resolves another character's position. A live
+// position wins over the saved one. Instances are refused because EQEmu
+// returns a character that is not a member to the base zone.
+func (p *PlayerSupportController) supportMoveDestination(scope supportScope, view supportCaseView, id uint) (*playersupport.MovePosition, string, error) {
+	if id == view.CharacterID {
+		return nil, "", echo.NewHTTPError(http.StatusBadRequest, "Choose a different character as the destination")
+	}
+	var target struct {
+		AccountID    uint
+		Name         string
+		ZoneID       uint
+		ZoneInstance uint
+		X, Y, Z      float64
+		Heading      float64
+	}
+	err := scope.eqemu.Table("character_data").Select("account_id, name, zone_id, zone_instance, x, y, z, heading").
+		Where("id = ? AND deleted_at IS NULL", id).Take(&target).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", echo.NewHTTPError(http.StatusConflict, "The destination character is unavailable")
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	position := &playersupport.MovePosition{
+		ZoneID: target.ZoneID, InstanceID: target.ZoneInstance,
+		X: float32(target.X), Y: float32(target.Y), Z: float32(target.Z), Heading: float32(target.Heading),
+	}
+	label := target.Name + "'s last saved location"
+	switch status, live := p.world.Locate(id, target.AccountID); status {
+	case "located":
+		position, label = live, target.Name+"'s current location"
+	case "offline":
+	case "busy":
+		return nil, "", echo.NewHTTPError(http.StatusConflict, target.Name+" is zoning. Try again in a moment.")
+	default:
+		return nil, "", echo.NewHTTPError(http.StatusServiceUnavailable, "Could not read "+target.Name+"'s location from the game server")
+	}
+	if position.InstanceID != 0 {
+		return nil, "", echo.NewHTTPError(http.StatusConflict, target.Name+" is in an instance. Moves into instances are not supported.")
+	}
+	if position.ZoneID == 0 {
+		return nil, "", echo.NewHTTPError(http.StatusConflict, target.Name+" has no saved zone")
+	}
+	return position, label, nil
 }
 
 func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
@@ -173,11 +256,7 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 		return supportError(c, echo.NewHTTPError(http.StatusServiceUnavailable, "Moves require the local EQEmu World"))
 	}
 	var input supportMoveInput
-	if c.Bind(&input) != nil || input.SourceZone == 0 || input.SourceZone > 65535 ||
-		input.SourceInstance > 65535 || input.Destination > 65535 ||
-		(input.ToPlayer && (input.CorpseID == 0 || input.Destination != 0)) ||
-		(!input.ToPlayer && input.Destination == 0) ||
-		input.CorpseID > 1<<32-1 || !supportRequestKey.MatchString(input.RequestID) {
+	if c.Bind(&input) != nil || !input.valid() {
 		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Invalid move request"))
 	}
 	if err := validatePlayerOperationsReason(input.Reason); err != nil {
@@ -195,6 +274,19 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 	if err != nil {
 		return supportError(c, err)
 	}
+	var position *playersupport.MovePosition
+	playerLabel := ""
+	if input.TargetCharacter != 0 {
+		position, playerLabel, err = p.supportMoveDestination(scope, view, input.TargetCharacter)
+		if err != nil {
+			return supportError(c, err)
+		}
+		input.Destination = position.ZoneID
+	} else if point := input.Coordinates; point != nil {
+		position = &playersupport.MovePosition{
+			ZoneID: input.Destination, X: float32(point.X), Y: float32(point.Y), Z: float32(point.Z), Heading: float32(point.Heading),
+		}
+	}
 	zoneDB := p.db.Get(models.Zone{}, c)
 	if zoneDB == nil || p.connectionID(scope.user) != scope.connectionID {
 		return supportError(c, echo.NewHTTPError(http.StatusConflict, "The active content database changed or is unavailable"))
@@ -204,11 +296,18 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 		return supportError(c, err)
 	}
 	destination := names[int(input.Destination)]
-	if input.ToPlayer {
+	switch {
+	case input.ToPlayer:
 		destination = view.Character + "'s current location"
-	} else if destination == "" {
+	case destination == "":
 		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Select a valid destination zone"))
-	} else {
+	case position != nil:
+		place := fmt.Sprintf("%s at (%.1f, %.1f, %.1f)", destination, position.X, position.Y, position.Z)
+		if playerLabel != "" {
+			place = playerLabel + " in " + place
+		}
+		destination = place
+	default:
 		destination += " safe point"
 	}
 	source := names[int(input.SourceZone)]
@@ -251,7 +350,8 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 	if p.connectionID(scope.user) == scope.connectionID {
 		status = p.world.Move(playersupport.MoveTarget{
 			CharacterID: view.CharacterID, AccountID: accountID, CorpseID: input.CorpseID,
-			SourceZone: input.SourceZone, SourceInstance: input.SourceInstance, Destination: input.Destination, ToPlayer: input.ToPlayer,
+			SourceZone: input.SourceZone, SourceInstance: input.SourceInstance, Destination: input.Destination,
+			ToPlayer: input.ToPlayer, PlayerPosition: position,
 		})
 	}
 	delivery, message := supportMoveResult(status, input.CorpseID != 0)

@@ -21,10 +21,12 @@ type MoveTarget struct {
 	SourceInstance uint          `json:"source_instance"`
 	Destination    uint          `json:"destination"`
 	ToPlayer       bool          `json:"-"`
-	PlayerPosition *movePosition `json:"player_position,omitempty"`
+	PlayerPosition *MovePosition `json:"player_position,omitempty"`
 }
 
-type movePosition struct {
+// MovePosition is an exact destination. A corpse moved to the player uses
+// the player's live position; a character move uses GM-chosen coordinates.
+type MovePosition struct {
 	ZoneID     uint    `json:"zone_id"`
 	InstanceID uint    `json:"instance_id"`
 	X          float32 `json:"x"`
@@ -40,11 +42,45 @@ type moveConsoleReply struct {
 
 type moveZoneReply struct {
 	Status   string        `json:"status"`
-	Location *movePosition `json:"location"`
+	Location *MovePosition `json:"location"`
+}
+
+// Locate reports a character's live position. "located" includes the
+// position; "offline" means the character is not in game; "busy" means the
+// character is zoning. Other statuses mean the position could not be read.
+func (w *World) Locate(characterID, accountID uint) (string, *MovePosition) {
+	address := w.address()
+	if address == "" {
+		return "unavailable", nil
+	}
+	console := telnet.NewClientWithAddress(w.logger, address)
+	defer console.Close()
+	status, _, position := locate(console, characterID, accountID)
+	return status, position
+}
+
+func locate(console *telnet.Client, characterID, accountID uint) (string, uint16, *MovePosition) {
+	owner := moveConsole(console, fmt.Sprintf("supportlocation %d %d", characterID, accountID))
+	if owner.Status != "zone" {
+		return owner.Status, 0, nil
+	}
+	if owner.Port == 0 {
+		return "unavailable", 0, nil
+	}
+	player := moveZoneCall(owner.Port, "get_support_location", MoveTarget{CharacterID: characterID, AccountID: accountID})
+	if player.Status == "offline" {
+		return "offline", 0, nil
+	}
+	if player.Status != "located" || player.Location == nil {
+		return "unavailable", 0, nil
+	}
+	return "located", owner.Port, player.Location
 }
 
 // Move lets World update an unloaded target or identify the local zone that
 // owns a live entity. The zone revalidates the target before applying the move.
+// A character move with PlayerPosition goes to those coordinates in the base
+// zone instead of the destination's safe point.
 func (w *World) Move(target MoveTarget) string {
 	address := w.address()
 	if address == "" {
@@ -54,23 +90,16 @@ func (w *World) Move(target MoveTarget) string {
 	defer console.Close()
 	var playerPort uint16
 	if target.ToPlayer {
-		owner := moveConsole(console, fmt.Sprintf("supportlocation %d %d", target.CharacterID, target.AccountID))
-		if owner.Status != "zone" {
-			return owner.Status
-		}
-		if owner.Port == 0 {
-			return "unavailable"
-		}
-		playerPort = owner.Port
-		player := moveZoneCall(playerPort, "get_support_location", target)
-		if player.Status != "located" || player.Location == nil {
-			if player.Status == "offline" {
-				return "offline"
+		status, port, position := locate(console, target.CharacterID, target.AccountID)
+		if status != "located" {
+			if status == "offline" || status == "busy" || status == "stale" {
+				return status
 			}
 			return "unavailable"
 		}
-		target.PlayerPosition = player.Location
-		target.Destination = player.Location.ZoneID
+		playerPort = port
+		target.PlayerPosition = position
+		target.Destination = position.ZoneID
 	}
 	command := fmt.Sprintf("supportmove %d %d %d %d %d %d", target.CharacterID,
 		target.AccountID, target.CorpseID, target.SourceZone, target.SourceInstance, target.Destination)

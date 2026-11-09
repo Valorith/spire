@@ -218,6 +218,45 @@ test('moves the petition character and a selected unburied corpse with separate 
   expect(writes[1]).toMatchObject({ path: `${endpoint}/${caseKey}/move`, connection: '7', input: { corpse_id: 42, source_zone: 89, source_instance: 8, destination: 202, request_id: expect.stringMatching(/^[a-f0-9]{32}$/) } });
 });
 
+test('moves the character to exact coordinates or to another player', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support', 'player-operations']);
+  await page.route('**/api/v1/player-operations/lookup/characters?*', route => route.fulfill({ json: { data: [
+    { id: 100, name: 'Aranel', level: 50, zone_id: 89, zone_name: 'Old Sebilis', online: true },
+    { id: 205, name: 'Thornwick', level: 60, zone_id: 202, zone_name: 'Plane of Knowledge', online: true },
+  ] } }));
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Move character' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Aranel · Recovery' });
+  const moveCharacter = dialog.getByRole('button', { name: 'Move character' });
+
+  await dialog.getByRole('button', { name: 'Coordinates' }).click();
+  await expect(dialog.getByLabel('X coordinate')).toHaveValue('3');
+  await dialog.getByLabel('Paste a /loc result').fill('Your Location is 120.5, -45.25, 3.1');
+  await expect(dialog.getByLabel('X coordinate')).toHaveValue('-45.25');
+  await expect(dialog.getByLabel('Y coordinate')).toHaveValue('120.5');
+  await dialog.getByLabel('Heading').fill('600');
+  await dialog.getByLabel('Reason for move').fill('Player is stuck under the floor');
+  await expect(moveCharacter).toBeDisabled();
+  await dialog.getByLabel('Heading').fill('128');
+  await moveCharacter.click();
+  await expect(dialog.getByRole('status')).toHaveText('Move requested in game.');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+
+  await page.getByRole('button', { name: 'Move character' }).click();
+  await dialog.getByRole('button', { name: 'Player', exact: true }).click();
+  await dialog.getByLabel('Search characters').fill('th');
+  await expect(dialog.getByRole('button', { name: /Aranel/ })).toHaveCount(0);
+  await dialog.getByRole('button', { name: /Thornwick/ }).click();
+  await expect(dialog.getByText(/Live location · Plane of Knowledge/)).toBeVisible();
+  await dialog.getByLabel('Reason for move').fill('Join the guide for an escort');
+  await moveCharacter.click();
+  await expect(dialog.getByRole('status')).toHaveText('Move requested in game.');
+
+  expect(writes).toHaveLength(2);
+  expect(writes[0].input).toMatchObject({ corpse_id: 0, destination: 89, coordinates: { x: -45.25, y: 120.5, z: 3.1, heading: 128 } });
+  expect(writes[1].input).toMatchObject({ corpse_id: 0, destination: 0, target_character: 205, to_player: false });
+});
+
 test('moves a corpse to the player and shows the notice receipt', async ({ page }) => {
   const writes = await mockSupport(page, ['player-support', 'player-operations']);
   await page.route(`**${endpoint}/${caseKey}/move?*`, route => route.fulfill({

@@ -41,11 +41,30 @@
             <i v-if="canMove" class="fe fe-arrow-right recovery-direction" aria-hidden="true"></i>
             <section v-if="canMove" class="recovery-position recovery-destination">
               <h3><i class="fe fe-flag" aria-hidden="true"></i> Destination</h3>
-              <strong>{{ toPlayer ? record.character + '’s current location' : destination && destination.long_name }}</strong>
-              <span v-if="toPlayer" class="recovery-tag"><i class="fe fe-bell" aria-hidden="true"></i> In-game notice</span>
-              <span v-else class="recovery-tag">Safe point</span>
+              <div v-if="mode === 'move'" class="recovery-target-modes" role="group" aria-label="Destination type">
+                <button v-for="option in targetModes" :key="option.id" type="button" :aria-pressed="target === option.id"
+                        :disabled="sending || !!result" @click="setTarget(option.id)">
+                  <i :class="option.icon" aria-hidden="true"></i> {{ option.label }}
+                </button>
+              </div>
+              <template v-if="mode === 'move' && target === 'player'">
+                <strong>{{ targetPlayer ? targetPlayer.name : 'Choose a player' }}</strong>
+                <span v-if="targetPlayer" class="recovery-tag">
+                  <i :class="targetPlayer.online ? 'fe fe-radio' : 'fe fe-save'" aria-hidden="true"></i>
+                  {{ targetPlayer.online ? 'Live location' : 'Last saved location' }} · {{ targetPlayer.zone_name || 'Zone #' + targetPlayer.zone_id }}
+                </span>
+                <span v-else class="recovery-tag">Moves to their location in any zone</span>
+              </template>
+              <template v-else>
+                <strong>{{ toPlayer ? record.character + '’s current location' : destination && destination.long_name }}</strong>
+                <span v-if="toPlayer" class="recovery-tag"><i class="fe fe-bell" aria-hidden="true"></i> In-game notice</span>
+                <span v-else-if="mode === 'move' && target === 'coordinates'" class="recovery-tag">{{ coordinatesReady ? coordinateLabel : 'Enter coordinates below' }}</span>
+                <span v-else class="recovery-tag">Safe point</span>
+              </template>
               <div class="recovery-destination-actions">
-                <button type="button" class="recovery-button recovery-change" :disabled="sending || !!result"
+                <button v-if="mode === 'move' && target === 'player'" type="button" class="recovery-button recovery-change" :disabled="sending || !!result"
+                        :aria-expanded="choosingPlayer" @click="togglePlayers">{{ choosingPlayer ? 'Close player search' : targetPlayer ? 'Change player' : 'Find player' }}</button>
+                <button v-else type="button" class="recovery-button recovery-change" :disabled="sending || !!result"
                         :aria-expanded="choosing" @click="toggleZones">{{ choosing ? 'Close zone search' : 'Change zone' }}</button>
                 <button v-if="selectedCorpse && data.live_destination && !toPlayer" type="button" class="recovery-button recovery-change" :disabled="sending || !!result"
                         @click="choosePlayer"><i class="fe fe-crosshair" aria-hidden="true"></i> Player’s current location</button>
@@ -65,6 +84,44 @@
               </button>
             </div>
           </div>
+
+          <div v-if="choosingPlayer" class="recovery-picker">
+            <label for="recovery-player">Search characters</label>
+            <input id="recovery-player" ref="playerSearch" v-model="playerQuery" type="search" class="recovery-input" maxlength="64"
+                   placeholder="Character name or ID" @input="schedulePlayers">
+            <p v-if="playerError" class="recovery-message is-error" role="alert">{{ playerError }}</p>
+            <p v-else-if="playersLoading" class="recovery-empty" role="status">Searching characters…</p>
+            <p v-else-if="playerQuery.trim().length < 2" class="recovery-empty">Type at least 2 characters</p>
+            <p v-else-if="!players.length" class="recovery-empty">No matching characters</p>
+            <div v-else class="recovery-zone-results">
+              <button v-for="player in players" :key="player.id" type="button" :aria-pressed="!!targetPlayer && targetPlayer.id === player.id" @click="choosePlayerTarget(player)">
+                <strong><span class="recovery-online" :class="{ 'is-online': player.online }" aria-hidden="true"></span>{{ player.name }}</strong>
+                <span>Level {{ player.level }} · {{ player.zone_name || 'Zone #' + player.zone_id }} · {{ player.online ? 'Online' : 'Offline' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <fieldset v-if="canMove && mode === 'move' && target === 'coordinates' && !result" class="recovery-coordinates-form">
+            <legend>Coordinates in {{ destination ? destination.long_name : 'the destination zone' }}</legend>
+            <div class="recovery-coordinate-grid">
+              <label v-for="axis in axes" :key="axis.id">
+                <span>{{ axis.label }}</span>
+                <input v-model="coords[axis.id]" class="recovery-input" type="number" step="any" inputmode="decimal"
+                       :min="axis.id === 'heading' ? 0 : -100000" :max="axis.id === 'heading' ? 511.99 : 100000"
+                       :aria-label="axis.aria" :disabled="sending" @input="moveError = ''">
+              </label>
+            </div>
+            <div class="recovery-loc-row">
+              <input v-model="locPaste" class="recovery-input" type="text" maxlength="120" aria-label="Paste a /loc result"
+                     placeholder="Paste /loc output, e.g. Your Location is 120.5, -45.0, 3.1" :disabled="sending" @input="applyLoc">
+              <button type="button" class="recovery-button recovery-change" :disabled="sending" @click="useSavedCoordinates">
+                <i class="fe fe-map-pin" aria-hidden="true"></i> Use saved location
+              </button>
+            </div>
+            <span class="recovery-hint" :class="{ 'is-short': locPaste && !locParsed }">
+              {{ locPaste && !locParsed ? 'Could not read three numbers from that text.' : 'EverQuest /loc lists Y, X, Z — pasting fills them in the right order. Heading is 0–511.' }}
+            </span>
+          </fieldset>
 
           <section v-if="selectedCorpse" class="recovery-inventory" aria-label="Corpse inventory">
             <div class="recovery-inventory-header">
@@ -111,7 +168,7 @@
         <span v-if="data && !data.local_world && allowMove" class="recovery-tag">Moves require the local game server</span>
         <button type="button" class="recovery-button" :disabled="sending" @click="$emit('close')">{{ result ? 'Done' : 'Close' }}</button>
         <button v-if="canMove && !result" type="button" class="recovery-button is-primary"
-                :disabled="sending || choosing || !reason.trim()" @click="move">
+                :disabled="sending || choosing || choosingPlayer || !reason.trim() || !destinationReady" @click="move">
           <i class="fe fe-navigation" aria-hidden="true"></i> {{ sending ? 'Moving…' : mode === 'move' ? 'Move character' : 'Move corpse' }}
         </button>
       </div>
@@ -135,7 +192,21 @@ export default {
       mode: this.initialMode, data: null, selectedId: null, loading: false, loadError: '',
       items: [], lootLoading: false, lootError: '', lootVersion: 0,
       choosing: false, zoneQuery: '', zones: [], zonesLoading: false, zoneError: '', zoneVersion: 0, zoneTimer: null,
-      destination: null, toPlayer: false, reason: '', sending: false, moveError: '', result: null
+      destination: null, toPlayer: false, reason: '', sending: false, moveError: '', result: null,
+      target: 'zone', coords: { x: '', y: '', z: '', heading: '0' }, locPaste: '', locParsed: false,
+      choosingPlayer: false, playerQuery: '', players: [], playersLoading: false, playerError: '', playerVersion: 0, playerTimer: null,
+      targetPlayer: null,
+      targetModes: [
+        { id: 'zone', label: 'Zone', icon: 'fe fe-map' },
+        { id: 'coordinates', label: 'Coordinates', icon: 'fe fe-crosshair' },
+        { id: 'player', label: 'Player', icon: 'fe fe-users' }
+      ],
+      axes: [
+        { id: 'x', label: 'X', aria: 'X coordinate' },
+        { id: 'y', label: 'Y', aria: 'Y coordinate' },
+        { id: 'z', label: 'Z', aria: 'Z coordinate' },
+        { id: 'heading', label: 'Heading', aria: 'Heading' }
+      ]
     }
   },
   computed: {
@@ -152,6 +223,29 @@ export default {
       return Boolean(this.allowMove && !this.loading && this.data && this.data.local_world && this.source &&
         this.source.zone_id && (!this.selectedCorpse || !this.selectedCorpse.buried))
     },
+    coordinateValues () {
+      const values = {}
+      for (const axis of ['x', 'y', 'z', 'heading']) {
+        const raw = String(this.coords[axis]).trim()
+        values[axis] = raw === '' ? NaN : Number(raw)
+      }
+      return values
+    },
+    coordinatesReady () {
+      const { x, y, z, heading } = this.coordinateValues
+      return [x, y, z].every(value => Number.isFinite(value) && Math.abs(value) <= 100000) &&
+        Number.isFinite(heading) && heading >= 0 && heading < 512
+    },
+    coordinateLabel () {
+      const { x, y, z } = this.coordinateValues
+      return [x, y, z].map(value => value.toFixed(1)).join(' / ')
+    },
+    destinationReady () {
+      if (this.toPlayer || this.mode !== 'move') return Boolean(this.toPlayer || this.destination)
+      if (this.target === 'player') return Boolean(this.targetPlayer)
+      if (this.target === 'coordinates') return Boolean(this.destination && this.coordinatesReady)
+      return Boolean(this.destination)
+    },
     unconfirmed () { return this.result && ['unconfirmed', 'moved_arrival_unconfirmed'].includes(this.result.status) },
     warning () { return this.unconfirmed || (this.result && this.result.status === 'moved_notice_unavailable') },
     coins () {
@@ -161,7 +255,10 @@ export default {
     }
   },
   created () { this.load() },
-  beforeDestroy () { clearTimeout(this.zoneTimer) },
+  beforeDestroy () {
+    clearTimeout(this.zoneTimer)
+    clearTimeout(this.playerTimer)
+  },
   methods: {
     errorText (error, fallback) {
       const response = error.response
@@ -199,6 +296,74 @@ export default {
       this.reason = ''
       this.moveError = ''
       this.result = null
+      clearTimeout(this.playerTimer)
+      this.playerVersion++
+      this.target = 'zone'
+      this.choosingPlayer = false
+      this.targetPlayer = null
+      this.locPaste = ''
+      this.locParsed = false
+      this.useSavedCoordinates()
+    },
+    setTarget (target) {
+      if (this.target === target) return
+      this.target = target
+      this.moveError = ''
+      this.choosing = false
+      this.choosingPlayer = false
+      if (target === 'player' && !this.targetPlayer) this.togglePlayers()
+    },
+    useSavedCoordinates () {
+      const source = this.mode === 'move' && this.data ? this.data.character : null
+      if (!source) return
+      this.coords = { x: this.round(source.x), y: this.round(source.y), z: this.round(source.z), heading: '0' }
+      if (this.target === 'coordinates') this.destination = { id: source.zone_id, long_name: this.zoneName(source) }
+    },
+    round (value) { return String(Math.round(Number(value) * 100) / 100) },
+    // EverQuest prints "/loc" as Y, X, Z.
+    applyLoc () {
+      const numbers = (this.locPaste.match(/-?\d+(?:\.\d+)?/g) || []).map(Number)
+      this.locParsed = numbers.length >= 3
+      if (!this.locParsed) return
+      const [y, x, z] = numbers
+      this.coords = { ...this.coords, x: String(x), y: String(y), z: String(z) }
+      this.moveError = ''
+    },
+    togglePlayers () {
+      this.choosingPlayer = !this.choosingPlayer
+      if (this.choosingPlayer) {
+        this.choosing = false
+        this.playerQuery = ''
+        this.players = []
+        this.playerError = ''
+        this.$nextTick(() => { if (this.$refs.playerSearch) this.$refs.playerSearch.focus() })
+      }
+    },
+    schedulePlayers () {
+      clearTimeout(this.playerTimer)
+      const version = ++this.playerVersion
+      const q = this.playerQuery.trim()
+      this.playerError = ''
+      this.players = []
+      this.playersLoading = q.length >= 2
+      if (!this.playersLoading) return
+      this.playerTimer = setTimeout(async () => {
+        try {
+          const { data } = await SpireApi.v1().get('player-operations/lookup/characters', { params: { q } })
+          if (version === this.playerVersion) {
+            this.players = (data.data || []).filter(player => player.id !== this.record.character_id)
+          }
+        } catch (error) {
+          if (version === this.playerVersion) this.playerError = this.errorText(error, 'Could not search characters.')
+        } finally {
+          if (version === this.playerVersion) this.playersLoading = false
+        }
+      }, 200)
+    },
+    choosePlayerTarget (player) {
+      this.targetPlayer = player
+      this.choosingPlayer = false
+      this.moveError = ''
     },
     changeMode (mode) {
       if (this.mode === mode) return
@@ -229,6 +394,7 @@ export default {
     },
     toggleZones () {
       this.choosing = !this.choosing
+      this.choosingPlayer = false
       if (this.choosing) {
         this.zoneQuery = ''
         this.scheduleZones()
@@ -263,7 +429,7 @@ export default {
       this.moveError = ''
     },
     async move () {
-      if (!this.canMove || this.sending || this.result || this.choosing) return
+      if (!this.canMove || this.sending || this.result || this.choosing || this.choosingPlayer || !this.destinationReady) return
       const reason = this.reason.trim()
       const length = new TextEncoder().encode(reason).length
       if (length < 8 || length > 240) {
@@ -275,11 +441,19 @@ export default {
       this.moveError = ''
       const requestId = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
       try {
-        const { data } = await SpireApi.v1().put(this.endpoint + '/move', {
+        const body = {
           corpse_id: this.selectedCorpse ? this.selectedCorpse.id : 0,
           source_zone: this.source.zone_id, source_instance: this.source.instance_id,
           destination: this.toPlayer ? 0 : this.destination.id, to_player: this.toPlayer, reason, request_id: requestId
-        }, { params: this.params })
+        }
+        if (this.mode === 'move' && this.target === 'player') {
+          body.destination = 0
+          body.target_character = this.targetPlayer.id
+        } else if (this.mode === 'move' && this.target === 'coordinates') {
+          const { x, y, z, heading } = this.coordinateValues
+          body.coordinates = { x, y, z, heading }
+        }
+        const { data } = await SpireApi.v1().put(this.endpoint + '/move', body, { params: this.params })
         this.result = ['saved', 'requested', 'moved', 'moved_notified', 'moved_notice_unavailable', 'moved_arrival_unconfirmed'].includes(data.status)
           ? data : { ...data, status: 'unconfirmed' }
       } catch (error) {
@@ -363,6 +537,22 @@ export default {
 .recovery-loot strong { overflow-wrap: anywhere; font-size: .8rem; }
 .recovery-loot li span { color: var(--muted); }
 .recovery-empty { padding: 10px 0; margin: 0; color: var(--muted); }
+.recovery-target-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; width: 100%; margin-bottom: 4px; padding: 3px; border-radius: 7px; background: #141210; border: 1px solid #4a3d2a; }
+.recovery-target-modes button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 6px; border: 0; border-radius: 5px; background: transparent; color: #cdb98f; font-size: .72rem; font-weight: 650; white-space: nowrap; }
+.recovery-target-modes button:hover:not(:disabled) { color: #f3dcae; }
+.recovery-target-modes button[aria-pressed=true] { color: #241b11; background: var(--gold); }
+.recovery-target-modes button:disabled { opacity: .5; cursor: default; }
+.recovery-coordinates-form { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+.recovery-coordinates-form legend { width: auto; margin: 0; padding: 0 4px; font-size: .8rem; font-weight: 600; color: #e1ebf6; }
+.recovery-coordinate-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.recovery-coordinate-grid label { display: grid; gap: 4px; margin: 0; }
+.recovery-coordinate-grid label span { color: var(--muted); font-size: .72rem; font-weight: 650; }
+.recovery-coordinate-grid input { font-variant-numeric: tabular-nums; }
+.recovery-loc-row { display: flex; gap: 8px; margin-top: 10px; }
+.recovery-loc-row input { flex: 1; min-width: 0; }
+.recovery-loc-row button { flex: none; }
+.recovery-online { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; border: 1px solid var(--muted); vertical-align: middle; }
+.recovery-online.is-online { border: 0; background: #8fd6ad; }
 .recovery-corpse-summary { color: var(--muted); font-size: .74rem; justify-content: flex-start !important; gap: 10px !important; }
 .recovery-corpse-summary i { margin-right: 2px; }
 .recovery-reason { display: grid; }
@@ -379,5 +569,7 @@ export default {
   .recovery-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 145px; }
   .recovery-detail, .recovery-bar { padding-left: 12px; padding-right: 12px; }
   .recovery-position { padding: 8px; }
+  .recovery-coordinate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .recovery-loc-row { flex-wrap: wrap; }
 }
 </style>
