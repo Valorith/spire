@@ -28,6 +28,7 @@ The patch adds a `#petition` command for players. It works alongside `/guidehelp
 
 - `#petition <message>` files a petition when the player has none. It creates the same petition as `/guidehelp`, so it appears in Player Support right away.
 - If the player already has an open petition, `#petition <message>` adds to it. The text goes to Game Master like a tell. Spire records it on the case when **Messages** is on, and otherwise tells the player why it could not.
+- Petitions are one per account. Only the character that filed it can add to it; on another character, `#petition` names the character who filed it instead.
 - `#petition` with no message shows whether a petition is open and how to add to or withdraw it.
 
 Server operators can rename or restrict the command in the `command_settings` table like any other command.

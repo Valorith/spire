@@ -82,7 +82,7 @@ index ba9f47ff526295d2cc93a7c10c60b3276ce4a578..7f5e352e0933efb071a3051ce4a81db9
  			size_t m_cursor;
  			char m_line[MaxConsoleLineLength];
 diff --git a/world/console.cpp b/world/console.cpp
-index 364d40375917f3a9c0794dac6b523423d4a75779..368a5c6b3a1616a45618cf69695668b4073c330f 100644
+index 364d40375917f3a9c0794dac6b523423d4a75779..f924cffa62bc85c269df137274ed9390a5fceae8 100644
 --- a/world/console.cpp
 +++ b/world/console.cpp
 @@ -21,9 +21,12 @@
@@ -133,7 +133,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..368a5c6b3a1616a45618cf69695668b4
 +{
 +	const char *message = "Game Master messaging is unavailable right now. Please try again.";
 +	if (decision == "no_petition") {
-+		message = "This character has no active petition. Use #petition [message] or /guidehelp to file one.";
++		message = "This character has no active petition. File one with #petition [message] or /guidehelp, or reply from the character that filed it.";
 +	} else if (decision == "messages_off") {
 +		message = "Your petition is in the queue. A Game Master will turn on messages when they are ready to reply.";
 +	} else if (decision == "invalid") {
@@ -1007,10 +1007,10 @@ index 2dbfc3986b8c0c06e83ca75774937b4336c0148f..8c8693e237cd45a04528ea91865ec55a
  	uint32 GetCharID() { return m_character_id; }
  
 diff --git a/zone/gm_commands/delpetition.cpp b/zone/gm_commands/delpetition.cpp
-index f42cf277285cf77f11e18d5d0651c10228593322..a1aee7e0b8a06da3f60869b44ae0feae83bb12db 100755
+index f42cf277285cf77f11e18d5d0651c10228593322..83ab385d1fa3f45c1732db8dc47e9b1b925510f2 100755
 --- a/zone/gm_commands/delpetition.cpp
 +++ b/zone/gm_commands/delpetition.cpp
-@@ -18,3 +18,35 @@ void command_delpetition(Client *c, const Seperator *sep)
+@@ -18,3 +18,59 @@ void command_delpetition(Client *c, const Seperator *sep)
  
  }
  
@@ -1027,15 +1027,39 @@ index f42cf277285cf77f11e18d5d0651c10228593322..a1aee7e0b8a06da3f60869b44ae0feae
 +	std::string text = sep->argplus[1] ? sep->argplus[1] : "";
 +	Strings::Trim(text);
 +	const bool has_petition = PetitionList::Instance()->FindPetitionByAccountName(c->AccountName());
-+	if (text.empty()) {
++
++	// Petitions are one per account, but Player Support only accepts
++	// follow-ups from the character that filed it.
++	std::string petitioner;
++	if (has_petition) {
++		auto results = database.QueryDatabase(fmt::format(
++			"SELECT `charname` FROM `petitions` WHERE `accountname` = '{}' ORDER BY `dib` DESC LIMIT 1",
++			Strings::Escape(c->AccountName())
++		));
++		if (results.Success() && results.RowCount() > 0) {
++			auto row = results.begin();
++			petitioner = row[0] ? row[0] : "";
++		}
++	}
++	const bool own_petition = has_petition && strcasecmp(petitioner.c_str(), c->GetName()) == 0;
++	if (has_petition && !own_petition) {
 +		c->Message(
 +			Chat::White,
-+			has_petition ? "Your petition is in the queue. Use #petition [message] to add to it, or /deletepetition to withdraw it."
-+			     : "Usage: #petition [message] - Describe your problem and a Game Master will respond."
++			petitioner.empty()
++				? "Your account already has a petition in the queue. Log in as the character who filed it to add to it or withdraw it."
++				: fmt::format("Your account's petition was filed by {}. Log in as {} to add to it or withdraw it.", petitioner, petitioner).c_str()
 +		);
 +		return;
 +	}
-+	if (!has_petition) {
++	if (text.empty()) {
++		c->Message(
++			Chat::White,
++			own_petition ? "Your petition is in the queue. Use #petition [message] to add to it, or /deletepetition to withdraw it."
++			             : "Usage: #petition [message] - Describe your problem and a Game Master will respond."
++		);
++		return;
++	}
++	if (!own_petition) {
 +		if (c->FilePetition(text)) {
 +			c->Message(Chat::Yellow, "Your petition has been submitted. A Game Master will respond as soon as possible.");
 +		}
