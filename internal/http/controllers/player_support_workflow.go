@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/EQEmuTools/spire/internal/env"
@@ -61,29 +62,76 @@ func supportCategoryLabel(id string) (string, bool) {
 	return "", false
 }
 
-// Keywords per category, in tie-break order.
+// Keywords per category, in tie-break order. A keyword matches whole words
+// of the petition text; a keyword of several words matches them in a row.
+// The last word of a stem also matches longer words that start with it, so
+// "quest" counts "quests" but not "request". Words match exactly, for
+// keywords that start too many unrelated words ("ban" and "bank", "key" and
+// "keyboard"), and list the forms they match.
 var supportCategoryKeywords = []struct {
-	ID       string
-	Keywords []string
+	ID    string
+	Stems []string
+	Words []string
 }{
-	{"corpse", []string{"corpse", "died", "death", "dead", "rez", "resurrect", "exp loss", "experience", "body"}},
-	{"stuck", []string{"stuck", "under the world", "fell through", "falling", "trapped", "can't move", "cannot move", "can not move", "bind"}},
-	{"items", []string{"item", "lost", "missing", "disappear", "vanish", "gone", "trade", "traded", "sold", "destroy", "deleted", "bag", "bank"}},
-	{"quest", []string{"quest", "task", "flag", "key", "lockout", "expedition", "instance", "progress"}},
-	{"conduct", []string{"harass", "spam", "cheat", "hack", "exploit", "bot", "rude", "scam", "threat", "kill steal", "ks"}},
-	{"bug", []string{"bug", "broken", "error", "crash", "glitch", "not working", "doesn't work"}},
-	{"account", []string{"account", "password", "login", "log in", "suspend", "ban", "name change", "transfer"}},
+	{"corpse", []string{"corpse", "died", "death", "dead", "resurrect", "exp loss", "experience"},
+		[]string{"rez", "rezz", "body", "bodies"}},
+	{"stuck", []string{"stuck", "under the world", "fell through", "falling", "trapped", "can't move", "cannot move", "can not move", "bind"}, nil},
+	{"items", []string{"item", "lost", "missing", "disappear", "vanish", "gone", "trade", "destroy", "deleted", "bank"},
+		[]string{"sold", "bag", "bags"}},
+	{"quest", []string{"quest", "task", "flag", "lockout", "expedition", "instance", "progress"},
+		[]string{"key", "keys"}},
+	{"conduct", []string{"harass", "spam", "cheat", "hack", "exploit", "rude", "scam", "threat", "kill steal"},
+		[]string{"bot", "bots", "botting", "botter", "ks", "ksing", "train", "trains", "trained", "training"}},
+	{"bug", []string{"broken", "error", "crash", "glitch", "not working", "doesn't work"},
+		[]string{"bug", "bugs", "bugged"}},
+	{"account", []string{"account", "password", "login", "log in", "suspend", "name change", "transfer"},
+		[]string{"ban", "bans", "banned"}},
+}
+
+// supportWords splits text into lowercase words of letters, digits and
+// apostrophes.
+func supportWords(text string) []string {
+	text = strings.ReplaceAll(strings.ToLower(text), "\u2019", "'")
+	return strings.FieldsFunc(text, func(r rune) bool {
+		return r != '\'' && !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+}
+
+// supportKeywordHit reports whether the keyword's words appear in a row in
+// words. With stem, its last word also matches a longer word it starts.
+func supportKeywordHit(words []string, keyword string, stem bool) bool {
+	parts := strings.Fields(keyword)
+	last := len(parts) - 1
+	for start := 0; start+last < len(words); start++ {
+		matched := true
+		for i, part := range parts {
+			word := words[start+i]
+			if word != part && !(stem && i == last && strings.HasPrefix(word, part)) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
 
 // supportSuggestCategory counts keyword hits per category in the petition
 // text. The most hits win; a tie goes to the earlier category.
 func supportSuggestCategory(message string) string {
-	text := strings.ToLower(message)
+	words := supportWords(message)
 	best, bestHits := "", 0
 	for _, category := range supportCategoryKeywords {
 		hits := 0
-		for _, keyword := range category.Keywords {
-			if strings.Contains(text, keyword) {
+		for _, keyword := range category.Stems {
+			if supportKeywordHit(words, keyword, true) {
+				hits++
+			}
+		}
+		for _, keyword := range category.Words {
+			if supportKeywordHit(words, keyword, false) {
 				hits++
 			}
 		}

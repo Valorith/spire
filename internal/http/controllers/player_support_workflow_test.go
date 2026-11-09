@@ -110,6 +110,39 @@ func TestSupportSuggestCategory(t *testing.T) {
 		{"The Veeshan's Peak lockout did not reset", "quest"},
 		{"Hello", ""},
 		{"", ""},
+
+		// Keywords match whole words, not letters inside other words.
+		{"a kick request, someone is training mobs on me", "conduct"},
+		{"thanks for the help", ""},
+		{"both of my characters", ""},
+		{"the urban bandit camp", ""},
+		{"my keyboard stopped working in game", ""},
+		{"my bodyguard pet wandered off", ""},
+		{"the soldier attacked me", ""},
+		{"the bugbear camp", ""},
+		{"rezoning fixed it", ""},
+		{"I put it in the bank", "items"},
+
+		// Stems match their plurals and inflections.
+		{"I lost my items", "items"},
+		{"I can't find my corpses", "corpse"},
+		{"I finished both quests but got no credit", "quest"},
+		{"I was banned for no reason", "account"},
+		{"someone is hacking", "conduct"},
+		{"he is exploiting the boss", "conduct"},
+		{"spamming the channel", "conduct"},
+		{"harassment from a player", "conduct"},
+		{"need a resurrection please", "corpse"},
+		{"kill stealing my mobs", "conduct"},
+		{"he ks my mobs", "conduct"},
+		{"a group is botting", "conduct"},
+		{"big exp loss", "corpse"},
+		{"I can't log in", "account"},
+		{"I need a name change", "account"},
+		{"my key was taken", "quest"},
+		{"the zone is bugged", "bug"},
+		{"fell through the floor", "stuck"},
+		{"I can\u2019t move", "stuck"},
 	}
 	for _, test := range cases {
 		if got := supportSuggestCategory(test.text); got != test.want {
