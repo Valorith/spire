@@ -65,6 +65,11 @@
  *   .support-settings      bordered list of .support-setting rows: a label with
  *                          .support-setting-text (strong + small) and a
  *                          .support-switch checkbox; .is-disabled on the row
+ *   .support-check         16px checkbox (input type=checkbox); gold when checked
+ *   .support-bulkbar       bar shown while items are selected: a
+ *                          .support-bulkbar-count ("2 selected") and a ghost
+ *                          Cancel on the first line, then
+ *                          .support-bulkbar-actions holding .support-button.is-sm
  *   .support-kbd           keyboard hint
  *   .support-link          text-styled button
  *   .support-feedback      inline status text: .is-error, .is-success
@@ -666,6 +671,58 @@ select.support-field { padding-right: 28px; }
   background-position: 16px 2px;
 }
 .support-switch:disabled { opacity: .5; }
+
+/* Checkbox --------------------------------------------------------------- */
+/* A 16px box; the tick is a background image for the same Firefox reason as
+   the switch. Focus uses the shared ring above. */
+.support-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius-sm);
+  background-color: var(--support-sunken);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: var(--support-transition);
+  vertical-align: middle;
+}
+.support-check:hover:not(:disabled) { border-color: var(--support-border-hover); }
+.support-check:checked {
+  border-color: var(--support-accent);
+  background-color: var(--support-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='%231f1910' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.support-check:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Bulk action bar -------------------------------------------------------- */
+/* Replaces a filter row while items are selected: a count, then small buttons. */
+.support-bulkbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--support-space-2);
+  padding: var(--support-space-2);
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+}
+.support-bulkbar-count {
+  margin-right: auto;
+  padding-left: var(--support-space-1);
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.support-bulkbar-actions { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: 6px; }
+.support-bulkbar .support-button.is-sm { padding: 0 var(--support-space-2); }
 
 /* Keyboard hint ---------------------------------------------------------- */
 .support-kbd {

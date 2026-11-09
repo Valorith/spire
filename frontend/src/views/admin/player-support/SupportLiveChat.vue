@@ -73,13 +73,22 @@
           <template v-if="!patched"> Without the server patch, the player cannot reply in game.</template></span>
       </p>
     </form>
+
+    <b-modal v-model="confirmOpen" modal-class="support-modal" title="Another GM is on this case" centered @hidden="focusDraft">
+      <p class="support-modal-lead">{{ confirmText }}</p>
+      <template #modal-footer="{ cancel }">
+        <button type="button" class="support-button" @click="cancel()">Cancel</button>
+        <button type="button" class="support-button is-primary" @click="sendAnyway">Send anyway</button>
+      </template>
+    </b-modal>
   </section>
 </template>
 
 <script>
 import axios from 'axios'
-import { avatarStyle, deliveryLabel, deliveryTone, fillReply, fitsTell, initials } from './support-ui'
+import { avatarStyle, deliveryLabel, deliveryTone, fillReply, fitsTell, initials, otherResponder } from './support-ui'
 import { SpireApi } from '@/app/api/spire-api'
+import UserContext from '@/app/user/UserContext'
 
 export default {
   name: 'SupportLiveChat',
@@ -88,18 +97,38 @@ export default {
     // Shared saved replies; the ones that fit in a tell become quick replies.
     savedReplies: { type: Array, default: () => [] },
     connectionId: { type: Number, required: true },
-    canWrite: { type: Boolean, default: false }
+    canWrite: { type: Boolean, default: false },
+    // Other staff on this case ({ name, composing }), from presence.
+    viewers: { type: Array, default: () => [] }
   },
   data () {
     return {
-      state: 'connecting', active: false, messages: [], cursor: 0, draft: '', requestId: '', recipient: '', tellsOff: false, mailTo: '', companion: '',
+      state: 'connecting',
+      active: false,
+      messages: [],
+      cursor: 0,
+      draft: '',
+      requestId: '',
+      recipient: '',
+      tellsOff: false,
+      mailTo: '',
+      companion: '',
       quickReplies: [
         'Hi! I am looking into this now.',
         'Can you tell me more about what happened?',
         'Please log in on any character so I can help.',
         'This should be fixed now. Let me know if not.'
       ],
-      busy: false, error: '', timer: null, cancellation: null, version: 0, stopped: false
+      busy: false,
+      error: '',
+      timer: null,
+      cancellation: null,
+      version: 0,
+      stopped: false,
+      me: '',
+      confirmOpen: false,
+      confirmText: '',
+      confirmed: false
     }
   },
   computed: {
@@ -176,7 +205,14 @@ export default {
     }
   },
   watch: {
-    petitionAvailable () { this.load() }
+    petitionAvailable () { this.load() },
+    // The page tells other staff while a reply is being written.
+    draft (value, previous) {
+      if (Boolean(value.trim()) !== Boolean(previous.trim())) this.$emit('composing', Boolean(value.trim()))
+    }
+  },
+  created () {
+    UserContext.getUser().then(user => { this.me = (user && user.user_name) || '' }).catch(() => {})
   },
   mounted () {
     document.addEventListener('visibilitychange', this.onVisibility)
@@ -184,6 +220,7 @@ export default {
   },
   beforeDestroy () {
     this.stopped = true
+    if (this.draft.trim()) this.$emit('composing', false)
     document.removeEventListener('visibilitychange', this.onVisibility)
     this.cancelLoad()
   },
@@ -250,10 +287,12 @@ export default {
         if (replies.length) this.$emit('seen', replies[replies.length - 1].created_at)
         this.cursor = data.cursor
         delay = this.active ? 350 : 8000
-        if (following) this.$nextTick(() => {
-          const area = this.$refs.transcript
-          if (area) area.scrollTop = area.scrollHeight
-        })
+        if (following) {
+          this.$nextTick(() => {
+            const area = this.$refs.transcript
+            if (area) area.scrollTop = area.scrollHeight
+          })
+        }
       } catch (error) {
         if (this.stopped || version !== this.version || axios.isCancel(error)) return
         this.state = 'unavailable'
@@ -262,6 +301,12 @@ export default {
           this.timer = setTimeout(() => this.load(true), delay)
         }
       }
+    },
+    focusDraft () { if (this.$refs.draft) this.$refs.draft.focus() },
+    sendAnyway () {
+      this.confirmed = true
+      this.confirmOpen = false
+      this.act('send')
     },
     async act (action) {
       if (!this.canWrite || this.busy) return
@@ -272,6 +317,19 @@ export default {
         this.error = 'Use printable ASCII characters.'
         return
       }
+      // Ask first when another Game Master is writing or just wrote to the player.
+      if (action === 'send' && !this.confirmed) {
+        const other = otherResponder(this.viewers, this.messages.filter(message => message.kind === 'chat_out'), this.me)
+        if (other) {
+          const to = this.mailing ? this.mailTo : this.target
+          this.confirmText = other.composing
+            ? `${other.name} is also writing to ${to}.`
+            : `${other.name} messaged ${to} ${other.minutes} ${other.minutes === 1 ? 'minute' : 'minutes'} ago.`
+          this.confirmOpen = true
+          return
+        }
+      }
+      if (action === 'send') this.confirmed = false
       this.busy = true
       this.error = ''
       if (action === 'send' && !this.requestId) {
@@ -289,10 +347,12 @@ export default {
       } finally {
         this.busy = false
         await this.load()
-        if (action !== 'end' && !this.stopped) this.$nextTick(() => {
-          const input = this.$el.querySelector('#support-live-message')
-          if (input) input.focus()
-        })
+        if (action !== 'end' && !this.stopped) {
+          this.$nextTick(() => {
+            const input = this.$el.querySelector('#support-live-message')
+            if (input) input.focus()
+          })
+        }
       }
     }
   }

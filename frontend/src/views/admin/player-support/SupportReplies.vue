@@ -16,6 +16,7 @@
               <small>
                 <span v-if="fitsTell(reply.body)" class="support-chip"><i class="fe fe-message-circle" aria-hidden="true"></i> Quick reply</span>
                 <span class="support-chip"><i class="fe fe-mail" aria-hidden="true"></i> Mail template</span>
+                <span v-if="reply.resolves" class="support-chip is-accent"><i class="fe fe-check-circle" aria-hidden="true"></i> Reply and resolve</span>
                 <span v-if="reply.updated_by">· {{ reply.updated_by }}</span>
               </small>
             </div>
@@ -35,6 +36,12 @@
         <label for="reply-body">Reply <span>({{ body.length }}/2,000 · {{ fitsTell(body.trim()) ? 'fits in a tell' : 'mail only' }})</span></label>
         <textarea id="reply-body" v-model="body" class="form-control" rows="4" maxlength="2000"
                   placeholder="Hi {character}, we restored the item you reported."></textarea>
+        <div class="support-settings replies-resolves">
+          <label for="reply-resolves" class="support-setting">
+            <span class="support-setting-text"><strong id="reply-resolves-title">Reply and resolve</strong><small id="reply-resolves-hint">Offer in the Resolve dialog.</small></span>
+            <input id="reply-resolves" v-model="resolves" type="checkbox" class="support-switch" aria-labelledby="reply-resolves-title" aria-describedby="reply-resolves-hint">
+          </label>
+        </div>
         <div class="replies-form-actions">
           <button v-if="editing" type="button" class="support-button" :disabled="busy" @click="reset">Cancel</button>
           <button type="submit" class="support-button is-primary" :disabled="busy || !title.trim() || !body.trim()">
@@ -61,7 +68,7 @@ export default {
     replies: { type: Array, required: true }
   },
   data () {
-    return { editing: 0, title: '', body: '', busy: false, error: '' }
+    return { editing: 0, title: '', body: '', resolves: false, busy: false, error: '' }
   },
   methods: {
     fitsTell (text) { return fitsTell(text) },
@@ -71,18 +78,20 @@ export default {
       this.editing = reply.id
       this.title = reply.title
       this.body = reply.body
+      this.resolves = Boolean(reply.resolves)
       this.$nextTick(() => this.$refs.title && this.$refs.title.focus())
     },
     reset () {
       this.editing = 0
       this.title = ''
       this.body = ''
+      this.resolves = false
     },
     async save () {
       this.busy = true
       this.error = ''
       try {
-        const payload = { title: this.title.trim(), body: this.body.trim() }
+        const payload = { title: this.title.trim(), body: this.body.trim(), resolves: this.resolves }
         if (this.editing) {
           await SpireApi.v1().put(`player-support/replies/${this.editing}`, payload, this.params())
         } else {
@@ -137,5 +146,6 @@ export default {
 .support-button.replies-delete:hover:not(:disabled) { background: var(--support-danger-soft); color: var(--support-danger); }
 .replies-form { padding-top: var(--support-space-4); border-top: 1px solid var(--support-border-subtle); }
 .replies-form .support-section-label { margin: 0; }
+.replies-resolves { margin-top: var(--support-space-3); }
 .replies-form-actions { display: flex; justify-content: flex-end; gap: var(--support-space-2); margin-top: var(--support-space-3); }
 </style>

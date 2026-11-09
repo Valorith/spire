@@ -43,24 +43,44 @@
         <i class="fe fe-send" aria-hidden="true"></i>{{ sending ? 'Sending…' : 'Send reply' }}
       </button>
     </template>
+    <b-modal v-model="confirmOpen" modal-class="support-modal" title="Another GM is on this case" centered>
+      <p class="support-modal-lead">{{ confirmText }}</p>
+      <template #modal-footer="{ cancel }">
+        <button type="button" class="support-button" @click="cancel()">Cancel</button>
+        <button type="button" class="support-button is-primary" @click="sendAnyway">Send anyway</button>
+      </template>
+    </b-modal>
   </b-modal>
 </template>
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
-import { fillReply } from './support-ui'
+import { fillReply, otherResponder } from './support-ui'
+import UserContext from '@/app/user/UserContext'
 
 export default {
   name: 'SupportMailReply',
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
-    savedReplies: { type: Array, default: () => [] }
+    savedReplies: { type: Array, default: () => [] },
+    // Other staff on this case ({ name, composing }), and the case activity,
+    // to warn before writing over another Game Master's reply.
+    viewers: { type: Array, default: () => [] },
+    activity: { type: Array, default: () => [] }
   },
   data () {
     return {
-      open: true, reviewing: false, sending: false, error: '', verify: false,
-      subject: 'Your support case #' + this.record.key.split('-')[0], body: '',
+      open: true,
+      reviewing: false,
+      sending: false,
+      error: '',
+      verify: false,
+      me: '',
+      confirmOpen: false,
+      confirmText: '',
+      subject: 'Your support case #' + this.record.key.split('-')[0],
+      body: '',
       requestId: Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
     }
   },
@@ -69,19 +89,25 @@ export default {
     templates () {
       const name = this.record.character
       return [
-        { label: 'Item restored', icon: 'fe fe-package', body: `Hi ${name},
+        {
+          label: 'Item restored', icon: 'fe fe-package', body: `Hi ${name},
 
 We restored the item you reported. You can collect it from any parcel merchant.
 
-Thanks for your patience!` },
-        { label: 'Need details', icon: 'fe fe-help-circle', body: `Hi ${name},
+Thanks for your patience!`
+        },
+        {
+          label: 'Need details', icon: 'fe fe-help-circle', body: `Hi ${name},
 
 Thanks for your petition. Could you tell us a little more about what happened, including roughly when and where?
 
-You can reply with #petition in game.` },
-        { label: 'Resolved', icon: 'fe fe-check-circle', body: `Hi ${name},
+You can reply with #petition in game.`
+        },
+        {
+          label: 'Resolved', icon: 'fe fe-check-circle', body: `Hi ${name},
 
-Your issue has been resolved. If anything still looks wrong, use #petition in game and we will take another look.` }
+Your issue has been resolved. If anything still looks wrong, use #petition in game and we will take another look.`
+        }
       ]
     },
     // Shared saved replies come first; the built-in templates stay available.
@@ -92,11 +118,25 @@ Your issue has been resolved. If anything still looks wrong, use #petition in ga
       return saved.concat(this.templates)
     }
   },
+  watch: {
+    // The page tells other staff while a reply is being written.
+    body (value, previous) {
+      if (Boolean(value.trim()) !== Boolean(previous.trim())) this.$emit('composing', Boolean(value.trim()))
+    }
+  },
+  created () {
+    UserContext.getUser().then(user => { this.me = (user && user.user_name) || '' }).catch(() => {})
+  },
+  beforeDestroy () {
+    if (this.body.trim()) this.$emit('composing', false)
+  },
   methods: {
     useTemplate (template) {
-      this.body = this.body.trim() ? `${this.body.trimEnd()}
+      this.body = this.body.trim()
+        ? `${this.body.trimEnd()}
 
-${template.body}` : template.body
+${template.body}`
+        : template.body
       this.$nextTick(this.focusBody)
     },
     focusBody () {
@@ -107,8 +147,23 @@ ${template.body}` : template.body
       this.error = ''
       this.reviewing = true
     },
-    async send () {
+    sendAnyway () {
+      this.confirmOpen = false
+      this.send(true)
+    },
+    async send (confirmed = false) {
       if (!this.valid || this.sending || this.verify) return
+      // Ask first when another Game Master is writing or just wrote to the player.
+      const sent = this.activity.filter(entry => ['chat_out', 'reply', 'parcel'].includes(entry.kind))
+      const other = confirmed === true ? null : otherResponder(this.viewers, sent, this.me)
+      if (other) {
+        const to = this.record.character
+        this.confirmText = other.composing
+          ? `${other.name} is also writing to ${to}.`
+          : `${other.name} messaged ${to} ${other.minutes} ${other.minutes === 1 ? 'minute' : 'minutes'} ago.`
+        this.confirmOpen = true
+        return
+      }
       this.sending = true
       this.error = ''
       try {

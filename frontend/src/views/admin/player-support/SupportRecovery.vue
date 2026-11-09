@@ -4,10 +4,10 @@
     <div class="recovery">
       <div class="recovery-bar">
         <div class="support-tabs recovery-tabs" role="group" aria-label="Recovery tools">
-          <button type="button" :aria-pressed="mode === 'move'" :disabled="sending || unconfirmed" @click="changeMode('move')">
+          <button type="button" :aria-pressed="String(mode === 'move')" :disabled="sending || unconfirmed" @click="changeMode('move')">
             <i class="fe fe-user" aria-hidden="true"></i> Character
           </button>
-          <button type="button" :aria-pressed="mode === 'corpses'" :disabled="sending || unconfirmed" @click="changeMode('corpses')">
+          <button type="button" :aria-pressed="String(mode === 'corpses')" :disabled="sending || unconfirmed" @click="changeMode('corpses')">
             <i class="fe fe-archive" aria-hidden="true"></i> Corpses <span v-if="data" class="support-count">{{ data.corpses.length }}</span>
           </button>
         </div>
@@ -27,9 +27,9 @@
       <div v-else-if="data" class="recovery-workspace" :class="{ 'has-corpses': mode === 'corpses' }">
         <aside v-if="mode === 'corpses'" aria-label="Player corpses" class="recovery-list">
           <button v-for="corpse in data.corpses" :key="corpse.id" type="button" class="support-option recovery-corpse"
-                  :aria-pressed="corpse.id === selectedId" :disabled="sending || unconfirmed" @click="selectCorpse(corpse.id)">
+                  :aria-pressed="String(corpse.id === selectedId)" :disabled="sending || unconfirmed" @click="selectCorpse(corpse.id)">
             <span class="recovery-corpse-line"><strong>{{ zoneName(corpse.location) }}</strong><span class="recovery-corpse-id">#{{ corpse.id }}</span></span>
-            <span class="recovery-corpse-line is-meta"><time :datetime="corpse.time_of_death">{{ dateLabel(corpse.time_of_death) }}</time><span v-if="corpse.buried" class="support-chip">Buried</span></span>
+            <span class="recovery-corpse-line is-meta"><time :datetime="corpse.time_of_death">{{ dateLabel(corpse.time_of_death) }}</time><span v-if="corpse.buried" class="support-chip">{{ canUnbury ? 'Buried · will be unburied' : 'Buried' }}</span></span>
             <span class="recovery-corpse-line is-meta">
               <span><i class="fe fe-package" aria-hidden="true"></i> {{ corpse.item_count }} {{ corpse.item_count === 1 ? 'item' : 'items' }}</span>
             </span>
@@ -48,7 +48,7 @@
             <section v-if="canMove" class="recovery-position recovery-destination">
               <h3><i class="fe fe-flag" aria-hidden="true"></i> Destination</h3>
               <div v-if="mode === 'move'" class="support-segmented recovery-target-modes" role="group" aria-label="Destination type">
-                <button v-for="option in targetModes" :key="option.id" type="button" :aria-pressed="target === option.id"
+                <button v-for="option in targetModes" :key="option.id" type="button" :aria-pressed="String(target === option.id)"
                         :disabled="sending || !!result" @click="setTarget(option.id)">
                   <i :class="option.icon" aria-hidden="true"></i> {{ option.label }}
                 </button>
@@ -82,14 +82,18 @@
               </div>
               <div class="recovery-destination-actions">
                 <button v-if="mode === 'move' && target === 'player'" type="button" class="support-button is-sm" :disabled="sending || !!result"
-                        :aria-expanded="choosingPlayer" @click="togglePlayers">{{ choosingPlayer ? 'Close player search' : targetPlayer ? 'Change player' : 'Find player' }}</button>
+                        :aria-expanded="String(choosingPlayer)" @click="togglePlayers">{{ choosingPlayer ? 'Close player search' : targetPlayer ? 'Change player' : 'Find player' }}</button>
                 <button v-else type="button" class="support-button is-sm" :disabled="sending || !!result"
-                        :aria-expanded="choosing" @click="toggleZones">{{ choosing ? 'Close zone search' : 'Change zone' }}</button>
+                        :aria-expanded="String(choosing)" @click="toggleZones">{{ choosing ? 'Close zone search' : 'Change zone' }}</button>
                 <button v-if="selectedCorpse && data.live_destination && !toPlayer" type="button" class="support-button is-sm" :disabled="sending || !!result"
                         @click="choosePlayer"><i class="fe fe-crosshair" aria-hidden="true"></i> Player’s current location</button>
               </div>
             </section>
           </div>
+
+          <p v-if="buriedBlocked" class="support-callout is-warning">
+            <i class="fe fe-lock" aria-hidden="true"></i><span>Moving a buried corpse needs the updated Player Support patch.</span>
+          </p>
 
           <div v-if="choosing" class="recovery-panel">
             <label for="recovery-zone" class="recovery-panel-label">Search zones</label>
@@ -98,7 +102,7 @@
             <p v-else-if="zonesLoading" class="recovery-status" role="status">Searching zones…</p>
             <p v-else-if="!zones.length" class="recovery-status">No matching zones</p>
             <div v-else class="recovery-results">
-              <button v-for="zone in zones" :key="zone.id" type="button" class="support-option" :aria-pressed="!toPlayer && destination.id === zone.id" @click="chooseZone(zone)">
+              <button v-for="zone in zones" :key="zone.id" type="button" class="support-option" :aria-pressed="String(!toPlayer && destination.id === zone.id)" @click="chooseZone(zone)">
                 <strong>{{ zone.long_name }}</strong><span>{{ zone.short_name }} · #{{ zone.id }}</span>
               </button>
             </div>
@@ -113,7 +117,7 @@
             <p v-else-if="playerQuery.trim().length < 2" class="recovery-status">Type at least 2 characters</p>
             <p v-else-if="!players.length" class="recovery-status">No matching characters</p>
             <div v-else class="recovery-results">
-              <button v-for="player in players" :key="player.id" type="button" class="support-option" :aria-pressed="!!targetPlayer && targetPlayer.id === player.id" @click="choosePlayerTarget(player)">
+              <button v-for="player in players" :key="player.id" type="button" class="support-option" :aria-pressed="String(!!targetPlayer && targetPlayer.id === player.id)" @click="choosePlayerTarget(player)">
                 <strong><span class="recovery-online" :class="{ 'is-online': player.online }" aria-hidden="true"></span>{{ player.name }}</strong>
                 <span>Level {{ player.level }} · {{ player.zone_name || 'Zone #' + player.zone_id }} · {{ player.online ? 'Online' : 'Offline' }}</span>
               </button>
@@ -142,11 +146,41 @@
             </span>
           </fieldset>
 
+          <section v-if="selectedCorpse && (selectedCorpse.exp > 0 || expResult)" class="recovery-exp" aria-label="Corpse experience">
+            <div class="recovery-exp-row">
+              <div class="recovery-exp-text">
+                <strong><i class="fe fe-trending-up" aria-hidden="true"></i> Experience: {{ Number(selectedCorpse.exp || 0).toLocaleString() }}</strong>
+                <small v-if="allowMove && expBlocked && !expResult" class="is-blocked">{{ expBlocked }}</small>
+                <small v-else-if="allowMove && !expOpen && !expResult">Returned to {{ record.character }} once, where they are now. The corpse is then marked resurrected.</small>
+              </div>
+              <button v-if="allowMove && !expOpen" type="button" class="support-button is-sm" :disabled="Boolean(expBlocked) || sending" @click="openExp">
+                <i class="fe fe-rotate-ccw" aria-hidden="true"></i> Restore experience
+              </button>
+            </div>
+            <div v-if="expOpen" class="recovery-exp-form">
+              <p class="recovery-exp-lead">Returns the corpse’s full resurrection experience to {{ record.character }} once and marks the corpse resurrected.</p>
+              <label for="recovery-exp-reason" class="recovery-panel-label">Reason <span>(required, recorded on the case)</span></label>
+              <textarea id="recovery-exp-reason" ref="expReason" v-model="expReason" class="support-field" rows="2" maxlength="240" :disabled="expSending"
+                        placeholder="Why is this experience being returned?" aria-describedby="recovery-exp-hint" @input="expError = ''"></textarea>
+              <div class="recovery-exp-actions">
+                <span id="recovery-exp-hint" class="recovery-hint" :class="{ 'is-short': expReason.trim() && expReasonBytes < 8 }">8–240 characters · {{ expReasonBytes }}/240</span>
+                <button type="button" class="support-button is-sm" :disabled="expSending" @click="expOpen = false">Cancel</button>
+                <button type="button" class="support-button is-primary is-sm" :disabled="expSending || expReasonBytes < 8 || expReasonBytes > 240 || Boolean(expBlocked)" @click="restoreExp">
+                  <i class="fe fe-rotate-ccw" aria-hidden="true"></i> {{ expSending ? 'Restoring…' : 'Restore experience' }}
+                </button>
+              </div>
+            </div>
+            <p v-if="expError" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ expError }}</span></p>
+            <p v-if="expResult" class="support-callout" :class="expResult.status === 'unconfirmed' ? 'is-warning' : 'is-success'" :role="expResult.status === 'unconfirmed' ? 'alert' : 'status'">
+              <i :class="expResult.status === 'unconfirmed' ? 'fe fe-alert-triangle' : 'fe fe-check-circle'" aria-hidden="true"></i><span>{{ expResult.message }}</span>
+            </p>
+          </section>
+
           <section v-if="selectedCorpse" class="recovery-inventory" aria-label="Corpse inventory">
             <div class="recovery-inventory-header">
               <h3>Loot <span class="support-count">{{ selectedCorpse.item_count }}</span></h3>
               <div class="recovery-tags">
-                <span v-if="selectedCorpse.buried" class="support-chip">Buried</span>
+                <span v-if="selectedCorpse.buried" class="support-chip">{{ canUnbury ? 'Buried · will be unburied' : 'Buried' }}</span>
                 <span class="support-chip">{{ selectedCorpse.rezzed ? 'Resurrected' : selectedCorpse.rezzable ? 'Resurrection available' : 'Resurrection unavailable' }}</span>
               </div>
             </div>
@@ -204,6 +238,7 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
+import { newRequestId } from './support-ui'
 
 export default {
   name: 'SupportRecovery',
@@ -217,13 +252,45 @@ export default {
   },
   data () {
     return {
-      mode: this.initialMode, data: null, selectedId: null, loading: false, loadError: '',
-      items: [], lootLoading: false, lootError: '', lootVersion: 0,
-      choosing: false, zoneQuery: '', zones: [], zonesLoading: false, zoneError: '', zoneVersion: 0, zoneTimer: null,
-      destination: null, toPlayer: false, reason: '', sending: false, moveError: '', result: null,
-      target: 'zone', coords: { x: '', y: '', z: '', heading: '0' }, locPaste: '', locParsed: false,
-      choosingPlayer: false, playerQuery: '', players: [], playersLoading: false, playerError: '', playerVersion: 0, playerTimer: null,
+      mode: this.initialMode,
+      data: null,
+      selectedId: null,
+      loading: false,
+      loadError: '',
+      items: [],
+      lootLoading: false,
+      lootError: '',
+      lootVersion: 0,
+      choosing: false,
+      zoneQuery: '',
+      zones: [],
+      zonesLoading: false,
+      zoneError: '',
+      zoneVersion: 0,
+      zoneTimer: null,
+      destination: null,
+      toPlayer: false,
+      reason: '',
+      sending: false,
+      moveError: '',
+      result: null,
+      target: 'zone',
+      coords: { x: '', y: '', z: '', heading: '0' },
+      locPaste: '',
+      locParsed: false,
+      choosingPlayer: false,
+      playerQuery: '',
+      players: [],
+      playersLoading: false,
+      playerError: '',
+      playerVersion: 0,
+      playerTimer: null,
       targetPlayer: null,
+      expOpen: false,
+      expReason: '',
+      expSending: false,
+      expError: '',
+      expResult: null,
       targetModes: [
         { id: 'zone', label: 'Zone', icon: 'fe fe-map' },
         { id: 'coordinates', label: 'Coordinates', icon: 'fe fe-crosshair' },
@@ -257,9 +324,33 @@ export default {
       if (!this.data) return null
       return this.mode === 'move' ? this.data.character : this.selectedCorpse && this.selectedCorpse.location
     },
+    // Features reported with the recovery data win over the page's copy.
+    liveFeatures () { return { ...this.features, ...((this.data && this.data.features) || {}) } },
+    canUnbury () { return Boolean(this.liveFeatures.unbury && this.data && this.data.local_world) },
     canMove () {
       return Boolean(this.allowMove && !this.loading && this.data && this.data.local_world && this.data.companion !== 'missing' && this.source &&
-        this.source.zone_id && (!this.selectedCorpse || !this.selectedCorpse.buried))
+        this.source.zone_id && (!this.selectedCorpse || !this.selectedCorpse.buried || this.canUnbury))
+    },
+    buriedBlocked () {
+      return Boolean(this.allowMove && this.selectedCorpse && this.selectedCorpse.buried && !this.canUnbury && this.data.local_world &&
+        this.data.companion !== 'missing')
+    },
+    expReasonBytes () { return new TextEncoder().encode(this.expReason.trim()).length },
+    // Why "Restore experience" is unavailable for the selected corpse, or ''.
+    expBlocked () {
+      const corpse = this.selectedCorpse
+      const name = this.record.character
+      if (!corpse) return 'Choose a corpse.'
+      if (corpse.rezzed) return 'This corpse was already resurrected; its experience was returned then.'
+      if (!(corpse.exp > 0)) return 'This corpse holds no experience.'
+      if (!this.data.local_world) return 'Needs the game server this Spire runs beside'
+      if (!this.liveFeatures.corpse_exp) return 'Needs the updated Player Support patch'
+      const live = this.data.live_location
+      if (!live) return `${name} must be in game to receive experience.`
+      if (Number(live.zone_id) !== Number(corpse.location.zone_id) || Number(live.instance_id || 0) !== Number(corpse.location.instance_id || 0)) {
+        return `Move the corpse to ${name} first. Experience is restored where the player is.`
+      }
+      return ''
     },
     coordinateValues () {
       const values = {}
@@ -301,7 +392,7 @@ export default {
     errorText (error, fallback) {
       const response = error.response
       if (response && response.status === 422) return 'Recovery is unavailable on this Spire server.'
-      return response && response.data && response.data.error || fallback
+      return (response && response.data && response.data.error) || fallback
     },
     zoneName (location) { return location.zone_name || (location.zone_id ? 'Zone #' + location.zone_id : 'Unknown zone') },
     coordinates (location) {
@@ -419,14 +510,57 @@ export default {
       this.choosingPlayer = false
       this.moveError = ''
     },
+    resetExp () {
+      this.expOpen = false
+      this.expReason = ''
+      this.expError = ''
+      this.expResult = null
+    },
+    openExp () {
+      this.expOpen = true
+      this.expError = ''
+      this.$nextTick(() => { if (this.$refs.expReason) this.$refs.expReason.focus() })
+    },
+    async restoreExp () {
+      const corpse = this.selectedCorpse
+      if (!corpse || this.expSending || this.expBlocked || this.expReasonBytes < 8 || this.expReasonBytes > 240) return
+      this.expSending = true
+      this.expError = ''
+      let receipt = null
+      try {
+        const { data, status } = await SpireApi.v1().put(`${this.endpoint}/corpses/${corpse.id}/experience`,
+          { reason: this.expReason.trim(), request_id: newRequestId() }, { params: this.params })
+        const unconfirmed = status === 202 || (data && data.status === 'unconfirmed')
+        receipt = { status: unconfirmed ? 'unconfirmed' : (data && data.status) || 'sent', message: (data && data.message) || 'Experience restored.' }
+        this.expResult = receipt
+        this.expOpen = false
+        this.expReason = ''
+        if (!unconfirmed) this.$set(corpse, 'rezzed', true)
+      } catch (error) {
+        const response = error.response
+        if (!response || (response.status >= 500 && response.status !== 503)) {
+          receipt = { status: 'unconfirmed', message: `The game server did not confirm. Check ${this.record.character}’s experience before retrying.` }
+          this.expResult = receipt
+          this.expOpen = false
+        } else {
+          this.expError = this.errorText(error, 'The experience could not be restored.')
+          if (response.status === 409) receipt = { status: 'failed', message: this.expError }
+        }
+      } finally {
+        this.expSending = false
+        if (receipt) this.$emit('receipt', receipt)
+      }
+    },
     changeMode (mode) {
       if (this.mode === mode) return
+      this.resetExp()
       this.mode = mode
       this.resetDraft()
       if (this.selectedCorpse) this.loadLoot(this.selectedCorpse)
     },
     selectCorpse (id) {
       if (this.selectedId === id) return
+      this.resetExp()
       this.selectedId = id
       this.resetDraft()
       this.loadLoot(this.selectedCorpse)
@@ -493,12 +627,16 @@ export default {
       }
       this.sending = true
       this.moveError = ''
-      const requestId = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
+      const requestId = newRequestId()
       try {
         const body = {
           corpse_id: this.selectedCorpse ? this.selectedCorpse.id : 0,
-          source_zone: this.source.zone_id, source_instance: this.source.instance_id,
-          destination: this.toPlayer ? 0 : this.destination.id, to_player: this.toPlayer, reason, request_id: requestId
+          source_zone: this.source.zone_id,
+          source_instance: this.source.instance_id,
+          destination: this.toPlayer ? 0 : this.destination.id,
+          to_player: this.toPlayer,
+          reason,
+          request_id: requestId
         }
         if (this.mode === 'move' && this.target === 'player') {
           body.destination = 0
@@ -509,7 +647,8 @@ export default {
         }
         const { data } = await SpireApi.v1().put(this.endpoint + '/move', body, { params: this.params })
         this.result = ['saved', 'requested', 'moved', 'moved_notified', 'moved_notice_unavailable', 'moved_arrival_unconfirmed'].includes(data.status)
-          ? data : { ...data, status: 'unconfirmed' }
+          ? data
+          : { ...data, status: 'unconfirmed' }
       } catch (error) {
         if (!error.response || (error.response.status >= 500 && error.response.status !== 503)) {
           this.result = { status: 'unconfirmed', message: 'Check the target location before retrying. The move could not be confirmed.' }
@@ -692,6 +831,20 @@ export default {
 .recovery-loot li > .fe { color: var(--support-faint); text-align: center; }
 .recovery-loot strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; overflow-wrap: anywhere; }
 .recovery-loot li span { color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
+
+/* Experience on the corpse */
+.recovery-exp { display: grid; gap: var(--support-space-3); padding: var(--support-space-3) var(--support-space-4); border: 1px solid var(--support-border); border-radius: var(--support-radius-lg); background: var(--support-pane); }
+.recovery-exp-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--support-space-2) var(--support-space-3); }
+.recovery-exp-text { display: grid; flex: 1; gap: 2px; min-width: 200px; }
+.recovery-exp-text strong { display: inline-flex; align-items: center; gap: 6px; color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+.recovery-exp-text strong i { color: var(--support-muted); }
+.recovery-exp-text small { color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.45; }
+.recovery-exp-text small.is-blocked { color: var(--support-warning); }
+.recovery-exp-form { display: grid; padding-top: var(--support-space-3); border-top: 1px solid var(--support-border-subtle); }
+.recovery-exp-lead { margin: 0 0 var(--support-space-3); color: var(--support-text-secondary); font-size: var(--support-text-sm); line-height: 1.5; }
+.recovery-exp-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--support-space-2); margin-top: var(--support-space-2); }
+.recovery-exp-actions .recovery-hint { margin: 0 auto 0 0; }
+.recovery-exp > .support-callout { margin: 0; }
 
 /* Reason */
 .recovery-reason { display: grid; }

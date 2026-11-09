@@ -144,3 +144,40 @@ export function newRequestId () {
 export function fitsTell (text) {
   return text.length > 0 && text.length <= 200 && !/[^\x20-\x7E]/.test(text)
 }
+
+// Case categories, in their fixed order. `hint` is the triage line shown on a
+// case with that category; `tools` names the buttons beside it (the page
+// decides which ones the viewer may use).
+export const supportCategories = [
+  { id: 'items', label: 'Lost or missing items', hint: 'Check Evidence for trades, sales and destroys, then trace or restore the item.', tools: ['evidence', 'items'] },
+  { id: 'corpse', label: 'Corpse or death', hint: 'Find the corpse, move it to the player, or restore its experience.', tools: ['corpses'] },
+  { id: 'stuck', label: 'Stuck or location', hint: 'Move the character to their bind point or a safe spot.', tools: ['move'] },
+  { id: 'quest', label: 'Quest or progress', hint: 'Check tasks, lockouts and flags.', tools: ['tasks', 'lockouts'] },
+  { id: 'conduct', label: 'Player conduct', hint: 'Set the reported player, review their chat in Evidence, then use Discipline.', tools: ['evidence', 'discipline'] },
+  { id: 'bug', label: 'Bug report', hint: 'Link the player’s /bug reports from the Bug reports section.', tools: [] },
+  { id: 'account', label: 'Account or access', hint: 'Check the account’s restrictions and linked accounts.', tools: ['discipline'] },
+  { id: 'other', label: 'Other', hint: '', tools: [] }
+]
+
+export function categoryLabel (id) {
+  const category = supportCategories.find(item => item.id === id)
+  return category ? category.label : ''
+}
+
+// Another GM is composing, or messaged the player in the last two minutes.
+// Returns { name, composing, minutes } for the confirmation, or null.
+// `viewers` excludes the current user (the server leaves them out).
+// `sent` holds { actor, created_at } of tells, mail and parcels.
+export function otherResponder (viewers, sent, me, now = Date.now()) {
+  const composing = (viewers || []).find(viewer => viewer.composing)
+  if (composing) return { name: composing.name, composing: true, minutes: 0 }
+  // Without the viewer's own name, every message would look like someone else's.
+  const self = String(me || '').toLowerCase()
+  if (!self) return null
+  const recent = (sent || [])
+    .filter(entry => entry.actor && entry.actor.toLowerCase() !== self && entry.created_at)
+    .map(entry => ({ name: entry.actor, at: new Date(entry.created_at).getTime() }))
+    .filter(entry => now - entry.at > -60000 && now - entry.at < 120000)
+    .sort((a, b) => b.at - a.at)[0]
+  return recent ? { name: recent.name, composing: false, minutes: Math.max(1, Math.round((now - recent.at) / 60000)) } : null
+}
