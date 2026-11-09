@@ -12,6 +12,16 @@
         <span class="support-live" :title="'Queue refreshes every 12 seconds' + (refreshedAt ? ' · last updated ' + clock(refreshedAt) : '')">
           <span class="support-live-dot" aria-hidden="true"></span> Live
         </span>
+        <button v-if="connectionId !== null" type="button" class="support-button is-quiet" aria-label="Support insights" title="Response times and staff activity" @click="panel = 'metrics'">
+          <i class="fe fe-bar-chart-2" aria-hidden="true"></i><span class="support-button-label"> Insights</span>
+        </button>
+        <button v-if="connectionId !== null" type="button" class="support-button is-quiet" aria-label="Saved replies" title="Replies shared with your team" @click="panel = 'replies'">
+          <i class="fe fe-bookmark" aria-hidden="true"></i><span class="support-button-label"> Replies</span>
+        </button>
+        <button v-if="connectionId !== null" type="button" class="support-button is-quiet" aria-label="Petition alerts" title="Desktop, sound and Discord alerts" @click="panel = 'alerts'">
+          <i :class="alertPrefs.desktop || alertPrefs.sound ? 'fe fe-bell' : 'fe fe-bell-off'" aria-hidden="true"></i><span class="support-button-label"> Alerts</span>
+          <span v-if="alertPrefs.desktop || alertPrefs.sound" class="support-alert-dot" aria-hidden="true"></span>
+        </button>
         <button type="button" class="support-button" :disabled="queueLoading || busy" @click="refresh">
           <i class="fe fe-refresh-cw" :class="{ 'is-spinning': queueLoading && !backgroundLoading }" aria-hidden="true"></i> Refresh
         </button>
@@ -57,7 +67,7 @@
       </div>
     </transition>
 
-    <div class="support-workspace" :class="{ 'show-case': mobileDetail }">
+    <div ref="workspace" class="support-workspace" :class="{ 'show-case': mobileDetail }">
       <aside class="support-queue" aria-label="Petition queue">
         <div class="support-queue-controls">
           <div class="support-section-title">
@@ -168,10 +178,11 @@
               <template v-if="record.owner"> · assigned to <strong>{{ record.mine ? 'you' : record.owner }}</strong></template>
             </p>
             <div class="support-thread-tabs" role="group" aria-label="Case view">
-              <button type="button" :aria-pressed="String(!chatOpen)" @click="showTimeline">
+              <button type="button" :aria-pressed="String(!chatOpen && !evidenceOpen)" @click="showTimeline">
                 <i class="fe fe-list" aria-hidden="true"></i> Timeline <span class="support-tab-count">{{ activity.length + 1 }}</span>
               </button>
-              <button type="button" :aria-pressed="String(chatOpen)" @click="chatOpen = true"><i class="fe fe-message-circle" aria-hidden="true"></i> Live chat</button>
+              <button type="button" :aria-pressed="String(chatOpen)" @click="openChat"><i class="fe fe-message-circle" aria-hidden="true"></i> Live chat</button>
+              <button v-if="canReadEvents" type="button" :aria-pressed="String(evidenceOpen)" @click="openEvidence"><i class="fe fe-search" aria-hidden="true"></i> Evidence</button>
             </div>
           </div>
 
@@ -180,7 +191,8 @@
           </div>
 
           <support-live-chat v-if="chatOpen" :key="selectedKey" :record="record" :connection-id="connectionId" :can-write="canWrite && record.status !== 'resolved'"
-                             @seen="noteSeen" />
+                             :saved-replies="replies" @seen="noteSeen" />
+          <support-evidence v-else-if="evidenceOpen" :key="'evidence-' + selectedKey" :record="record" :connection-id="connectionId" />
           <div v-else ref="timeline" class="support-timeline">
             <article class="support-event support-original">
               <span class="support-event-icon"><i class="fe fe-message-square" aria-hidden="true"></i></span>
@@ -218,7 +230,7 @@
             </template>
           </div>
 
-          <form v-if="canWrite && !chatOpen" class="support-note" @submit.prevent="updateCase('note')">
+          <form v-if="canWrite && !chatOpen && !evidenceOpen" class="support-note" @submit.prevent="updateCase('note')">
             <label for="support-note"><i class="fe fe-lock" aria-hidden="true"></i> Private staff note</label>
             <textarea id="support-note" v-model="note" rows="2" maxlength="8000" :disabled="busy"
                       placeholder="Only staff can see notes. The player is not notified."
@@ -270,16 +282,40 @@
                 <span class="support-tile-icon"><i class="fe fe-archive" aria-hidden="true"></i></span>
                 <strong>Corpses</strong><small>Loot and recovery</small>
               </button>
+              <button v-if="canInspectRecovery" type="button" class="support-tile tone-blue" aria-label="Inventory snapshots" :disabled="busy" @click="delivery = 'snapshots'">
+                <span class="support-tile-icon"><i class="fe fe-camera" aria-hidden="true"></i></span>
+                <strong>Snapshots</strong><small>Find and restore lost items</small>
+              </button>
             </div>
             <router-link v-for="link in characterLinks" :key="link.name" :to="link.to">
               <i :class="link.icon" aria-hidden="true"></i> {{ link.name }} <i class="fe fe-arrow-up-right" aria-hidden="true"></i>
             </router-link>
           </nav>
         </section>
+        <section v-if="history.length" class="support-history" aria-label="Account history">
+          <h2>Account history <span class="support-count">{{ history.length }}</span></h2>
+          <ul>
+            <li v-for="item in history" :key="item.key">
+              <button type="button" class="support-history-case" @click="selectCase(item.key)">
+                <span class="support-history-top">
+                  <strong>#{{ item.key.split('-')[0] }}</strong>
+                  <span class="support-chip" :class="item.merged ? 'status-merged' : 'status-' + item.status">{{ item.merged ? 'Merged' : statusLabel(item.status) }}</span>
+                  <time :datetime="dateTime(item.submitted_at)" :title="formatDate(item.submitted_at)">{{ age(item.submitted_at) }}</time>
+                </span>
+                <span class="support-history-message">{{ item.character }}: {{ item.message }}</span>
+                <span v-if="item.resolution" class="support-history-resolution"><i class="fe fe-check" aria-hidden="true"></i> {{ item.resolution }}</span>
+              </button>
+              <button v-if="canMerge(item)" type="button" class="support-history-merge" :disabled="busy" :aria-label="'Merge case ' + item.key.split('-')[0] + ' into this case'"
+                      title="Move this case's history into the open case" @click="mergeSource = item">
+                <i class="fe fe-git-merge" aria-hidden="true"></i> Merge here
+              </button>
+            </li>
+          </ul>
+        </section>
         <section v-if="canWrite && record.status !== 'resolved'" class="support-actions">
           <h2>Respond</h2>
           <div class="support-tiles">
-            <button type="button" class="support-tile tone-gold" aria-label="Open live chat" :disabled="busy" @click="chatOpen = true">
+            <button type="button" class="support-tile tone-gold" aria-label="Open live chat" :disabled="busy" @click="openChat">
               <span class="support-tile-icon"><i class="fe fe-message-circle" aria-hidden="true"></i></span>
               <strong>Live chat</strong><small>{{ chatTileHint }}</small>
             </button>
@@ -306,12 +342,25 @@
       </aside>
     </div>
 
-    <support-mail-reply v-if="delivery === 'reply' && record" :record="record" :connection-id="connectionId"
+    <support-mail-reply v-if="delivery === 'reply' && record" :record="record" :connection-id="connectionId" :saved-replies="replies"
                         @close="delivery = null" @sent="deliverySent('reply')" @reconcile="loadDetail(selectedKey)" />
     <gm-parcel-composer v-if="delivery === 'parcel' && record" :key="record.key"
                         :recipient="{ id: record.character_id, name: record.character }"
-                        :case-key="record.key" :connection-id="connectionId"
-                        @close="delivery = null" @sent="deliverySent('parcel')" @reconcile="loadDetail(selectedKey)" />
+                        :case-key="record.key" :connection-id="connectionId" :prefill="parcelPrefill"
+                        @close="closeParcel" @sent="deliverySent('parcel')" @reconcile="loadDetail(selectedKey)" />
+    <support-snapshots v-if="delivery === 'snapshots' && record" :key="'snapshots-' + record.key" :record="record" :connection-id="connectionId"
+                       :can-restore="canParcel && canWrite && record.status !== 'resolved'" @close="delivery = null" @restore="restoreSnapshot" />
+    <support-alerts v-if="panel === 'alerts'" :connection-id="connectionId" :can-write="canWrite" @close="panel = null" @change="alertPrefs = $event" />
+    <support-replies v-if="panel === 'replies'" :connection-id="connectionId" :can-write="canWrite" :replies="replies" @close="panel = null" @changed="loadReplies" />
+    <support-metrics v-if="panel === 'metrics'" :connection-id="connectionId" @close="panel = null" />
+    <b-modal :visible="Boolean(mergeSource)" modal-class="support-modal" title="Merge cases" centered ok-title="Merge cases"
+             cancel-variant="outline-light" @hide="mergeSource = null" @ok="mergeCase">
+      <template v-if="mergeSource && record">
+        <p class="support-modal-lead">Merge case <strong>#{{ mergeSource.key.split('-')[0] }}</strong> into <strong>#{{ caseNumber }}</strong>?</p>
+        <p class="support-modal-hint"><i class="fe fe-info" aria-hidden="true"></i>
+          Its notes, messages and deliveries move to this case, and it is resolved with a link here. This cannot be undone.</p>
+      </template>
+    </b-modal>
     <support-recovery v-if="(delivery === 'move' || delivery === 'corpses') && record" :key="record.key"
                       :record="record" :connection-id="connectionId" :initial-mode="delivery" :allow-move="canMove"
                       @close="delivery = null" @receipt="recoveryReceipt" />
@@ -340,34 +389,43 @@ import SupportMailReply from './SupportMailReply.vue'
 import GmParcelComposer from '../mail-parcels/GMParcelComposer.vue'
 import SupportLiveChat from './SupportLiveChat.vue'
 import SupportRecovery from './SupportRecovery.vue'
-import { avatarStyle, hasUnseenReply, initials, markSeen } from './support-ui'
+import SupportEvidence from './SupportEvidence.vue'
+import SupportSnapshots from './SupportSnapshots.vue'
+import SupportAlerts from './SupportAlerts.vue'
+import SupportReplies from './SupportReplies.vue'
+import SupportMetrics from './SupportMetrics.vue'
+import { avatarStyle, desktopNotify, hasUnseenReply, initials, markSeen, playChime, readAlertPrefs } from './support-ui'
 
 const endpoint = 'player-support/cases'
 const titles = {
   note: 'Private note', reply: 'Mail sent', parcel: 'Parcel sent', pending: 'Delivery unverified',
   chat_in: 'Player tell', chat_out: 'Game Master tell', chat_on: 'Messages on', chat_off: 'Messages off',
   character_move: 'Character move', corpse_move: 'Corpse move',
-  claim: 'Claimed', release: 'Released', wait: 'Waiting for player', resolve: 'Resolved', reopen: 'Reopened'
+  claim: 'Claimed', release: 'Released', wait: 'Waiting for player', resolve: 'Resolved', reopen: 'Reopened', merge: 'Cases merged'
 }
 const icons = {
   note: 'fe fe-lock', reply: 'fe fe-mail', parcel: 'fe fe-package', pending: 'fe fe-alert-triangle',
   chat_in: 'fe fe-corner-down-right', chat_out: 'fe fe-send', chat_on: 'fe fe-toggle-right', chat_off: 'fe fe-toggle-left',
   character_move: 'fe fe-navigation', corpse_move: 'fe fe-archive',
-  claim: 'fe fe-user-check', release: 'fe fe-user-minus', wait: 'fe fe-clock', resolve: 'fe fe-check-circle', reopen: 'fe fe-rotate-ccw'
+  claim: 'fe fe-user-check', release: 'fe fe-user-minus', wait: 'fe fe-clock', resolve: 'fe fe-check-circle', reopen: 'fe fe-rotate-ccw',
+  merge: 'fe fe-git-merge'
 }
 // Status changes carry a fixed first line; anything after it is the GM's summary.
 const statusKinds = ['claim', 'release', 'wait', 'resolve', 'reopen', 'chat_on', 'chat_off']
 
 export default {
   name: 'PlayerSupport',
-  components: { SupportMailReply, GmParcelComposer, SupportLiveChat, SupportRecovery },
+  components: {
+    SupportMailReply, GmParcelComposer, SupportLiveChat, SupportRecovery, SupportEvidence, SupportSnapshots, SupportAlerts, SupportReplies, SupportMetrics
+  },
   data () {
     return {
       filters: [{ id: 'open', label: 'Active' }, { id: 'mine', label: 'Mine' }, { id: 'unassigned', label: 'Unassigned' }, { id: 'resolved', label: 'Resolved' }],
       filter: 'open', search: '', page: 1, total: 0, cases: [], connectionId: null, selectedKey: '', record: null, activity: [],
       queueLoading: false, backgroundLoading: false, detailLoading: false, queueError: false, detailError: false, queueVersion: 0, detailVersion: 0,
       mobileDetail: false, searchTimer: null, presenceTimer: null, noticeTimer: null, busy: false, note: '', notice: null, delivery: null,
-      resolveOpen: false, resolution: '', chatOpen: false, refreshedAt: null,
+      resolveOpen: false, resolution: '', chatOpen: false, evidenceOpen: false, refreshedAt: null,
+      history: [], replies: [], panel: null, parcelPrefill: null, mergeSource: null, alertPrefs: readAlertPrefs(), lastSummary: null,
       summary: null, companion: 'unknown', now: Date.now(), clockTimer: null, seenVersion: 0, copied: '', copyTimer: null, entering: true,
       resolutionPhrases: ['Restored the missing item', 'Moved the character to safety', 'Recovered the corpse', 'Explained how it works', 'No action needed']
     }
@@ -387,6 +445,7 @@ export default {
         canWriteAdminApi('player-operations/character/0/relocate'))
     },
     caseNumber () { return this.record ? this.record.key.split('-')[0] : '' },
+    canReadEvents () { return canReadAdminApi('player_event_logs') },
     // Live chat, moves and in-game notices need the Player Support patch on
     // World. Say what is off, and what still works, when it is missing.
     companionNote () {
@@ -426,6 +485,9 @@ export default {
     caseBanner () {
       const record = this.record
       if (!record) return null
+      if (record.merged_into) {
+        return { tone: 'info', icon: 'fe fe-git-merge', text: `This case was merged into case #${record.merged_into.split('-')[0]}. Its history moved there.` }
+      }
       if (record.status === 'resolved') {
         return { tone: 'success', icon: 'fe fe-check-circle', text: 'This case is resolved. Reopen it to reply, send parcels, or move the character.' }
       }
@@ -490,6 +552,19 @@ export default {
       if (open) this.resolution = ''
     }
   },
+  mounted () {
+    window.addEventListener('resize', this.fitWorkspace)
+    // Spire's page zoom can change without a window resize event.
+    if (window.ResizeObserver) {
+      this.pageObserver = new window.ResizeObserver(() => this.fitWorkspace())
+      this.pageObserver.observe(document.documentElement)
+    }
+    this.fitWorkspace()
+  },
+  updated () {
+    // Banners and notices above the workspace move it; re-measure cheaply.
+    this.fitWorkspace()
+  },
   created () {
     this.mobileDetail = Boolean(this.$route.query.case)
     this.loadQueue(true)
@@ -505,10 +580,27 @@ export default {
     clearInterval(this.clockTimer)
     clearTimeout(this.copyTimer)
     window.removeEventListener('keydown', this.onShortcut)
+    window.removeEventListener('resize', this.fitWorkspace)
+    if (this.pageObserver) this.pageObserver.disconnect()
     this.queueVersion++
     this.detailVersion++
   },
   methods: {
+    // The space from the workspace to the bottom of the window, so it can fill
+    // it. Spire zooms the page at some window sizes, so convert from screen
+    // pixels to the page's own pixels.
+    fitWorkspace () {
+      const workspace = this.$refs.workspace
+      if (!workspace) return
+      const rect = workspace.getBoundingClientRect()
+      const scale = workspace.offsetHeight ? rect.height / workspace.offsetHeight : 1
+      if (!scale) return
+      const fill = Math.floor((window.innerHeight - (rect.top + window.scrollY)) / scale) - 44
+      if (fill !== this.workspaceFill) {
+        this.workspaceFill = fill
+        this.$el.style.setProperty('--support-fill', fill + 'px')
+      }
+    },
     statusLabel (status) { return { open: 'Open', waiting: 'Waiting', resolved: 'Resolved' }[status] || 'Open' },
     presenceLabel (status) { return { online: 'Online', offline: 'Offline' }[status] || 'Unknown' },
     characterPresenceLabel (status) { return { online: 'In game', offline: 'Not in game' }[status] || 'Presence unknown' },
@@ -617,15 +709,25 @@ export default {
           this.delivery = null
           this.resolveOpen = false
           this.chatOpen = false
+          this.evidenceOpen = false
+          this.history = []
           this.note = ''
           this.mobileDetail = false
           this.detailVersion++
           this.$router.replace({ path: this.$route.path, query: {} }).catch(() => {})
         }
+        const connectionChanged = this.connectionId !== data.connection_id
         this.connectionId = data.connection_id
+        if (connectionChanged) {
+          this.lastSummary = null
+          this.loadReplies()
+        }
         this.cases = data.cases || []
         this.total = data.total || 0
-        if (data.summary) this.summary = data.summary
+        if (data.summary) {
+          this.summary = data.summary
+          this.checkArrivals(data.summary)
+        }
         this.companion = data.companion || 'unknown'
         this.refreshedAt = new Date()
         if (!this.selectedKey) {
@@ -661,6 +763,7 @@ export default {
         const grew = (data.activity || []).length > this.activity.length
         this.record = data.case
         this.activity = data.activity || []
+        this.history = data.history || []
         if (data.case.last_reply_at) this.noteSeen(data.case.last_reply_at)
         if (!background || (following && grew)) this.$nextTick(this.scrollTimeline)
       } catch (error) {
@@ -682,9 +785,11 @@ export default {
       this.selectedKey = key
       this.record = null
       this.activity = []
+      this.history = []
       this.note = ''
       this.delivery = null
       this.chatOpen = false
+      this.evidenceOpen = false
       return this.loadDetail(key)
     },
     selectCase (key) {
@@ -722,9 +827,84 @@ export default {
     },
     confirmResolve () { this.resolveOpen = true },
     showTimeline () {
-      if (!this.chatOpen) return
+      if (!this.chatOpen && !this.evidenceOpen) return
+      const reload = this.chatOpen
       this.chatOpen = false
-      this.loadDetail(this.selectedKey)
+      this.evidenceOpen = false
+      if (reload) this.loadDetail(this.selectedKey)
+    },
+    openChat () {
+      this.evidenceOpen = false
+      this.chatOpen = true
+    },
+    openEvidence () {
+      this.chatOpen = false
+      this.evidenceOpen = true
+    },
+    // Only an earlier case without a live in-game petition folds into this one.
+    canMerge (item) {
+      return this.canWrite && this.record && !this.record.merged_into && !item.merged && !item.native_open && this.record.status !== 'resolved'
+    },
+    async mergeCase () {
+      const source = this.mergeSource
+      if (!source || !this.record || this.busy) return
+      const key = this.selectedKey
+      this.busy = true
+      this.notice = null
+      try {
+        await SpireApi.v1().put(`${endpoint}/${encodeURIComponent(key)}/merge`, { source: source.key, revision: this.record.revision },
+          { params: { connection_id: this.connectionId } })
+        this.notice = { error: false, text: `Case #${source.key.split('-')[0]} merged into this case` }
+        await Promise.all([this.loadQueue(), this.loadDetail(key)])
+      } catch (error) {
+        this.notice = { error: true, text: this.errorText(error) }
+        await this.loadDetail(key)
+      } finally {
+        this.busy = false
+        this.mergeSource = null
+      }
+    },
+    async loadReplies () {
+      try {
+        const { data } = await SpireApi.v1().get('player-support/replies', { params: { connection_id: this.connectionId } })
+        this.replies = data.replies || []
+      } catch (error) {
+        this.replies = []
+      }
+    },
+    // Items missing since a snapshot go to the parcel composer for review.
+    restoreSnapshot ({ lines, snapshot }) {
+      this.parcelPrefill = {
+        lines,
+        reason: `Restored items missing since the ${snapshot} inventory snapshot (case #${this.caseNumber})`,
+        note: 'Restored by staff in response to your petition.'
+      }
+      this.delivery = 'parcel'
+    },
+    closeParcel () {
+      this.delivery = null
+      this.parcelPrefill = null
+    },
+    // Alert on petitions and replies that arrived since the last refresh.
+    checkArrivals (summary) {
+      const previous = this.lastSummary
+      this.lastSummary = summary
+      if (!previous || !summary) return
+      const alerts = []
+      if (summary.newest_at > previous.newest_at && summary.newest_key) {
+        alerts.push({ title: 'New petition', body: `${summary.newest_character || 'A player'} filed a petition`, tag: 'petition-' + summary.newest_key })
+      }
+      const replied = summary.reply_at && (!previous.reply_at || new Date(summary.reply_at) > new Date(previous.reply_at))
+      const watching = summary.reply_key === this.selectedKey && this.chatOpen && !document.hidden
+      if (replied && !watching) {
+        alerts.push({ title: 'Player reply', body: `${summary.reply_character || 'A player'} replied to a petition`, tag: 'reply-' + summary.reply_key })
+      }
+      if (!alerts.length) return
+      if (this.alertPrefs.sound) playChime()
+      if (this.alertPrefs.desktop && document.hidden) {
+        for (const alert of alerts) desktopNotify(alert.title, alert.body, alert.tag)
+      }
+      if (!document.hidden) this.notice = { error: false, text: alerts.map(alert => alert.body).join(' · ') }
     },
     backToQueue () {
       this.mobileDetail = false
@@ -785,7 +965,6 @@ export default {
   --tone-teal: #62d2d8;
   --tone-violet: #b9a2ff;
   --tone-gold: #e7c27f;
-  max-width: 1560px;
   margin: 0 auto 2.5rem;
   color: var(--support-text);
 }
@@ -848,6 +1027,8 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
 .support-button:disabled, .support-icon:disabled { opacity: .45; cursor: default; }
 .support-button.is-primary { color: #1f1910; background: var(--support-accent); border-color: var(--support-accent); }
 .support-button.is-primary:hover:not(:disabled) { background: #f0cd90; border-color: #f0cd90; }
+.support-button.is-quiet { position: relative; color: #c9d6e3; background: transparent; }
+.support-alert-dot { position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--support-accent); box-shadow: 0 0 0 2px var(--support-bg); }
 .support-button.is-success { color: #c8f0d8; border-color: #3f7259; background: #18342a; }
 .support-button.is-success:hover:not(:disabled) { background: #1f4536; border-color: #5c9a7b; }
 .player-support button:focus-visible, .player-support a:focus-visible, .player-support input:focus-visible,
@@ -881,7 +1062,7 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
 
 /* Workspace */
 .support-workspace {
-  display: grid; grid-template-columns: minmax(260px, 27%) minmax(0, 1fr) minmax(230px, 22%);
+  display: grid; grid-template-columns: minmax(260px, min(27%, 420px)) minmax(0, 1fr) minmax(230px, min(22%, 380px));
   min-height: 640px; border: 1px solid var(--support-border); border-radius: 14px;
   background:
     radial-gradient(900px 320px at 50% -120px, rgba(223, 185, 118, .07), transparent 70%),
@@ -951,6 +1132,7 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
 .support-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: .68rem; font-weight: 650; line-height: 1.35; white-space: nowrap; color: #cfe2fb; background: #213650; }
 .support-chip.status-waiting { background: #3a2d1b; color: #f6ce91; }
 .support-chip.status-resolved { background: #193a2e; color: #b8e6cc; }
+.support-chip.status-merged { background: #2a2540; color: #cbbcf3; }
 .support-chip.is-urgent { background: #3d2420; color: var(--support-warning); }
 .support-chip.is-alt { margin-left: 4px; padding: 0 6px; font-size: .62rem; letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
 .support-chip.delivery-failed { background: #3d2228; color: #ffb2c0; }
@@ -1014,6 +1196,7 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
 .kind-chat_out .support-event-icon { border-color: #6d5839; color: var(--support-accent); }
 .kind-chat_in .support-event-icon { border-color: #3a5a82; color: var(--support-info); }
 .kind-resolve .support-event-icon { border-color: #3d6a55; color: var(--support-success); }
+.kind-merge .support-event-icon { border-color: #554a7a; color: #cbbcf3; }
 .support-event-body { min-width: 0; padding-top: 4px; }
 .support-event-heading { justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; }
 .support-event-heading h3 { color: inherit; font-size: .82rem; font-weight: 650; margin: 0; line-height: 1.35; }
@@ -1054,6 +1237,23 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
 .support-inspector dt { color: var(--support-muted); font-weight: 400; }
 .support-inspector dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .support-related { display: grid; gap: 2px; }
+.support-history h2 { display: flex; align-items: center; gap: 8px; }
+.support-history ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.support-history li { border: 1px solid var(--support-border); border-radius: 9px; background: var(--support-raised); overflow: hidden; }
+.support-history-case {
+  display: grid; gap: 3px; width: 100%; padding: 8px 10px; text-align: left; border: 0; background: transparent; color: var(--support-text);
+}
+.support-history-case:hover { background: #223040; }
+.support-history-top { display: flex; align-items: center; gap: 7px; font-size: .76rem; }
+.support-history-top time { margin-left: auto; color: var(--support-muted); font-size: .7rem; }
+.support-history-message { color: #c9d6e3; font-size: .74rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.support-history-resolution { display: flex; gap: 5px; color: #9fd8b8; font-size: .7rem; line-height: 1.35; }
+.support-history-resolution i { margin-top: 2px; }
+.support-history-merge {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 5px; border: 0;
+  border-top: 1px solid var(--support-border); background: #1a2330; color: #cbbcf3; font-size: .72rem; font-weight: 600;
+}
+.support-history-merge:hover:not(:disabled) { background: #2a2540; }
 .support-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 7px; margin-bottom: 8px; }
 .support-tile {
   --tone: var(--tone-blue);
@@ -1081,6 +1281,22 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
 .support-actions button { justify-content: flex-start; }
 .support-back { display: none; }
 
+/* Wide, tall screens: the workspace fills the window and each pane scrolls. */
+@media (min-width: 1181px) and (min-height: 760px) {
+  .support-workspace { height: max(640px, var(--support-fill, calc(100vh - 344px))); min-height: 0; }
+  .support-queue, .support-thread { min-height: 0; }
+  .support-case-list, .support-timeline { max-height: none; min-height: 0; }
+  .support-inspector { overflow-y: auto; }
+}
+@media (min-width: 1900px) {
+  .support-thread-header, .support-note, .support-timeline { padding-left: 32px; padding-right: 32px; }
+  .support-banner { margin-left: 32px; margin-right: 32px; }
+  .support-timeline .support-event-body p { max-width: 1100px; }
+  .support-timeline > *, .support-note { max-width: 1500px; }
+}
+@media (min-width: 2600px) {
+  .support-workspace { grid-template-columns: minmax(260px, min(22%, 520px)) minmax(0, 1fr) minmax(230px, min(18%, 460px)); }
+}
 @media (max-width: 1100px) {
   .support-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -1091,6 +1307,7 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
   .support-inspector section + section { border-top: 0; border-left: 1px solid var(--support-border); }
 }
 @media (max-width: 680px) {
+  .support-button-label { display: none; }
   .support-workspace { display: block; min-height: 0; }
   .support-queue { border-right: 0; }
   .support-thread, .support-inspector { display: none; }

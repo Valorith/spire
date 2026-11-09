@@ -24,6 +24,19 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
   ];
   // A stock World answers without the Player Support patch.
   const companion = (overrides.companion as string) || 'ready';
+  const history = (overrides.history as object[]) || [];
+  const replies: { id: number; title: string; body: string }[] = (overrides.replies as { id: number; title: string; body: string }[]) || [];
+  const settings = { available: true, discord_webhook_id: 0, webhooks: [{ id: 4, name: 'gm-alerts' }] };
+  const filedAt = submitted;
+  const events = [
+    { id: 91, character_id: 100, character: 'Aranel', zone_id: 89, event_type_id: 27, event_type_name: 'Trade',
+      event_data: JSON.stringify({ character_1_id: 100, character_2_id: 101, character_1_give_items: [], character_2_give_items: [], character_1_give_money: {}, character_2_give_money: {} }),
+      created_at: new Date((filedAt - 600) * 1000).toISOString() },
+    { id: 92, character_id: 102, character: 'Thornalt', zone_id: 89, event_type_id: 9, event_type_name: 'Item Destroy',
+      event_data: JSON.stringify({ item_id: 2730, item_name: 'Fungus Covered Scale Tunic', charges: 1, reason: 'Client Destroy' }),
+      created_at: new Date((filedAt + 300) * 1000).toISOString() },
+  ];
+  const tunic = { id: 2730, name: 'Fungus Covered Scale Tunic', icon: 590, stackable: 0, stack_size: 1 };
   let active = false;
   const writes: { path: string; connection: string | null; input: Record<string, unknown> }[] = [];
   await page.addInitScript(() => localStorage.setItem(`spire-web-access-token-${location.host}`, 'test-session'));
@@ -36,7 +49,7 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
   } } }));
   await page.route('**/api/v1/me', route => route.fulfill({ json: { id: 2, user_name: 'Guide', provider: 'local', is_admin: false } }));
   await page.route('**/api/v1/permissions/me', route => route.fulfill({ json: {
-    connection_id: 7, read_all: false, write_all: false, read: ['player-support', 'mail-parcels-editor', 'player-operations'], write,
+    connection_id: 7, read_all: false, write_all: false, read: ['player-support', 'mail-parcels-editor', 'player-operations', 'player_event_logs'], write,
   } }));
   await page.route('**/api/v1/player-operations/lookup/zones?*', route => route.fulfill({ json: {
     data: [{ id: 202, version: 0, short_name: 'poknowledge', long_name: 'Plane of Knowledge' }],
@@ -82,9 +95,26 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
       }
       if (path.endsWith('/recovery')) return route.fulfill({ json: {
         character: location, corpses, local_world: true, companion, live_destination: companion === 'ready',
+        bind: { zone_id: 22, instance_id: 0, zone_name: 'East Commonlands', x: 120.5, y: -310.25, z: 4 },
+      } });
+      if (path.endsWith('/events')) {
+        const group = url.searchParams.get('group');
+        // "All" has 120 zoning events, newest first, 50 per page.
+        const all = Array.from({ length: 120 }, (_, i) => ({ ...events[0], id: 1000 + i, event_type_name: 'Zoning', event_type_id: 2,
+          event_data: JSON.stringify({ from_zone_id: 89, to_zone_id: 22 }), created_at: new Date((filedAt + 3600 - i * 60) * 1000).toISOString() }));
+        const matching = group === 'deaths' ? [] : group === '' ? all : events;
+        const page = Math.min(Math.max(1, Number(url.searchParams.get('page')) || 1), Math.max(1, Math.ceil(matching.length / 50)));
+        return route.fulfill({ json: {
+          events: matching.slice((page - 1) * 50, page * 50), hours: Number(url.searchParams.get('hours')) || 24, group,
+          filed_at: filedAt, page, page_size: 50, total: matching.length,
+        } });
+      }
+      if (path.endsWith('/snapshots')) return route.fulfill({ json: { snapshots: [{ time_index: filedAt - 7200, items: 31 }] } });
+      if (/\/snapshots\/\d+$/.test(path)) return route.fulfill({ json: {
+        time_index: filedAt - 7200, snapshot_items: 31, missing: [{ item: tunic, augments: [null, null, null, null, null, null], had: 1, has: 0, missing: 1 }],
       } });
       if (path.endsWith('/corpses/42')) return route.fulfill({ json: { items: [{ id: 2730, icon: 590, name: 'Fungus Covered Scale Tunic' }] } });
-      return route.fulfill({ json: { case: record, activity } });
+      return route.fulfill({ json: { case: record, activity, history } });
     }
     const input = request.postDataJSON();
     writes.push({ path, connection: url.searchParams.get('connection_id'), input });
@@ -94,6 +124,12 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
       const message = input.to_player ? 'Corpse moved and player notified.' : input.corpse_id ? 'Corpse moved.' : 'Move requested in game.';
       activity.push({ key: 'move-' + writes.length, kind, text: input.reason, actor: 'Guide', delivery: 'sent', created_at: new Date().toISOString() });
       return route.fulfill({ json: { status, message } });
+    }
+    if (path.endsWith('/merge')) {
+      activity.push({ key: 'merge-1', kind: 'merge', text: 'Merged case #700 (Aranel, filed Nov 1, 2026) into this case', actor: 'Guide', created_at: new Date().toISOString() });
+      history.splice(0, history.length, ...history.map(item => ({ ...item, merged: true })));
+      record.revision++;
+      return route.fulfill({ status: 204 });
     }
     if (path.endsWith('/parcel')) {
       activity.push({ key: 'delivery-981', kind: 'parcel', text: 'Fungus Covered Scale Tunic × 1', receipt: [42], actor: 'Guide', created_at: new Date().toISOString() });
@@ -114,6 +150,29 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
     record.revision++;
     return route.fulfill({ status: 204 });
   });
+  await page.route('**/api/v1/player-support/replies**', async route => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: { replies } });
+    const input = request.postDataJSON();
+    writes.push({ path: new URL(request.url()).pathname, connection: null, input });
+    if (request.method() === 'POST') {
+      replies.push({ id: replies.length + 1, ...input });
+      return route.fulfill({ status: 201, json: replies[replies.length - 1] });
+    }
+    return route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/v1/player-support/settings**', async route => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: settings });
+    const input = request.postDataJSON();
+    writes.push({ path: '/settings', connection: null, input });
+    settings.discord_webhook_id = input.discord_webhook_id;
+    return route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/v1/player-support/metrics**', route => route.fulfill({ json: {
+    days: 30, filed: 12, resolved: 9, merged: 1, responded: 11, first_response_minutes: 14, resolve_minutes: 190,
+    staff: [{ name: 'Guide', responses: 15, resolved: 7 }, { name: 'Valorith', responses: 4, resolved: 2 }],
+  } }));
   return writes;
 }
 
@@ -451,4 +510,110 @@ test('dismisses a pending resolution when the active server changes', async ({ p
   await page.clock.fastForward(12000);
   await expect(dialog).toBeHidden();
   expect(writes).toHaveLength(0);
+});
+
+test('shows the account’s events around the petition as evidence', async ({ page }) => {
+  await mockSupport(page, ['player-support']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  const evidence = page.getByRole('region', { name: 'Evidence' });
+  await expect(evidence.getByText('Item Destroy')).toBeVisible();
+  await expect(evidence.getByText('Thornalt · alt')).toBeVisible();
+  await expect(evidence.getByText('5m after')).toBeVisible();
+  await expect(evidence.getByRole('separator')).toContainText('Petition filed');
+  await expect(evidence.getByRole('navigation', { name: 'Event pages' })).toHaveCount(0);
+  await evidence.getByRole('button', { name: 'All', exact: true }).click();
+  const pager = evidence.getByRole('navigation', { name: 'Event pages' });
+  await expect(pager).toContainText('Page 1 of 3 · 1–50 of 120');
+  await expect(evidence.getByRole('button', { name: 'Newer' })).toBeDisabled();
+  await expect(evidence.locator('.evidence-row')).toHaveCount(50);
+  await evidence.getByRole('button', { name: 'Older' }).click();
+  await expect(pager).toContainText('Page 2 of 3 · 51–100 of 120');
+  // The petition was filed 60 events in, so its marker is on page 2.
+  await expect(evidence.getByRole('separator')).toContainText('Petition filed');
+  await evidence.getByRole('button', { name: 'Older' }).click();
+  await expect(pager).toContainText('Page 3 of 3 · 101–120 of 120');
+  await expect(evidence.locator('.evidence-row')).toHaveCount(20);
+  await evidence.getByRole('button', { name: 'Deaths' }).click();
+  await expect(evidence.getByText('No events in this window')).toBeVisible();
+  await expect(page.getByLabel('Private staff note')).toHaveCount(0);
+});
+
+test('restores items missing since an inventory snapshot through a reviewed parcel', async ({ page }) => {
+  await mockSupport(page, ['player-support', 'mail-parcels-editor', 'player-operations']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Inventory snapshots' }).click();
+  const snapshots = page.locator('.modal.show');
+  await expect(snapshots.getByText('1 item is missing')).toBeVisible();
+  await snapshots.getByRole('checkbox').check();
+  await snapshots.getByRole('button', { name: /Restore 1 as parcels/ }).click();
+  const composer = page.locator('.modal.show').filter({ hasText: 'Reason for delivery' });
+  await expect(composer.getByText('Fungus Covered Scale Tunic')).toBeVisible();
+  await expect(composer.getByLabel('Reason for delivery')).toHaveValue(/inventory snapshot \(case #731\)/);
+});
+
+test('offers bind point and safe point as quick move destinations', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support', 'player-operations']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Move character' }).click();
+  const recovery = page.locator('.modal.show');
+  await recovery.getByRole('group', { name: 'Quick destinations' }).getByRole('button', { name: /Bind point/ }).click();
+  await expect(recovery.locator('.recovery-destination strong')).toHaveText('East Commonlands');
+  await expect(recovery.getByLabel('X coordinate')).toHaveValue('120.5');
+  await recovery.getByLabel('Reason for move').fill('Stuck in geometry, sent home to bind');
+  await recovery.getByRole('button', { name: 'Move character', exact: true }).click();
+  await expect.poll(() => writes.find(write => write.path.endsWith('/move'))?.input).toMatchObject({
+    destination: 22, coordinates: { x: 120.5, y: -310.25, z: 4 },
+  });
+});
+
+test('lists the account history and merges an earlier case into the open one', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { history: [
+    { key: '700-1793900000', character: 'Aranel', status: 'resolved', message: 'Lost my tunic last week', submitted_at: 1793900000,
+      merged: false, resolution: 'Sent a replacement tunic', native_open: false },
+  ] });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  const history = page.getByRole('region', { name: 'Account history' });
+  await expect(history.getByText('Sent a replacement tunic')).toBeVisible();
+  await history.getByRole('button', { name: 'Merge case 700 into this case' }).click();
+  await page.locator('.modal.show').getByRole('button', { name: 'Merge cases' }).click();
+  await expect.poll(() => writes.find(write => write.path.endsWith('/merge'))?.input).toMatchObject({ source: '700-1793900000' });
+  await expect(page.getByText('Cases merged')).toBeVisible();
+  await expect(history.getByText('Merged')).toBeVisible();
+});
+
+test('shares saved replies as quick replies and manages them', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support', 'mail-parcels-editor'], { id: 7 }, { replies: [
+    { id: 1, title: 'Parcel ready', body: 'Hi {character}, your item is at the parcel merchant.' },
+  ] });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Live chat', exact: true }).click();
+  await page.getByRole('group', { name: 'Quick replies' }).getByRole('button', { name: 'Parcel ready' }).click();
+  await expect(page.getByLabel('Tell Aranel')).toHaveValue('Hi Aranel, your item is at the parcel merchant.');
+
+  await page.getByRole('button', { name: 'Saved replies' }).click();
+  const manager = page.locator('.modal.show');
+  await manager.getByLabel('Title').fill('Need details');
+  await manager.getByLabel(/^Reply/).fill('Can you tell me which zone you were in?');
+  await manager.getByRole('button', { name: 'Add reply' }).click();
+  await expect.poll(() => writes.find(write => write.path.endsWith('/replies'))?.input).toMatchObject({ title: 'Need details' });
+});
+
+test('sets petition alerts and shows support insights', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Petition alerts' }).click();
+  const alerts = page.locator('.modal.show');
+  await alerts.getByRole('checkbox', { name: /Sound/ }).check();
+  await alerts.getByLabel('Discord channel').selectOption({ label: 'gm-alerts' });
+  await alerts.getByRole('button', { name: 'Save Discord channel' }).click();
+  await expect(alerts.getByText('Saved')).toBeVisible();
+  expect(writes.find(write => write.path === '/settings')?.input).toMatchObject({ discord_webhook_id: 4 });
+  expect(await page.evaluate(() => localStorage.getItem('spire-player-support-alerts'))).toContain('"sound":true');
+  await alerts.getByRole('button', { name: 'Done' }).click();
+
+  await page.getByRole('button', { name: 'Support insights' }).click();
+  const insights = page.locator('.modal.show');
+  await expect(insights.getByText('14 min')).toBeVisible();
+  await expect(insights.getByRole('row', { name: /Valorith/ })).toBeVisible();
 });

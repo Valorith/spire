@@ -48,6 +48,8 @@ var spireTables = []models.Modelable{
 	&models.PlayerSupportCase{},
 	&models.PlayerSupportEntry{},
 	&models.PlayerSupportChat{},
+	&models.PlayerSupportReply{},
+	&models.PlayerSupportSettings{},
 	&models.UserServerResourcePermission{},
 	&models.CrashReport{},
 	&models.Setting{},

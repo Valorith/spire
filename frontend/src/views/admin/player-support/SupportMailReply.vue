@@ -25,7 +25,7 @@
         <input id="support-mail-subject" v-model="subject" class="form-control" maxlength="200">
         <div class="delivery-templates" role="group" aria-label="Message templates">
           <span>Start from</span>
-          <button v-for="template in templates" :key="template.label" type="button" @click="useTemplate(template)">
+          <button v-for="(template, index) in templateList" :key="index" type="button" @click="useTemplate(template)">
             <i :class="template.icon" aria-hidden="true"></i> {{ template.label }}
           </button>
         </div>
@@ -50,12 +50,14 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
+import { fillReply } from './support-ui'
 
 export default {
   name: 'SupportMailReply',
   props: {
     record: { type: Object, required: true },
-    connectionId: { type: Number, required: true }
+    connectionId: { type: Number, required: true },
+    savedReplies: { type: Array, default: () => [] }
   },
   data () {
     return {
@@ -83,6 +85,13 @@ You can reply with #petition in game.` },
 
 Your issue has been resolved. If anything still looks wrong, use #petition in game and we will take another look.` }
       ]
+    },
+    // Shared saved replies come first; the built-in templates stay available.
+    templateList () {
+      const saved = this.savedReplies.map(reply => ({
+        label: reply.title, icon: 'fe fe-bookmark', body: fillReply(reply.body, this.record)
+      }))
+      return saved.concat(this.templates)
     }
   },
   methods: {

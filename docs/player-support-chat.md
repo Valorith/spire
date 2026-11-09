@@ -65,3 +65,15 @@ A cross-zone character receipt confirms that the zone requested the move. If a r
 For an unburied corpse, choose **Player’s current location** to use the petitioning character’s live coordinates and instance. The character must be in game. The destination zone sends a chat notice when it confirms the corpse arrived.
 
 Spire character moves send **You have been moved by a Game Master**. If Spire relocates a saved character, the patched zone displays the notice when the player next enters the game.
+
+## Investigation and team tools
+
+These work on stock EQEmu; moves still need the companion patch.
+
+- **Evidence:** the case's **Evidence** tab lists player events from every character on the petition's account, from 6 hours to 7 days before the petition up to now, with a marker where the petition was filed. Filter by items, deaths, zoning or GM commands. It needs Player Event Logs read access, and only shows event types turned on in the Player Event Log settings.
+- **Inventory snapshots:** **Snapshots** compares an inventory snapshot with the character's current inventory and bank, and lists what is missing. Selected items open in the parcel composer with a reason filled in, for review before sending. EQEmu takes snapshots when the `Character:ActiveInvSnapshots` rule is on, or with `#invsnapshot capture`.
+- **Move presets:** Move character offers **Current zone** (its safe point) and **Bind point** as one-click destinations.
+- **Account history:** the side panel lists the account's other cases with their resolution summaries. **Merge here** moves an earlier case's notes, messages and deliveries into the open case and resolves the earlier one with a link. A case whose petition is still open in game can't be merged away.
+- **Saved replies:** **Replies** in the header manages replies shared by everyone on the server connection. Use `{character}` for the player's name. Replies that fit in a tell (200 plain characters) also show as Live chat quick replies; all of them show as mail templates.
+- **Alerts:** **Alerts** turns on desktop notifications and a chime for new petitions and player replies in this browser. It can also post each new petition to a Discord channel, using a webhook from EQEmu's `discord_webhooks` table. Spire checks every 30 seconds, announces only petitions filed after the channel is chosen, and turns mentions off. Discord alerts come from the Spire running beside the game server.
+- **Insights:** **Insights** shows cases filed, resolved and merged over 7, 30 or 90 days, the median time to first response and to resolution, and responses and resolutions per staff member.

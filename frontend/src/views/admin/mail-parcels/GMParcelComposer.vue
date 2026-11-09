@@ -160,7 +160,10 @@ export default {
   props: {
     recipient: { type: Object, default: null },
     caseKey: { type: String, default: '' },
-    connectionId: { type: Number, default: 0 }
+    connectionId: { type: Number, default: 0 },
+    // Lines to start with, such as items restored from an inventory snapshot:
+    // { lines: [{ item, quantity, augments, copies }], reason, note }
+    prefill: { type: Object, default: null }
   },
   data () {
     return {
@@ -198,11 +201,20 @@ export default {
     open () {
       this.step = 'compose'
       this.lines = []
-      this.addLine()
+      for (const line of (this.prefill && this.prefill.lines) || []) {
+        // An item that does not stack goes as one parcel per copy.
+        for (let copy = 0; copy < Math.max(1, line.copies || 1) && this.lines.length < 20; copy++) {
+          this.lines.push({
+            ...emptyLine(`parcel-${++this.lineSequence}`), item: line.item, quantity: line.quantity || 1,
+            augments: Array.from({ length: 6 }, (_, index) => (line.augments && line.augments[index]) || null)
+          })
+        }
+      }
+      if (!this.lines.length) this.addLine()
       this.fromName = 'Server Staff'
       this.sentAt = localDateTimeValue(new Date())
-      this.note = ''
-      this.reason = ''
+      this.note = (this.prefill && this.prefill.note) || ''
+      this.reason = (this.prefill && this.prefill.reason) || ''
       this.confirmation = ''
       this.reviewAttempted = false
       this.sending = false

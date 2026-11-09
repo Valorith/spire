@@ -99,7 +99,20 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 	if zoneDB == nil || p.connectionID(scope.user) != scope.connectionID {
 		return supportError(c, echo.NewHTTPError(http.StatusConflict, "The active content database changed or is unavailable"))
 	}
+	// The primary bind point is a move preset. Instances are not move targets.
+	var bind *supportLocation
+	var binds []supportLocation
+	if err := scope.eqemu.Table("character_bind").Select("zone_id, instance_id, x, y, z").
+		Where("id = ? AND slot = 0", view.CharacterID).Limit(1).Find(&binds).Error; err != nil {
+		return supportError(c, err)
+	}
+	if len(binds) == 1 && binds[0].ZoneID > 0 && binds[0].InstanceID == 0 {
+		bind = &binds[0]
+	}
 	zoneIDs := []int{int(location.ZoneID)}
+	if bind != nil {
+		zoneIDs = append(zoneIDs, int(bind.ZoneID))
+	}
 	for _, corpse := range corpses {
 		zoneIDs = append(zoneIDs, int(corpse.Location.ZoneID))
 	}
@@ -108,6 +121,9 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 		return supportError(c, err)
 	}
 	location.ZoneName = names[int(location.ZoneID)]
+	if bind != nil {
+		bind.ZoneName = names[int(bind.ZoneID)]
+	}
 	for i := range corpses {
 		corpses[i].Location.ZoneName = names[int(corpses[i].Location.ZoneID)]
 	}
@@ -118,7 +134,7 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, echo.Map{
 		"character": location, "corpses": corpses, "local_world": local,
-		"companion": companion, "live_destination": local && companion.Moves(),
+		"companion": companion, "live_destination": local && companion.Moves(), "bind": bind,
 	})
 }
 

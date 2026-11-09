@@ -47,7 +47,10 @@
 
     <form v-if="canWrite && (active || composable)" class="chat-composer" @submit.prevent="act('send')">
       <div v-if="composable" class="chat-quick" role="group" aria-label="Quick replies">
-        <button v-for="reply in quickReplies" :key="reply" type="button" :disabled="busy" @click="useQuickReply(reply)">{{ reply }}</button>
+        <button v-for="reply in quickReplyList" :key="reply.key" type="button" :disabled="busy" :class="{ 'is-saved': reply.saved }"
+                :title="reply.saved ? reply.text : null" @click="useQuickReply(reply.text)">
+          <i v-if="reply.saved" class="fe fe-bookmark" aria-hidden="true"></i> {{ reply.label }}
+        </button>
       </div>
       <label for="support-live-message">{{ mailing ? 'Mail ' + mailTo : 'Tell ' + target }} <span>as GameMaster</span></label>
       <div class="chat-compose-row">
@@ -73,13 +76,15 @@
 
 <script>
 import axios from 'axios'
-import { avatarStyle, initials, nameHue } from './support-ui'
+import { avatarStyle, fillReply, fitsTell, initials, nameHue } from './support-ui'
 import { SpireApi } from '@/app/api/spire-api'
 
 export default {
   name: 'SupportLiveChat',
   props: {
     record: { type: Object, required: true },
+    // Shared saved replies; the ones that fit in a tell become quick replies.
+    savedReplies: { type: Array, default: () => [] },
     connectionId: { type: Number, required: true },
     canWrite: { type: Boolean, default: false }
   },
@@ -107,6 +112,13 @@ export default {
     composable () { return this.state === 'ready' || this.mailing },
     // World answered without the Player Support patch, or with an older one.
     patched () { return this.companion !== 'missing' && this.companion !== 'outdated' },
+    quickReplyList () {
+      const saved = this.savedReplies
+        .map(reply => ({ key: 'saved-' + reply.id, label: reply.title, text: fillReply(reply.body, this.record), saved: true }))
+        .filter(reply => fitsTell(reply.text))
+      const builtIn = this.quickReplies.map(text => ({ key: text, label: text, text, saved: false }))
+      return saved.length ? saved.concat(builtIn.slice(0, 2)) : builtIn
+    },
     onAlt () { return Boolean(this.recipient) && this.recipient.toLowerCase() !== this.record.character.toLowerCase() },
     status () {
       if (this.state === 'ready') return this.active ? 'Messages on' : 'Messages off'
@@ -299,6 +311,11 @@ export default {
 .chat-button:disabled { opacity: .45; cursor: default; }
 .chat-button:focus-visible, .chat-compose-row textarea:focus-visible { outline: 2px solid var(--support-accent); outline-offset: 2px; }
 .chat-transcript { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 260px; max-height: 480px; padding: 18px 23px; overflow: auto; }
+/* On tall screens the workspace has a fixed height, so the transcript fills it. */
+@media (min-width: 1181px) and (min-height: 760px) {
+  .support-chat { min-height: 0; }
+  .chat-transcript { max-height: none; min-height: 0; }
+}
 .chat-empty { flex: 1; display: grid; place-content: center; justify-items: center; gap: 6px; max-width: 360px; margin: 0 auto; color: var(--support-muted); text-align: center; }
 .chat-empty-mark { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 4px; border-radius: 50%; background: #1d2836; border: 1px solid #344558; font-size: 19px; color: #8fa2b7; }
 .chat-empty strong { color: var(--support-text); font-size: .9rem; }
@@ -337,6 +354,8 @@ export default {
 }
 .chat-quick button:hover:not(:disabled) { border-color: var(--support-accent); color: #f3dcae; background: #241f18; }
 .chat-quick button:disabled { opacity: .5; }
+.chat-quick button.is-saved { border-color: color-mix(in srgb, var(--support-accent) 45%, var(--support-border)); color: #f3dcae; }
+.chat-quick button.is-saved i { font-size: .7rem; }
 .chat-compose-row textarea::placeholder { color: #75879b; }
 .chat-compose-hint { margin-top: 6px; color: #7f91a5; font-size: .7rem; font-variant-numeric: tabular-nums; }
 .chat-compose-hint .is-near { color: #f4ba83; }

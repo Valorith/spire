@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,10 +33,13 @@ type PlayerSupportController struct {
 	permissions *permissions.Service
 	mail        *MailParcelsEditorController
 	world       *playersupport.World
+	log         *logger.AppLogger
+	// postWebhook sends petition alerts; tests replace it.
+	postWebhook func(ctx context.Context, url string, body []byte) error
 }
 
 func NewPlayerSupportController(db *database.Resolver, permissions *permissions.Service, mail *MailParcelsEditorController, config *eqemuserverconfig.Config, log *logger.AppLogger) *PlayerSupportController {
-	controller := &PlayerSupportController{db: db, permissions: permissions, mail: mail}
+	controller := &PlayerSupportController{db: db, permissions: permissions, mail: mail, log: log}
 	controller.world = playersupport.NewWorld(config, log, controller.receiveChat)
 	if config != nil && config.Exists() && db.GetSpireDb() != nil {
 		go func() {
@@ -44,6 +48,9 @@ func NewPlayerSupportController(db *database.Resolver, permissions *permissions.
 				controller.world.Resume()
 			}
 		}()
+	}
+	if db.GetSpireDb() != nil {
+		go controller.watchPetitionAlerts(context.Background())
 	}
 	return controller
 }
@@ -58,6 +65,17 @@ func (p *PlayerSupportController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key/chat", p.chat, nil),
 		routes.RegisterRoute(http.MethodPut, "player-support/cases/:key/chat", p.updateChat, nil),
 		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key/recovery", p.recovery, nil),
+		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key/events", p.events, nil),
+		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key/snapshots", p.snapshots, nil),
+		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key/snapshots/:time", p.snapshotDiff, nil),
+		routes.RegisterRoute(http.MethodPut, "player-support/cases/:key/merge", p.merge, nil),
+		routes.RegisterRoute(http.MethodGet, "player-support/replies", p.listReplies, nil),
+		routes.RegisterRoute(http.MethodPost, "player-support/replies", p.saveReply, nil),
+		routes.RegisterRoute(http.MethodPut, "player-support/replies/:id", p.saveReply, nil),
+		routes.RegisterRoute(http.MethodDelete, "player-support/replies/:id", p.deleteReply, nil),
+		routes.RegisterRoute(http.MethodGet, "player-support/settings", p.settings, nil),
+		routes.RegisterRoute(http.MethodPut, "player-support/settings", p.updateSettings, nil),
+		routes.RegisterRoute(http.MethodGet, "player-support/metrics", p.metrics, nil),
 		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key/corpses/:corpse", p.corpseContents, nil),
 		routes.RegisterRoute(http.MethodPut, "player-support/cases/:key/move", p.moveRecoveryTarget, nil),
 	}
@@ -86,6 +104,8 @@ type supportCaseView struct {
 	MessagesOn  bool       `json:"messages_on"`
 	LastReplyAt *time.Time `json:"last_reply_at,omitempty"`
 	ZoneName    string     `json:"zone_name,omitempty"`
+	// MergedKey is the case this one was merged into.
+	MergedKey string `json:"merged_into,omitempty"`
 }
 
 type supportActivity struct {
@@ -207,6 +227,7 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		cases = append(cases, supportView(scope.newCase(row), row, scope.user.ID))
 	}
 	summary := supportQueueSummary(cases, scope.user.ID)
+	scope.latestReply(&summary)
 	if filter == "resolved" {
 		query := scope.spire.Model(&models.PlayerSupportCase{}).
 			Where("connection_id = ? AND status = ?", scope.connectionID, "resolved")
@@ -327,7 +348,17 @@ func (p *PlayerSupportController) detail(c echo.Context) error {
 	p.decoratePresence(scope, cases)
 	p.decorateZones(c, cases)
 	decorateConversations(scope, cases)
-	return c.JSON(http.StatusOK, echo.Map{"case": cases[0], "activity": activity})
+	if view.MergedInto != 0 {
+		var into models.PlayerSupportCase
+		if scope.spire.Select("source_key").Where("id = ?", view.MergedInto).Take(&into).Error == nil {
+			cases[0].MergedKey = into.SourceKey
+		}
+	}
+	history, err := scope.accountHistory(view)
+	if err != nil {
+		return supportError(c, err)
+	}
+	return c.JSON(http.StatusOK, echo.Map{"case": cases[0], "activity": activity, "history": history})
 }
 
 type supportSummary struct {
@@ -336,6 +367,14 @@ type supportSummary struct {
 	Unassigned int `json:"unassigned"`
 	Waiting    int `json:"waiting"`
 	Mine       int `json:"mine"`
+	// The newest petition and the latest player reply let the page alert
+	// staff to arrivals beyond the page they are viewing.
+	NewestAt        int64      `json:"newest_at"`
+	NewestKey       string     `json:"newest_key,omitempty"`
+	NewestCharacter string     `json:"newest_character,omitempty"`
+	ReplyAt         *time.Time `json:"reply_at,omitempty"`
+	ReplyKey        string     `json:"reply_key,omitempty"`
+	ReplyCharacter  string     `json:"reply_character,omitempty"`
 }
 
 // supportQueueSummary counts the live inbox before filters and search, so the
@@ -357,8 +396,28 @@ func supportQueueSummary(cases []supportCaseView, userID uint) supportSummary {
 		if record.Mine {
 			summary.Mine++
 		}
+		if record.SubmittedAt > summary.NewestAt {
+			summary.NewestAt, summary.NewestKey, summary.NewestCharacter = record.SubmittedAt, record.SourceKey, record.Character
+		}
 	}
 	return summary
+}
+
+// latestReply finds the newest player tell on this connection's cases.
+func (s supportScope) latestReply(summary *supportSummary) {
+	var reply struct {
+		CreatedAt time.Time
+		Actor     string
+		SourceKey string
+	}
+	err := s.spire.Table("spire_player_support_entries AS entries").
+		Select("entries.created_at, entries.actor, cases.source_key").
+		Joins("JOIN spire_player_support_cases AS cases ON cases.id = entries.case_id").
+		Where("cases.connection_id = ? AND entries.kind = ?", s.connectionID, "chat_in").
+		Order("entries.id DESC").Limit(1).Scan(&reply).Error
+	if err == nil && reply.SourceKey != "" {
+		summary.ReplyAt, summary.ReplyKey, summary.ReplyCharacter = &reply.CreatedAt, reply.SourceKey, reply.Actor
+	}
 }
 
 // decorateConversations marks cases with Messages on and the time of the

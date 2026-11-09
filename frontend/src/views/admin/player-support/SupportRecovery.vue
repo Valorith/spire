@@ -47,6 +47,17 @@
                   <i :class="option.icon" aria-hidden="true"></i> {{ option.label }}
                 </button>
               </div>
+              <div v-if="mode === 'move'" class="recovery-presets" role="group" aria-label="Quick destinations">
+                <span>Quick picks</span>
+                <button type="button" :disabled="sending || !!result" :aria-pressed="String(preset === 'safe')"
+                        :title="'Safe point in ' + zoneName(data.character)" @click="usePreset('safe')">
+                  <i class="fe fe-shield" aria-hidden="true"></i> Current zone
+                </button>
+                <button v-if="data.bind" type="button" :disabled="sending || !!result" :aria-pressed="String(preset === 'bind')"
+                        :title="'Bind point in ' + zoneName(data.bind)" @click="usePreset('bind')">
+                  <i class="fe fe-home" aria-hidden="true"></i> Bind point
+                </button>
+              </div>
               <template v-if="mode === 'move' && target === 'player'">
                 <strong>{{ targetPlayer ? targetPlayer.name : 'Choose a player' }}</strong>
                 <span v-if="targetPlayer" class="recovery-tag">
@@ -213,6 +224,16 @@ export default {
     }
   },
   computed: {
+    // Which quick pick matches the current destination, if any.
+    preset () {
+      if (this.mode !== 'move' || !this.data || !this.destination) return ''
+      const character = this.data.character
+      const bind = this.data.bind
+      if (this.target === 'zone' && this.destination.id === character.zone_id) return 'safe'
+      if (bind && this.target === 'coordinates' && this.destination.id === bind.zone_id &&
+        Number(this.coords.x) === Number(this.round(bind.x)) && Number(this.coords.y) === Number(this.round(bind.y))) return 'bind'
+      return ''
+    },
     endpoint () { return 'player-support/cases/' + this.record.key },
     params () { return { connection_id: this.connectionId } },
     selectedCorpse () {
@@ -307,6 +328,20 @@ export default {
       this.locPaste = ''
       this.locParsed = false
       this.useSavedCoordinates()
+    },
+    // One-click destinations: the current zone's safe point, or the bind point.
+    usePreset (preset) {
+      const character = this.data.character
+      if (preset === 'safe') {
+        this.setTarget('zone')
+        this.destination = { id: character.zone_id, long_name: this.zoneName(character) }
+      } else if (this.data.bind) {
+        const bind = this.data.bind
+        this.setTarget('coordinates')
+        this.destination = { id: bind.zone_id, long_name: this.zoneName(bind) }
+        this.coords = { x: this.round(bind.x), y: this.round(bind.y), z: this.round(bind.z), heading: '0' }
+      }
+      this.$nextTick(() => { if (this.$refs.reason) this.$refs.reason.focus() })
     },
     setTarget (target) {
       if (this.target === target) return
@@ -571,6 +606,14 @@ export default {
 .recovery > .recovery-empty, .recovery > .recovery-message { margin: 14px 20px; }
 .recovery-message { margin: 0; padding: 9px 11px; color: #b9e3cf; border: 1px solid #375e52; border-radius: 4px; background: #172b27; }
 .recovery-message.is-error { color: #ffc6a8; border-color: #754f3d; background: #30241e; }
+.recovery-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 2px 0 6px; }
+.recovery-presets span { color: #8fa1b5; font-size: .7rem; margin-right: 2px; }
+.recovery-presets button {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: .72rem;
+  border: 1px solid #3c4f63; background: #172230; color: #c9d6e3;
+}
+.recovery-presets button:hover:not(:disabled) { border-color: #62d2d8; color: #c9f3f5; }
+.recovery-presets button[aria-pressed="true"] { border-color: #62d2d8; background: #173236; color: #c9f3f5; }
 .recovery-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; width: 100%; gap: 8px; }
 .recovery-footer .recovery-tag { margin-right: auto; }
 @media (max-width: 600px) {
