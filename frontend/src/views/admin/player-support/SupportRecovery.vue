@@ -569,6 +569,9 @@ export default {
   .recovery-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 145px; }
   .recovery-detail, .recovery-bar { padding-left: 12px; padding-right: 12px; }
   .recovery-position { padding: 8px; }
+  /* Stack the source and destination so the destination switch has room. */
+  .recovery-positions.has-move { grid-template-columns: minmax(0, 1fr); }
+  .recovery-direction { justify-self: center; transform: rotate(90deg); }
   .recovery-coordinate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .recovery-loc-row { flex-wrap: wrap; }
 }
