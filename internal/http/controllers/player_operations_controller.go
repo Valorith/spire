@@ -1272,22 +1272,19 @@ func (p *PlayerOperationsController) sanctionAccount(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := p.db.Get(models.Account{}, c)
-	var account struct {
-		Name string
-		playerOperationsSanctionAccount
-	}
-	if err := db.Table("account").Select("name, status, suspendeduntil, ban_reason").Where("id = ?", id).Take(&account).Error; err != nil {
+	accountName, account, err := loadPlayerOperationsSanctionTarget(db, id)
+	if err != nil {
 		return playerOperationsLoadError(c, "Account", err)
 	}
 	if !playerOperationsTimesEqual(account.SuspendedUntil, request.ExpectedSuspendedAt) {
 		return c.JSON(http.StatusConflict, echo.Map{"error": "Account sanction changed; refresh before applying"})
 	}
-	updates, err := playerOperationsSanctionPlan(request.Mode, account.playerOperationsSanctionAccount, request.Until, request.Reason)
+	updates, err := playerOperationsSanctionPlan(request.Mode, account, request.Until, request.Reason)
 	if err != nil {
 		return c.JSON(http.StatusConflict, echo.Map{"error": err.Error()})
 	}
 	payload := map[string]interface{}{
-		"action": request.Mode, "account_id": id, "account_name": account.Name, "previous_status": account.Status,
+		"action": request.Mode, "account_id": id, "account_name": accountName, "previous_status": account.Status,
 		"previous_until": account.SuspendedUntil, "until": updates["suspendeduntil"], "reason": strings.TrimSpace(request.Reason),
 	}
 	auditID, err := p.writeAudit(c, playerOperationsEventAccountSanction, payload)
@@ -1331,6 +1328,18 @@ type playerOperationsSanctionAccount struct {
 	Status         int        `gorm:"column:status"`
 	SuspendedUntil *time.Time `gorm:"column:suspendeduntil"`
 	BanReason      *string    `gorm:"column:ban_reason"`
+}
+
+// loadPlayerOperationsSanctionTarget reads the account's name and sanction
+// state. gorm skips unexported fields, an embedded struct of an unexported
+// type included, so the state is a named field.
+func loadPlayerOperationsSanctionTarget(db *gorm.DB, accountID int) (string, playerOperationsSanctionAccount, error) {
+	var target struct {
+		Name    string
+		Account playerOperationsSanctionAccount `gorm:"embedded"`
+	}
+	err := db.Table("account").Select("name, status, suspendeduntil, ban_reason").Where("id = ?", accountID).Take(&target).Error
+	return target.Name, target.Account, err
 }
 
 // A ban keeps a far-future date. Its Unix time is out of range for EQEmu,

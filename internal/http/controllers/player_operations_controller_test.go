@@ -1,14 +1,21 @@
 package controllers
 
 import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	gormMysql "gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 func TestValidatePlayerOperationsCharacter(t *testing.T) {
@@ -158,6 +165,85 @@ func TestPlayerOperationsSanctionPlan(t *testing.T) {
 	// valid DATETIME in every zone, including those east of UTC.
 	if local := playerOperationsBanUntil.In(time.Local); local.Year() != 9999 || local.Month() != time.December || local.Day() != 31 {
 		t.Fatalf("ban date in local time = %v", local)
+	}
+}
+
+// oneRowConn is a database connection that answers every query with one
+// row, so a test runs gorm's real scan without a server.
+type oneRowConn struct {
+	columns []string
+	values  []driver.Value
+	queries *[]string
+}
+
+func (c oneRowConn) Prepare(string) (driver.Stmt, error) { return nil, errors.New("not supported") }
+func (c oneRowConn) Close() error                        { return nil }
+func (c oneRowConn) Begin() (driver.Tx, error)           { return nil, errors.New("not supported") }
+func (c oneRowConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	*c.queries = append(*c.queries, query)
+	return &oneRow{columns: c.columns, values: c.values}, nil
+}
+
+type oneRow struct {
+	columns []string
+	values  []driver.Value
+	read    bool
+}
+
+func (r *oneRow) Columns() []string { return r.columns }
+func (r *oneRow) Close() error      { return nil }
+func (r *oneRow) Next(dest []driver.Value) error {
+	if r.read {
+		return io.EOF
+	}
+	r.read = true
+	copy(dest, r.values)
+	return nil
+}
+
+type oneRowConnector struct{ conn oneRowConn }
+
+func (c oneRowConnector) Connect(context.Context) (driver.Conn, error) { return c.conn, nil }
+func (c oneRowConnector) Driver() driver.Driver                        { return nil }
+
+// oneRowDB is a gorm database whose queries all return the given row.
+func oneRowDB(t *testing.T, columns []string, values []driver.Value) (*gorm.DB, *[]string) {
+	t.Helper()
+	queries := &[]string{}
+	pool := sql.OpenDB(oneRowConnector{oneRowConn{columns: columns, values: values, queries: queries}})
+	t.Cleanup(func() { _ = pool.Close() })
+	db, err := gorm.Open(gormMysql.New(gormMysql.Config{Conn: pool, SkipInitializeWithVersion: true}),
+		&gorm.Config{DisableAutomaticPing: true, Logger: gormLogger.Default.LogMode(gormLogger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db, queries
+}
+
+// The sanction endpoint compares the stored suspension with the one the
+// client saw and records the previous state, so every column must be read.
+func TestLoadPlayerOperationsSanctionTarget(t *testing.T) {
+	until := time.Date(2035, time.January, 2, 18, 45, 0, 0, time.UTC)
+	db, queries := oneRowDB(t, []string{"name", "status", "suspendeduntil", "ban_reason"},
+		[]driver.Value{"aranel", int64(-1), until, "Botting"})
+	name, account, err := loadPlayerOperationsSanctionTarget(db, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "aranel" || account.Status != -1 || account.SuspendedUntil == nil || !account.SuspendedUntil.Equal(until) ||
+		account.BanReason == nil || *account.BanReason != "Botting" {
+		t.Fatalf("read %q %+v, want aranel, status -1, until %v, ban reason Botting", name, account, until)
+	}
+	if !playerOperationsTimesEqual(account.SuspendedUntil, &until) {
+		t.Fatal("the stored suspension does not match the one the client saw")
+	}
+	if len(*queries) != 1 || !strings.Contains((*queries)[0], "SELECT name, status, suspendeduntil, ban_reason FROM `account`") {
+		t.Fatalf("queries = %q", *queries)
+	}
+
+	db, _ = oneRowDB(t, []string{"name", "status", "suspendeduntil", "ban_reason"}, []driver.Value{"aranel", int64(0), nil, nil})
+	if _, account, err = loadPlayerOperationsSanctionTarget(db, 7); err != nil || account.SuspendedUntil != nil || account.BanReason != nil {
+		t.Fatalf("unsanctioned account = %+v, %v", account, err)
 	}
 }
 
