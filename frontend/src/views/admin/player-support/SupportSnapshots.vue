@@ -36,12 +36,14 @@
             <ul class="snapshots-items">
               <li v-for="(line, index) in missing" :key="index">
                 <label>
-                  <input v-model="chosen" type="checkbox" :value="index" :disabled="!chosen.includes(index) && chosen.length >= 20">
+                  <input v-model="chosen" type="checkbox" :value="index" :disabled="!chosen.includes(index) && !fits(index)">
                   <span class="snapshots-item">
                     <strong>{{ line.item.name }}</strong>
                     <span v-if="augmentNames(line)" class="snapshots-augments">with {{ augmentNames(line) }}</span>
                   </span>
-                  <span class="snapshots-count" :title="`Had ${line.had}, has ${line.has}`">× {{ line.missing }}</span>
+                  <span class="snapshots-count" :title="`Had ${line.had}, has ${line.has}`">× {{ line.missing }}
+                    <small v-if="cost(line) > 1">{{ cost(line) }} parcels</small>
+                  </span>
                 </label>
               </li>
             </ul>
@@ -51,10 +53,11 @@
     </div>
     <template #modal-footer>
       <span v-if="!canRestore && missing.length" class="snapshots-note">Restoring needs Mail &amp; Parcels write access.</span>
-      <span v-else-if="chosen.length >= 20" class="snapshots-note">A parcel batch holds up to 20 items.</span>
+      <span v-else-if="overflow" class="snapshots-note is-warning">Only the first 20 parcels fit in one batch. Restore the rest after sending.</span>
+      <span v-else-if="parcels" class="snapshots-note">{{ parcels }} of 20 parcels in this batch</span>
       <button type="button" class="btn btn-outline-light btn-sm" @click="$emit('close')">Close</button>
       <button v-if="canRestore" type="button" class="btn btn-primary btn-sm" :disabled="!chosen.length" @click="restore">
-        <i class="fe fe-package" aria-hidden="true"></i> Restore {{ chosen.length || '' }} as parcels
+        <i class="fe fe-package" aria-hidden="true"></i> Restore {{ Math.min(parcels, 20) || '' }} as parcels
       </button>
     </template>
   </b-modal>
@@ -75,7 +78,12 @@ export default {
   },
   computed: {
     endpoint () { return `player-support/cases/${encodeURIComponent(this.record.key)}/snapshots` },
-    allChosen () { return this.missing.length > 0 && this.chosen.length === Math.min(20, this.missing.length) }
+    allChosen () { return this.missing.length > 0 && this.chosen.length > 0 && this.missing.every((_, index) => this.chosen.includes(index) || !this.fits(index)) },
+    // Parcels the chosen items need: one per copy of an item that does not
+    // stack, or one per full stack.
+    parcels () { return this.chosen.reduce((total, index) => total + this.cost(this.missing[index]), 0) },
+    // One item can need more than a batch holds; only the first 20 go.
+    overflow () { return this.parcels > 20 }
   },
   async mounted () {
     try {
@@ -108,8 +116,32 @@ export default {
         if (version === this.version) this.diffLoading = false
       }
     },
+    cost (line) {
+      if (!line.item.stackable) return line.missing
+      return Math.ceil(line.missing / Math.max(1, line.item.stack_size || line.missing))
+    },
+    // A pick fits while the batch stays within 20 parcels. An item that needs
+    // more than 20 on its own can be picked alone.
+    fits (index) {
+      const cost = this.cost(this.missing[index])
+      if (!this.chosen.length) return true
+      return this.parcels + cost <= 20
+    },
     toggleAll () {
-      this.chosen = this.allChosen ? [] : this.missing.slice(0, 20).map((_, index) => index)
+      if (this.allChosen) {
+        this.chosen = []
+        return
+      }
+      const chosen = []
+      let total = 0
+      this.missing.forEach((line, index) => {
+        const cost = this.cost(line)
+        if (total + cost <= 20) {
+          chosen.push(index)
+          total += cost
+        }
+      })
+      this.chosen = chosen.length ? chosen : [0]
     },
     augmentNames (line) { return (line.augments || []).filter(Boolean).map(item => item.name).join(', ') },
     restore () {
@@ -173,5 +205,7 @@ export default {
 .snapshots-augments { color: #8fa1b5; font-size: .7rem; }
 .snapshots-count { color: #f4ba83; font-size: .78rem; font-weight: 650; font-variant-numeric: tabular-nums; }
 .snapshots-note { margin-right: auto; color: #8fa1b5; font-size: .74rem; }
+.snapshots-note.is-warning { color: #f4ba83; }
+.snapshots-count small { display: block; color: #8fa1b5; font-size: .66rem; font-weight: 500; text-align: right; }
 @media (max-width: 600px) { .snapshots-workspace { grid-template-columns: 1fr; } .snapshots-list { max-height: 160px; } }
 </style>

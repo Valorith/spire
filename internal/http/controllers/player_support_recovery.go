@@ -24,6 +24,8 @@ type supportLocation struct {
 	X          float64 `json:"x"`
 	Y          float64 `json:"y"`
 	Z          float64 `json:"z"`
+	// Heading is read for the bind point only.
+	Heading float64 `json:"heading,omitempty"`
 }
 
 type supportCorpse struct {
@@ -102,7 +104,7 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 	// The primary bind point is a move preset. Instances are not move targets.
 	var bind *supportLocation
 	var binds []supportLocation
-	if err := scope.eqemu.Table("character_bind").Select("zone_id, instance_id, x, y, z").
+	if err := scope.eqemu.Table("character_bind").Select("zone_id, instance_id, x, y, z, heading").
 		Where("id = ? AND slot = 0", view.CharacterID).Limit(1).Find(&binds).Error; err != nil {
 		return supportError(c, err)
 	}

@@ -853,6 +853,11 @@ func (p *PlayerSupportController) metrics(c echo.Context) error {
 		return staff[name]
 	}
 	first := map[uint]time.Time{}
+	// Merging moves an earlier case's history onto a later one. Work done
+	// before this case was filed, or before the period, belongs elsewhere.
+	counts := func(caseID uint, at time.Time) bool {
+		return !at.Before(since) && !at.Before(time.Unix(byID[caseID].SubmittedAt, 0))
+	}
 	responded := func(caseID uint, at time.Time) {
 		if current, ok := first[caseID]; !ok || at.Before(current) {
 			first[caseID] = at
@@ -866,6 +871,9 @@ func (p *PlayerSupportController) metrics(c echo.Context) error {
 		}
 		resolvedAt := map[uint]time.Time{}
 		for _, entry := range entries {
+			if !counts(entry.CaseID, entry.CreatedAt) {
+				continue
+			}
 			if entry.Kind == "chat_out" {
 				responded(entry.CaseID, entry.CreatedAt)
 				member(entry.Actor).Responses++
@@ -895,6 +903,9 @@ func (p *PlayerSupportController) metrics(c echo.Context) error {
 			return supportError(c, err)
 		}
 		for _, delivery := range deliveries {
+			if !counts(delivery.SupportCaseID, delivery.CreatedAt) {
+				continue
+			}
 			responded(delivery.SupportCaseID, delivery.CreatedAt)
 			member(delivery.Actor).Responses++
 		}

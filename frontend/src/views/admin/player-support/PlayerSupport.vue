@@ -788,6 +788,7 @@ export default {
       this.history = []
       this.note = ''
       this.delivery = null
+      this.parcelPrefill = null
       this.chatOpen = false
       this.evidenceOpen = false
       return this.loadDetail(key)
@@ -933,6 +934,8 @@ export default {
     },
     async deliverySent (kind) {
       if (kind === 'reply') this.delivery = null
+      // Snapshot items belong to one send only.
+      this.parcelPrefill = null
       this.notice = { error: false, text: kind === 'parcel' ? 'Parcel queued for delivery' : 'Reply sent' }
       await this.loadDetail(this.selectedKey)
     },

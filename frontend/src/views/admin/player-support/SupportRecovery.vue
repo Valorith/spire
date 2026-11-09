@@ -339,7 +339,9 @@ export default {
         const bind = this.data.bind
         this.setTarget('coordinates')
         this.destination = { id: bind.zone_id, long_name: this.zoneName(bind) }
-        this.coords = { x: this.round(bind.x), y: this.round(bind.y), z: this.round(bind.z), heading: '0' }
+        // EverQuest headings run from 0 up to 512.
+        const heading = Number(bind.heading) || 0
+        this.coords = { x: this.round(bind.x), y: this.round(bind.y), z: this.round(bind.z), heading: this.round(((heading % 512) + 512) % 512) }
       }
       this.$nextTick(() => { if (this.$refs.reason) this.$refs.reason.focus() })
     },
