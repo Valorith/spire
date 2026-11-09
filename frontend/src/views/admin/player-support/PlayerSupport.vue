@@ -103,6 +103,9 @@
                 <span v-if="record.character_presence" class="support-presence" :class="'presence-' + record.character_presence">
                   {{ characterPresenceLabel(record.character_presence) }}
                 </span>
+                <span v-if="onAlt" class="support-presence presence-online" :title="record.character + '’s account is playing ' + record.online_character">
+                  On {{ record.online_character }}
+                </span>
               </div>
               <div class="support-heading-actions">
                 <button v-if="canWrite && record.status !== 'resolved' && !record.owner" class="support-button is-primary" type="button" :disabled="busy" @click="updateCase('claim')">
@@ -152,13 +155,18 @@
                 <span class="support-event-icon"><i :class="eventIcon(entry.kind)" aria-hidden="true"></i></span>
                 <div class="support-event-body">
                   <div class="support-event-heading">
-                    <h3>{{ eventTitle(entry.kind) }} <span>· {{ entry.actor }}</span></h3>
+                    <h3>
+                      {{ eventTitle(entry.kind) }} <span>· {{ entry.actor }}<template v-if="entry.recipient"> to {{ entry.recipient }}</template></span>
+                      <span v-if="entry.alt" class="support-chip is-alt" :title="'Not the character that filed the petition (' + record.character + ')'">alt</span>
+                    </h3>
                     <time :datetime="entry.created_at" :title="formatDate(entry.created_at)">{{ clock(entry.created_at) }}</time>
                   </div>
                   <p v-if="entry.body">{{ entry.body }}</p>
                   <p v-if="entry.detail" class="support-event-detail">{{ entry.detail }}</p>
                   <div v-if="(entry.delivery && entry.delivery !== 'sent') || (entry.receipt && entry.receipt.length)" class="support-event-tags">
-                    <span v-if="entry.delivery && entry.delivery !== 'sent'" class="support-chip" :class="'delivery-' + entry.delivery">{{ deliveryLabel(entry.delivery) }}</span>
+                    <span v-if="entry.delivery && entry.delivery !== 'sent'" class="support-chip" :class="'delivery-' + entry.delivery">
+                      <i v-if="entry.delivery === 'mail'" class="fe fe-mail" aria-hidden="true"></i> {{ deliveryLabel(entry.delivery) }}
+                    </span>
                     <span v-if="entry.receipt && entry.receipt.length" class="support-receipt">Receipt {{ entry.receipt.map(id => '#' + id).join(', ') }}</span>
                   </div>
                 </div>
@@ -186,11 +194,12 @@
             <span class="support-avatar is-large" aria-hidden="true">{{ initial(record.character) }}</span>
             <div>
               <strong>{{ record.character }}</strong>
-              <span>{{ characterPresenceLabel(record.character_presence || record.account_presence) }}</span>
+              <span>Filed the petition · {{ characterPresenceLabel(record.character_presence || record.account_presence).toLowerCase() }}</span>
             </div>
           </div>
           <dl>
             <dt>Account</dt><dd>{{ record.account }}</dd>
+            <template v-if="onAlt"><dt>Playing now</dt><dd>{{ record.online_character }}</dd></template>
             <dt>Filed from</dt><dd>{{ record.zone_name || record.zone || 'Unknown zone' }}</dd>
             <dt>Assigned to</dt><dd>{{ record.owner || 'Unassigned' }}</dd>
             <dt>In-game petition</dt><dd>{{ record.checked_out ? 'Checked out' : record.native_open ? '#' + record.petition_id : 'Cleared' }}</dd>
@@ -309,6 +318,11 @@ export default {
         canWriteAdminApi('player-operations/character/0/relocate'))
     },
     caseNumber () { return this.record ? this.record.key.split('-')[0] : '' },
+    // The account is in game on a character other than the one that filed.
+    onAlt () {
+      const record = this.record
+      return Boolean(record && record.online_character && record.online_character.toLowerCase() !== record.character.toLowerCase())
+    },
     characterLinks () {
       const id = String(this.record.character_id)
       return [
@@ -344,13 +358,16 @@ export default {
         const status = statusKinds.includes(entry.kind)
         const delivery = ['parcel', 'pending', 'character_move', 'corpse_move'].includes(entry.kind)
         const chat = entry.kind === 'chat_in' || entry.kind === 'chat_out'
+        const character = entry.kind === 'chat_out' ? entry.recipient : entry.kind === 'chat_in' ? entry.actor : ''
         const view = {
           ...entry,
           day: day !== previousDay ? day : '',
           body: status ? rest.join('\n') : delivery ? first : entry.text,
           detail: delivery ? rest.join('\n') : '',
+          alt: Boolean(character) && character.toLowerCase() !== this.record.character.toLowerCase(),
           // Consecutive tells from the same side read as one exchange.
-          compact: chat && previous && previous.kind === entry.kind && previous.actor === entry.actor && day === previousDay
+          compact: chat && previous && previous.kind === entry.kind && previous.actor === entry.actor &&
+            previous.recipient === entry.recipient && day === previousDay
         }
         previousDay = day
         previous = entry
@@ -398,7 +415,7 @@ export default {
     statusLabel (status) { return { open: 'Open', waiting: 'Waiting', resolved: 'Resolved' }[status] || 'Open' },
     presenceLabel (status) { return { online: 'Online', offline: 'Offline' }[status] || 'Unknown' },
     characterPresenceLabel (status) { return { online: 'In game', offline: 'Not in game' }[status] || 'Presence unknown' },
-    deliveryLabel (status) { return { pending: 'Sending', failed: 'Failed', unconfirmed: 'Unconfirmed' }[status] || status },
+    deliveryLabel (status) { return { pending: 'Sending', failed: 'Failed', unconfirmed: 'Unconfirmed', mail: 'Sent by mail' }[status] || status },
     urgency (value) { return value > 1 ? 'Urgent' : 'Elevated' },
     eventTitle (kind) { return titles[kind] || 'Case updated' },
     eventIcon (kind) { return icons[kind] || 'fe fe-activity' },
@@ -726,7 +743,9 @@ export default {
 .support-chip.status-waiting { background: #3a2d1b; color: #f6ce91; }
 .support-chip.status-resolved { background: #193a2e; color: #b8e6cc; }
 .support-chip.is-urgent { background: #3d2420; color: var(--support-warning); }
+.support-chip.is-alt { margin-left: 4px; padding: 0 6px; font-size: .62rem; letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
 .support-chip.delivery-failed { background: #3d2228; color: #ffb2c0; }
+.support-chip.delivery-mail { background: #1a2a3c; color: var(--support-info); }
 .support-chip.delivery-pending, .support-chip.delivery-unconfirmed { background: #3a2c1b; color: var(--support-warning); }
 .support-pagination { justify-content: space-between; padding: 9px 14px; border-top: 1px solid var(--support-border); font-size: .75rem; color: var(--support-muted); }
 .support-empty { display: grid; justify-items: center; gap: 6px; margin: 34px 18px; color: var(--support-muted); text-align: center; font-size: .8rem; }

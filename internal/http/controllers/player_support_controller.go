@@ -39,7 +39,7 @@ func NewPlayerSupportController(db *database.Resolver, permissions *permissions.
 	if config != nil && config.Exists() && db.GetSpireDb() != nil {
 		go func() {
 			var active models.PlayerSupportChat
-			if db.GetSpireDb().Select("character_id").Take(&active).Error == nil {
+			if db.GetSpireDb().Select("account_id").Take(&active).Error == nil {
 				controller.world.Resume()
 			}
 		}()
@@ -77,7 +77,10 @@ type supportCaseView struct {
 	Mine              bool   `json:"mine"`
 	AccountPresence   string `json:"account_presence"`
 	CharacterPresence string `json:"character_presence,omitempty"`
-	ZoneName          string `json:"zone_name,omitempty"`
+	// OnlineCharacter is the account's character in a zone, which can differ
+	// from the character that filed the petition.
+	OnlineCharacter string `json:"online_character,omitempty"`
+	ZoneName        string `json:"zone_name,omitempty"`
 }
 
 type supportActivity struct {
@@ -86,6 +89,7 @@ type supportActivity struct {
 	Actor     string    `json:"actor"`
 	Text      string    `json:"text"`
 	Delivery  string    `json:"delivery,omitempty"`
+	Recipient string    `json:"recipient,omitempty"`
 	Receipt   []uint    `json:"receipt,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -338,7 +342,7 @@ func (s supportScope) activity(id uint) ([]supportActivity, error) {
 	}
 	for _, entry := range entries {
 		result = append(result, supportActivity{
-			Key: fmt.Sprintf("note-%d", entry.ID), Kind: entry.Kind, Actor: entry.Actor, Text: entry.Text, Delivery: entry.Delivery, CreatedAt: entry.CreatedAt,
+			Key: fmt.Sprintf("note-%d", entry.ID), Kind: entry.Kind, Actor: entry.Actor, Text: entry.Text, Delivery: entry.Delivery, Recipient: entry.Recipient, CreatedAt: entry.CreatedAt,
 		})
 	}
 	var audits []struct {
@@ -466,7 +470,38 @@ func (p *PlayerSupportController) update(c echo.Context) error {
 	if input.Action == "resolve" && p.world != nil {
 		p.world.Notify()
 	}
+	p.publishCaseStatus(c, scope, view.SourceKey)
 	return c.NoContent(http.StatusNoContent)
+}
+
+// publishCaseStatus shares the case's workflow state with the game, so the
+// #petition menu can show it. The value is "status|messages|owner"; the owner
+// comes last because it is free text. Failures only affect that menu.
+func (p *PlayerSupportController) publishCaseStatus(c echo.Context, scope supportScope, sourceKey string) {
+	var record models.PlayerSupportCase
+	if scope.spire.Where("connection_id = ? AND source_key = ?", scope.connectionID, sourceKey).Take(&record).Error != nil {
+		return
+	}
+	var chats int64
+	if scope.spire.Model(&models.PlayerSupportChat{}).Where("case_id = ?", record.ID).Count(&chats).Error != nil {
+		return
+	}
+	messages := "0"
+	if chats > 0 {
+		messages = "1"
+	}
+	key := "spire:petition:" + sourceKey
+	value := record.Status + "|" + messages + "|" + record.Owner
+	expires := time.Now().Add(30 * 24 * time.Hour).Unix()
+	err := scope.eqemu.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM data_buckets WHERE `key` = ?", key).Error; err != nil {
+			return err
+		}
+		return tx.Exec("INSERT INTO data_buckets (`key`, `value`, `expires`) VALUES (?, ?, ?)", key, value, expires).Error
+	})
+	if err != nil {
+		c.Logger().Warnf("Player Support: could not publish case status for %s: %v", sourceKey, err)
+	}
 }
 
 func applySupportUpdate(record *models.PlayerSupportCase, input supportUpdate, userID uint, actor string) (string, error) {

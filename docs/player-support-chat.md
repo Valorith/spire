@@ -1,6 +1,6 @@
 # Player Support live chat
 
-The petition inbox uses the local EQEmu World roster for account presence. **Online** includes another character on the petition’s account and a player at character select. **Unknown** means Spire could not verify presence for the selected server. The chat composer checks that the petition’s character is in a zone and can receive tells.
+The petition inbox uses the local EQEmu World roster for account presence. **Online** includes another character on the petition’s account and a player at character select. **Unknown** means Spire could not verify presence for the selected server. Messaging is per account: Spire sends tells to whichever character on the petition’s account is in a zone with tells on, and the case header shows **On <character>** when that is not the character that filed the petition.
 
 ## Enable live tells
 
@@ -14,24 +14,27 @@ The petition inbox uses the local EQEmu World roster for account presence. **Onl
 
 Turning **Messages** on or off is recorded on the case timeline with the staff member's name. When you resolve a case you can add an optional resolution summary, which is shown on the timeline next to the status change.
 
-Spire grants chat actions through Player Support write access. The patch reserves `GameMaster` and `*GameMaster` as tell destinations. A reply is recorded and acknowledged only when the sender is the petitioning character, the in-game petition is active, and **Messages** is on for that case. Players receive a private reason if they have no active petition or **Messages** is off. Turning off **Messages** or resolving the case preserves the transcript.
+Spire grants chat actions through Player Support write access. The patch reserves `GameMaster` and `*GameMaster` as tell destinations. A reply is recorded and acknowledged when it comes from any character on the petitioning account, the in-game petition is active, and **Messages** is on for that case. Every tell, in either direction, lands in the same conversation, labelled with the character that sent or received it and marked **alt** when that is not the character that filed the petition. Players receive a private reason if they have no active petition or **Messages** is off. Turning off **Messages** or resolving the case preserves the transcript.
+
+When no character on the petition's account is in game, a message sent from **Live chat** is mailed to the character that filed the petition instead, from GameMaster with the subject "Response to your petition". The mail reads "This message was sent to you in response to your petition while you were offline: " followed by the message. It is kept in the same conversation, marked **Sent by mail** with a mail icon. A player who is in game with tells turned off is not mailed; Live chat explains that tells are off.
 
 Spire and the patched World use console protocol version 2 to confirm replies. If you installed an earlier revision of the patch, rebuild World and zone with the current patch before updating Spire.
 
 The patched World also refreshes the parcel window and shows the native arrival notice for online recipients when Spire sends a parcel to the local server. Parcels are committed before World is notified. Players can collect queued parcels from a parcel merchant when they next open the window.
 
-Test an account with its petitioning character offline and an alternate online. The queue should show **Online** and the conversation should show **Character unavailable**. Also test that reconnecting World restores messaging on an enabled petition and that switching to an unrelated database connection shows **Unknown** for presence.
+Test an account with its petitioning character offline and an alternate online. The queue should show **Online**, the case header **On <alternate>**, and tells should reach the alternate and appear in the same conversation. Also test that reconnecting World restores messaging on an enabled petition and that switching to an unrelated database connection shows **Unknown** for presence.
 
 ## Filing petitions with #petition
 
-The patch adds a `#petition` command for players. It works alongside `/guidehelp`, which is how current clients open the petition window.
+The patch adds a `#petition` command for players. It works alongside `/guidehelp`, which is how current clients open the petition window. Petitions are one per account, and any character on the account can use the command.
 
-- `#petition <message>` files a petition when the player has none. It creates the same petition as `/guidehelp`, so it appears in Player Support right away.
-- If the player already has an open petition, `#petition <message>` adds to it. The text goes to Game Master like a tell. Spire records it on the case when **Messages** is on, and otherwise tells the player why it could not.
-- Petitions are one per account. Only the character that filed it can add to it; on another character, `#petition` names the character who filed it instead.
-- `#petition` with no message shows whether a petition is open and how to add to or withdraw it.
+- `#petition` with no message shows the petition menu: each open petition on the account with its number, the character that filed it, how long ago, its status, whether **Messages** is on, and a preview of the request. Saylinks refresh the menu, explain how to add a message, and withdraw the petition after a confirmation.
+- `#petition <message>` files a petition when the account has none. It creates the same petition as `/guidehelp`, so it appears in Player Support right away.
+- While the account has an open petition, `#petition <message>` adds to it. The text goes to Game Master like a tell. Spire records it on the case when **Messages** is on, and otherwise tells the player why it could not.
 
-Server operators can rename or restrict the command in the `command_settings` table like any other command.
+The menu's status comes from Spire when Spire tracks the case: waiting for a Game Master, assigned to a staff member, waiting for the player's reply, or resolved. Spire stores it in the `spire:petition:<petition>` data bucket whenever the case or its messaging changes. Without it, the menu shows the in-game queue state. A petition checked out in game shows who is reviewing it.
+
+The menu's links use `#petition reply` and `#petition withdraw <number> [confirm]`; those exact phrases are actions, not messages. Server operators can rename or restrict the command in the `command_settings` table like any other command.
 
 ## Character and corpse recovery
 

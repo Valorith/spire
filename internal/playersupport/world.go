@@ -50,10 +50,19 @@ type Frame struct {
 	Text        string `json:"text"`
 }
 
+// Presence is a snapshot of the World roster. Characters holds characters in
+// a zone with tells on; InZone holds each account's character in a zone.
 type Presence struct {
 	Known      bool
 	Accounts   map[uint]bool
 	Characters map[uint]bool
+	InZone     map[uint]OnlineCharacter
+}
+
+type OnlineCharacter struct {
+	ID       uint
+	Name     string
+	TellsOff bool
 }
 
 type World struct {
@@ -158,12 +167,15 @@ func (w *World) Roster() Presence {
 
 func presenceFromRoster(rows eqemuserver.WorldClientList) Presence {
 	const online, inZone = 2, 5 // CLE_Status in EQEmu.
-	result := Presence{Known: true, Accounts: map[uint]bool{}, Characters: map[uint]bool{}}
+	result := Presence{Known: true, Accounts: map[uint]bool{}, Characters: map[uint]bool{}, InZone: map[uint]OnlineCharacter{}}
 	for _, row := range rows.Data {
 		if row.Online >= online && row.Online <= inZone && row.AccountID > 0 {
 			result.Accounts[uint(row.AccountID)] = true
-			if row.Online == inZone && row.CharacterID > 0 && row.TellsOff == 0 {
-				result.Characters[uint(row.CharacterID)] = true
+			if row.Online == inZone && row.CharacterID > 0 {
+				result.InZone[uint(row.AccountID)] = OnlineCharacter{ID: uint(row.CharacterID), Name: row.Name, TellsOff: row.TellsOff != 0}
+				if row.TellsOff == 0 {
+					result.Characters[uint(row.CharacterID)] = true
+				}
 			}
 		}
 	}

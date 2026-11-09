@@ -4,12 +4,13 @@ const submitted = 1794116400;
 const endpoint = '/api/v1/player-support/cases';
 const caseKey = '731-' + submitted;
 
-async function mockSupport(page: Page, write: string[], connection = { id: 7 }) {
+async function mockSupport(page: Page, write: string[], connection = { id: 7 }, overrides: Record<string, unknown> = {}) {
   const record = {
     key: caseKey, petition_id: 100, character_id: 100, character: 'Aranel', account: 'norrathguide',
     zone: 'sebilis', message: 'My Fungi Tunic disappeared after a trade.', urgency: 2, submitted_at: submitted,
     status: 'open', owner: '', mine: false, native_open: true, checked_out: false, revision: 0, account_presence: 'online',
   };
+  Object.assign(record, overrides);
   const otherCase = { ...record, key: '730-' + submitted, character: 'Thornwick', account_presence: 'offline' };
   const activity: object[] = [];
   const messages: object[] = [];
@@ -298,6 +299,53 @@ test('shows account presence and enables petition messages on the first Game Mas
   expect(writes[0]).toMatchObject({
     connection: '7', input: { text: 'Your parcel is 100% ready.', request_id: expect.stringMatching(/^[a-f0-9]{32}$/) },
   });
+});
+
+test('messages the player on any character of the petitioning account', async ({ page }) => {
+  await mockSupport(page, ['player-support'], { id: 7 }, { character_presence: 'offline', online_character: 'Bramble' });
+  const messages = [
+    { id: 1, kind: 'chat_out', actor: 'Guide', recipient: 'Bramble', text: 'Hello from the GM team.', delivery: 'sent', created_at: '2026-11-08T12:00:00Z' },
+    { id: 2, kind: 'chat_in', actor: 'Bramble', text: 'Replying from my alt.', created_at: '2026-11-08T12:01:00Z' },
+  ];
+  await page.route(`**${endpoint}/${caseKey}/chat?*`, route => route.request().method() === 'GET'
+    ? route.fulfill({ json: { state: 'ready', active: true, recipient: 'Bramble', cursor: 2, messages } })
+    : route.fallback());
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await expect(page.getByRole('heading', { name: 'Aranel', exact: true })).toBeVisible();
+  await expect(page.getByText('On Bramble')).toBeVisible();
+  await expect(page.getByText('Playing now')).toBeVisible();
+  await page.getByRole('button', { name: 'Live chat', exact: true }).click();
+  await expect(page.getByText(/playing Bramble, so tells go there/)).toBeVisible();
+  await expect(page.getByLabel('Tell Bramble')).toBeEnabled();
+  const transcript = page.getByRole('log', { name: 'Chat messages' });
+  await expect(transcript.getByText('to Bramble')).toBeVisible();
+  await expect(transcript.getByText('Replying from my alt.')).toBeVisible();
+  await expect(transcript.getByText('alt', { exact: true })).toHaveCount(2);
+});
+
+test('mails a Game Master message when no character on the account is in game', async ({ page }) => {
+  await mockSupport(page, ['player-support'], { id: 7 }, { character_presence: 'offline', account_presence: 'offline' });
+  const messages: object[] = [];
+  const sends: Record<string, unknown>[] = [];
+  await page.route(`**${endpoint}/${caseKey}/chat?*`, route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ json: { state: 'offline', active: messages.length > 0, mail_to: 'Aranel', cursor: messages.length, messages } });
+    }
+    const input = route.request().postDataJSON();
+    sends.push(input);
+    messages.push({ id: 1, kind: 'chat_out', actor: 'Guide', recipient: 'Aranel', text: input.text, delivery: 'mail', created_at: new Date().toISOString() });
+    return route.fulfill({ status: 204 });
+  });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Live chat', exact: true }).click();
+  await expect(page.getByText(/Messages you send now are mailed to Aranel/)).toBeVisible();
+  await expect(page.getByText(/This message was sent to you in response to your petition while you were offline/)).toBeVisible();
+  await page.getByLabel('Mail Aranel').fill('Your tunic is waiting at the parcel merchant.');
+  await page.getByRole('button', { name: 'Send as mail' }).click();
+  const transcript = page.getByRole('log', { name: 'Chat messages' });
+  await expect(transcript.getByText('Your tunic is waiting at the parcel merchant.')).toBeVisible();
+  await expect(transcript.getByText('Sent by mail')).toBeVisible();
+  expect(sends[0]).toMatchObject({ action: 'send', text: 'Your tunic is waiting at the parcel merchant.', request_id: expect.stringMatching(/^[a-f0-9]{32}$/) });
 });
 
 test('refreshes live chat immediately when a case is resolved or reopened', async ({ page }) => {

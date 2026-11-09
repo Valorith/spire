@@ -19,7 +19,7 @@ import (
 func TestPresenceDistinguishesAccountFromCharacter(t *testing.T) {
 	var rows eqemuserver.WorldClientList
 	err := json.Unmarshal([]byte(`{"method":"get_client_list","data":[
-		{"account_id":7,"online":5,"character_id":22},
+		{"account_id":7,"online":5,"character_id":22,"name":"Altchar"},
 		{"account_id":7,"online":1,"character_id":21},
 		{"account_id":8,"online":3},
 		{"account_id":9,"online":6,"character_id":40},
@@ -34,6 +34,16 @@ func TestPresenceDistinguishesAccountFromCharacter(t *testing.T) {
 	}
 	if !presence.Accounts[8] || presence.Accounts[9] || !presence.Accounts[10] || presence.Characters[41] {
 		t.Fatalf("incorrect World session classification: %+v", presence)
+	}
+	// Account messaging follows whichever character is in a zone.
+	if got := presence.InZone[7]; got.ID != 22 || got.Name != "Altchar" || got.TellsOff {
+		t.Fatalf("in-zone character for account 7 = %+v", got)
+	}
+	if got := presence.InZone[10]; got.ID != 41 || !got.TellsOff {
+		t.Fatalf("tells-off character for account 10 = %+v", got)
+	}
+	if _, ok := presence.InZone[8]; ok {
+		t.Fatal("an account at character select has no in-zone character")
 	}
 }
 
