@@ -1,3 +1,18 @@
+## [Unreleased] (Beta) 11/9/2026
+
+**Player Support (new Server Admin tool)**
+* Work in-game petitions in one inbox: claim, wait and resolve cases, add private notes, and record a resolution summary. Cases keep the original petition after EQEmu clears it.
+* Reply by mail or send parcels from the case. Every delivery is recorded on the case timeline.
+* Move a character to a zone's safe point, exact coordinates, their bind point or another player, and move corpses. A reason is required and recorded.
+* Review the account's player events around the filing time, compare inventory snapshots and restore missing items as parcels, and see the account's earlier cases or merge them into the open one.
+* Share saved replies across staff, get desktop, sound or Discord alerts for new petitions, and track response times in Insights.
+* Live chat with players in game, and players' #petition command, need the companion EQEmu patch (see docs/player-support-chat.md). Without it, those features turn off and the rest works as usual.
+* Access is controlled by the new Player Support permission.
+
+**Other**
+* The GM parcel composer is shared between Mail & Parcels and Player Support.
+* Fixed a race in the World telnet connection pool.
+
 ## [5.8.0] 11/6/2026
 
 * Server Restart Scheduler now available!
