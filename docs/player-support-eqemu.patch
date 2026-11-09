@@ -869,15 +869,22 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..7a0a297ec9a9656bd7b2073a0e57ad2b
  	server->SetMethodHandler("get_mob_list_detail", &ApiGetMobListDetail, 50);
  	server->SetMethodHandler("get_client_list_detail", &ApiGetClientListDetail, 50);
 diff --git a/zone/client.cpp b/zone/client.cpp
-index f361a00092e8c1fb8b0c3aee59677dda3969b0af..0b6c1da88e053829c2998cab3f656bf8a8051fa9 100644
+index f361a00092e8c1fb8b0c3aee59677dda3969b0af..9e40bffe70cbe590ea1d8c2914d560de5542d897 100644
 --- a/zone/client.cpp
 +++ b/zone/client.cpp
-@@ -1537,7 +1537,7 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+@@ -1537,7 +1537,14 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
  				target_name[x] = '\0';
  			}
  
 -			if(!worldserver.SendChannelMessage(this, target_name, chan_num, 0, language, lang_skill, message))
-+			if(!worldserver.SendChannelMessageRaw(this, target_name, chan_num, 0, language, lang_skill, message))
++			// The recipient's zone prints a tell with printf, so double any % in
++			// tells to players. Tells to GameMaster (Player Support) and to
++			// console sessions reach World as typed; World handles those.
++			const bool console_target = target_name[0] == '*';
++			const char *recipient = console_target ? target_name + 1 : target_name;
++			const bool literal = console_target || strcasecmp(recipient, "GameMaster") == 0;
++			const auto text = literal ? std::string(message) : Strings::Replace(message, "%", "%%");
++			if(!worldserver.SendChannelMessageRaw(this, target_name, chan_num, 0, language, lang_skill, text.c_str()))
  				Message(0, "Error: World server disconnected");
  		break;
  	}
@@ -1085,10 +1092,10 @@ index 2dbfc3986b8c0c06e83ca75774937b4336c0148f..8c8693e237cd45a04528ea91865ec55a
  	uint32 GetCharID() { return m_character_id; }
  
 diff --git a/zone/gm_commands/delpetition.cpp b/zone/gm_commands/delpetition.cpp
-index f42cf277285cf77f11e18d5d0651c10228593322..b16295f40c1c25b3b76179510f15fa3208b494be 100755
+index f42cf277285cf77f11e18d5d0651c10228593322..d57b60ad4fe85b7c2099a29a1c34ac7fba1819f5 100755
 --- a/zone/gm_commands/delpetition.cpp
 +++ b/zone/gm_commands/delpetition.cpp
-@@ -18,3 +18,250 @@ void command_delpetition(Client *c, const Seperator *sep)
+@@ -18,3 +18,249 @@ void command_delpetition(Client *c, const Seperator *sep)
  
  }
  
@@ -1273,17 +1280,16 @@ index f42cf277285cf77f11e18d5d0651c10228593322..b16295f40c1c25b3b76179510f15fa32
 +		));
 +		return;
 +	}
-+	// This zone's queue can lag the database, so fall back to deleting the row.
-+	if (PetitionList::Instance()->DeletePetition(id) == -1) {
-+		const auto deleted = database.QueryDatabase(fmt::format(
-+			"DELETE FROM `petitions` WHERE `petid` = {} AND `accountname` = '{}'",
-+			id,
-+			Strings::Escape(c->AccountName())
-+		));
-+		if (!deleted.Success() || deleted.RowsAffected() != 1) {
-+			c->Message(Chat::Red, "The petition could not be withdrawn. Please try again.");
-+			return;
-+		}
++	// Delete the row first and check it, then rebuild this zone's queue from
++	// the database, so the player is only told it worked when it did.
++	const auto deleted = database.QueryDatabase(fmt::format(
++		"DELETE FROM `petitions` WHERE `petid` = {} AND `accountname` = '{}'",
++		id,
++		Strings::Escape(c->AccountName())
++	));
++	if (!deleted.Success() || deleted.RowsAffected() != 1) {
++		c->Message(Chat::Red, "The petition could not be withdrawn. Please try again.");
++		return;
 +	}
 +	PetitionList::Instance()->ClearPetitions();
 +	PetitionList::Instance()->UpdateGMQueue();
