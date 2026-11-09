@@ -123,3 +123,12 @@ func TestPlayerSupportQueueSummary(t *testing.T) {
 		t.Fatalf("summary = %+v, want %+v", got, want)
 	}
 }
+
+func TestPlayerSupportActorName(t *testing.T) {
+	if got := supportActor(models.User{}); got != "Game Master" {
+		t.Fatalf("anonymous staff name = %q", got)
+	}
+	if got := supportActor(models.User{UserName: "Vayle"}); got != "Vayle" {
+		t.Fatalf("named staff = %q", got)
+	}
+}

@@ -451,7 +451,7 @@ func (s supportScope) activity(id uint) ([]supportActivity, error) {
 		}
 		actor := audit.Actor
 		if actor == "" {
-			actor = "Local GM"
+			actor = supportDefaultActor
 		}
 		kind, label := "reply", payload.Subject
 		if audit.EventName == mailParcelsEventGMSendParcels {
@@ -743,9 +743,13 @@ func (p *PlayerSupportController) parcel(c echo.Context) error {
 	return p.mail.deliverGMParcels(c, scope.eqemu, itemDB.WithContext(c.Request().Context()), input.gmParcelSendInput)
 }
 
+// supportDefaultActor names staff who act without a Spire user name, such as
+// a local install with authentication off.
+const supportDefaultActor = "Game Master"
+
 func supportActor(user models.User) string {
 	if user.UserName == "" {
-		return "Local GM"
+		return supportDefaultActor
 	}
 	return user.UserName
 }
