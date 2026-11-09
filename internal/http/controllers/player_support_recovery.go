@@ -112,8 +112,13 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 		corpses[i].Location.ZoneName = names[int(corpses[i].Location.ZoneID)]
 	}
 	local := p.localWorld(scope)
+	companion := playersupport.CompanionUnknown
+	if local {
+		companion = p.world.Companion()
+	}
 	return c.JSON(http.StatusOK, echo.Map{
-		"character": location, "corpses": corpses, "local_world": local, "live_destination": local,
+		"character": location, "corpses": corpses, "local_world": local,
+		"companion": companion, "live_destination": local && companion.Moves(),
 	})
 }
 
@@ -254,6 +259,9 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 	}
 	if !p.localWorld(scope) {
 		return supportError(c, echo.NewHTTPError(http.StatusServiceUnavailable, "Moves require the local EQEmu World"))
+	}
+	if companion := p.world.Companion(); companion == playersupport.CompanionMissing {
+		return supportError(c, echo.NewHTTPError(http.StatusServiceUnavailable, "Moves need the Player Support patch on World and zones"))
 	}
 	var input supportMoveInput
 	if c.Bind(&input) != nil || !input.valid() {

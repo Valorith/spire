@@ -161,3 +161,25 @@ func TestStructuredSupportChatRoundTrip(t *testing.T) {
 		t.Fatal("invalid message validation")
 	}
 }
+
+func TestClassifyCompanion(t *testing.T) {
+	cases := []struct {
+		name  string
+		reply string
+		err   error
+		want  CompanionStatus
+	}{
+		{"patched World", `{"status":"stale","port":0}`, nil, CompanionReady},
+		{"stock World", "Command not found: supportlocation", nil, CompanionMissing},
+		{"no answer", "", errors.New("connection refused"), CompanionUnknown},
+		{"unexpected text", "Login failed", nil, CompanionUnknown},
+	}
+	for _, test := range cases {
+		if got := classifyCompanion(test.reply, test.err); got != test.want {
+			t.Errorf("%s: classifyCompanion() = %q, want %q", test.name, got, test.want)
+		}
+	}
+	if !CompanionOutdated.Moves() || !CompanionReady.Moves() || CompanionMissing.Moves() || CompanionUnknown.Moves() {
+		t.Error("Moves() should allow only a World with the patch")
+	}
+}

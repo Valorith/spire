@@ -166,6 +166,9 @@
     <template #modal-footer>
       <div class="recovery-footer">
         <span v-if="data && !data.local_world && allowMove" class="recovery-tag">Moves require the local game server</span>
+        <span v-else-if="data && data.companion === 'missing' && allowMove" class="recovery-tag">
+          <i class="fe fe-cpu" aria-hidden="true"></i> Moves need the Player Support patch on World and zones
+        </span>
         <button type="button" class="recovery-button" :disabled="sending" @click="$emit('close')">{{ result ? 'Done' : 'Close' }}</button>
         <button v-if="canMove && !result" type="button" class="recovery-button is-primary"
                 :disabled="sending || choosing || choosingPlayer || !reason.trim() || !destinationReady" @click="move">
@@ -220,7 +223,7 @@ export default {
       return this.mode === 'move' ? this.data.character : this.selectedCorpse && this.selectedCorpse.location
     },
     canMove () {
-      return Boolean(this.allowMove && !this.loading && this.data && this.data.local_world && this.source &&
+      return Boolean(this.allowMove && !this.loading && this.data && this.data.local_world && this.data.companion !== 'missing' && this.source &&
         this.source.zone_id && (!this.selectedCorpse || !this.selectedCorpse.buried))
     },
     coordinateValues () {

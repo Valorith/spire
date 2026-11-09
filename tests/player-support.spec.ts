@@ -22,6 +22,8 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
     { id: 42, location: { ...location, instance_id: 8 }, time_of_death: '2026-11-08T12:34:00Z', item_count: 1, rezzable: true, platinum: 14 },
     { id: 17, location, time_of_death: '2026-11-07T15:12:00Z', item_count: 0, buried: true, rezzed: true },
   ];
+  // A stock World answers without the Player Support patch.
+  const companion = (overrides.companion as string) || 'ready';
   let active = false;
   const writes: { path: string; connection: string | null; input: Record<string, unknown> }[] = [];
   await page.addInitScript(() => localStorage.setItem(`spire-web-access-token-${location.host}`, 'test-session'));
@@ -52,7 +54,8 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
     const path = url.pathname;
     if (path.endsWith('/chat')) {
       if (request.method() === 'GET') return route.fulfill({ json: {
-        state: record.status === 'resolved' ? 'unavailable' : 'ready', active, messages, cursor: messages.length,
+        state: record.status === 'resolved' ? 'unavailable' : companion === 'ready' ? 'ready' : 'unsupported',
+        active, messages, cursor: messages.length, companion, recipient: 'Aranel',
       } });
       const input = request.postDataJSON();
       writes.push({ path, connection: url.searchParams.get('connection_id'), input });
@@ -74,10 +77,12 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
         const cases = filter === 'unassigned' ? [otherCase] : [record, otherCase];
         return route.fulfill({ json: {
           connection_id: connection.id, cases, total: cases.length,
-          summary: { active: 2, urgent: 2, unassigned: 1, waiting: 0, mine: 0 },
+          summary: { active: 2, urgent: 2, unassigned: 1, waiting: 0, mine: 0 }, companion,
         } });
       }
-      if (path.endsWith('/recovery')) return route.fulfill({ json: { character: location, corpses, local_world: true, live_destination: true } });
+      if (path.endsWith('/recovery')) return route.fulfill({ json: {
+        character: location, corpses, local_world: true, companion, live_destination: companion === 'ready',
+      } });
       if (path.endsWith('/corpses/42')) return route.fulfill({ json: { items: [{ id: 2730, icon: 590, name: 'Fungus Covered Scale Tunic' }] } });
       return route.fulfill({ json: { case: record, activity } });
     }
@@ -354,6 +359,27 @@ test('mails a Game Master message when no character on the account is in game', 
   await expect(transcript.getByText('Your tunic is waiting at the parcel merchant.')).toBeVisible();
   await expect(transcript.getByText('Sent by mail')).toBeVisible();
   expect(sends[0]).toMatchObject({ action: 'send', text: 'Your tunic is waiting at the parcel merchant.', request_id: expect.stringMatching(/^[a-f0-9]{32}$/) });
+});
+
+test('turns off patch-only tools when the game server lacks the Player Support patch', async ({ page }) => {
+  await mockSupport(page, ['player-support', 'mail-parcels-editor', 'player-operations'], { id: 7 }, { companion: 'missing' });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await expect(page.getByRole('note').filter({ hasText: 'does not have the Player Support patch' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Move character' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Reply by mail' })).toBeEnabled();
+
+  await page.getByRole('button', { name: 'Corpses' }).click();
+  const recovery = page.locator('.modal.show');
+  await expect(recovery.getByText('Moves need the Player Support patch on World and zones')).toBeVisible();
+  await expect(recovery.getByRole('button', { name: /^Move corpse/ })).toHaveCount(0);
+  await recovery.locator('.recovery-footer').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(recovery).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Open live chat' }).click();
+  await expect(page.getByRole('heading', { name: 'Needs the server patch' })).toBeVisible();
+  await expect(page.getByText('Aranel is in game, but World does not have the Player Support patch')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enable messages' })).toBeDisabled();
+  await expect(page.getByLabel('Tell Aranel')).toHaveCount(0);
 });
 
 test('summarizes the queue, flags new replies, and offers quick text', async ({ page }) => {

@@ -39,6 +39,27 @@ var inboundRequestID = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[
 
 var ErrUnavailable = errors.New("Live chat unavailable")
 var ErrDeliveryUnknown = errors.New("World did not confirm delivery")
+var errCompanionMissing = errors.New("World does not have the Player Support patch")
+var errCompanionOutdated = errors.New("World has an older Player Support patch")
+
+// CompanionStatus says whether the local World runs the Player Support
+// companion patch. Live chat, moves and in-game notices need it; the queue,
+// notes, mail, parcels and corpse inspection work without it.
+type CompanionStatus string
+
+const (
+	// CompanionUnknown: there is no local World console, or it did not answer.
+	CompanionUnknown CompanionStatus = "unknown"
+	// CompanionReady: World answered the patch's commands.
+	CompanionReady CompanionStatus = "ready"
+	// CompanionMissing: World answered, but without the patch's commands.
+	CompanionMissing CompanionStatus = "missing"
+	// CompanionOutdated: World has the patch, with an older chat protocol.
+	CompanionOutdated CompanionStatus = "outdated"
+)
+
+// Moves and notices only need the patch's console and zone commands.
+func (s CompanionStatus) Moves() bool { return s == CompanionReady || s == CompanionOutdated }
 
 type Frame struct {
 	Kind        string `json:"kind"`
@@ -76,9 +97,13 @@ type World struct {
 	roster       Presence
 	rosterUntil  time.Time
 
+	companion      CompanionStatus
+	companionUntil time.Time
+
 	mu          sync.Mutex
 	conn        *session
 	retryAfter  time.Time
+	outdated    bool
 	maintaining bool
 	change      chan struct{}
 }
@@ -136,14 +161,13 @@ func NotifyParcelDelivery(config *eqemuserverconfig.Config, log *logger.AppLogge
 	}
 }
 
-// Roster shares one short-lived snapshot across queues and browsers.
-func (w *World) Roster() Presence {
+// consoleLocked returns the shared console client for the current address.
+// The caller holds rosterMu.
+func (w *World) consoleLocked() *telnet.Client {
 	addr := w.address()
 	if addr == "" {
-		return Presence{}
+		return nil
 	}
-	w.rosterMu.Lock()
-	defer w.rosterMu.Unlock()
 	if addr != w.rosterAddr {
 		if w.rosterClient != nil {
 			w.rosterClient.Close()
@@ -151,12 +175,84 @@ func (w *World) Roster() Presence {
 		w.rosterAddr = addr
 		w.rosterClient = telnet.NewClientWithAddress(w.logger, addr)
 		w.rosterUntil = time.Time{}
+		w.companionUntil = time.Time{}
+	}
+	return w.rosterClient
+}
+
+// Companion reports whether World has the Player Support patch. A stock World
+// answers "Command not found" to the harmless probe below; a patched World
+// answers with JSON. The answer is cached, and rechecked often enough that a
+// World restarted with the patch is detected within a minute.
+func (w *World) Companion() CompanionStatus {
+	w.rosterMu.Lock()
+	defer w.rosterMu.Unlock()
+	client := w.consoleLocked()
+	if client == nil {
+		return CompanionUnknown
+	}
+	if time.Now().Before(w.companionUntil) {
+		return w.companion
+	}
+	// Character 0 never exists, so World only validates and answers.
+	probe := telnet.CommandConfig{Command: "supportlocation 0 0", AllowEmptyResponse: true}
+	reply, err := client.Command(probe)
+	if err != nil {
+		// The shared connection dies when World restarts; the client
+		// reconnects on the next command.
+		reply, err = client.Command(probe)
+	}
+	w.companion = classifyCompanion(reply, err)
+	if w.companion == CompanionReady {
+		w.mu.Lock()
+		if w.outdated {
+			w.companion = CompanionOutdated
+		}
+		w.mu.Unlock()
+	}
+	switch w.companion {
+	case CompanionUnknown:
+		w.companionUntil = time.Now().Add(10 * time.Second)
+	case CompanionReady:
+		w.companionUntil = time.Now().Add(60 * time.Second)
+	default:
+		w.companionUntil = time.Now().Add(30 * time.Second)
+	}
+	return w.companion
+}
+
+func classifyCompanion(reply string, err error) CompanionStatus {
+	if err != nil {
+		return CompanionUnknown
+	}
+	if strings.Contains(reply, "Command not found") {
+		return CompanionMissing
+	}
+	var answer struct {
+		Status string `json:"status"`
+	}
+	if json.Unmarshal([]byte(reply), &answer) == nil && answer.Status != "" {
+		return CompanionReady
+	}
+	return CompanionUnknown
+}
+
+// Roster shares one short-lived snapshot across queues and browsers.
+func (w *World) Roster() Presence {
+	w.rosterMu.Lock()
+	defer w.rosterMu.Unlock()
+	if w.consoleLocked() == nil {
+		return Presence{}
 	}
 	if time.Now().Before(w.rosterUntil) {
 		return w.roster
 	}
 	// World only includes login status and tells_off in its full roster.
 	rows, err := eqemuserver.ReadWorldClientList(w.rosterClient, true)
+	if err != nil {
+		// Retry once on a fresh connection, in case World restarted.
+		rows, err = eqemuserver.ReadWorldClientList(w.rosterClient, true)
+	}
 	w.roster = Presence{}
 	w.rosterUntil = time.Now().Add(8 * time.Second)
 	if err == nil && rows.Method == "get_client_list" {
@@ -229,9 +325,17 @@ func (w *World) connectLocked() *session {
 	}
 	w.retryAfter = time.Now().Add(8 * time.Second)
 	conn, err := openSession(addr)
+	if errors.Is(err, errCompanionOutdated) {
+		w.outdated = true
+	}
+	if errors.Is(err, errCompanionMissing) || errors.Is(err, errCompanionOutdated) {
+		// World must be rebuilt and restarted before this can change.
+		w.retryAfter = time.Now().Add(60 * time.Second)
+	}
 	if err != nil {
 		return nil
 	}
+	w.outdated = false
 	w.conn = conn
 	w.notifyLocked()
 	go w.read(conn)
@@ -402,11 +506,14 @@ func startSession(addr string, socket net.Conn) (*session, error) {
 		frame, ok := parseFrame(line)
 		if ok && frame.Kind == "ready" {
 			if frame.Protocol != protocolVersion {
-				return nil, ErrUnavailable
+				return nil, errCompanionOutdated
 			}
 			return conn, nil
 		}
-		if (ok && frame.Kind == "busy") || strings.Contains(line, "Command not found: supportchat") {
+		if strings.Contains(line, "Command not found: supportchat") {
+			return nil, errCompanionMissing
+		}
+		if ok && frame.Kind == "busy" {
 			break
 		}
 	}

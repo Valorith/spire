@@ -61,6 +61,7 @@
       <p v-if="mailing" class="chat-mail-note">
         <i class="fe fe-mail" aria-hidden="true"></i>
         No character on the account is in game, so this goes to {{ mailTo }}’s mailbox. It starts with “This message was sent to you in response to your petition while you were offline:”
+        <template v-if="!patched"> Without the server patch, the player cannot reply in game.</template>
       </p>
       <div class="chat-compose-hint">
         <span><kbd>Enter</kbd> to send · plain text only</span>
@@ -84,7 +85,7 @@ export default {
   },
   data () {
     return {
-      state: 'connecting', active: false, messages: [], cursor: 0, draft: '', requestId: '', recipient: '', tellsOff: false, mailTo: '',
+      state: 'connecting', active: false, messages: [], cursor: 0, draft: '', requestId: '', recipient: '', tellsOff: false, mailTo: '', companion: '',
       quickReplies: [
         'Hi! I am looking into this now.',
         'Can you tell me more about what happened?',
@@ -104,11 +105,14 @@ export default {
     // With no character on the account in game, messages are mailed instead.
     mailing () { return this.state === 'offline' && Boolean(this.mailTo) },
     composable () { return this.state === 'ready' || this.mailing },
+    // World answered without the Player Support patch, or with an older one.
+    patched () { return this.companion !== 'missing' && this.companion !== 'outdated' },
     onAlt () { return Boolean(this.recipient) && this.recipient.toLowerCase() !== this.record.character.toLowerCase() },
     status () {
       if (this.state === 'ready') return this.active ? 'Messages on' : 'Messages off'
       if (this.state === 'offline') return this.tellsOff ? 'Tells turned off' : 'Player not in game'
       if (this.state === 'connecting') return 'Connecting…'
+      if (this.state === 'unsupported') return this.companion === 'outdated' ? 'Server patch out of date' : 'Needs the server patch'
       return 'Live chat unavailable'
     },
     tone () {
@@ -133,10 +137,19 @@ export default {
         return this.tellsOff
           ? `${this.recipient} has tells turned off. Messaging resumes when they turn tells back on.`
           : this.mailTo
-            ? `No character on ${name}’s account is in game. Messages you send now are mailed to ${this.mailTo} and kept here.`
+            ? `No character on ${name}’s account is in game. Messages you send now are mailed to ${this.mailTo} and kept here.` +
+              (this.patched ? '' : ' The player cannot reply in game until World has the Player Support patch.')
             : `No character on ${name}’s account is in a zone. Messaging resumes when the player logs in on any character.`
       }
       if (this.state === 'connecting') return 'Checking World for this character…'
+      if (this.state === 'unsupported') {
+        return this.companion === 'outdated'
+          ? `${this.recipient} is in game, but World has an older Player Support patch. Rebuild World and zones with the current patch to send tells.`
+          : `${this.recipient} is in game, but World does not have the Player Support patch, so Spire cannot send tells. Reply by mail instead.`
+      }
+      if (this.recipient && this.companion === 'ready') {
+        return `${this.recipient} is in game, but World’s chat stream is unavailable. Another Spire may be connected to it. Try again shortly.`
+      }
       return 'Spire cannot reach a World server with the Player Support patch on this connection.'
     }
   },
@@ -209,6 +222,7 @@ export default {
         this.recipient = data.recipient || ''
         this.tellsOff = Boolean(data.tells_off)
         this.mailTo = data.mail_to || ''
+        this.companion = data.companion || ''
         this.messages = data.messages || []
         const replies = this.messages.filter(message => message.kind === 'chat_in')
         if (replies.length) this.$emit('seen', replies[replies.length - 1].created_at)

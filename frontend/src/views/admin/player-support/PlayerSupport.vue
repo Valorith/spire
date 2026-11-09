@@ -41,6 +41,14 @@
       </button>
     </div>
 
+    <div v-if="companionNote" class="support-companion" role="note">
+      <span class="support-companion-icon"><i class="fe fe-cpu" aria-hidden="true"></i></span>
+      <div>
+        <strong>{{ companionNote.title }}</strong>
+        <p>{{ companionNote.text }}</p>
+      </div>
+    </div>
+
     <transition name="support-fade">
       <div v-if="notice" class="support-notice" :class="{ 'is-error': notice.error }" :role="notice.error ? 'alert' : 'status'">
         <i :class="notice.error ? 'fe fe-alert-circle' : 'fe fe-check-circle'" aria-hidden="true"></i>
@@ -253,9 +261,10 @@
           </dl>
           <nav v-if="record.character_id" class="support-related" aria-label="Character tools">
             <div v-if="canMove || canInspectRecovery" class="support-tiles">
-              <button v-if="canMove" type="button" class="support-tile tone-teal" aria-label="Move character" :disabled="busy" @click="delivery = 'move'">
+              <button v-if="canMove" type="button" class="support-tile tone-teal" aria-label="Move character" :disabled="busy || companion === 'missing'"
+                      :title="companion === 'missing' ? 'Moves need the Player Support patch on World and zones' : null" @click="delivery = 'move'">
                 <span class="support-tile-icon"><i class="fe fe-navigation" aria-hidden="true"></i></span>
-                <strong>Move character</strong><small>Zone, spot or player</small>
+                <strong>Move character</strong><small>{{ companion === 'missing' ? 'Needs the server patch' : 'Zone, spot or player' }}</small>
               </button>
               <button v-if="canInspectRecovery" type="button" class="support-tile tone-violet" aria-label="Corpses" :disabled="busy" @click="delivery = 'corpses'">
                 <span class="support-tile-icon"><i class="fe fe-archive" aria-hidden="true"></i></span>
@@ -272,7 +281,7 @@
           <div class="support-tiles">
             <button type="button" class="support-tile tone-gold" aria-label="Open live chat" :disabled="busy" @click="chatOpen = true">
               <span class="support-tile-icon"><i class="fe fe-message-circle" aria-hidden="true"></i></span>
-              <strong>Live chat</strong><small>{{ record.messages_on ? 'Messages are on' : 'Tells, or mail if offline' }}</small>
+              <strong>Live chat</strong><small>{{ chatTileHint }}</small>
             </button>
             <button v-if="canDeliver" type="button" class="support-tile tone-blue" aria-label="Reply by mail" :disabled="busy" @click="delivery = 'reply'">
               <span class="support-tile-icon"><i class="fe fe-mail" aria-hidden="true"></i></span>
@@ -359,7 +368,7 @@ export default {
       queueLoading: false, backgroundLoading: false, detailLoading: false, queueError: false, detailError: false, queueVersion: 0, detailVersion: 0,
       mobileDetail: false, searchTimer: null, presenceTimer: null, noticeTimer: null, busy: false, note: '', notice: null, delivery: null,
       resolveOpen: false, resolution: '', chatOpen: false, refreshedAt: null,
-      summary: null, now: Date.now(), clockTimer: null, seenVersion: 0, copied: '', copyTimer: null, entering: true,
+      summary: null, companion: 'unknown', now: Date.now(), clockTimer: null, seenVersion: 0, copied: '', copyTimer: null, entering: true,
       resolutionPhrases: ['Restored the missing item', 'Moved the character to safety', 'Recovered the corpse', 'Explained how it works', 'No action needed']
     }
   },
@@ -378,6 +387,28 @@ export default {
         canWriteAdminApi('player-operations/character/0/relocate'))
     },
     caseNumber () { return this.record ? this.record.key.split('-')[0] : '' },
+    // Live chat, moves and in-game notices need the Player Support patch on
+    // World. Say what is off, and what still works, when it is missing.
+    companionNote () {
+      if (this.companion === 'missing') {
+        return {
+          title: 'This game server does not have the Player Support patch',
+          text: 'Live chat, character and corpse moves, and in-game notices are off until World and zones are rebuilt with it. ' +
+            'The queue, notes, mail, parcels and corpse inspection work as usual. See docs/player-support-chat.md to install it.'
+        }
+      }
+      if (this.companion === 'outdated') {
+        return {
+          title: 'This game server has an older Player Support patch',
+          text: 'Live chat is off until World and zones are rebuilt with the current patch. Moves and notices still work.'
+        }
+      }
+      return null
+    },
+    chatTileHint () {
+      if (this.companion === 'missing' || this.companion === 'outdated') return 'History, and mail if offline'
+      return this.record && this.record.messages_on ? 'Messages are on' : 'Tells, or mail if offline'
+    },
     // The account is in game on a character other than the one that filed.
     onAlt () {
       const record = this.record
@@ -595,6 +626,7 @@ export default {
         this.cases = data.cases || []
         this.total = data.total || 0
         if (data.summary) this.summary = data.summary
+        this.companion = data.companion || 'unknown'
         this.refreshedAt = new Date()
         if (!this.selectedKey) {
           const key = (initial && this.$route.query.case) || (this.cases[0] && this.cases[0].key)
@@ -831,6 +863,16 @@ button.support-stat:hover { transform: translateY(-1px); border-color: color-mix
 .support-notice.is-error > i { color: #ffadbd; }
 .support-fade-enter-active, .support-fade-leave-active { transition: opacity 180ms ease, transform 180ms ease; }
 .support-fade-enter, .support-fade-leave-to { opacity: 0; transform: translateY(-4px); }
+.support-companion {
+  display: flex; gap: 11px; align-items: flex-start; margin-bottom: 12px; padding: 10px 13px;
+  border: 1px solid #5d5338; border-radius: 9px; background: linear-gradient(100deg, #2b2619, #1d2230 70%);
+}
+.support-companion-icon {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px;
+  color: var(--support-accent); background: var(--support-accent-soft);
+}
+.support-companion strong { display: block; color: #f1dfbd; font-size: .84rem; font-weight: 650; }
+.support-companion p { margin: 2px 0 0; color: #cbbfa6; font-size: .78rem; line-height: 1.45; }
 .support-banner { display: flex; gap: 9px; align-items: flex-start; margin: 12px 23px 0; padding: 9px 12px; border-radius: 8px; border: 1px solid; font-size: .8rem; line-height: 1.45; }
 .support-banner i { margin-top: 2px; }
 .support-banner.is-warning { color: #ffd9b5; background: #33261b; border-color: #79583a; }

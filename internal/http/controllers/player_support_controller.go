@@ -230,7 +230,7 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		p.decoratePresence(scope, resolved)
 		p.decorateZones(c, resolved)
 		decorateConversations(scope, resolved)
-		return c.JSON(http.StatusOK, echo.Map{"cases": resolved, "total": count, "connection_id": scope.connectionID, "summary": summary})
+		return c.JSON(http.StatusOK, echo.Map{"cases": resolved, "total": count, "connection_id": scope.connectionID, "summary": summary, "companion": p.companion(scope)})
 	}
 
 	search = strings.ToLower(search)
@@ -259,7 +259,17 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 	decorateConversations(scope, matches[start:end])
 	return c.JSON(http.StatusOK, echo.Map{
 		"cases": matches[start:end], "total": len(matches), "connection_id": scope.connectionID, "summary": summary,
+		"companion": p.companion(scope),
 	})
+}
+
+// companion reports the Player Support patch status of the World behind this
+// connection. Only the local World is checked; another connection is unknown.
+func (p *PlayerSupportController) companion(scope supportScope) playersupport.CompanionStatus {
+	if !p.localWorld(scope) {
+		return playersupport.CompanionUnknown
+	}
+	return p.world.Companion()
 }
 
 func (s supportScope) caseByKey(key string) (supportCaseView, error) {

@@ -104,6 +104,10 @@ type supportChatSnapshot struct {
 	// MailTo is set when no character on the account is in game; a message
 	// sent now is mailed to the character that filed the petition.
 	MailTo string `json:"mail_to,omitempty"`
+	// Companion is the local World's Player Support patch status. Without
+	// it, a player in game has the "unsupported" state, and offline messages
+	// are still mailed but cannot be answered in game.
+	Companion playersupport.CompanionStatus `json:"companion,omitempty"`
 }
 
 func (p *PlayerSupportController) chat(c echo.Context) error {
@@ -175,6 +179,7 @@ func (p *PlayerSupportController) chatSnapshot(scope supportScope, view supportC
 	if !roster.Known {
 		return state, nil
 	}
+	state.Companion = p.world.Companion()
 	online, ok := roster.InZone[accountID]
 	state.State = "offline"
 	if !ok {
@@ -188,8 +193,14 @@ func (p *PlayerSupportController) chatSnapshot(scope supportScope, view supportC
 		state.TellsOff = true
 		return state, nil
 	}
-	if p.world.Ready() {
+	switch {
+	case state.Companion == playersupport.CompanionMissing || state.Companion == playersupport.CompanionOutdated:
+		state.State = "unsupported"
+	case p.world.Ready():
 		state.State = "ready"
+	default:
+		// The player is in game, but the chat stream is not available.
+		state.State = "unavailable"
 	}
 	return state, nil
 }
@@ -261,6 +272,9 @@ func (p *PlayerSupportController) startChat(scope supportScope, view supportCase
 	}
 	if _, ok := p.chatRecipient(accountID); !ok {
 		return echo.NewHTTPError(http.StatusConflict, "No character on this account can receive tells right now")
+	}
+	if err := companionChatError(p.world.Companion()); err != nil {
+		return err
 	}
 	if !p.world.Ready() {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "Live chat unavailable")
@@ -345,6 +359,18 @@ func enableChat(tx *gorm.DB, record models.PlayerSupportCase, accountID uint, ac
 	return enabled()
 }
 
+// companionChatError explains why tells cannot be sent when World lacks the
+// current Player Support patch.
+func companionChatError(status playersupport.CompanionStatus) error {
+	switch status {
+	case playersupport.CompanionMissing:
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "Live chat needs the Player Support patch on World. Reply by mail instead.")
+	case playersupport.CompanionOutdated:
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "World has an older Player Support patch. Rebuild World and zones with the current patch to use live chat.")
+	}
+	return nil
+}
+
 // supportOfflineMailPrefix introduces a Game Master message that was mailed
 // because no character on the account was in game.
 const supportOfflineMailPrefix = "This message was sent to you in response to your petition while you were offline: "
@@ -367,12 +393,18 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 	if mail {
 		recipient = view.Character
 	}
+	// Without the patch, a mailed message still arrives, but the player
+	// cannot answer in game, so it does not turn Messages on.
+	companion := p.world.Companion()
+	replies := companion == playersupport.CompanionReady
 	var refusal error
 	switch {
 	case !roster.Known:
 		refusal = echo.NewHTTPError(http.StatusServiceUnavailable, "Spire cannot check whether the player is in game right now")
 	case inGame && online.TellsOff:
 		refusal = echo.NewHTTPError(http.StatusConflict, online.Name+" has tells turned off")
+	case inGame && companionChatError(companion) != nil:
+		refusal = companionChatError(companion)
 	case inGame && !p.world.Ready():
 		refusal = echo.NewHTTPError(http.StatusServiceUnavailable, "Live chat unavailable")
 	case mail && view.CharacterID == 0:
@@ -398,8 +430,10 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 		if refusal != nil {
 			return refusal
 		}
-		if err := enableChat(tx, record, accountID, supportActor(scope.user)); err != nil {
-			return err
+		if replies {
+			if err := enableChat(tx, record, accountID, supportActor(scope.user)); err != nil {
+				return err
+			}
 		}
 		entry = models.PlayerSupportEntry{
 			CaseID: record.ID, Kind: "chat_out", Actor: supportActor(scope.user), Text: text,
@@ -417,7 +451,9 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 		// Mailing turned Messages on without opening the World chat stream,
 		// which a tell would have done. Keep it connected so the player's
 		// reply is not refused as "messaging unavailable".
-		p.world.Resume()
+		if replies {
+			p.world.Resume()
+		}
 		outcome = "mail"
 		row := gmMailInsert{
 			CharID: view.CharacterID, Timestamp: time.Now().Unix(), From: playersupport.Identity,

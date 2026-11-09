@@ -4,6 +4,20 @@
 
 The petition inbox uses the local EQEmu World roster for account presence. **Online** includes another character on the petition’s account and a player at character select. **Unknown** means Spire could not verify presence for the selected server. Messaging is per account: Spire sends tells to whichever character on the petition’s account is in a zone with tells on, and the case header shows **On <character>** when that is not the character that filed the petition.
 
+## Without the companion patch
+
+Player Support works on a stock EQEmu World. Spire checks the local World for the patch and turns off what needs it, with a note at the top of the page:
+
+| Works on stock EQEmu | Needs the patch |
+|---|---|
+| The queue, case workflow and notes, mail and parcel delivery, corpse inspection, and presence | Live chat and in-game replies, character and corpse moves, move and parcel notices in game, and the `#petition` command and menu |
+
+- **Live chat** shows the conversation history. A message to a player with no character in game is still mailed, but it doesn't turn on **Messages**, because the player can't reply in game. When the player is in game, Live chat says tells need the patch and points to **Reply by mail**.
+- **Move character** is unavailable, and the recovery window explains why. Corpses can still be inspected.
+- A World with an older revision of the patch keeps moves and notices, and turns off Live chat until World and zones are rebuilt with the current patch.
+
+Spire rechecks World about every 30 seconds while the patch is missing, so the tools come back on their own after World restarts with it.
+
 ## Enable live tells
 
 1. Apply [the EQEmu companion patch](player-support-eqemu.patch) in your EQEmu server checkout with `git apply player-support-eqemu.patch`. The patch applies cleanly, and World and zone build with it, on both of these:
