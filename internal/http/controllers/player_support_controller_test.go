@@ -118,7 +118,7 @@ func TestPlayerSupportQueueSummary(t *testing.T) {
 		view(1, "Other", 9, "open"),
 		view(0, "", 0, "waiting"),
 	}, 7)
-	want := supportSummary{Active: 4, Urgent: 2, Unassigned: 2, Waiting: 2, Mine: 1}
+	want := supportSummary{Active: 4, Urgent: 1, Unassigned: 2, Waiting: 2, Mine: 1}
 	if got != want {
 		t.Fatalf("summary = %+v, want %+v", got, want)
 	}

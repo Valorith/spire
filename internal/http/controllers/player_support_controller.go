@@ -334,7 +334,8 @@ func supportQueueSummary(cases []supportCaseView, userID uint) supportSummary {
 	var summary supportSummary
 	for _, record := range cases {
 		summary.Active++
-		if record.Urgency > 0 {
+		// Matches the queue's labels: 1 is Elevated, 2 and above are Urgent.
+		if record.Urgency > 1 {
 			summary.Urgent++
 		}
 		if record.Owner == "" {

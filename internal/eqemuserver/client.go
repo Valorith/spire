@@ -6,6 +6,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/telnet"
 	"strings"
+	"sync"
 )
 
 type Client struct {
@@ -13,6 +14,7 @@ type Client struct {
 	logger *logger.AppLogger
 
 	pool                []*telnet.Client
+	poolMu              sync.Mutex
 	lastUsedClientIndex int
 }
 
@@ -32,14 +34,17 @@ func NewClient(t *telnet.Client, logger *logger.AppLogger) *Client {
 
 // GetTelnetClient returns a telnet client from the pool
 func (c *Client) GetTelnetClient() *telnet.Client {
+	c.poolMu.Lock()
 	c.lastUsedClientIndex++
 	if c.lastUsedClientIndex >= len(c.pool) {
 		c.lastUsedClientIndex = 0
 	}
+	index := c.lastUsedClientIndex
+	c.poolMu.Unlock()
 
-	c.logger.DebugVvv().Any("lastUsedClientIndex", c.lastUsedClientIndex).Msg("GetTelnetClient")
+	c.logger.DebugVvv().Any("lastUsedClientIndex", index).Msg("GetTelnetClient")
 
-	return c.pool[c.lastUsedClientIndex]
+	return c.pool[index]
 }
 
 type WorldZoneList struct {
