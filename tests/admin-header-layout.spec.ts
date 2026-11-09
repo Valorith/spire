@@ -93,8 +93,26 @@ test('keeps host telemetry labels, progress bars, and values separated', async (
   for (const viewport of [
     { width: 1280, height: 720 },
     { width: 900, height: 900 },
+    { width: 390, height: 820 },
   ]) {
     await page.setViewportSize(viewport);
+
+    const header = page.locator('.admin-header');
+    const groupLayout = await header.evaluate(element => ({
+      overflow: element.scrollWidth - element.clientWidth,
+      groups: Array.from(element.querySelectorAll('.admin-header-stats, .admin-host-metrics'), group => {
+        const { left, right, top, bottom } = group.getBoundingClientRect();
+        return { left, right, top, bottom };
+      }),
+    }));
+    expect(groupLayout.overflow).toBeLessThanOrEqual(1);
+    for (const [index, group] of groupLayout.groups.entries()) {
+      for (const next of groupLayout.groups.slice(index + 1)) {
+        const horizontalOverlap = Math.min(group.right, next.right) - Math.max(group.left, next.left);
+        const verticalOverlap = Math.min(group.bottom, next.bottom) - Math.max(group.top, next.top);
+        expect(Math.min(horizontalOverlap, verticalOverlap)).toBeLessThanOrEqual(0);
+      }
+    }
 
     const layoutGeometry = await hostMetrics.evaluate(element => {
       const block = element as HTMLElement;

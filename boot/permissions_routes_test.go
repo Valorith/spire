@@ -73,6 +73,7 @@ func TestCurrentPermissionsRouteDoesNotRequireResourceGrants(t *testing.T) {
 				nil,       // mailParcelsEditor
 				nil,       // mercenaryEditor
 				nil,       // playerOperations
+				nil,       // playerSupport
 				nil,       // inventoryKeyring
 				nil,       // dataBucketEditor
 				nil,       // qGlobalEditor

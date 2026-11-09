@@ -1,0 +1,1363 @@
+<template>
+  <section class="player-support" aria-labelledby="player-support-title">
+    <header class="support-header">
+      <div class="support-title">
+        <span class="support-mark"><i class="fe fe-life-buoy" aria-hidden="true"></i></span>
+        <div>
+          <h1 id="player-support-title">Player Support</h1>
+          <p>Work in-game petitions with notes, tells, mail, parcels and recovery in one place.</p>
+        </div>
+      </div>
+      <div class="support-header-actions">
+        <span class="support-live" :title="'Queue refreshes every 12 seconds' + (refreshedAt ? ' · last updated ' + clock(refreshedAt) : '')">
+          <span class="support-live-dot" aria-hidden="true"></span> Live
+        </span>
+        <button v-if="connectionId !== null" type="button" class="support-button is-quiet" aria-label="Support insights" title="Response times and staff activity" @click="panel = 'metrics'">
+          <i class="fe fe-bar-chart-2" aria-hidden="true"></i><span class="support-button-label"> Insights</span>
+        </button>
+        <button v-if="connectionId !== null" type="button" class="support-button is-quiet" aria-label="Saved replies" title="Replies shared with your team" @click="panel = 'replies'">
+          <i class="fe fe-bookmark" aria-hidden="true"></i><span class="support-button-label"> Replies</span>
+        </button>
+        <button v-if="connectionId !== null" type="button" class="support-button is-quiet" aria-label="Petition alerts" title="Desktop, sound and Discord alerts" @click="panel = 'alerts'">
+          <i :class="alertPrefs.desktop || alertPrefs.sound ? 'fe fe-bell' : 'fe fe-bell-off'" aria-hidden="true"></i><span class="support-button-label"> Alerts</span>
+          <span v-if="alertPrefs.desktop || alertPrefs.sound" class="support-alert-dot" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="support-button" :disabled="queueLoading || busy" @click="refresh">
+          <i class="fe fe-refresh-cw" :class="{ 'is-spinning': queueLoading && !backgroundLoading }" aria-hidden="true"></i> Refresh
+        </button>
+      </div>
+    </header>
+
+    <div v-if="summary" class="support-summary" role="group" aria-label="Queue at a glance">
+      <button type="button" class="support-stat tone-blue" :aria-pressed="String(filter === 'open')" @click="setFilter('open')">
+        <span class="support-stat-icon"><i class="fe fe-inbox" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.active }}</strong> Active</span>
+      </button>
+      <div class="support-stat tone-ember" :class="{ 'is-quiet': !summary.urgent }">
+        <span class="support-stat-icon"><i class="fe fe-flag" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.urgent }}</strong> Urgent</span>
+      </div>
+      <button type="button" class="support-stat tone-violet" :class="{ 'is-quiet': !summary.unassigned }" :aria-pressed="String(filter === 'unassigned')" @click="setFilter('unassigned')">
+        <span class="support-stat-icon"><i class="fe fe-user-plus" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.unassigned }}</strong> Unassigned</span>
+      </button>
+      <div class="support-stat tone-amber" :class="{ 'is-quiet': !summary.waiting }">
+        <span class="support-stat-icon"><i class="fe fe-clock" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.waiting }}</strong> Waiting on player</span>
+      </div>
+      <button type="button" class="support-stat tone-gold" :class="{ 'is-quiet': !summary.mine }" :aria-pressed="String(filter === 'mine')" @click="setFilter('mine')">
+        <span class="support-stat-icon"><i class="fe fe-user-check" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.mine }}</strong> Assigned to you</span>
+      </button>
+    </div>
+
+    <div v-if="companionNote" class="support-companion" role="note">
+      <span class="support-companion-icon"><i class="fe fe-cpu" aria-hidden="true"></i></span>
+      <div>
+        <strong>{{ companionNote.title }}</strong>
+        <p>{{ companionNote.text }}</p>
+      </div>
+    </div>
+
+    <transition name="support-fade">
+      <div v-if="notice" class="support-notice" :class="{ 'is-error': notice.error }" :role="notice.error ? 'alert' : 'status'">
+        <i :class="notice.error ? 'fe fe-alert-circle' : 'fe fe-check-circle'" aria-hidden="true"></i>
+        <span>{{ notice.text }}</span>
+        <button type="button" aria-label="Dismiss notification" class="support-icon" @click="dismissNotice"><i class="fe fe-x" aria-hidden="true"></i></button>
+      </div>
+    </transition>
+
+    <div ref="workspace" class="support-workspace" :class="{ 'show-case': mobileDetail }">
+      <aside class="support-queue" aria-label="Petition queue">
+        <div class="support-queue-controls">
+          <div class="support-section-title">
+            <h2>Petitions</h2>
+            <span class="support-count" :aria-label="total + ' petitions'">{{ total }}</span>
+          </div>
+          <label class="support-search">
+            <i class="fe fe-search" aria-hidden="true"></i>
+            <input ref="search" v-model="search" type="search" maxlength="200" placeholder="Character, account or text" aria-label="Search petitions"
+                   @input="scheduleSearch" @keydown.esc="clearSearch">
+            <kbd v-if="!search" class="support-search-key" title="Press / to search">/</kbd>
+          </label>
+          <div class="support-filters" role="group" aria-label="Filter petitions">
+            <button v-for="option in filters" :key="option.id" type="button" :aria-pressed="String(filter === option.id)" @click="setFilter(option.id)">
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <div v-if="queueLoading && !cases.length" class="support-empty" role="status">
+          <span class="support-skeleton" v-for="n in 3" :key="n" aria-hidden="true"></span>
+          <span class="sr-only">Loading petitions…</span>
+        </div>
+        <div v-else-if="!cases.length" class="support-empty">
+          <i :class="queueError ? 'fe fe-cloud-off' : 'fe fe-inbox'" aria-hidden="true"></i>
+          <strong>{{ queueError ? 'Petitions unavailable' : emptyTitle }}</strong>
+          <span>{{ queueError ? 'Check the server connection, then refresh.' : emptyHint }}</span>
+        </div>
+        <ul v-else ref="caseList" class="support-case-list" :class="{ 'is-entering': entering }"
+            @keydown.up.prevent="moveFocus(-1)" @keydown.down.prevent="moveFocus(1)">
+          <li v-for="(item, index) in cases" :key="item.key" :style="{ '--i': Math.min(index, 12) }">
+            <button type="button" class="support-case-row" :class="['urgency-' + Math.min(item.urgency || 0, 2), { 'is-selected': selectedKey === item.key, 'is-unread': unread(item) }]"
+                    :aria-current="selectedKey === item.key ? 'true' : null" :disabled="busy" @click="selectCase(item.key)">
+              <span class="support-row-avatar" :style="avatarStyle(item.character)" aria-hidden="true">
+                {{ initial(item.character) }}
+                <span class="support-row-presence" :class="'presence-' + (item.account_presence || 'unknown')"></span>
+              </span>
+              <span class="support-row-main">
+                <span class="support-row-top">
+                  <strong>{{ item.character }}</strong>
+                  <span v-if="unread(item)" class="support-unread" title="New reply from the player">New</span>
+                  <span class="support-presence is-small" :class="'presence-' + (item.account_presence || 'unknown')"
+                        :title="'Account ' + presenceLabel(item.account_presence).toLowerCase()">{{ presenceLabel(item.account_presence) }}</span>
+                  <time :datetime="dateTime(item.submitted_at)" :title="formatDate(item.submitted_at)">{{ age(item.submitted_at) }}</time>
+                </span>
+                <span class="support-case-snippet">{{ item.message }}</span>
+                <span class="support-row-bottom">
+                  <span class="support-chip" :class="'status-' + item.status">{{ statusLabel(item.status) }}</span>
+                  <span v-if="item.urgency > 0" class="support-chip is-urgent"><i class="fe fe-flag" aria-hidden="true"></i> {{ urgency(item.urgency) }}</span>
+                  <span v-if="item.messages_on" class="support-chip is-live" title="Messages are on for this case"><i class="fe fe-message-circle" aria-hidden="true"></i> Live</span>
+                  <span v-if="item.owner" class="support-row-owner" :class="{ 'is-mine': item.mine }" :title="'Assigned to ' + item.owner">
+                    <span class="support-avatar" :style="item.mine ? null : avatarStyle(item.owner)" aria-hidden="true">{{ initial(item.owner) }}</span>{{ item.mine ? 'You' : item.owner }}
+                  </span>
+                </span>
+              </span>
+            </button>
+          </li>
+        </ul>
+        <div v-if="page > 1 || total > 30" class="support-pagination" aria-label="Queue pages">
+          <button type="button" class="support-icon" aria-label="Previous page" :disabled="page === 1 || queueLoading" @click="changePage(-1)"><i class="fe fe-chevron-left" aria-hidden="true"></i></button>
+          <span>Page {{ page }} of {{ Math.ceil(total / 30) || 1 }}</span>
+          <button type="button" class="support-icon" aria-label="Next page" :disabled="page * 30 >= total || queueLoading" @click="changePage(1)"><i class="fe fe-chevron-right" aria-hidden="true"></i></button>
+        </div>
+      </aside>
+
+      <main class="support-thread" aria-label="Petition detail">
+        <button v-if="mobileDetail" type="button" class="support-button support-back" @click="backToQueue"><i class="fe fe-arrow-left" aria-hidden="true"></i> Petitions</button>
+        <div v-if="detailLoading && !record" class="support-placeholder" role="status">
+          <i class="fe fe-loader is-spinning" aria-hidden="true"></i><span>Loading petition…</span>
+        </div>
+        <div v-else-if="!record" class="support-placeholder">
+          <i :class="detailError ? 'fe fe-alert-circle' : 'fe fe-inbox'" aria-hidden="true"></i>
+          <strong>{{ detailError ? 'Petition unavailable' : 'Select a petition' }}</strong>
+          <span>{{ detailError ? 'It may have been removed in-game. Refresh the queue.' : 'Choose a petition from the queue to see its history.' }}</span>
+        </div>
+        <template v-else>
+          <div class="support-thread-header">
+            <div class="support-case-meta">
+              <span class="support-case-number">Case #{{ caseNumber }}</span>
+              <span class="support-chip" :class="'status-' + record.status">{{ statusLabel(record.status) }}</span>
+              <span v-if="record.urgency > 0" class="support-chip is-urgent"><i class="fe fe-flag" aria-hidden="true"></i> {{ urgency(record.urgency) }}</span>
+            </div>
+            <div class="support-thread-heading">
+              <div class="support-identity">
+                <span class="support-hero-avatar" :style="avatarStyle(record.character)" aria-hidden="true">{{ initial(record.character) }}</span>
+                <h2>{{ record.character }}</h2>
+                <span v-if="record.character_presence" class="support-presence" :class="'presence-' + record.character_presence">
+                  {{ characterPresenceLabel(record.character_presence) }}
+                </span>
+                <span v-if="onAlt" class="support-presence presence-online" :title="record.character + '’s account is playing ' + record.online_character">
+                  On {{ record.online_character }}
+                </span>
+              </div>
+              <div class="support-heading-actions">
+                <button v-if="canWrite && record.status !== 'resolved' && !record.owner" class="support-button is-primary" type="button" :disabled="busy" @click="updateCase('claim')">
+                  <i class="fe fe-user-check" aria-hidden="true"></i> Claim case
+                </button>
+                <button v-if="canWrite && record.status !== 'resolved' && record.mine" class="support-button" type="button" :disabled="busy" @click="updateCase('release')">
+                  <i class="fe fe-user-minus" aria-hidden="true"></i> Release
+                </button>
+                <button v-if="canWrite && record.status === 'resolved'" class="support-button" type="button" :disabled="busy" @click="updateCase('reopen')">
+                  <i class="fe fe-rotate-ccw" aria-hidden="true"></i> Reopen
+                </button>
+              </div>
+            </div>
+            <p class="support-subline">
+              Filed {{ age(record.submitted_at, true) }} from <strong>{{ record.zone_name || record.zone || 'an unknown zone' }}</strong>
+              · account <strong>{{ record.account }}</strong>
+              <template v-if="record.owner"> · assigned to <strong>{{ record.mine ? 'you' : record.owner }}</strong></template>
+            </p>
+            <div class="support-thread-tabs" role="group" aria-label="Case view">
+              <button type="button" :aria-pressed="String(!chatOpen && !evidenceOpen)" @click="showTimeline">
+                <i class="fe fe-list" aria-hidden="true"></i> Timeline <span class="support-tab-count">{{ activity.length + 1 }}</span>
+              </button>
+              <button type="button" :aria-pressed="String(chatOpen)" @click="openChat"><i class="fe fe-message-circle" aria-hidden="true"></i> Live chat</button>
+              <button v-if="canReadEvents" type="button" :aria-pressed="String(evidenceOpen)" @click="openEvidence"><i class="fe fe-search" aria-hidden="true"></i> Evidence</button>
+            </div>
+          </div>
+
+          <div v-if="caseBanner" class="support-banner" :class="'is-' + caseBanner.tone" role="note">
+            <i :class="caseBanner.icon" aria-hidden="true"></i><span>{{ caseBanner.text }}</span>
+          </div>
+
+          <support-live-chat v-if="chatOpen" :key="selectedKey" :record="record" :connection-id="connectionId" :can-write="canWrite && record.status !== 'resolved'"
+                             :saved-replies="replies" @seen="noteSeen" />
+          <support-evidence v-else-if="evidenceOpen" :key="'evidence-' + selectedKey" :record="record" :connection-id="connectionId" />
+          <div v-else ref="timeline" class="support-timeline">
+            <article class="support-event support-original">
+              <span class="support-event-icon"><i class="fe fe-message-square" aria-hidden="true"></i></span>
+              <div class="support-event-body">
+                <div class="support-event-heading"><h3>Original petition <span>· {{ record.character }}</span></h3><time :datetime="dateTime(record.submitted_at)">{{ formatDate(record.submitted_at) }}</time></div>
+                <p>{{ record.message }}</p>
+              </div>
+            </article>
+            <article v-if="record.native_note" class="support-event kind-native">
+              <span class="support-event-icon"><i class="fe fe-file-text" aria-hidden="true"></i></span>
+              <div class="support-event-body"><div class="support-event-heading"><h3>In-game GM note <span v-if="record.last_gm">· {{ record.last_gm }}</span></h3></div><p>{{ record.native_note }}</p></div>
+            </article>
+            <template v-for="entry in timeline">
+              <div v-if="entry.day" :key="'day-' + entry.key" class="support-day" role="separator"><span>{{ entry.day }}</span></div>
+              <article :key="entry.key" class="support-event" :class="['kind-' + entry.kind, { 'is-compact': entry.compact }]">
+                <span class="support-event-icon"><i :class="eventIcon(entry.kind)" aria-hidden="true"></i></span>
+                <div class="support-event-body">
+                  <div class="support-event-heading">
+                    <h3>
+                      {{ eventTitle(entry.kind) }} <span>· {{ entry.actor }}<template v-if="entry.recipient"> to {{ entry.recipient }}</template></span>
+                      <span v-if="entry.alt" class="support-chip is-alt" :title="'Not the character that filed the petition (' + record.character + ')'">alt</span>
+                    </h3>
+                    <time :datetime="entry.created_at" :title="formatDate(entry.created_at)">{{ clock(entry.created_at) }}</time>
+                  </div>
+                  <p v-if="entry.body">{{ entry.body }}</p>
+                  <p v-if="entry.detail" class="support-event-detail">{{ entry.detail }}</p>
+                  <div v-if="(entry.delivery && entry.delivery !== 'sent') || (entry.receipt && entry.receipt.length)" class="support-event-tags">
+                    <span v-if="entry.delivery && entry.delivery !== 'sent'" class="support-chip" :class="'delivery-' + entry.delivery">
+                      <i v-if="entry.delivery === 'mail'" class="fe fe-mail" aria-hidden="true"></i> {{ deliveryLabel(entry.delivery) }}
+                    </span>
+                    <span v-if="entry.receipt && entry.receipt.length" class="support-receipt">Receipt {{ entry.receipt.map(id => '#' + id).join(', ') }}</span>
+                  </div>
+                </div>
+              </article>
+            </template>
+          </div>
+
+          <form v-if="canWrite && !chatOpen && !evidenceOpen" class="support-note" @submit.prevent="updateCase('note')">
+            <label for="support-note"><i class="fe fe-lock" aria-hidden="true"></i> Private staff note</label>
+            <textarea id="support-note" v-model="note" rows="2" maxlength="8000" :disabled="busy"
+                      placeholder="Only staff can see notes. The player is not notified."
+                      @keydown.enter.ctrl.exact.prevent="updateCase('note')" @keydown.enter.meta.exact.prevent="updateCase('note')"></textarea>
+            <div class="support-note-actions">
+              <span class="support-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to add</span>
+              <button type="submit" class="support-button" :disabled="!note.trim() || busy">Add note</button>
+            </div>
+          </form>
+        </template>
+      </main>
+
+      <aside v-if="record" class="support-inspector" aria-label="Character and actions">
+        <section>
+          <h2>Character</h2>
+          <div class="support-character-card">
+            <span class="support-avatar is-large" :style="avatarStyle(record.character)" aria-hidden="true">{{ initial(record.character) }}</span>
+            <div>
+              <strong>{{ record.character }}</strong>
+              <span>Filed the petition · {{ characterPresenceLabel(record.character_presence || record.account_presence).toLowerCase() }}</span>
+            </div>
+            <button type="button" class="support-copy" :aria-label="'Copy ' + record.character" :title="copied === 'character' ? 'Copied' : 'Copy name'"
+                    @click="copy(record.character, 'character')">
+              <i :class="copied === 'character' ? 'fe fe-check' : 'fe fe-copy'" aria-hidden="true"></i>
+            </button>
+          </div>
+          <dl>
+            <dt>Account</dt>
+            <dd class="support-copyable">
+              {{ record.account }}
+              <button type="button" class="support-copy is-inline" :aria-label="'Copy account ' + record.account" :title="copied === 'account' ? 'Copied' : 'Copy account'"
+                      @click="copy(record.account, 'account')">
+                <i :class="copied === 'account' ? 'fe fe-check' : 'fe fe-copy'" aria-hidden="true"></i>
+              </button>
+            </dd>
+            <template v-if="onAlt"><dt>Playing now</dt><dd>{{ record.online_character }}</dd></template>
+            <dt>Filed from</dt><dd>{{ record.zone_name || record.zone || 'Unknown zone' }}</dd>
+            <dt>Assigned to</dt><dd>{{ record.owner || 'Unassigned' }}</dd>
+            <dt>In-game petition</dt><dd>{{ record.checked_out ? 'Checked out' : record.native_open ? '#' + record.petition_id : 'Cleared' }}</dd>
+          </dl>
+          <nav v-if="record.character_id" class="support-related" aria-label="Character tools">
+            <div v-if="canMove || canInspectRecovery" class="support-tiles">
+              <button v-if="canMove" type="button" class="support-tile tone-teal" aria-label="Move character" :disabled="busy || companion === 'missing'"
+                      :title="companion === 'missing' ? 'Moves need the Player Support patch on World and zones' : null" @click="delivery = 'move'">
+                <span class="support-tile-icon"><i class="fe fe-navigation" aria-hidden="true"></i></span>
+                <strong>Move character</strong><small>{{ companion === 'missing' ? 'Needs the server patch' : 'Zone, spot or player' }}</small>
+              </button>
+              <button v-if="canInspectRecovery" type="button" class="support-tile tone-violet" aria-label="Corpses" :disabled="busy" @click="delivery = 'corpses'">
+                <span class="support-tile-icon"><i class="fe fe-archive" aria-hidden="true"></i></span>
+                <strong>Corpses</strong><small>Loot and recovery</small>
+              </button>
+              <button v-if="canInspectRecovery" type="button" class="support-tile tone-blue" aria-label="Inventory snapshots" :disabled="busy" @click="delivery = 'snapshots'">
+                <span class="support-tile-icon"><i class="fe fe-camera" aria-hidden="true"></i></span>
+                <strong>Snapshots</strong><small>Find and restore lost items</small>
+              </button>
+            </div>
+            <router-link v-for="link in characterLinks" :key="link.name" :to="link.to">
+              <i :class="link.icon" aria-hidden="true"></i> {{ link.name }} <i class="fe fe-arrow-up-right" aria-hidden="true"></i>
+            </router-link>
+          </nav>
+        </section>
+        <section v-if="history.length" class="support-history" aria-label="Account history">
+          <h2>Account history <span class="support-count">{{ history.length }}</span></h2>
+          <ul>
+            <li v-for="item in history" :key="item.key">
+              <button type="button" class="support-history-case" @click="selectCase(item.key)">
+                <span class="support-history-top">
+                  <strong>#{{ item.key.split('-')[0] }}</strong>
+                  <span class="support-chip" :class="item.merged ? 'status-merged' : 'status-' + item.status">{{ item.merged ? 'Merged' : statusLabel(item.status) }}</span>
+                  <time :datetime="dateTime(item.submitted_at)" :title="formatDate(item.submitted_at)">{{ age(item.submitted_at) }}</time>
+                </span>
+                <span class="support-history-message">{{ item.character }}: {{ item.message }}</span>
+                <span v-if="item.resolution" class="support-history-resolution"><i class="fe fe-check" aria-hidden="true"></i> {{ item.resolution }}</span>
+              </button>
+              <button v-if="canMerge(item)" type="button" class="support-history-merge" :disabled="busy" :aria-label="'Merge case ' + item.key.split('-')[0] + ' into this case'"
+                      title="Move this case's history into the open case" @click="mergeSource = item">
+                <i class="fe fe-git-merge" aria-hidden="true"></i> Merge here
+              </button>
+            </li>
+          </ul>
+        </section>
+        <section v-if="canWrite && record.status !== 'resolved'" class="support-actions">
+          <h2>Respond</h2>
+          <div class="support-tiles">
+            <button type="button" class="support-tile tone-gold" aria-label="Open live chat" :disabled="busy" @click="openChat">
+              <span class="support-tile-icon"><i class="fe fe-message-circle" aria-hidden="true"></i></span>
+              <strong>Live chat</strong><small>{{ chatTileHint }}</small>
+            </button>
+            <button v-if="canDeliver" type="button" class="support-tile tone-blue" aria-label="Reply by mail" :disabled="busy" @click="delivery = 'reply'">
+              <span class="support-tile-icon"><i class="fe fe-mail" aria-hidden="true"></i></span>
+              <strong>Reply by mail</strong><small>To {{ record.character }}’s mailbox</small>
+            </button>
+            <button v-if="canParcel" type="button" class="support-tile tone-green" aria-label="Send parcel" :disabled="busy" @click="delivery = 'parcel'">
+              <span class="support-tile-icon"><i class="fe fe-package" aria-hidden="true"></i></span>
+              <strong>Send parcel</strong><small>Items via parcel merchant</small>
+            </button>
+          </div>
+          <h2 class="support-actions-divider">Status</h2>
+          <button v-if="record.status === 'open'" type="button" class="support-button" :disabled="busy" @click="updateCase('wait')">
+            <i class="fe fe-clock" aria-hidden="true"></i> Wait for player
+          </button>
+          <button v-else type="button" class="support-button" :disabled="busy" @click="updateCase('reopen')">
+            <i class="fe fe-play" aria-hidden="true"></i> Resume case
+          </button>
+          <button type="button" class="support-button is-success" :disabled="busy" @click="confirmResolve">
+            <i class="fe fe-check-circle" aria-hidden="true"></i> Resolve case
+          </button>
+        </section>
+      </aside>
+    </div>
+
+    <support-mail-reply v-if="delivery === 'reply' && record" :record="record" :connection-id="connectionId" :saved-replies="replies"
+                        @close="delivery = null" @sent="deliverySent('reply')" @reconcile="loadDetail(selectedKey)" />
+    <gm-parcel-composer v-if="delivery === 'parcel' && record" :key="record.key"
+                        :recipient="{ id: record.character_id, name: record.character }"
+                        :case-key="record.key" :connection-id="connectionId" :prefill="parcelPrefill"
+                        @close="closeParcel" @sent="deliverySent('parcel')" @reconcile="loadDetail(selectedKey)" />
+    <support-snapshots v-if="delivery === 'snapshots' && record" :key="'snapshots-' + record.key" :record="record" :connection-id="connectionId"
+                       :can-restore="canParcel && canWrite && record.status !== 'resolved'" @close="delivery = null" @restore="restoreSnapshot" />
+    <support-alerts v-if="panel === 'alerts'" :connection-id="connectionId" :can-write="canWrite" @close="panel = null" @change="alertPrefs = $event" />
+    <support-replies v-if="panel === 'replies'" :connection-id="connectionId" :can-write="canWrite" :replies="replies" @close="panel = null" @changed="loadReplies" />
+    <support-metrics v-if="panel === 'metrics'" :connection-id="connectionId" @close="panel = null" />
+    <b-modal :visible="Boolean(mergeSource)" modal-class="support-modal" title="Merge cases" centered ok-title="Merge cases"
+             cancel-variant="outline-light" @hide="mergeSource = null" @ok="mergeCase">
+      <template v-if="mergeSource && record">
+        <p class="support-modal-lead">Merge case <strong>#{{ mergeSource.key.split('-')[0] }}</strong> into <strong>#{{ caseNumber }}</strong>?</p>
+        <p class="support-modal-hint"><i class="fe fe-info" aria-hidden="true"></i>
+          Its notes, messages and deliveries move to this case, and it is resolved with a link here. This cannot be undone.</p>
+      </template>
+    </b-modal>
+    <support-recovery v-if="(delivery === 'move' || delivery === 'corpses') && record" :key="record.key"
+                      :record="record" :connection-id="connectionId" :initial-mode="delivery" :allow-move="canMove"
+                      @close="delivery = null" @receipt="recoveryReceipt" />
+    <b-modal v-model="resolveOpen" modal-class="support-modal" title="Resolve case" centered
+             ok-title="Resolve case" ok-variant="success" cancel-variant="outline-light" @shown="$refs.resolution && $refs.resolution.focus()"
+             @ok="updateCase('resolve')">
+      <p class="support-modal-lead">Resolve <strong>{{ record ? record.character : '' }}</strong>’s case in Spire?</p>
+      <label for="support-resolution">Resolution summary <span>(optional)</span></label>
+      <div class="support-quick" role="group" aria-label="Common resolutions">
+        <button v-for="phrase in resolutionPhrases" :key="phrase" type="button" @click="addResolution(phrase)">{{ phrase }}</button>
+      </div>
+      <textarea id="support-resolution" ref="resolution" v-model="resolution" class="form-control" rows="3" maxlength="8000"
+                placeholder="What was done? This is added to the case timeline."></textarea>
+      <p v-if="record && record.native_open" class="support-modal-hint">
+        <i class="fe fe-info" aria-hidden="true"></i> Clear petition #{{ record.petition_id }} in-game after resolving it here.
+      </p>
+    </b-modal>
+  </section>
+</template>
+
+<script>
+import { SpireApi } from '@/app/api/spire-api'
+import { canReadAdminApi, canWriteAdminApi } from '@/app/user/server-admin-access'
+import { ROUTE } from '@/routes'
+import SupportMailReply from './SupportMailReply.vue'
+import GmParcelComposer from '../mail-parcels/GMParcelComposer.vue'
+import SupportLiveChat from './SupportLiveChat.vue'
+import SupportRecovery from './SupportRecovery.vue'
+import SupportEvidence from './SupportEvidence.vue'
+import SupportSnapshots from './SupportSnapshots.vue'
+import SupportAlerts from './SupportAlerts.vue'
+import SupportReplies from './SupportReplies.vue'
+import SupportMetrics from './SupportMetrics.vue'
+import { avatarStyle, desktopNotify, hasUnseenReply, initials, markSeen, playChime, readAlertPrefs } from './support-ui'
+
+const endpoint = 'player-support/cases'
+const titles = {
+  note: 'Private note', reply: 'Mail sent', parcel: 'Parcel sent', pending: 'Delivery unverified',
+  chat_in: 'Player tell', chat_out: 'Game Master tell', chat_on: 'Messages on', chat_off: 'Messages off',
+  character_move: 'Character move', corpse_move: 'Corpse move',
+  claim: 'Claimed', release: 'Released', wait: 'Waiting for player', resolve: 'Resolved', reopen: 'Reopened', merge: 'Cases merged'
+}
+const icons = {
+  note: 'fe fe-lock', reply: 'fe fe-mail', parcel: 'fe fe-package', pending: 'fe fe-alert-triangle',
+  chat_in: 'fe fe-corner-down-right', chat_out: 'fe fe-send', chat_on: 'fe fe-toggle-right', chat_off: 'fe fe-toggle-left',
+  character_move: 'fe fe-navigation', corpse_move: 'fe fe-archive',
+  claim: 'fe fe-user-check', release: 'fe fe-user-minus', wait: 'fe fe-clock', resolve: 'fe fe-check-circle', reopen: 'fe fe-rotate-ccw',
+  merge: 'fe fe-git-merge'
+}
+// Status changes carry a fixed first line; anything after it is the GM's summary.
+const statusKinds = ['claim', 'release', 'wait', 'resolve', 'reopen', 'chat_on', 'chat_off']
+
+export default {
+  name: 'PlayerSupport',
+  components: {
+    SupportMailReply, GmParcelComposer, SupportLiveChat, SupportRecovery, SupportEvidence, SupportSnapshots, SupportAlerts, SupportReplies, SupportMetrics
+  },
+  data () {
+    return {
+      filters: [{ id: 'open', label: 'Active' }, { id: 'mine', label: 'Mine' }, { id: 'unassigned', label: 'Unassigned' }, { id: 'resolved', label: 'Resolved' }],
+      filter: 'open', search: '', page: 1, total: 0, cases: [], connectionId: null, selectedKey: '', record: null, activity: [],
+      queueLoading: false, backgroundLoading: false, detailLoading: false, queueError: false, detailError: false, queueVersion: 0, detailVersion: 0,
+      mobileDetail: false, searchTimer: null, presenceTimer: null, noticeTimer: null, busy: false, note: '', notice: null, delivery: null,
+      resolveOpen: false, resolution: '', chatOpen: false, evidenceOpen: false, refreshedAt: null,
+      history: [], replies: [], panel: null, parcelPrefill: null, mergeSource: null, alertPrefs: readAlertPrefs(), lastSummary: null,
+      summary: null, companion: 'unknown', now: Date.now(), clockTimer: null, seenVersion: 0, copied: '', copyTimer: null, entering: true,
+      resolutionPhrases: ['Restored the missing item', 'Moved the character to safety', 'Recovered the corpse', 'Explained how it works', 'No action needed']
+    }
+  },
+  computed: {
+    canWrite () { return canWriteAdminApi(endpoint) },
+    hasRecipient () { return this.record && this.record.character_id && !this.record.checked_out },
+    canDeliver () { return this.hasRecipient && canWriteAdminApi('mail-parcels-editor/mail/send') },
+    canParcel () {
+      return this.hasRecipient && canWriteAdminApi('mail-parcels-editor/parcel/send') && canReadAdminApi('mail-parcels-editor/items')
+    },
+    canInspectRecovery () {
+      return this.record && this.record.character_id && canReadAdminApi('player-operations')
+    },
+    canMove () {
+      return Boolean(this.canInspectRecovery && this.hasRecipient && this.canWrite && this.record.status !== 'resolved' &&
+        canWriteAdminApi('player-operations/character/0/relocate'))
+    },
+    caseNumber () { return this.record ? this.record.key.split('-')[0] : '' },
+    canReadEvents () { return canReadAdminApi('player_event_logs') },
+    // Live chat, moves and in-game notices need the Player Support patch on
+    // World. Say what is off, and what still works, when it is missing.
+    companionNote () {
+      if (this.companion === 'missing') {
+        return {
+          title: 'This game server does not have the Player Support patch',
+          text: 'Live chat, character and corpse moves, and in-game notices are off until World and zones are rebuilt with it. ' +
+            'The queue, notes, mail, parcels and corpse inspection work as usual. See docs/player-support-chat.md to install it.'
+        }
+      }
+      if (this.companion === 'outdated') {
+        return {
+          title: 'This game server has an older Player Support patch',
+          text: 'Live chat is off until World and zones are rebuilt with the current patch. Moves and notices still work.'
+        }
+      }
+      return null
+    },
+    chatTileHint () {
+      if (this.companion === 'missing' || this.companion === 'outdated') return 'History, and mail if offline'
+      return this.record && this.record.messages_on ? 'Messages are on' : 'Tells, or mail if offline'
+    },
+    // The account is in game on a character other than the one that filed.
+    onAlt () {
+      const record = this.record
+      return Boolean(record && record.online_character && record.online_character.toLowerCase() !== record.character.toLowerCase())
+    },
+    characterLinks () {
+      const id = String(this.record.character_id)
+      return [
+        { name: 'Player Operations', icon: 'fe fe-user', path: ROUTE.ADMIN_PLAYER_OPERATIONS, query: { character: id }, api: 'player-operations' },
+        { name: 'Inventory & Keyring', icon: 'fe fe-briefcase', path: ROUTE.ADMIN_INVENTORY_KEYRING, query: { character: id }, api: 'inventory-keyring' },
+        { name: 'Player Event Logs', icon: 'fe fe-list', path: ROUTE.ADMIN_TOOL_PLAYER_EVENT_LOGS, query: { characterId: id }, api: 'player_event_logs' }
+      ].filter(link => canReadAdminApi(link.api)).map(link => ({ ...link, to: { path: link.path, query: link.query } }))
+    },
+    // Explains why actions are missing instead of hiding them silently.
+    caseBanner () {
+      const record = this.record
+      if (!record) return null
+      if (record.merged_into) {
+        return { tone: 'info', icon: 'fe fe-git-merge', text: `This case was merged into case #${record.merged_into.split('-')[0]}. Its history moved there.` }
+      }
+      if (record.status === 'resolved') {
+        return { tone: 'success', icon: 'fe fe-check-circle', text: 'This case is resolved. Reopen it to reply, send parcels, or move the character.' }
+      }
+      if (record.checked_out) {
+        return { tone: 'warning', icon: 'fe fe-lock', text: `Checked out in-game${record.last_gm ? ' by ' + record.last_gm : ''}. Mail, parcels, chat and moves are paused until it is checked back in.` }
+      }
+      if (!record.character_id) {
+        return { tone: 'warning', icon: 'fe fe-user-x', text: 'The petitioning character was renamed, moved or deleted, so character tools are unavailable.' }
+      }
+      if (!record.native_open) {
+        return { tone: 'info', icon: 'fe fe-info', text: 'The in-game petition was cleared. Live chat is off; resolve the case here when you are done.' }
+      }
+      return null
+    },
+    timeline () {
+      let previousDay = this.dayLabel(this.record.submitted_at * 1000)
+      let previous = null
+      return this.activity.map(entry => {
+        const day = this.dayLabel(entry.created_at)
+        const [first, ...rest] = String(entry.text || '').split('\n')
+        const status = statusKinds.includes(entry.kind)
+        const delivery = ['parcel', 'pending', 'character_move', 'corpse_move'].includes(entry.kind)
+        const chat = entry.kind === 'chat_in' || entry.kind === 'chat_out'
+        const character = entry.kind === 'chat_out' ? entry.recipient : entry.kind === 'chat_in' ? entry.actor : ''
+        const view = {
+          ...entry,
+          day: day !== previousDay ? day : '',
+          body: status ? rest.join('\n') : delivery ? first : entry.text,
+          detail: delivery ? rest.join('\n') : '',
+          alt: Boolean(character) && character.toLowerCase() !== this.record.character.toLowerCase(),
+          // Consecutive tells from the same side read as one exchange.
+          compact: chat && previous && previous.kind === entry.kind && previous.actor === entry.actor &&
+            previous.recipient === entry.recipient && day === previousDay
+        }
+        previousDay = day
+        previous = entry
+        return view
+      })
+    },
+    emptyTitle () {
+      if (this.search.trim()) return 'No matching petitions'
+      return { mine: 'Nothing assigned to you', unassigned: 'Every petition has an owner', resolved: 'No resolved cases yet' }[this.filter] || 'No active petitions'
+    },
+    emptyHint () {
+      if (this.search.trim()) return 'Try a character, account, or a phrase from the petition.'
+      return { mine: 'Claim a case to see it here.', resolved: 'Resolved cases are kept here for reference.' }[this.filter] ||
+        'Petitions players file with /guidehelp or #petition appear here automatically.'
+    }
+  },
+  watch: {
+    '$route.query.case' (key) {
+      if (this.connectionId !== null && key && key !== this.selectedKey) {
+        this.mobileDetail = true
+        this.openCase(key)
+      }
+    },
+    notice (value) {
+      clearTimeout(this.noticeTimer)
+      if (value && !value.error) this.noticeTimer = setTimeout(() => { this.notice = null }, 6000)
+    },
+    resolveOpen (open) {
+      if (open) this.resolution = ''
+    }
+  },
+  mounted () {
+    window.addEventListener('resize', this.fitWorkspace)
+    // Spire's page zoom can change without a window resize event.
+    if (window.ResizeObserver) {
+      this.pageObserver = new window.ResizeObserver(() => this.fitWorkspace())
+      this.pageObserver.observe(document.documentElement)
+    }
+    this.fitWorkspace()
+  },
+  updated () {
+    // Banners and notices above the workspace move it; re-measure cheaply.
+    this.fitWorkspace()
+  },
+  created () {
+    this.mobileDetail = Boolean(this.$route.query.case)
+    this.loadQueue(true)
+    this.presenceTimer = setInterval(this.backgroundRefresh, 12000)
+    this.clockTimer = setInterval(() => { this.now = Date.now() }, 30000)
+    window.addEventListener('keydown', this.onShortcut)
+    setTimeout(() => { this.entering = false }, 900)
+  },
+  beforeDestroy () {
+    clearTimeout(this.searchTimer)
+    clearTimeout(this.noticeTimer)
+    clearInterval(this.presenceTimer)
+    clearInterval(this.clockTimer)
+    clearTimeout(this.copyTimer)
+    window.removeEventListener('keydown', this.onShortcut)
+    window.removeEventListener('resize', this.fitWorkspace)
+    if (this.pageObserver) this.pageObserver.disconnect()
+    this.queueVersion++
+    this.detailVersion++
+  },
+  methods: {
+    // The space from the workspace to the bottom of the window, so it can fill
+    // it. Spire zooms the page at some window sizes, so convert from screen
+    // pixels to the page's own pixels.
+    fitWorkspace () {
+      const workspace = this.$refs.workspace
+      if (!workspace) return
+      const rect = workspace.getBoundingClientRect()
+      const scale = workspace.offsetHeight ? rect.height / workspace.offsetHeight : 1
+      if (!scale) return
+      const fill = Math.floor((window.innerHeight - (rect.top + window.scrollY)) / scale) - 44
+      if (fill !== this.workspaceFill) {
+        this.workspaceFill = fill
+        this.$el.style.setProperty('--support-fill', fill + 'px')
+      }
+    },
+    statusLabel (status) { return { open: 'Open', waiting: 'Waiting', resolved: 'Resolved' }[status] || 'Open' },
+    presenceLabel (status) { return { online: 'Online', offline: 'Offline' }[status] || 'Unknown' },
+    characterPresenceLabel (status) { return { online: 'In game', offline: 'Not in game' }[status] || 'Presence unknown' },
+    deliveryLabel (status) { return { pending: 'Sending', failed: 'Failed', unconfirmed: 'Unconfirmed', mail: 'Sent by mail' }[status] || status },
+    urgency (value) { return value > 1 ? 'Urgent' : 'Elevated' },
+    eventTitle (kind) { return titles[kind] || 'Case updated' },
+    eventIcon (kind) { return icons[kind] || 'fe fe-activity' },
+    initial (name) { return initials(name) },
+    avatarStyle (name) { return avatarStyle(name) },
+    // On a phone the case is on screen only after it is opened from the queue.
+    caseVisible () {
+      return this.mobileDetail || !window.matchMedia('(max-width: 680px)').matches
+    },
+    unread (item) {
+      return this.seenVersion >= 0 && !(item.key === this.selectedKey && this.caseVisible()) && hasUnseenReply(item)
+    },
+    // A reply counts as seen only while staff can see the case.
+    noteSeen (at) {
+      if (document.hidden || !this.caseVisible()) return
+      markSeen(this.selectedKey, at)
+      this.seenVersion++
+    },
+    // "/" focuses search from anywhere outside a text field.
+    onShortcut (event) {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return
+      const target = event.target
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
+      if (document.querySelector('.modal.show')) return
+      event.preventDefault()
+      if (this.$refs.search) this.$refs.search.focus()
+    },
+    clearSearch () {
+      if (!this.search) return
+      this.search = ''
+      this.scheduleSearch()
+    },
+    async copy (text, which) {
+      try {
+        await navigator.clipboard.writeText(text)
+        this.copied = which
+        clearTimeout(this.copyTimer)
+        this.copyTimer = setTimeout(() => { this.copied = '' }, 1600)
+      } catch (e) {
+        this.notice = { error: true, text: 'Copying is not available in this browser.' }
+      }
+    },
+    addResolution (phrase) {
+      const current = this.resolution.trim()
+      this.resolution = current ? `${current}${/[.!?]$/.test(current) ? '' : '.'} ${phrase}.` : `${phrase}.`
+      this.$nextTick(() => { if (this.$refs.resolution) this.$refs.resolution.focus() })
+    },
+    dateTime (value) { return new Date(value * 1000).toISOString() },
+    toDate (value) { return new Date(typeof value === 'number' ? value * 1000 : value) },
+    formatDate (value) {
+      return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(this.toDate(value))
+    },
+    clock (value) {
+      return new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(value instanceof Date ? value : new Date(value))
+    },
+    dayLabel (value) {
+      const date = new Date(value)
+      const today = new Date()
+      const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+      if (date.toDateString() === today.toDateString()) return 'Today'
+      if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+      return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric' }).format(date)
+    },
+    age (value, long = false) {
+      const minutes = Math.max(0, Math.floor((this.now / 1000 - value) / 60))
+      if (minutes < 1) return long ? 'just now' : 'Now'
+      const [amount, unit] = minutes < 60 ? [minutes, 'm'] : minutes < 1440 ? [Math.floor(minutes / 60), 'h'] : [Math.floor(minutes / 1440), 'd']
+      if (!long) return amount + unit
+      const word = { m: 'minute', h: 'hour', d: 'day' }[unit]
+      return `${amount} ${word}${amount === 1 ? '' : 's'} ago`
+    },
+    errorText (error) {
+      return (error.response && error.response.data && error.response.data.error) || error.message || 'Request failed'
+    },
+    dismissNotice () { this.notice = null },
+    moveFocus (direction) {
+      const rows = Array.from(this.$refs.caseList ? this.$refs.caseList.querySelectorAll('.support-case-row') : [])
+      const index = rows.indexOf(document.activeElement)
+      const next = rows[Math.max(0, Math.min(rows.length - 1, index + direction))]
+      if (next) next.focus()
+    },
+    backgroundRefresh () {
+      if (document.hidden || this.busy || this.queueLoading || this.searchTimer) return
+      this.loadQueue(false, true)
+      // Pick up notes, deliveries and status changes made by other staff.
+      if (this.record && !this.chatOpen && !this.delivery && !this.resolveOpen && !this.detailLoading) {
+        this.loadDetail(this.selectedKey, true)
+      }
+    },
+    async loadQueue (initial = false, background = false) {
+      const version = ++this.queueVersion
+      this.queueLoading = true
+      this.backgroundLoading = background
+      this.queueError = false
+      try {
+        const { data } = await SpireApi.v1().get(endpoint, { params: { filter: this.filter, q: this.search.trim(), page: this.page } })
+        if (version !== this.queueVersion) return
+        if (this.connectionId !== null && this.connectionId !== data.connection_id) {
+          this.record = null
+          this.selectedKey = ''
+          this.activity = []
+          this.delivery = null
+          this.resolveOpen = false
+          this.chatOpen = false
+          this.evidenceOpen = false
+          this.history = []
+          this.note = ''
+          this.mobileDetail = false
+          this.detailVersion++
+          this.$router.replace({ path: this.$route.path, query: {} }).catch(() => {})
+        }
+        const connectionChanged = this.connectionId !== data.connection_id
+        this.connectionId = data.connection_id
+        if (connectionChanged) {
+          this.lastSummary = null
+          this.loadReplies()
+        }
+        this.cases = data.cases || []
+        this.total = data.total || 0
+        if (data.summary) {
+          this.summary = data.summary
+          this.checkArrivals(data.summary)
+        }
+        this.companion = data.companion || 'unknown'
+        this.refreshedAt = new Date()
+        if (!this.selectedKey) {
+          const key = (initial && this.$route.query.case) || (this.cases[0] && this.cases[0].key)
+          if (key) await this.openCase(key)
+        }
+      } catch (error) {
+        if (version === this.queueVersion) {
+          if (background) {
+            this.cases = this.cases.map(item => ({ ...item, account_presence: 'unknown' }))
+            return
+          }
+          this.queueError = true
+          this.notice = { error: true, text: this.errorText(error) }
+        }
+      } finally {
+        if (version === this.queueVersion) {
+          this.queueLoading = false
+          this.backgroundLoading = false
+        }
+      }
+    },
+    async loadDetail (key, background = false) {
+      if (!key) return
+      const version = ++this.detailVersion
+      if (!background) this.detailLoading = true
+      this.detailError = false
+      try {
+        const { data } = await SpireApi.v1().get(endpoint + '/' + encodeURIComponent(key), { params: { connection_id: this.connectionId } })
+        if (version !== this.detailVersion) return
+        const timeline = this.$refs.timeline
+        const following = timeline && timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 60
+        const grew = (data.activity || []).length > this.activity.length
+        this.record = data.case
+        this.activity = data.activity || []
+        this.history = data.history || []
+        if (data.case.last_reply_at) this.noteSeen(data.case.last_reply_at)
+        if (!background || (following && grew)) this.$nextTick(this.scrollTimeline)
+      } catch (error) {
+        if (version === this.detailVersion && !background) {
+          this.detailError = true
+          this.record = null
+          this.activity = []
+          this.notice = { error: true, text: this.errorText(error) }
+        }
+      } finally {
+        if (version === this.detailVersion) this.detailLoading = false
+      }
+    },
+    scrollTimeline () {
+      const timeline = this.$refs.timeline
+      if (timeline) timeline.scrollTop = timeline.scrollHeight
+    },
+    openCase (key) {
+      this.selectedKey = key
+      this.record = null
+      this.activity = []
+      this.history = []
+      this.note = ''
+      this.delivery = null
+      this.parcelPrefill = null
+      this.chatOpen = false
+      this.evidenceOpen = false
+      return this.loadDetail(key)
+    },
+    selectCase (key) {
+      this.mobileDetail = true
+      this.notice = null
+      // A case loaded in the background is now on screen.
+      if (this.record && this.record.key === key && this.record.last_reply_at) this.noteSeen(this.record.last_reply_at)
+      if (key !== this.selectedKey || !this.record) this.openCase(key)
+      this.$router.replace({ path: this.$route.path, query: { case: key } }).catch(() => {})
+    },
+    async refresh () {
+      this.notice = null
+      await this.loadQueue()
+      if (this.selectedKey) await this.loadDetail(this.selectedKey)
+    },
+    scheduleSearch () {
+      clearTimeout(this.searchTimer)
+      this.searchTimer = setTimeout(() => {
+        this.searchTimer = null
+        this.page = 1
+        this.loadQueue()
+      }, 250)
+    },
+    setFilter (filter) {
+      if (this.filter === filter) return
+      clearTimeout(this.searchTimer)
+      this.searchTimer = null
+      this.filter = filter
+      this.page = 1
+      this.loadQueue()
+    },
+    changePage (direction) {
+      this.page += direction
+      this.loadQueue()
+    },
+    confirmResolve () { this.resolveOpen = true },
+    showTimeline () {
+      if (!this.chatOpen && !this.evidenceOpen) return
+      const reload = this.chatOpen
+      this.chatOpen = false
+      this.evidenceOpen = false
+      if (reload) this.loadDetail(this.selectedKey)
+    },
+    openChat () {
+      this.evidenceOpen = false
+      this.chatOpen = true
+    },
+    openEvidence () {
+      this.chatOpen = false
+      this.evidenceOpen = true
+    },
+    // Only an earlier case without a live in-game petition folds into this one.
+    canMerge (item) {
+      return this.canWrite && this.record && !this.record.merged_into && !item.merged && !item.native_open && this.record.status !== 'resolved'
+    },
+    async mergeCase () {
+      const source = this.mergeSource
+      if (!source || !this.record || this.busy) return
+      const key = this.selectedKey
+      this.busy = true
+      this.notice = null
+      try {
+        await SpireApi.v1().put(`${endpoint}/${encodeURIComponent(key)}/merge`, { source: source.key, revision: this.record.revision },
+          { params: { connection_id: this.connectionId } })
+        this.notice = { error: false, text: `Case #${source.key.split('-')[0]} merged into this case` }
+        await Promise.all([this.loadQueue(), this.loadDetail(key)])
+      } catch (error) {
+        this.notice = { error: true, text: this.errorText(error) }
+        await this.loadDetail(key)
+      } finally {
+        this.busy = false
+        this.mergeSource = null
+      }
+    },
+    async loadReplies () {
+      try {
+        const { data } = await SpireApi.v1().get('player-support/replies', { params: { connection_id: this.connectionId } })
+        this.replies = data.replies || []
+      } catch (error) {
+        this.replies = []
+      }
+    },
+    // Items missing since a snapshot go to the parcel composer for review.
+    restoreSnapshot ({ lines, snapshot }) {
+      this.parcelPrefill = {
+        lines,
+        reason: `Restored items missing since the ${snapshot} inventory snapshot (case #${this.caseNumber})`,
+        note: 'Restored by staff in response to your petition.'
+      }
+      this.delivery = 'parcel'
+    },
+    closeParcel () {
+      this.delivery = null
+      this.parcelPrefill = null
+    },
+    // Alert on petitions and replies that arrived since the last refresh.
+    checkArrivals (summary) {
+      const previous = this.lastSummary
+      this.lastSummary = summary
+      if (!previous || !summary) return
+      const alerts = []
+      if (summary.newest_at > previous.newest_at && summary.newest_key) {
+        alerts.push({ title: 'New petition', body: `${summary.newest_character || 'A player'} filed a petition`, tag: 'petition-' + summary.newest_key })
+      }
+      const replied = summary.reply_at && (!previous.reply_at || new Date(summary.reply_at) > new Date(previous.reply_at))
+      const watching = summary.reply_key === this.selectedKey && this.chatOpen && !document.hidden
+      if (replied && !watching) {
+        alerts.push({ title: 'Player reply', body: `${summary.reply_character || 'A player'} replied to a petition`, tag: 'reply-' + summary.reply_key })
+      }
+      if (!alerts.length) return
+      if (this.alertPrefs.sound) playChime()
+      if (this.alertPrefs.desktop && document.hidden) {
+        for (const alert of alerts) desktopNotify(alert.title, alert.body, alert.tag)
+      }
+      if (!document.hidden) this.notice = { error: false, text: alerts.map(alert => alert.body).join(' · ') }
+    },
+    backToQueue () {
+      this.mobileDetail = false
+      this.showTimeline()
+    },
+    async updateCase (action) {
+      if (!this.record || this.busy || !this.canWrite) return
+      if (action === 'note' && !this.note.trim()) return
+      const key = this.selectedKey
+      const text = action === 'note' ? this.note.trim() : action === 'resolve' ? this.resolution.trim() : ''
+      this.busy = true
+      this.notice = null
+      try {
+        await SpireApi.v1().patch(endpoint + '/' + encodeURIComponent(key), {
+          action, text, revision: this.record.revision
+        }, { params: { connection_id: this.connectionId } })
+        if (action === 'note') this.note = ''
+        if (action === 'resolve') this.notice = { error: false, text: `${this.record.character}’s case resolved` }
+        await Promise.all([this.loadQueue(), this.loadDetail(key)])
+      } catch (error) {
+        this.notice = { error: true, text: this.errorText(error) }
+        if (error.response && error.response.status === 409) await this.loadDetail(key)
+      } finally {
+        this.busy = false
+      }
+    },
+    async deliverySent (kind) {
+      if (kind === 'reply') this.delivery = null
+      // Snapshot items belong to one send only.
+      this.parcelPrefill = null
+      this.notice = { error: false, text: kind === 'parcel' ? 'Parcel queued for delivery' : 'Reply sent' }
+      await this.loadDetail(this.selectedKey)
+    },
+    async recoveryReceipt (result) {
+      if (result) this.notice = { error: ['unconfirmed', 'moved_arrival_unconfirmed', 'moved_notice_unavailable'].includes(result.status), text: result.message }
+      await this.loadDetail(this.selectedKey)
+    }
+  }
+}
+</script>
+
+<style scoped>
+.player-support {
+  --support-bg: #121922;
+  --support-pane: #17202b;
+  --support-raised: #1d2836;
+  --support-border: #2f3d4d;
+  --support-border-strong: #46586c;
+  --support-muted: #9fb0c3;
+  --support-text: #eef3f8;
+  --support-accent: #dfb976;
+  --support-accent-soft: #352c1f;
+  --support-success: #8fd6ad;
+  --support-warning: #f4ba83;
+  --support-info: #9cc5f5;
+  --tone-blue: #79adff;
+  --tone-green: #6fd3a0;
+  --tone-amber: #f2c46d;
+  --tone-ember: #ff8f6b;
+  --tone-teal: #62d2d8;
+  --tone-violet: #b9a2ff;
+  --tone-gold: #e7c27f;
+  margin: 0 auto 2.5rem;
+  color: var(--support-text);
+}
+.support-header, .support-title, .support-section-title, .support-row-top, .support-row-bottom,
+.support-thread-heading, .support-case-meta, .support-event-heading, .support-note-actions,
+.support-pagination, .support-notice, .support-header-actions { display: flex; align-items: center; }
+
+/* Page header */
+.support-header { justify-content: space-between; gap: 16px; padding: 14px 0 18px; flex-wrap: wrap; }
+.support-title { gap: 14px; min-width: 0; }
+.support-title h1 { margin: 0; font-size: clamp(1.35rem, 2.5vw, 1.8rem); line-height: 1.15; letter-spacing: -.03em; color: inherit; }
+.support-title p { margin: 3px 0 0; color: var(--support-muted); font-size: .82rem; }
+.support-mark {
+  display: grid; flex: none; place-items: center; width: 42px; height: 42px;
+  background: linear-gradient(145deg, #3a301f, #241f18); border: 1px solid #6b5636; border-radius: 11px;
+  color: var(--support-accent); font-size: 19px; box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+}
+.support-header-actions { gap: 12px; }
+.support-live { display: inline-flex; align-items: center; gap: 6px; color: var(--support-muted); font-size: .74rem; font-weight: 600; }
+.support-live-dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--support-success); }
+.support-live-dot::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--support-success); opacity: 0; animation: support-pulse 2.4s ease-out infinite; }
+@keyframes support-pulse { 0% { transform: scale(.6); opacity: .8; } 100% { transform: scale(1.6); opacity: 0; } }
+.is-spinning { display: inline-block; animation: support-spin 900ms linear infinite; }
+@keyframes support-spin { to { transform: rotate(360deg); } }
+
+/* Queue at a glance */
+.support-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: -4px 0 16px; }
+.support-stat {
+  --tone: var(--tone-blue);
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; text-align: left;
+  border: 1px solid color-mix(in srgb, var(--tone) 28%, var(--support-border)); border-radius: 11px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tone) 14%, #141c26), #131a23 70%);
+  color: var(--support-text); font-size: .78rem; line-height: 1.2;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.support-stat strong { display: block; font-size: 1.25rem; font-weight: 700; letter-spacing: -.02em; color: var(--tone); font-variant-numeric: tabular-nums; }
+.support-stat > span:last-child { min-width: 0; color: var(--support-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-stat-icon { display: grid; flex: none; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, transparent); font-size: 15px; }
+button.support-stat:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--tone) 55%, var(--support-border)); box-shadow: 0 8px 22px rgba(0, 0, 0, .25); }
+.support-stat[aria-pressed="true"] { border-color: var(--tone); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 40%, transparent); }
+.support-stat.is-quiet { opacity: .62; }
+.support-stat.is-quiet strong { color: var(--support-muted); }
+.tone-blue { --tone: var(--tone-blue); }
+.tone-green { --tone: var(--tone-green); }
+.tone-amber { --tone: var(--tone-amber); }
+.tone-ember { --tone: var(--tone-ember); }
+.tone-teal { --tone: var(--tone-teal); }
+.tone-violet { --tone: var(--tone-violet); }
+.tone-gold { --tone: var(--tone-gold); }
+
+/* Buttons */
+.support-button, .support-icon {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--support-border-strong); border-radius: 7px; background: #1f2b39; color: var(--support-text);
+  padding: 7px 12px; font-size: .8125rem; font-weight: 600; line-height: 1.25;
+  transition: background-color 130ms ease, border-color 130ms ease, transform 130ms ease;
+}
+.support-button:hover:not(:disabled), .support-icon:hover:not(:disabled) { border-color: #8ea3ba; background: #2a3a4c; }
+.support-button:active:not(:disabled) { transform: translateY(1px); }
+.support-button:disabled, .support-icon:disabled { opacity: .45; cursor: default; }
+.support-button.is-primary { color: #1f1910; background: var(--support-accent); border-color: var(--support-accent); }
+.support-button.is-primary:hover:not(:disabled) { background: #f0cd90; border-color: #f0cd90; }
+.support-button.is-quiet { position: relative; color: #c9d6e3; background: transparent; }
+.support-alert-dot { position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--support-accent); box-shadow: 0 0 0 2px var(--support-bg); }
+.support-button.is-success { color: #c8f0d8; border-color: #3f7259; background: #18342a; }
+.support-button.is-success:hover:not(:disabled) { background: #1f4536; border-color: #5c9a7b; }
+.player-support button:focus-visible, .player-support a:focus-visible, .player-support input:focus-visible,
+.player-support textarea:focus-visible { outline: 2px solid var(--support-accent); outline-offset: 2px; }
+.support-icon { padding: 5px 7px; }
+
+/* Notices and banners */
+.support-notice { gap: 10px; margin-bottom: 12px; padding: 9px 12px; border: 1px solid #3f735e; background: #16302a; border-radius: 8px; font-size: .85rem; }
+.support-notice > i { color: var(--support-success); }
+.support-notice > span { flex: 1; }
+.support-notice .support-icon { background: transparent; border-color: transparent; }
+.support-notice.is-error { background: #36222a; border-color: #9a5564; }
+.support-notice.is-error > i { color: #ffadbd; }
+.support-fade-enter-active, .support-fade-leave-active { transition: opacity 180ms ease, transform 180ms ease; }
+.support-fade-enter, .support-fade-leave-to { opacity: 0; transform: translateY(-4px); }
+.support-companion {
+  display: flex; gap: 11px; align-items: flex-start; margin-bottom: 12px; padding: 10px 13px;
+  border: 1px solid #5d5338; border-radius: 9px; background: linear-gradient(100deg, #2b2619, #1d2230 70%);
+}
+.support-companion-icon {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px;
+  color: var(--support-accent); background: var(--support-accent-soft);
+}
+.support-companion strong { display: block; color: #f1dfbd; font-size: .84rem; font-weight: 650; }
+.support-companion p { margin: 2px 0 0; color: #cbbfa6; font-size: .78rem; line-height: 1.45; }
+.support-banner { display: flex; gap: 9px; align-items: flex-start; margin: 12px 23px 0; padding: 9px 12px; border-radius: 8px; border: 1px solid; font-size: .8rem; line-height: 1.45; }
+.support-banner i { margin-top: 2px; }
+.support-banner.is-warning { color: #ffd9b5; background: #33261b; border-color: #79583a; }
+.support-banner.is-info { color: #d3e6fb; background: #1a2a3c; border-color: #38557a; }
+.support-banner.is-success { color: #cdeedb; background: #172d25; border-color: #3a6853; }
+
+/* Workspace */
+.support-workspace {
+  display: grid; grid-template-columns: minmax(260px, min(27%, 420px)) minmax(0, 1fr) minmax(230px, min(22%, 380px));
+  min-height: 640px; border: 1px solid var(--support-border); border-radius: 14px;
+  background:
+    radial-gradient(900px 320px at 50% -120px, rgba(223, 185, 118, .07), transparent 70%),
+    var(--support-bg);
+  overflow: hidden; box-shadow: 0 18px 50px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .03);
+}
+
+/* Queue */
+.support-queue { display: flex; flex-direction: column; min-width: 0; background: var(--support-pane); border-right: 1px solid var(--support-border); }
+.support-queue-controls { padding: 16px 14px 12px; border-bottom: 1px solid var(--support-border); }
+.support-section-title { justify-content: space-between; margin-bottom: 12px; }
+.support-section-title h2, .support-inspector h2 { margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--support-muted); }
+.support-count { min-width: 24px; padding: 1px 8px; border-radius: 999px; background: #263443; color: var(--support-text); font-size: .74rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.support-search { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--support-muted); border: 1px solid var(--support-border-strong); border-radius: 8px; background: var(--support-bg); padding: 0 10px; transition: border-color 130ms ease; }
+.support-search:focus-within { border-color: var(--support-accent); }
+.support-search input { width: 100%; min-width: 0; padding: 8px 0; background: transparent; border: 0; color: var(--support-text); font-size: .84rem; }
+.support-search input:focus-visible { outline: none; }
+.support-search-key { flex: none; padding: 0 6px; border-radius: 4px; border: 1px solid var(--support-border-strong); background: #1f2a37; color: var(--support-muted); font-size: .68rem; box-shadow: none; }
+.support-search input::placeholder { color: #7f91a5; }
+.support-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; margin-top: 10px; padding: 3px; border-radius: 8px; background: var(--support-bg); border: 1px solid var(--support-border); }
+.support-filters button { border: 0; border-radius: 6px; padding: 5px 4px; color: var(--support-muted); background: transparent; font-size: .72rem; font-weight: 650; white-space: nowrap; }
+.support-filters button:hover { color: var(--support-text); }
+.support-filters button[aria-pressed="true"] { color: #1f1910; background: var(--support-accent); }
+.support-case-list { flex: 1; padding: 0; margin: 0; list-style: none; max-height: 640px; overflow: auto; }
+.support-case-row {
+  position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 11px; width: 100%; border: 0; border-bottom: 1px solid #263342;
+  padding: 12px 14px 11px 14px; background: transparent; text-align: left; color: var(--support-text);
+  transition: background-color 150ms ease;
+}
+.support-row-main { display: block; min-width: 0; }
+.support-row-avatar {
+  position: relative; display: grid; place-items: center; width: 34px; height: 34px; margin-top: 1px;
+  border-radius: 10px; font-size: .92rem; font-weight: 700;
+}
+.support-row-presence { position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--support-pane); background: #5d6d7f; }
+.support-row-presence.presence-online { background: var(--support-success); }
+.support-row-presence.presence-unknown { background: #3a4757; }
+.support-case-list.is-entering li { animation: support-rise 420ms cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 32ms); }
+@keyframes support-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.support-unread {
+  flex: none; padding: 1px 7px; border-radius: 999px; color: #241b11; background: var(--support-accent);
+  font-size: .62rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  box-shadow: 0 0 0 0 rgba(223, 185, 118, .6); animation: support-glow 2.2s ease-out infinite;
+}
+@keyframes support-glow { 0% { box-shadow: 0 0 0 0 rgba(223, 185, 118, .55); } 70% { box-shadow: 0 0 0 7px rgba(223, 185, 118, 0); } 100% { box-shadow: 0 0 0 0 rgba(223, 185, 118, 0); } }
+.support-case-row.is-unread strong { color: #fff; }
+.support-case-row.is-unread .support-case-snippet { color: #e3ebf3; }
+.support-case-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; }
+.support-case-row.urgency-1::before { background: #a57a45; }
+.support-case-row.urgency-2::before { background: #e07b5a; }
+.support-case-row:hover:not(:disabled) { background: #1d2a38; }
+.support-case-row.is-selected { background: linear-gradient(90deg, rgba(223, 185, 118, .1), #233041 46%); }
+.support-case-row.is-selected::before { background: var(--support-accent); }
+.support-row-top, .support-row-bottom { gap: 8px; min-width: 0; }
+.support-row-top strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.support-row-top time { color: var(--support-muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.support-case-snippet {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  color: #c3cfdc; margin: 5px 0 8px; font-size: .79rem; line-height: 1.4; overflow-wrap: anywhere;
+}
+.support-row-bottom { flex-wrap: wrap; gap: 6px; }
+.support-row-owner { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; min-width: 0; max-width: 50%; color: var(--support-muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-row-owner.is-mine { color: var(--support-accent); }
+.support-avatar { display: inline-grid; flex: none; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: #2d3d50; color: var(--support-text); font-size: .62rem; font-weight: 700; }
+.support-row-owner.is-mine .support-avatar { background: var(--support-accent-soft); color: var(--support-accent); }
+.support-avatar.is-large { width: 38px; height: 38px; font-size: 1rem; background: linear-gradient(145deg, #34465b, #243242); }
+.support-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: .68rem; font-weight: 650; line-height: 1.35; white-space: nowrap; color: #cfe2fb; background: #213650; }
+.support-chip.status-waiting { background: #3a2d1b; color: #f6ce91; }
+.support-chip.status-resolved { background: #193a2e; color: #b8e6cc; }
+.support-chip.status-merged { background: #2a2540; color: #cbbcf3; }
+.support-chip.is-urgent { background: #3d2420; color: var(--support-warning); }
+.support-chip.is-alt { margin-left: 4px; padding: 0 6px; font-size: .62rem; letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
+.support-chip.delivery-failed { background: #3d2228; color: #ffb2c0; }
+.support-chip.delivery-mail { background: #1a2a3c; color: var(--support-info); }
+.support-chip.is-live { background: #173229; color: var(--tone-green); }
+.support-chip.delivery-pending, .support-chip.delivery-unconfirmed { background: #3a2c1b; color: var(--support-warning); }
+.support-pagination { justify-content: space-between; padding: 9px 14px; border-top: 1px solid var(--support-border); font-size: .75rem; color: var(--support-muted); }
+.support-empty { display: grid; justify-items: center; gap: 6px; margin: 34px 18px; color: var(--support-muted); text-align: center; font-size: .8rem; }
+.support-empty i { font-size: 1.6rem; margin-bottom: 4px; color: #6f8296; }
+.support-empty strong { color: var(--support-text); font-size: .88rem; }
+.support-skeleton { display: block; width: 100%; height: 58px; border-radius: 8px; background: linear-gradient(90deg, #1d2734 0%, #243142 50%, #1d2734 100%); background-size: 200% 100%; animation: support-shimmer 1.3s ease-in-out infinite; }
+@keyframes support-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* Thread */
+.support-thread { display: flex; flex-direction: column; min-width: 0; }
+.support-placeholder { flex: 1; display: grid; justify-items: center; align-content: center; gap: 7px; min-height: 360px; padding: 20px; color: var(--support-muted); text-align: center; font-size: .82rem; }
+.support-placeholder i { font-size: 1.8rem; color: #6f8296; margin-bottom: 4px; }
+.support-placeholder strong { color: var(--support-text); font-size: .95rem; }
+.support-thread-header { padding: 18px 23px 0; border-bottom: 1px solid var(--support-border); background: linear-gradient(180deg, #16202b, var(--support-bg)); }
+.support-case-meta { flex-wrap: wrap; gap: 7px; color: var(--support-muted); font-size: .74rem; font-variant-numeric: tabular-nums; }
+.support-case-number { font-weight: 650; letter-spacing: .02em; }
+.support-thread-heading { margin-top: 8px; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.support-identity { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.support-hero-avatar { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 12px; font-size: 1.15rem; font-weight: 700; }
+.support-thread-heading h2 { margin: 0; font-size: clamp(1.25rem, 2.3vw, 1.65rem); letter-spacing: -.025em; color: inherit; overflow-wrap: anywhere; }
+.support-heading-actions { display: flex; gap: 8px; }
+.support-presence { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: .72rem; font-weight: 650; color: var(--support-muted); background: #243241; }
+.support-presence::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.support-presence.presence-online { color: var(--support-success); background: #1c3a2e; }
+.support-presence.presence-unknown::before { background: transparent; border: 1px solid currentColor; }
+.support-presence.is-small { flex: none; gap: 4px; padding: 1px 7px; font-size: .64rem; }
+.support-presence.is-small::before { width: 5px; height: 5px; }
+.support-subline { margin: 6px 0 0; color: var(--support-muted); font-size: .8rem; }
+.support-subline strong { color: #d7e2ee; font-weight: 600; }
+.support-thread-tabs { display: flex; gap: 20px; margin-top: 12px; }
+.support-thread-tabs button {
+  display: flex; align-items: center; gap: 6px; padding: 8px 0 10px;
+  background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  color: var(--support-muted); font-size: .8rem; font-weight: 650;
+}
+.support-thread-tabs button:hover { color: var(--support-text); }
+.support-thread-tabs button[aria-pressed="true"] { border-bottom-color: var(--support-accent); color: var(--support-accent); }
+.support-tab-count { padding: 0 6px; border-radius: 999px; background: #263443; color: var(--support-muted); font-size: .68rem; }
+
+/* Timeline */
+.support-timeline { flex: 1; padding: 6px 23px 16px; max-height: 560px; overflow: auto; }
+.support-event { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 11px 0 9px; }
+.support-event::before { content: ""; position: absolute; left: 14px; top: 0; bottom: 0; width: 1px; background: var(--support-border); }
+.support-timeline > .support-event:first-child::before { top: 24px; }
+.support-timeline > .support-event:last-child::before { bottom: calc(100% - 24px); }
+.support-event-icon {
+  position: relative; z-index: 1; display: grid; place-items: center; width: 29px; height: 29px;
+  border: 1px solid #3f5066; border-radius: 50%; background: #1b2633; color: #bccadb; font-size: .8rem;
+}
+.support-original .support-event-icon { border-color: #6d5839; color: var(--support-accent); background: #2b251d; }
+.kind-note .support-event-icon { border-color: #5d4c7a; color: #cdb8f5; background: #251f33; }
+.kind-reply .support-event-icon { border-color: #3a5a82; color: var(--support-info); background: #1a2638; }
+.kind-parcel .support-event-icon { border-color: #3d6a55; color: var(--support-success); background: #182b24; }
+.kind-character_move .support-event-icon, .kind-corpse_move .support-event-icon { border-color: #3c6370; color: #9fdbea; background: #182a30; }
+.kind-pending .support-event-icon { border-color: #7a5937; color: var(--support-warning); background: #30241a; }
+.kind-chat_out .support-event-icon { border-color: #6d5839; color: var(--support-accent); }
+.kind-chat_in .support-event-icon { border-color: #3a5a82; color: var(--support-info); }
+.kind-resolve .support-event-icon { border-color: #3d6a55; color: var(--support-success); }
+.kind-merge .support-event-icon { border-color: #554a7a; color: #cbbcf3; }
+.support-event-body { min-width: 0; padding-top: 4px; }
+.support-event-heading { justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; }
+.support-event-heading h3 { color: inherit; font-size: .82rem; font-weight: 650; margin: 0; line-height: 1.35; }
+.support-event-heading h3 span, .support-event-heading time, .support-receipt { color: var(--support-muted); font-size: .72rem; font-weight: 400; }
+.support-event-body p { margin: 6px 0 0; color: #d1dce8; font-size: .86rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.support-event-body .support-event-detail { color: var(--support-muted); font-size: .8rem; }
+.support-original p { padding: 11px 13px; border: 1px solid #4a3e2c; border-radius: 0 9px 9px; background: #211d18; }
+.kind-note p { padding: 8px 11px; border-left: 2px solid #6d5a92; background: #1c1a26; border-radius: 0 6px 6px 0; }
+.kind-chat_in p, .kind-chat_out p { display: inline-block; max-width: 100%; padding: 7px 11px; border-radius: 0 9px 9px; border: 1px solid #344a63; background: #1a2637; }
+.kind-chat_out p { border-color: #5c4b32; background: #2a251d; }
+.support-event.is-compact { padding-top: 0; }
+.support-event.is-compact .support-event-icon { visibility: hidden; }
+.support-event.is-compact .support-event-heading { display: none; }
+.support-event.is-compact p { margin-top: 2px; }
+.support-event-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 7px; }
+.support-day { position: relative; display: flex; justify-content: center; margin: 10px 0 4px; }
+.support-day::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--support-border); }
+.support-day span { position: relative; padding: 1px 10px; border-radius: 999px; border: 1px solid var(--support-border); background: var(--support-bg); color: var(--support-muted); font-size: .68rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+
+/* Note composer */
+.support-note { padding: 12px 23px 16px; border-top: 1px solid var(--support-border); background: var(--support-pane); }
+.support-note label { display: flex; align-items: center; gap: 6px; color: var(--support-muted); font-size: .75rem; font-weight: 650; margin-bottom: 6px; }
+.support-note textarea { width: 100%; min-height: 60px; padding: 8px 10px; color: var(--support-text); background: var(--support-bg); border: 1px solid var(--support-border-strong); border-radius: 8px; resize: vertical; font-size: .85rem; }
+.support-note textarea::placeholder { color: #75879b; }
+.support-note-actions { justify-content: flex-end; gap: 12px; margin-top: 8px; }
+.support-hint { color: #7f91a5; font-size: .72rem; }
+.support-hint kbd { padding: 1px 5px; border-radius: 4px; border: 1px solid var(--support-border-strong); background: #1f2a37; color: var(--support-muted); font-size: .66rem; box-shadow: none; }
+
+/* Inspector */
+.support-inspector { min-width: 0; border-left: 1px solid var(--support-border); background: var(--support-pane); }
+.support-inspector section { padding: 16px 15px; }
+.support-inspector section + section { border-top: 1px solid var(--support-border); }
+.support-character-card { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px; border: 1px solid var(--support-border); border-radius: 9px; background: var(--support-bg); }
+.support-character-card > div { display: grid; flex: 1; min-width: 0; line-height: 1.3; }
+.support-character-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-character-card span { color: var(--support-muted); font-size: .74rem; }
+.support-inspector dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; margin: 14px 0; font-size: .77rem; }
+.support-inspector dt { color: var(--support-muted); font-weight: 400; }
+.support-inspector dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.support-related { display: grid; gap: 2px; }
+.support-history h2 { display: flex; align-items: center; gap: 8px; }
+.support-history ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.support-history li { border: 1px solid var(--support-border); border-radius: 9px; background: var(--support-raised); overflow: hidden; }
+.support-history-case {
+  display: grid; gap: 3px; width: 100%; padding: 8px 10px; text-align: left; border: 0; background: transparent; color: var(--support-text);
+}
+.support-history-case:hover { background: #223040; }
+.support-history-top { display: flex; align-items: center; gap: 7px; font-size: .76rem; }
+.support-history-top time { margin-left: auto; color: var(--support-muted); font-size: .7rem; }
+.support-history-message { color: #c9d6e3; font-size: .74rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.support-history-resolution { display: flex; gap: 5px; color: #9fd8b8; font-size: .7rem; line-height: 1.35; }
+.support-history-resolution i { margin-top: 2px; }
+.support-history-merge {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 5px; border: 0;
+  border-top: 1px solid var(--support-border); background: #1a2330; color: #cbbcf3; font-size: .72rem; font-weight: 600;
+}
+.support-history-merge:hover:not(:disabled) { background: #2a2540; }
+.support-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 7px; margin-bottom: 8px; }
+.support-tile {
+  --tone: var(--tone-blue);
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 9px; align-items: center;
+  padding: 9px 10px; text-align: left; color: var(--support-text);
+  border: 1px solid color-mix(in srgb, var(--tone) 26%, var(--support-border)); border-radius: 10px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--tone) 13%, #17202b), #17202b 75%);
+  transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease;
+}
+.support-tile:hover:not(:disabled) { transform: translateY(-1px); border-color: color-mix(in srgb, var(--tone) 60%, var(--support-border)); box-shadow: 0 8px 20px rgba(0, 0, 0, .28); }
+.support-tile:disabled { opacity: .45; cursor: default; }
+.support-tile-icon { grid-row: span 2; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: var(--tone); background: color-mix(in srgb, var(--tone) 17%, transparent); }
+.support-tile strong { font-size: .8rem; font-weight: 650; line-height: 1.2; }
+.support-tile small { color: var(--support-muted); font-size: .68rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-copy { display: grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--support-muted); }
+.support-copy:hover { color: var(--support-accent); border-color: var(--support-border-strong); background: #1f2a37; }
+.support-copy.is-inline { display: inline-grid; width: 22px; height: 22px; margin-left: 4px; vertical-align: -5px; font-size: .72rem; }
+.support-copyable { white-space: nowrap; }
+.support-related a { display: grid; grid-template-columns: 16px minmax(0, 1fr) 14px; align-items: center; gap: 7px; padding: 6px 4px; border-radius: 6px; color: #d3e1f3; font-size: .77rem; }
+.support-related a:hover { color: var(--support-accent); background: #1d2836; text-decoration: none; }
+.support-related a .fe-arrow-up-right { color: var(--support-muted); }
+.support-actions { display: grid; gap: 7px; }
+.support-actions h2 { margin-bottom: 3px; }
+.support-actions .support-actions-divider { margin-top: 8px; }
+.support-actions button { justify-content: flex-start; }
+.support-back { display: none; }
+
+/* Wide, tall screens: the workspace fills the window and each pane scrolls. */
+@media (min-width: 1181px) and (min-height: 760px) {
+  .support-workspace { height: max(640px, var(--support-fill, calc(100vh - 344px))); min-height: 0; }
+  .support-queue, .support-thread { min-height: 0; }
+  .support-case-list, .support-timeline { max-height: none; min-height: 0; }
+  .support-inspector { overflow-y: auto; }
+}
+@media (min-width: 1900px) {
+  .support-thread-header, .support-note, .support-timeline { padding-left: 32px; padding-right: 32px; }
+  .support-banner { margin-left: 32px; margin-right: 32px; }
+  .support-timeline .support-event-body p { max-width: 1100px; }
+  .support-timeline > *, .support-note { max-width: 1500px; }
+}
+@media (min-width: 2600px) {
+  .support-workspace { grid-template-columns: minmax(260px, min(22%, 520px)) minmax(0, 1fr) minmax(230px, min(18%, 460px)); }
+}
+@media (max-width: 1100px) {
+  .support-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1180px) {
+  .support-workspace { grid-template-columns: minmax(230px, 33%) minmax(0, 1fr); }
+  .support-queue { grid-row: 1 / span 2; }
+  .support-inspector { grid-column: 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-left: 0; border-top: 1px solid var(--support-border); }
+  .support-inspector section + section { border-top: 0; border-left: 1px solid var(--support-border); }
+}
+@media (max-width: 680px) {
+  .support-button-label { display: none; }
+  .support-workspace { display: block; min-height: 0; }
+  .support-queue { border-right: 0; }
+  .support-thread, .support-inspector { display: none; }
+  .support-workspace.show-case .support-queue { display: none; }
+  .support-workspace.show-case .support-thread { display: flex; }
+  .support-workspace.show-case .support-inspector { display: grid; grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--support-border); }
+  .support-workspace.show-case .support-inspector section + section { border-left: 0; border-top: 1px solid var(--support-border); }
+  .support-thread-header, .support-note, .support-timeline { padding-left: 14px; padding-right: 14px; }
+  .support-banner { margin-left: 14px; margin-right: 14px; }
+  .support-back { display: inline-flex; align-self: flex-start; margin: 10px 0 0 14px; }
+  .support-inspector section { padding: 13px 14px; }
+  .support-title p, .support-live { display: none; }
+  .support-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .support-summary > :first-child { grid-column: span 2; }
+  .support-stat { gap: 8px; padding: 7px 10px; }
+  .support-stat strong { font-size: 1.02rem; }
+  .support-stat-icon { width: 26px; height: 26px; border-radius: 8px; font-size: 13px; }
+  .support-search-key { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .support-button, .support-icon, .support-case-row { transition: none; }
+  .support-live-dot::after, .is-spinning, .support-skeleton, .support-unread, .support-case-list.is-entering li { animation: none; }
+  .support-stat, .support-tile { transition: none; }
+}
+</style>
+
+<style>
+/* Shared look for Player Support dialogs rendered outside the scoped tree. */
+.support-modal .modal-content { color: #e1ebf6; background: #121a24; border: 1px solid #354658; border-radius: 12px; box-shadow: 0 24px 60px rgba(0, 0, 0, .45); }
+.support-modal .modal-header, .support-modal .modal-footer { background: #151f2a; border-color: #2a3948; padding: 14px 20px; }
+.support-modal .modal-header { border-radius: 12px 12px 0 0; }
+.support-modal .modal-footer { border-radius: 0 0 12px 12px; }
+.support-modal .modal-title { font-size: 1.05rem; font-weight: 650; color: #f0f4f8; }
+.support-modal .modal-header .close { color: #b4c7d9; text-shadow: none; opacity: .8; }
+.support-modal .modal-body { padding: 18px 20px; }
+.support-modal label { display: block; margin: 12px 0 6px; font-size: .8rem; font-weight: 650; color: #c9d6e3; }
+.support-modal label span { color: #8fa1b5; font-weight: 400; }
+.support-modal .form-control { color: #eef3f8; background: #0e151d; border: 1px solid #45576b; border-radius: 8px; }
+.support-modal .form-control:focus { border-color: #dfb976; box-shadow: 0 0 0 3px rgba(223, 185, 118, .18); }
+.support-modal .form-control::placeholder { color: #75879b; }
+.support-modal-lead { margin: 0; font-size: .92rem; }
+.support-modal-hint { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 0; padding: 9px 11px; border-radius: 8px; color: #d3e6fb; background: #1a2a3c; border: 1px solid #38557a; font-size: .8rem; }
+.support-modal-hint i { margin-top: 2px; }
+.support-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.support-quick button {
+  padding: 3px 10px; border-radius: 999px; border: 1px solid #3c4f63; background: #172230; color: #c9d6e3; font-size: .74rem;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.support-quick button:hover { border-color: #dfb976; color: #f3dcae; background: #241f18; }
+</style>

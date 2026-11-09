@@ -6,6 +6,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/telnet"
 	"strings"
+	"sync"
 )
 
 type Client struct {
@@ -13,6 +14,7 @@ type Client struct {
 	logger *logger.AppLogger
 
 	pool                []*telnet.Client
+	poolMu              sync.Mutex
 	lastUsedClientIndex int
 }
 
@@ -32,14 +34,17 @@ func NewClient(t *telnet.Client, logger *logger.AppLogger) *Client {
 
 // GetTelnetClient returns a telnet client from the pool
 func (c *Client) GetTelnetClient() *telnet.Client {
+	c.poolMu.Lock()
 	c.lastUsedClientIndex++
 	if c.lastUsedClientIndex >= len(c.pool) {
 		c.lastUsedClientIndex = 0
 	}
+	index := c.lastUsedClientIndex
+	c.poolMu.Unlock()
 
-	c.logger.DebugVvv().Any("lastUsedClientIndex", c.lastUsedClientIndex).Msg("GetTelnetClient")
+	c.logger.DebugVvv().Any("lastUsedClientIndex", index).Msg("GetTelnetClient")
 
-	return c.pool[c.lastUsedClientIndex]
+	return c.pool[index]
 }
 
 type WorldZoneList struct {
@@ -216,7 +221,15 @@ type WorldClientList struct {
 }
 
 func (c *Client) GetWorldClientList() (WorldClientList, error) {
-	o, err := c.GetTelnetClient().Command(telnet.CommandConfig{Command: "api get_client_list", EnforceJson: true})
+	return ReadWorldClientList(c.GetTelnetClient(), false)
+}
+
+func ReadWorldClientList(client *telnet.Client, full bool) (WorldClientList, error) {
+	command := "api get_client_list"
+	if full {
+		command += " full"
+	}
+	o, err := client.Command(telnet.CommandConfig{Command: command, EnforceJson: true})
 	if err != nil {
 		return WorldClientList{}, err
 	}

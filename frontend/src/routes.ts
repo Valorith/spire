@@ -4,6 +4,7 @@ export const ROUTE = {
   ADMIN_PLAYERS_ONLINE: "/admin/players-online",
   ADMIN_MAIL_PARCELS: "/admin/mail-parcels",
   ADMIN_PLAYER_OPERATIONS: "/admin/player-operations",
+  ADMIN_PLAYER_SUPPORT: "/admin/player-support",
   ADMIN_INVENTORY_KEYRING: "/admin/inventory-keyring",
   ADMIN_CHAT_ADMINISTRATION: "/admin/chat-administration",
   ADMIN_ZONE_SERVERS: "/admin/zones",

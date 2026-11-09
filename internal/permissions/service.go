@@ -54,6 +54,7 @@ func (s *Service) RegisterManualResources() map[string][]string {
 		"Mail & Parcels Editor":     {"mail-parcels-editor"},
 		"Mercenary Editor":          {"mercenary-editor"},
 		"Player Operations":         {"player-operations"},
+		"Player Support":            {"player-support"},
 		"Inventory & Keyring":       {"inventory-keyring"},
 		"Data Buckets Editor":       {"data-bucket-editor"},
 		"QGlobals Editor":           {"qglobal-editor"},
@@ -355,6 +356,12 @@ func (s *Service) IsWriteRequest(c echo.Context) bool {
 }
 
 func (s *Service) CanAccessResource(c echo.Context, user models.User, connectionId uint) bool {
+	return s.CanAccessRoute(c, user, connectionId, c.Request().URL.Path, s.IsWriteRequest(c))
+}
+
+// CanAccessRoute also checks dependencies of an operation that uses another
+// editor's write path internally.
+func (s *Service) CanAccessRoute(c echo.Context, user models.User, connectionId uint, path string, isWriteRequest bool) bool {
 	p := s.getUserPermissions(c, user, connectionId)
 
 	if s.debug >= 3 {
@@ -369,8 +376,6 @@ func (s *Service) CanAccessResource(c echo.Context, user models.User, connection
 		return true
 	}
 
-	isWriteRequest := s.IsWriteRequest(c)
-
 	// global level rules
 	if p.canReadAll && !isWriteRequest {
 		return true
@@ -380,11 +385,11 @@ func (s *Service) CanAccessResource(c echo.Context, user models.User, connection
 	}
 
 	// match on v1 routes
-	if strings.Contains(c.Request().URL.Path, "/api/v1/") {
+	if strings.Contains(path, "/api/v1/") {
 		// the first parameter after `v1` is what we're describing as the "resource"
-		params := strings.Split(c.Request().URL.Path, "/")
+		params := strings.Split(path, "/")
 		resource := ""
-		if len(params) > 0 {
+		if len(params) > 3 {
 			resource = strings.TrimSpace(params[3])
 		}
 
@@ -393,7 +398,7 @@ func (s *Service) CanAccessResource(c echo.Context, user models.User, connection
 				// first check looks for CRUD generated resources eg task/tasks
 				// second check looks for things that would be in manually registered prefixes
 
-				isManualRouteMatch := strings.Contains(c.Request().URL.Path, prefix) && strings.Contains(prefix, "/")
+				isManualRouteMatch := strings.Contains(path, prefix) && strings.Contains(prefix, "/")
 
 				if prefix == resource || isManualRouteMatch {
 					if s.debug >= 3 {
@@ -401,7 +406,7 @@ func (s *Service) CanAccessResource(c echo.Context, user models.User, connection
 							Any("permissions", p).
 							Any("user", user).
 							Str("prefix", prefix).
-							Str("route", c.Request().URL.Path).
+							Str("route", path).
 							Msg("Found match for prefix")
 					}
 
