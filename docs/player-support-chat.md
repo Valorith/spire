@@ -10,7 +10,7 @@ The petition inbox uses the local EQEmu World roster for account presence. **Onl
 
    It only calls APIs that both trees share. For example, it starts transactions with a plain `START TRANSACTION` query because `TransactionBegin()` returns a result in Valorith/Server but `void` upstream.
 2. Build and install the patched World and zone binaries on your test installation. Keep the World console reachable from Spire on IPv4 loopback. Spire reads its port from `server.world.telnet` in `eqemu_config.json`.
-3. Open **Server Admin → Player Support** and select a petition. Send a tell from **Live chat** to turn on **Messages** automatically. Use **Enable messages** if you want the player to write first. In EverQuest, use `/reply <message>` after a Game Master tell or address it directly with `/tell *GameMaster <message>`.
+3. Open **Server Admin → Player Support** and select a petition. Send a tell from **Live chat** to turn on **Messages** automatically. Use **Enable messages** if you want the player to write first. In EverQuest, the player can answer with `#petition <message>`, `/reply <message>` after a Game Master tell, or `/tell *GameMaster <message>`.
 
 Turning **Messages** on or off is recorded on the case timeline with the staff member's name. When you resolve a case you can add an optional resolution summary, which is shown on the timeline next to the status change.
 
@@ -21,6 +21,16 @@ Spire and the patched World use console protocol version 2 to confirm replies. I
 The patched World also refreshes the parcel window and shows the native arrival notice for online recipients when Spire sends a parcel to the local server. Parcels are committed before World is notified. Players can collect queued parcels from a parcel merchant when they next open the window.
 
 Test an account with its petitioning character offline and an alternate online. The queue should show **Online** and the conversation should show **Character unavailable**. Also test that reconnecting World restores messaging on an enabled petition and that switching to an unrelated database connection shows **Unknown** for presence.
+
+## Filing petitions with #petition
+
+The patch adds a `#petition` command for players. It works alongside `/guidehelp`, which is how current clients open the petition window.
+
+- `#petition <message>` files a petition when the player has none. It creates the same petition as `/guidehelp`, so it appears in Player Support right away.
+- If the player already has an open petition, `#petition <message>` adds to it. The text goes to Game Master like a tell. Spire records it on the case when **Messages** is on, and otherwise tells the player why it could not.
+- `#petition` with no message shows whether a petition is open and how to add to or withdraw it.
+
+Server operators can rename or restrict the command in the `command_settings` table like any other command.
 
 ## Character and corpse recovery
 

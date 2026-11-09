@@ -82,7 +82,7 @@ index ba9f47ff526295d2cc93a7c10c60b3276ce4a578..7f5e352e0933efb071a3051ce4a81db9
  			size_t m_cursor;
  			char m_line[MaxConsoleLineLength];
 diff --git a/world/console.cpp b/world/console.cpp
-index 364d40375917f3a9c0794dac6b523423d4a75779..5fefa1d56dd3f494ddd7b144fe49a353f46b694b 100644
+index 364d40375917f3a9c0794dac6b523423d4a75779..368a5c6b3a1616a45618cf69695668b4073c330f 100644
 --- a/world/console.cpp
 +++ b/world/console.cpp
 @@ -21,9 +21,12 @@
@@ -133,9 +133,9 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5fefa1d56dd3f494ddd7b144fe49a353
 +{
 +	const char *message = "Game Master messaging is unavailable right now. Please try again.";
 +	if (decision == "no_petition") {
-+		message = "This character has no active petition. Use /petition before messaging Game Master.";
++		message = "This character has no active petition. Use #petition [message] or /guidehelp to file one.";
 +	} else if (decision == "messages_off") {
-+		message = "Messaging is turned off for your petition. A Game Master must enable it before you can reply.";
++		message = "Your petition is in the queue. A Game Master will turn on messages when they are ready to reply.";
 +	} else if (decision == "invalid") {
 +		message = "Your message was empty or too long. Please shorten it and try again.";
 +	} else if (decision == "timeout") {
@@ -810,7 +810,7 @@ index f361a00092e8c1fb8b0c3aee59677dda3969b0af..0b6c1da88e053829c2998cab3f656bf8
  		break;
  	}
 diff --git a/zone/client_packet.cpp b/zone/client_packet.cpp
-index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..4414e4a55ac4ee11693d5ccba572212950dcf64d 100644
+index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..650ff121d47542e7936865e7964dff538ba1670e 100644
 --- a/zone/client_packet.cpp
 +++ b/zone/client_packet.cpp
 @@ -547,6 +547,13 @@ void Client::CompleteConnect()
@@ -827,6 +827,133 @@ index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..4414e4a55ac4ee11693d5ccba5722129
  	hpupdate_timer.Start();
  	autosave_timer.Start();
  	SetDuelTarget(0);
+@@ -11920,48 +11927,50 @@ void Client::Handle_OP_Petition(const EQApplicationPacket *app)
+ {
+ 	if (app->size <= 1)
+ 		return;
+-	if (!worldserver.Connected())
++	const auto *text = reinterpret_cast<const char *>(app->pBuffer);
++	FilePetition(std::string(text, strnlen(text, app->size)));
++}
++
++// /guidehelp and #petition share this path so both create the same petition.
++bool Client::FilePetition(const std::string &text)
++{
++	if (!worldserver.Connected()) {
+ 		Message(Chat::Red, "Error: World server disconnected");
+-	/*else if(petition_list.FindPetitionByAccountName(AccountName()))
+-	{
+-	Message(Chat::White,"You already have a petition in queue, you cannot petition again until this one has been responded to or you have deleted the petition.");
+-	return;
+-	}*/
+-	else
+-	{
+-		if (PetitionList::Instance()->FindPetitionByAccountName(AccountName()))
+-		{
+-			Message(Chat::White, "You already have a petition in the queue, you must wait for it to be answered or use /deletepetition to delete it.");
+-			return;
+-		}
+-		auto pet = new Petition(CharacterID());
+-		pet->SetAName(AccountName());
+-		pet->SetClass(GetClass());
+-		pet->SetLevel(GetLevel());
+-		pet->SetCName(GetName());
+-		pet->SetRace(GetRace());
+-		pet->SetLastGM("");
+-		pet->SetCName(GetName());
+-		pet->SetPetitionText((char*)app->pBuffer);
+-		pet->SetZone(zone->GetZoneID());
+-		pet->SetUrgency(0);
+-		PetitionList::Instance()->AddPetition(pet);
+-		database.InsertPetitionToDB(pet);
+-		PetitionList::Instance()->UpdateGMQueue();
+-		PetitionList::Instance()->UpdateZoneListQueue();
+-		worldserver.SendEmoteMessage(
+-			0,
+-			0,
+-			AccountStatus::QuestTroupe,
+-			Chat::Yellow,
+-			fmt::format(
+-				"{} has made a petition. ID: {}",
+-				GetCleanName(),
+-				pet->GetID()
+-			).c_str()
+-		);
++		return false;
+ 	}
+-	return;
++	if (PetitionList::Instance()->FindPetitionByAccountName(AccountName()))
++	{
++		Message(Chat::White, "You already have a petition in the queue, you must wait for it to be answered or use /deletepetition to delete it.");
++		return false;
++	}
++	std::string petition_text = text;
++	auto pet = new Petition(CharacterID());
++	pet->SetAName(AccountName());
++	pet->SetClass(GetClass());
++	pet->SetLevel(GetLevel());
++	pet->SetCName(GetName());
++	pet->SetRace(GetRace());
++	pet->SetLastGM("");
++	pet->SetCName(GetName());
++	pet->SetPetitionText(petition_text.data());
++	pet->SetZone(zone->GetZoneID());
++	pet->SetUrgency(0);
++	PetitionList::Instance()->AddPetition(pet);
++	database.InsertPetitionToDB(pet);
++	PetitionList::Instance()->UpdateGMQueue();
++	PetitionList::Instance()->UpdateZoneListQueue();
++	worldserver.SendEmoteMessage(
++		0,
++		0,
++		AccountStatus::QuestTroupe,
++		Chat::Yellow,
++		fmt::format(
++			"{} has made a petition. ID: {}",
++			GetCleanName(),
++			pet->GetID()
++		).c_str()
++	);
++	return true;
+ }
+ 
+ void Client::Handle_OP_PetitionBug(const EQApplicationPacket *app)
+diff --git a/zone/client_packet.h b/zone/client_packet.h
+index 3ecb432487bb3d8eca8010644d75b7b565421b85..b15f1ed9766e4c041903acbb35e1839475d2b9b3 100644
+--- a/zone/client_packet.h
++++ b/zone/client_packet.h
+@@ -240,6 +240,7 @@
+ 	void Handle_OP_PDeletePetition(const EQApplicationPacket *app);
+ 	void Handle_OP_PetCommands(const EQApplicationPacket *app);
+ 	void Handle_OP_Petition(const EQApplicationPacket *app);
++	bool FilePetition(const std::string &text);
+ 	void Handle_OP_PetitionBug(const EQApplicationPacket *app);
+ 	void Handle_OP_PetitionCheckIn(const EQApplicationPacket *app);
+ 	void Handle_OP_PetitionCheckout(const EQApplicationPacket *app);
+diff --git a/zone/command.cpp b/zone/command.cpp
+index 672a928cee738a8db6e4e1552c17e61dae7ce272..59a254b3ff38fe9d10028c7217f3036c2411ac3d 100644
+--- a/zone/command.cpp
++++ b/zone/command.cpp
+@@ -104,6 +104,7 @@ int command_init(void)
+ 		command_add("dbspawn2", "[Spawngroup ID] [Respawn] [Variance] [Condition ID] [Condition Minimum] - Spawn an NPC from a predefined row in the spawn2 table, Respawn and Variance are in Seconds (condition is optional)", AccountStatus::GMAdmin, command_dbspawn2) ||
+ 		command_add("delacct", "[Account ID|Account Name] - Delete an account by ID or Name", AccountStatus::GMLeadAdmin, command_delacct) ||
+ 		command_add("delpetition", "[petition number] - Delete a petition", AccountStatus::ApprenticeGuide, command_delpetition) ||
++		command_add("petition", "[message] - File a petition, or add to your open petition", AccountStatus::Player, command_petition) ||
+ 		command_add("depop", "[Start Spawn Timer] - Depop your NPC target and optionally start their spawn timer (false by default)", AccountStatus::Guide, command_depop) ||
+ 		command_add("depopzone", "[Start Spawn Timers] - Depop the zone and optionally start spawn timers (false by default)", AccountStatus::GMAdmin, command_depopzone) ||
+ 		command_add("devtools", "[menu|window] [enable|disable] - Manages Developer Tools (send no parameter for menu)", AccountStatus::GMMgmt, command_devtools) ||
+diff --git a/zone/command.h b/zone/command.h
+index 49d079e57bb9160268a04ed48832eeb1fbff1e44..f98b6cad47119455ef4904ec835d024efa3f3f7f 100644
+--- a/zone/command.h
++++ b/zone/command.h
+@@ -66,6 +66,7 @@ void command_databuckets(Client *c, const Seperator *sep);
+ void command_dbspawn2(Client *c, const Seperator *sep);
+ void command_delacct(Client *c, const Seperator *sep);
+ void command_delpetition(Client *c, const Seperator *sep);
++void command_petition(Client *c, const Seperator *sep);
+ void command_depop(Client *c, const Seperator *sep);
+ void command_depopzone(Client *c, const Seperator *sep);
+ void command_devtools(Client *c, const Seperator *sep);
 diff --git a/zone/corpse.cpp b/zone/corpse.cpp
 index a2bd14970730e5d32130d9029e0d3ba936ed8f30..b2edb709adb71e63ff2ce6014dc2fb69a59efd55 100644
 --- a/zone/corpse.cpp
@@ -879,6 +1006,46 @@ index 2dbfc3986b8c0c06e83ca75774937b4336c0148f..8c8693e237cd45a04528ea91865ec55a
  
  	uint32 GetCharID() { return m_character_id; }
  
+diff --git a/zone/gm_commands/delpetition.cpp b/zone/gm_commands/delpetition.cpp
+index f42cf277285cf77f11e18d5d0651c10228593322..a1aee7e0b8a06da3f60869b44ae0feae83bb12db 100755
+--- a/zone/gm_commands/delpetition.cpp
++++ b/zone/gm_commands/delpetition.cpp
+@@ -18,3 +18,35 @@ void command_delpetition(Client *c, const Seperator *sep)
+ 
+ }
+ 
++#include "zone/petitions.h"
++#include "zone/worldserver.h"
++
++extern WorldServer worldserver;
++
++// Players can file a petition without the /guidehelp window. While one is
++// open, the text goes to Game Master as a tell so Player Support can add it
++// to the case or tell the player why it cannot.
++void command_petition(Client *c, const Seperator *sep)
++{
++	std::string text = sep->argplus[1] ? sep->argplus[1] : "";
++	Strings::Trim(text);
++	const bool has_petition = PetitionList::Instance()->FindPetitionByAccountName(c->AccountName());
++	if (text.empty()) {
++		c->Message(
++			Chat::White,
++			has_petition ? "Your petition is in the queue. Use #petition [message] to add to it, or /deletepetition to withdraw it."
++			     : "Usage: #petition [message] - Describe your problem and a Game Master will respond."
++		);
++		return;
++	}
++	if (!has_petition) {
++		if (c->FilePetition(text)) {
++			c->Message(Chat::Yellow, "Your petition has been submitted. A Game Master will respond as soon as possible.");
++		}
++		return;
++	}
++	// Common Tongue at full skill, matching an ordinary tell.
++	if (!worldserver.SendChannelMessageRaw(c, "GameMaster", ChatChannel_Tell, 0, 0, 100, text.c_str())) {
++		c->Message(Chat::Red, "Error: World server disconnected");
++	}
++}
 diff --git a/zone/worldserver.cpp b/zone/worldserver.cpp
 index 070fae004d3f861dbccd2d37db361951bfc434b1..a603365d830f8810cf2848b0cef6f20dec8cef33 100644
 --- a/zone/worldserver.cpp

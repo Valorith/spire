@@ -364,7 +364,7 @@ export default {
     emptyHint () {
       if (this.search.trim()) return 'Try a character, account, or a phrase from the petition.'
       return { mine: 'Claim a case to see it here.', resolved: 'Resolved cases are kept here for reference.' }[this.filter] ||
-        'New in-game petitions appear here automatically.'
+        'Petitions players file with /guidehelp or #petition appear here automatically.'
     }
   },
   watch: {

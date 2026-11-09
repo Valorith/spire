@@ -18,7 +18,7 @@
       <div v-if="!messages.length" class="chat-empty">
         <span class="chat-empty-mark"><i class="fe fe-message-circle" aria-hidden="true"></i></span>
         <strong>No messages yet</strong>
-        <p v-if="canWrite && state === 'ready'">Send a tell to start the conversation. {{ record.character }} can answer with <code>/reply</code> or <code>/tell *GameMaster</code>.</p>
+        <p v-if="canWrite && state === 'ready'">Send a tell to start the conversation. {{ record.character }} can answer with <code>#petition</code>, <code>/reply</code> or <code>/tell *GameMaster</code>.</p>
         <p v-else>Tells you exchange with {{ record.character }} in game appear here.</p>
       </div>
       <article v-for="message in messages" :key="message.id" class="chat-message" :class="{ 'is-outgoing': message.kind === 'chat_out' }">
