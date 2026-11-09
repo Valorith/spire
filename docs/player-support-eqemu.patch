@@ -82,7 +82,7 @@ index ba9f47ff526295d2cc93a7c10c60b3276ce4a578..7f5e352e0933efb071a3051ce4a81db9
  			size_t m_cursor;
  			char m_line[MaxConsoleLineLength];
 diff --git a/world/console.cpp b/world/console.cpp
-index 364d40375917f3a9c0794dac6b523423d4a75779..5232772e1382146abdaefd49a21c06fbdb0c46bb 100644
+index 364d40375917f3a9c0794dac6b523423d4a75779..5fefa1d56dd3f494ddd7b144fe49a353f46b694b 100644
 --- a/world/console.cpp
 +++ b/world/console.cpp
 @@ -21,9 +21,12 @@
@@ -111,7 +111,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5232772e1382146abdaefd49a21c06fb
  /**
   * @param username
   * @param password
-@@ -373,6 +382,403 @@ void ConsoleTell(
+@@ -373,6 +382,404 @@ void ConsoleTell(
  	ZSList::Instance()->SendChannelMessage(tmpname, to.c_str(), ChatChannel_Tell, 0, Strings::Join(join_args, " ").c_str());
  }
  
@@ -422,7 +422,8 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5232772e1382146abdaefd49a21c06fb
 +		"zone_id = {}, x = {}, y = {}, z = {}, heading = {}",
 +		destination, x, y, z, heading
 +	);
-+	if (!corpse_id && !database.TransactionBegin().Success()) {
++	// Upstream EQEmu's TransactionBegin() returns void, so check the query itself.
++	if (!corpse_id && !database.QueryDatabase("START TRANSACTION").Success()) {
 +		reply("unavailable");
 +		return;
 +	}
@@ -515,7 +516,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5232772e1382146abdaefd49a21c06fb
  /**
   * @param connection
   * @param command
-@@ -1389,10 +1795,14 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
+@@ -1389,10 +1796,14 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
  	console->RegisterCall("md5", 50, "md5", std::bind(ConsoleMd5, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ooc", 50, "ooc [message]", std::bind(ConsoleOOC, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ping", 50, "ping", std::bind(ConsoleNull, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
