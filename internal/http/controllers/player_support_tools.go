@@ -78,7 +78,7 @@ func (p *PlayerSupportController) events(c echo.Context) error {
 		return supportError(c, err)
 	}
 	events := []supportEvent{}
-	var total int64
+	var total, newer int64
 	// player_event_logs is indexed by character, not account, so look up the
 	// account's characters first.
 	var characters []uint
@@ -97,6 +97,11 @@ func (p *PlayerSupportController) events(c echo.Context) error {
 		if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 			return supportError(c, err)
 		}
+		// The page places the "Petition filed" marker after this many events.
+		if err := query.Session(&gorm.Session{}).Where("e.created_at >= FROM_UNIXTIME(?)", view.SubmittedAt).
+			Count(&newer).Error; err != nil {
+			return supportError(c, err)
+		}
 		pages := int((total + supportEventPageSize - 1) / supportEventPageSize)
 		if page > pages && pages > 0 {
 			page = pages
@@ -113,7 +118,7 @@ func (p *PlayerSupportController) events(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, echo.Map{
 		"events": events, "hours": hours, "group": group, "filed_at": view.SubmittedAt,
-		"page": page, "page_size": supportEventPageSize, "total": total,
+		"page": page, "page_size": supportEventPageSize, "total": total, "newer": newer,
 	})
 }
 
@@ -831,6 +836,21 @@ func (p *PlayerSupportController) metrics(c echo.Context) error {
 		return supportError(c, err)
 	}
 	result := supportMetrics{Days: days, Filed: len(cases), Staff: []supportStaffMetrics{}}
+	// Spire records a case once staff open or act on it. Petitions still in
+	// the queue untouched count as filed too.
+	known := map[string]bool{}
+	for _, record := range cases {
+		known[record.SourceKey] = true
+	}
+	var native []models.Petition
+	if err := scope.eqemu.Select("dib, senttime").Where("senttime >= ?", since.Unix()).Find(&native).Error; err != nil {
+		return supportError(c, err)
+	}
+	for _, row := range native {
+		if !known[supportSourceKey(row)] {
+			result.Filed++
+		}
+	}
 	ids := make([]uint, 0, len(cases))
 	byID := map[uint]models.PlayerSupportCase{}
 	for _, record := range cases {

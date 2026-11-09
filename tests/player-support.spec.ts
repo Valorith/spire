@@ -107,6 +107,7 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
         return route.fulfill({ json: {
           events: matching.slice((page - 1) * 50, page * 50), hours: Number(url.searchParams.get('hours')) || 24, group,
           filed_at: filedAt, page, page_size: 50, total: matching.length,
+          newer: matching.filter(item => new Date(item.created_at).getTime() >= filedAt * 1000).length,
         } });
       }
       if (path.endsWith('/snapshots')) return route.fulfill({ json: { snapshots: [{ time_index: filedAt - 7200, items: 31 }] } });
@@ -533,6 +534,7 @@ test('shows the account’s events around the petition as evidence', async ({ pa
   await expect(evidence.getByRole('separator')).toContainText('Petition filed');
   await evidence.getByRole('button', { name: 'Older' }).click();
   await expect(pager).toContainText('Page 3 of 3 · 101–120 of 120');
+  await expect(evidence.getByRole('separator')).toHaveCount(0);
   await expect(evidence.locator('.evidence-row')).toHaveCount(20);
   await evidence.getByRole('button', { name: 'Deaths' }).click();
   await expect(evidence.getByText('No events in this window')).toBeVisible();

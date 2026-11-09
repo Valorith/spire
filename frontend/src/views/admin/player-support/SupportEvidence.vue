@@ -89,7 +89,7 @@ export default {
   },
   data () {
     return {
-      itemNames: {}, group: 'items', hours: 24, events: [], filedAt: 0, page: 1, pageSize: 50, total: 0, loading: false, error: '', version: 0,
+      itemNames: {}, group: 'items', hours: 24, events: [], filedAt: 0, page: 1, pageSize: 50, total: 0, newer: 0, loading: false, error: '', version: 0,
       groups: [
         { id: 'items', label: 'Items', icon: 'fe fe-package' },
         { id: 'deaths', label: 'Deaths', icon: 'fe fe-x-octagon' },
@@ -107,19 +107,14 @@ export default {
     firstShown () { return (this.page - 1) * this.pageSize + 1 },
     lastShown () { return Math.min(this.total, this.page * this.pageSize) },
     windowLabel () { return (this.windows.find(option => option.hours === this.hours) || {}).label || '24 hours' },
-    // Events are newest first; the filing marker sits where the petition falls.
+    // Events are newest first. The server counts the events newer than the
+    // petition, so the filing marker appears once, on the page it falls on.
     rows () {
-      const rows = []
-      let placed = false
-      for (const item of this.events) {
-        if (!placed && new Date(item.created_at).getTime() < this.filedAt * 1000) {
-          rows.push({ marker: true, key: 'marker' })
-          placed = true
-        }
-        rows.push({ ...item, key: item.id })
+      const rows = this.events.map(item => ({ ...item, key: item.id }))
+      const at = this.newer - (this.page - 1) * this.pageSize
+      if (rows.length && at >= 0 && (at < rows.length || (at === rows.length && this.page >= this.pages))) {
+        rows.splice(at, 0, { marker: true, key: 'marker' })
       }
-      // Every event on the last page is newer than the petition.
-      if (!placed && this.events.length && this.page >= this.pages) rows.push({ marker: true, key: 'marker' })
       return rows
     }
   },
@@ -144,6 +139,7 @@ export default {
         this.page = data.page || 1
         this.pageSize = data.page_size || 50
         this.total = data.total || 0
+        this.newer = data.newer || 0
         this.$nextTick(() => { if (this.$el) this.$el.scrollTop = 0 })
       } catch (error) {
         if (version !== this.version) return
