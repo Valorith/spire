@@ -70,6 +70,8 @@
  *   .support-feedback      inline status text: .is-error, .is-success
  *   .support-modal-lead    first line of a dialog body; .support-modal-hint for
  *                          a note under it
+ *   .support-footer-note   note on the left of a dialog footer, before the
+ *                          buttons; .is-warning when it warns
  *
  * support-parcel.css themes the shared GMParcelComposer and its item picker when
  * Player Support opens them with modal-class "support-modal support-parcel-modal".
@@ -637,33 +639,32 @@ select.support-field { padding-right: 28px; }
 .support-setting.is-disabled strong { color: var(--support-muted); }
 .support-setting:hover:not(.is-disabled) .support-switch:not(:checked) { border-color: var(--support-muted); }
 
+/* The knob is a background image on the input itself, not ::before: Firefox draws
+   no pseudo-elements on form controls. --support-switch-knob is its colour. */
 .support-switch {
-  position: relative;
+  --support-switch-knob: var(--support-muted);
   flex: none;
   width: 32px;
   height: 18px;
   margin: 0;
   border: 1px solid var(--support-border-strong);
   border-radius: var(--support-radius-pill);
-  background: var(--support-sunken);
+  background-color: var(--support-sunken);
+  background-image: radial-gradient(circle closest-side, var(--support-switch-knob) calc(100% - .5px), transparent 100%);
+  background-position: 2px 2px;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
   appearance: none;
   -webkit-appearance: none;
   cursor: inherit;
-  transition: var(--support-transition);
+  transition: var(--support-transition), background-position var(--support-duration) ease;
 }
-.support-switch::before {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--support-muted);
-  transition: transform var(--support-duration) ease, background-color var(--support-duration) ease;
+.support-switch:checked {
+  --support-switch-knob: var(--support-on-accent);
+  border-color: var(--support-accent);
+  background-color: var(--support-accent);
+  background-position: 16px 2px;
 }
-.support-switch:checked { border-color: var(--support-accent); background: var(--support-accent); }
-.support-switch:checked::before { background: var(--support-on-accent); transform: translateX(14px); }
 .support-switch:disabled { opacity: .5; }
 
 /* Keyboard hint ---------------------------------------------------------- */
@@ -718,6 +719,10 @@ select.support-field { padding-right: 28px; }
 .support-modal .modal-header { align-items: center; }
 .support-modal .modal-footer { gap: var(--support-space-2); }
 .support-modal .modal-footer > * { margin: 0; }
+/* A note on the left of a dialog footer, before the buttons. The reset above
+   clears margins, so the auto margin lives here, where it outranks it. */
+.support-modal .modal-footer > .support-footer-note { margin-right: auto; color: var(--support-muted); font-size: var(--support-text-sm); }
+.support-modal .modal-footer > .support-footer-note.is-warning { color: var(--support-warning); }
 .support-modal .modal-title {
   color: var(--support-text);
   font-family: inherit;

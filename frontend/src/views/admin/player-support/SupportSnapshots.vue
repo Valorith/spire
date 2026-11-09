@@ -52,9 +52,9 @@
       </div>
     </div>
     <template #modal-footer>
-      <span v-if="!canRestore && missing.length" class="snapshots-note">Restoring needs Mail &amp; Parcels write access.</span>
-      <span v-else-if="overflow" class="snapshots-note is-warning">Only the first 20 parcels fit in one batch. Restore the rest after sending.</span>
-      <span v-else-if="parcels" class="snapshots-note">{{ parcels }} of 20 parcels in this batch</span>
+      <span v-if="!canRestore && missing.length" class="support-footer-note">Restoring needs Mail &amp; Parcels write access.</span>
+      <span v-else-if="overflow" class="support-footer-note is-warning">Only the first 20 parcels fit in one batch. Restore the rest after sending.</span>
+      <span v-else-if="parcels" class="support-footer-note">{{ parcels }} of 20 parcels in this batch</span>
       <button type="button" class="support-button" @click="$emit('close')">Close</button>
       <button v-if="canRestore" type="button" class="support-button is-primary" :disabled="!chosen.length" @click="restore">
         <i class="fe fe-package" aria-hidden="true"></i> Restore {{ Math.min(parcels, 20) || '' }} as parcels
@@ -221,8 +221,6 @@ export default {
 .snapshots-items .snapshots-augments { color: var(--support-muted); font-size: var(--support-text-xs); }
 .snapshots-items .snapshots-count { color: var(--support-text-secondary); font-size: var(--support-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .snapshots-count small { display: block; color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 400; }
-.snapshots-note { margin-right: auto; color: var(--support-muted); font-size: var(--support-text-sm); }
-.snapshots-note.is-warning { color: var(--support-warning); }
 @media (max-width: 600px) {
   .snapshots-workspace { grid-template-columns: minmax(0, 1fr); }
   .snapshots-list { max-height: 160px; }
