@@ -20,6 +20,12 @@ type PlayerSupportCase struct {
 	OwnerID      uint   `json:"-"`
 	Owner        string `json:"owner" gorm:"size:100"`
 	Revision     uint   `json:"revision"`
+	Category     string `json:"category" gorm:"size:24"`
+	Escalated    bool   `json:"escalated"`
+	// SubjectCharacterID is the reported player, when the petition is about
+	// another character.
+	SubjectCharacterID uint   `json:"subject_character_id"`
+	SubjectCharacter   string `json:"subject_character" gorm:"size:64"`
 	// MergedInto is the case this one was merged into; its history moved there.
 	MergedInto uint      `json:"-" gorm:"index"`
 	UpdatedAt  time.Time `json:"updated_at"`
@@ -66,6 +72,7 @@ type PlayerSupportReply struct {
 	ConnectionID uint      `json:"-" gorm:"index"`
 	Title        string    `json:"title" gorm:"size:80"`
 	Body         string    `json:"body" gorm:"type:text"`
+	Resolves     bool      `json:"resolves"`
 	UpdatedBy    string    `json:"updated_by" gorm:"size:100"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -73,6 +80,23 @@ type PlayerSupportReply struct {
 func (PlayerSupportReply) TableName() string       { return "spire_player_support_replies" }
 func (PlayerSupportReply) Relationships() []string { return nil }
 func (PlayerSupportReply) Connection() string      { return "spire" }
+
+// PlayerSupportAccountNote is a staff note about an EQEmu account, shown on
+// every case from that account.
+type PlayerSupportAccountNote struct {
+	ID           uint      `json:"id"`
+	ConnectionID uint      `json:"-" gorm:"index:idx_support_account_note"`
+	AccountID    uint      `json:"-" gorm:"index:idx_support_account_note"`
+	Account      string    `json:"-" gorm:"size:64;index"`
+	Text         string    `json:"text" gorm:"type:text"`
+	AuthorID     uint      `json:"-"`
+	Author       string    `json:"author" gorm:"size:100"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+func (PlayerSupportAccountNote) TableName() string       { return "spire_player_support_account_notes" }
+func (PlayerSupportAccountNote) Relationships() []string { return nil }
+func (PlayerSupportAccountNote) Connection() string      { return "spire" }
 
 // PlayerSupportSettings holds Player Support options for the game server this
 // Spire runs beside. There is one row.

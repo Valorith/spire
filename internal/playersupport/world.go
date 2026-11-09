@@ -99,6 +99,7 @@ type World struct {
 
 	companion      CompanionStatus
 	companionUntil time.Time
+	features       Features
 
 	mu          sync.Mutex
 	conn        *session
@@ -203,6 +204,11 @@ func (w *World) Companion() CompanionStatus {
 		reply, err = client.Command(probe)
 	}
 	w.companion = classifyCompanion(reply, err)
+	w.features = Features{}
+	if status := w.withProtocol(w.companion); status.Moves() {
+		reply, err := client.Command(telnet.CommandConfig{Command: "supportfeatures", AllowEmptyResponse: true})
+		w.features = classifyFeatures(reply, err, status)
+	}
 	switch w.companion {
 	case CompanionUnknown:
 		w.companionUntil = time.Now().Add(10 * time.Second)

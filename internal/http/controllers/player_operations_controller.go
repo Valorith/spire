@@ -15,6 +15,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/http/routes"
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/models"
+	"github.com/EQEmuTools/spire/internal/playersupport"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -734,13 +735,17 @@ func (p *PlayerOperationsController) updateCharacter(c echo.Context) error {
 			ID        int
 			Name      string
 			DeletedAt *time.Time `gorm:"column:deleted_at"`
+			InGame    int        `gorm:"column:ingame"`
 		}
 		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).
-			Select("id, name, deleted_at").Where("id = ?", id).Take(&locked).Error; err != nil {
+			Select("id, name, deleted_at, ingame").Where("id = ?", id).Take(&locked).Error; err != nil {
 			return err
 		}
 		if locked.DeletedAt != nil {
 			return playerOperationsConflict("Restore the character before editing its profile")
+		}
+		if err := playerOperationsOnlineRefusal("profile", locked.InGame); err != nil {
+			return err
 		}
 		if input.Name != locked.Name {
 			var duplicate int64
@@ -812,12 +817,16 @@ func (p *PlayerOperationsController) transferCharacter(c echo.Context) error {
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var current struct {
 			AccountID int `gorm:"column:account_id"`
+			InGame    int `gorm:"column:ingame"`
 		}
-		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Select("account_id").Where("id = ?", id).Take(&current).Error; err != nil {
+		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Select("account_id, ingame").Where("id = ?", id).Take(&current).Error; err != nil {
 			return err
 		}
 		if current.AccountID != request.ExpectedAccountID {
 			return playerOperationsConflict("Character account changed; refresh before transferring")
+		}
+		if err := playerOperationsOnlineRefusal("transfer", current.InGame); err != nil {
+			return err
 		}
 		var count int64
 		if err := tx.Table("account").Where("id = ?", request.AccountID).Count(&count).Error; err != nil {
@@ -891,12 +900,16 @@ func (p *PlayerOperationsController) relocateCharacter(c echo.Context) error {
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var current struct {
 			ZoneID int `gorm:"column:zone_id"`
+			InGame int `gorm:"column:ingame"`
 		}
-		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Select("zone_id").Where("id = ?", id).Take(&current).Error; err != nil {
+		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Select("zone_id, ingame").Where("id = ?", id).Take(&current).Error; err != nil {
 			return err
 		}
 		if current.ZoneID != request.ExpectedZoneID {
 			return playerOperationsConflict("Character location changed; refresh before moving")
+		}
+		if err := playerOperationsOnlineRefusal("relocate", current.InGame); err != nil {
+			return err
 		}
 		if err := tx.Table("character_data").Where("id = ?", id).Updates(map[string]interface{}{
 			"zone_id": request.ZoneID, "zone_instance": 0,
@@ -1058,6 +1071,16 @@ func (p *PlayerOperationsController) updateCharacterCurrency(c echo.Context) err
 		return playerOperationsAuditError(c, err)
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		var character struct {
+			InGame int `gorm:"column:ingame"`
+		}
+		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Select("ingame").
+			Where("id = ? AND deleted_at IS NULL", id).Take(&character).Error; err != nil {
+			return err
+		}
+		if err := playerOperationsOnlineRefusal("currency", character.InGame); err != nil {
+			return err
+		}
 		current, err := loadPlayerOperationsCurrency(tx, id, true)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -1137,13 +1160,17 @@ func (p *PlayerOperationsController) changeCharacterLifecycle(c echo.Context, re
 		var locked struct {
 			Name      string
 			DeletedAt *time.Time `gorm:"column:deleted_at"`
+			InGame    int        `gorm:"column:ingame"`
 		}
-		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Select("name, deleted_at").Where("id = ?", id).Take(&locked).Error; err != nil {
+		if err := tx.Table("character_data").Clauses(clause.Locking{Strength: "UPDATE"}).Select("name, deleted_at, ingame").Where("id = ?", id).Take(&locked).Error; err != nil {
 			return err
 		}
 		if retire {
 			if locked.DeletedAt != nil {
 				return playerOperationsConflict("Character is already retired")
+			}
+			if err := playerOperationsOnlineRefusal("retire", locked.InGame); err != nil {
+				return err
 			}
 			retiredName := playerOperationsRetiredName(locked.Name, id)
 			if retiredName == "" {
@@ -1238,90 +1265,179 @@ func (p *PlayerOperationsController) sanctionAccount(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid sanction payload"})
 	}
 	request.Mode = strings.ToLower(strings.TrimSpace(request.Mode))
-	if request.Mode != "suspend" && request.Mode != "ban" && request.Mode != "clear" {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Sanction mode must be suspend, ban, or clear"})
-	}
-	if request.Mode == "suspend" && (request.Until == nil || !request.Until.After(time.Now())) {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Suspension end must be in the future"})
+	if err := validatePlayerOperationsSanction(request.Mode, request.Until); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	if err := validatePlayerOperationsReason(request.Reason); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
 	db := p.db.Get(models.Account{}, c)
 	var account struct {
-		Name             string
-		SuspendedUntil   *time.Time `gorm:"column:suspendeduntil"`
-		BanReason        *string    `gorm:"column:ban_reason"`
-		SuspensionReason *string    `gorm:"column:suspend_reason"`
+		Name string
+		playerOperationsSanctionAccount
 	}
-	if err := db.Table("account").Where("id = ?", id).Take(&account).Error; err != nil {
+	if err := db.Table("account").Select("name, status, suspendeduntil, ban_reason").Where("id = ?", id).Take(&account).Error; err != nil {
 		return playerOperationsLoadError(c, "Account", err)
 	}
 	if !playerOperationsTimesEqual(account.SuspendedUntil, request.ExpectedSuspendedAt) {
 		return c.JSON(http.StatusConflict, echo.Map{"error": "Account sanction changed; refresh before applying"})
 	}
-	if request.Mode == "suspend" && playerOperationsHasBanReason(account.BanReason) {
-		return c.JSON(http.StatusConflict, echo.Map{"error": "Clear the existing indefinite ban before applying a temporary suspension"})
-	}
-	until := request.Until
-	if request.Mode == "ban" {
-		farFuture := time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
-		until = &farFuture
-	} else if request.Mode == "clear" {
-		until = nil
+	updates, err := playerOperationsSanctionPlan(request.Mode, account.playerOperationsSanctionAccount, request.Until, request.Reason)
+	if err != nil {
+		return c.JSON(http.StatusConflict, echo.Map{"error": err.Error()})
 	}
 	payload := map[string]interface{}{
-		"action": request.Mode, "account_id": id, "account_name": account.Name,
-		"previous_until": account.SuspendedUntil, "until": until, "reason": strings.TrimSpace(request.Reason),
+		"action": request.Mode, "account_id": id, "account_name": account.Name, "previous_status": account.Status,
+		"previous_until": account.SuspendedUntil, "until": updates["suspendeduntil"], "reason": strings.TrimSpace(request.Reason),
 	}
 	auditID, err := p.writeAudit(c, playerOperationsEventAccountSanction, payload)
 	if err != nil {
 		return playerOperationsAuditError(c, err)
 	}
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		var current struct {
-			SuspendedUntil *time.Time `gorm:"column:suspendeduntil"`
-			BanReason      *string    `gorm:"column:ban_reason"`
-		}
-		if err := tx.Table("account").Clauses(clause.Locking{Strength: "UPDATE"}).Select("suspendeduntil, ban_reason").Where("id = ?", id).Take(&current).Error; err != nil {
-			return err
-		}
-		if !playerOperationsTimesEqual(current.SuspendedUntil, request.ExpectedSuspendedAt) {
-			return playerOperationsConflict("Account sanction changed; refresh before applying")
-		}
-		if request.Mode == "suspend" && playerOperationsHasBanReason(current.BanReason) {
-			return playerOperationsConflict("Clear the existing indefinite ban before applying a temporary suspension")
-		}
-		return tx.Table("account").Where("id = ?", id).
-			Updates(playerOperationsSanctionUpdates(request.Mode, until, request.Reason)).Error
-	}); err != nil {
+	if err := applyPlayerOperationsSanction(db, id, request.Mode, request.Until, request.ExpectedSuspendedAt, request.Reason); err != nil {
 		p.discardAudit(c, auditID)
 		return playerOperationsMutationError(c, "Account", err)
+	}
+	kick, kicked := "none", []string{}
+	if request.Mode != "clear" {
+		local := worldDatabase(db) != "" && worldDatabase(db) == worldDatabase(p.db.GetEqemuDb())
+		kick, kicked, err = kickSanctionedAccount(db, id, local, func(name string) string {
+			return playersupport.KickCharacter(p.config, p.log, name)
+		})
+		if err != nil {
+			c.Logger().Errorf("Player Operations: could not list in-game characters of account %d: %v", id, err)
+		}
 	}
 	detail, err := loadPlayerOperationsAccountDetail(db, p.db.Get(models.Zone{}, c), id)
 	if err != nil {
 		return playerOperationsLoadError(c, "Account", err)
 	}
-	return c.JSON(http.StatusOK, echo.Map{"detail": detail, "audit_id": auditID})
+	return c.JSON(http.StatusOK, echo.Map{"detail": detail, "audit_id": auditID, "kick": kick, "kicked": kicked})
+}
+
+func validatePlayerOperationsSanction(mode string, until *time.Time) error {
+	if mode != "suspend" && mode != "ban" && mode != "clear" {
+		return errors.New("Sanction mode must be suspend, ban, or clear")
+	}
+	if mode == "suspend" && (until == nil || !until.After(time.Now())) {
+		return errors.New("Suspension end must be in the future")
+	}
+	return nil
+}
+
+// playerOperationsSanctionAccount is the account state a sanction is checked
+// against.
+type playerOperationsSanctionAccount struct {
+	Status         int        `gorm:"column:status"`
+	SuspendedUntil *time.Time `gorm:"column:suspendeduntil"`
+	BanReason      *string    `gorm:"column:ban_reason"`
+}
+
+// A ban keeps a far-future date. Its Unix time is out of range for EQEmu,
+// which reads it as 0, so the suspension expiry in GetAccountStatus never
+// resets the -2 status. It is in local time because the database
+// connections use loc=Local: the same instant in UTC becomes year 10000 east
+// of UTC, which the MySQL driver refuses to send.
+var playerOperationsBanUntil = time.Date(9999, 12, 31, 23, 59, 59, 0, time.Local)
+
+// playerOperationsSanctionPlan returns the account update for a sanction, or
+// a conflict. Only player accounts (status 0 to -2) are suspended or banned,
+// so EQEmu resetting an expired suspension to status 0 cannot remove a staff
+// status, and lifting a restriction never changes a positive status.
+func playerOperationsSanctionPlan(mode string, account playerOperationsSanctionAccount, until *time.Time, reason string) (map[string]interface{}, error) {
+	reason = strings.TrimSpace(reason)
+	if mode != "clear" && (account.Status > 0 || account.Status < -2) {
+		return nil, playerOperationsConflict("This account has status %d. Spire suspends and bans player accounts only; change the status in the account editor first if you mean to restrict it.", account.Status)
+	}
+	switch mode {
+	case "suspend":
+		if account.Status == -2 || playerOperationsHasBanReason(account.BanReason) {
+			return nil, playerOperationsConflict("Clear the existing indefinite ban before applying a temporary suspension")
+		}
+		return map[string]interface{}{"status": -1, "suspendeduntil": until, "suspend_reason": reason}, nil
+	case "ban":
+		banUntil := playerOperationsBanUntil
+		return map[string]interface{}{"status": -2, "suspendeduntil": &banUntil, "ban_reason": reason, "suspend_reason": ""}, nil
+	case "clear":
+		updates := map[string]interface{}{"suspendeduntil": nil, "ban_reason": "", "suspend_reason": ""}
+		if account.Status == -1 || account.Status == -2 {
+			updates["status"] = 0
+		}
+		return updates, nil
+	}
+	return nil, fmt.Errorf("unknown sanction mode %q", mode)
+}
+
+// applyPlayerOperationsSanction locks the account row, checks the sanction
+// against it and applies it. Player Operations and Player Support share it.
+func applyPlayerOperationsSanction(db *gorm.DB, accountID int, mode string, until, expected *time.Time, reason string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var current playerOperationsSanctionAccount
+		if err := tx.Table("account").Clauses(clause.Locking{Strength: "UPDATE"}).Select("status, suspendeduntil, ban_reason").
+			Where("id = ?", accountID).Take(&current).Error; err != nil {
+			return err
+		}
+		if !playerOperationsTimesEqual(current.SuspendedUntil, expected) {
+			return playerOperationsConflict("Account sanction changed; refresh before applying")
+		}
+		updates, err := playerOperationsSanctionPlan(mode, current, until, reason)
+		if err != nil {
+			return err
+		}
+		return tx.Table("account").Where("id = ?", accountID).Updates(updates).Error
+	})
+}
+
+// kickSanctionedAccount removes the account's characters from the game after
+// a suspension or ban. It reports "none" when none is in game, "not_local"
+// when the account is not on the World this Spire runs beside, "unavailable"
+// when a kick failed, and "requested" otherwise, with the characters kicked.
+func kickSanctionedAccount(db *gorm.DB, accountID int, local bool, kick func(string) string) (string, []string, error) {
+	kicked := []string{}
+	var names []string
+	if err := db.Table("character_data").Where("account_id = ? AND ingame = 1 AND deleted_at IS NULL", accountID).
+		Order("name").Pluck("name", &names).Error; err != nil {
+		return "unavailable", kicked, err
+	}
+	if len(names) == 0 {
+		return "none", kicked, nil
+	}
+	if !local {
+		return "not_local", kicked, nil
+	}
+	state := "requested"
+	for _, name := range names {
+		if kick(name) == playersupport.KickRequested {
+			kicked = append(kicked, name)
+		} else {
+			state = "unavailable"
+		}
+	}
+	return state, kicked, nil
+}
+
+// playerOperationsOnlineRefusal refuses edits to tables the zone overwrites
+// when it saves an online character.
+func playerOperationsOnlineRefusal(operation string, ingame int) error {
+	if ingame == 0 {
+		return nil
+	}
+	switch operation {
+	case "profile":
+		return playerOperationsConflict("This character is online. Log them out, or kick them from Player Support, before editing the profile; the game would overwrite the change.")
+	case "relocate":
+		return playerOperationsConflict("This character is online. Use Move in Player Support, or log them out first; the game would overwrite the change.")
+	case "currency":
+		return playerOperationsConflict("This character is online. Log them out before changing balances; the game would overwrite the change.")
+	case "transfer":
+		return playerOperationsConflict("This character is online. Log them out before transferring it; the game would overwrite the change.")
+	default:
+		return playerOperationsConflict("This character is online. Log them out before retiring it; the game would overwrite the change.")
+	}
 }
 
 func playerOperationsHasBanReason(reason *string) bool {
 	return strings.TrimSpace(stringValue(reason)) != ""
-}
-
-func playerOperationsSanctionUpdates(mode string, until *time.Time, reason string) map[string]interface{} {
-	updates := map[string]interface{}{"suspendeduntil": until}
-	switch mode {
-	case "ban":
-		updates["ban_reason"] = strings.TrimSpace(reason)
-		updates["suspend_reason"] = ""
-	case "suspend":
-		updates["suspend_reason"] = strings.TrimSpace(reason)
-	case "clear":
-		updates["ban_reason"] = ""
-		updates["suspend_reason"] = ""
-	}
-	return updates
 }
 
 func (p *PlayerOperationsController) deleteAccount(c echo.Context) error {

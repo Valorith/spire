@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -98,25 +100,84 @@ func TestPlayerOperationsGuildLeaderChanged(t *testing.T) {
 	}
 }
 
-func TestPlayerOperationsSanctionUpdates(t *testing.T) {
+func TestPlayerOperationsSanctionPlan(t *testing.T) {
 	until := time.Date(2035, time.January, 2, 18, 45, 0, 0, time.UTC)
-
-	suspend := playerOperationsSanctionUpdates("suspend", &until, " Temporary suspension ")
-	if _, overwritesBanReason := suspend["ban_reason"]; overwritesBanReason {
-		t.Fatal("temporary suspension must preserve the stored ban reason")
+	banned := "Indefinite ban"
+	plan := func(mode string, status int, banReason *string) (map[string]interface{}, error) {
+		return playerOperationsSanctionPlan(mode, playerOperationsSanctionAccount{Status: status, BanReason: banReason}, &until, " Policy violation ")
 	}
-	if suspend["suspend_reason"] != "Temporary suspension" {
-		t.Fatalf("suspend_reason = %v", suspend["suspend_reason"])
+	for _, status := range []int{-2, -1, 0, 5, 255} {
+		suspend, suspendErr := plan("suspend", status, nil)
+		ban, banErr := plan("ban", status, nil)
+		clear, clearErr := plan("clear", status, nil)
+		if clearErr != nil {
+			t.Fatalf("clear on status %d: %v", status, clearErr)
+		}
+		if clear["ban_reason"] != "" || clear["suspend_reason"] != "" || clear["suspendeduntil"] != nil {
+			t.Fatalf("clear on status %d = %#v", status, clear)
+		}
+		switch status {
+		case -2:
+			if suspendErr == nil || suspendErr.Error() != "Clear the existing indefinite ban before applying a temporary suspension" {
+				t.Fatalf("suspend on a ban = %v", suspendErr)
+			}
+		case -1, 0:
+			if suspendErr != nil || suspend["status"] != -1 || suspend["suspendeduntil"] != &until || suspend["suspend_reason"] != "Policy violation" {
+				t.Fatalf("suspend on status %d = %#v, %v", status, suspend, suspendErr)
+			}
+			if _, overwrites := suspend["ban_reason"]; overwrites {
+				t.Fatal("a suspension must not touch the ban reason")
+			}
+		default:
+			want := fmt.Sprintf("This account has status %d. Spire suspends and bans player accounts only; change the status in the account editor first if you mean to restrict it.", status)
+			if suspendErr == nil || suspendErr.Error() != want || banErr == nil || banErr.Error() != want {
+				t.Fatalf("staff status %d: suspend %v, ban %v", status, suspendErr, banErr)
+			}
+		}
+		if status <= 0 {
+			farDate, _ := ban["suspendeduntil"].(*time.Time)
+			if banErr != nil || ban["status"] != -2 || farDate == nil || !farDate.Equal(playerOperationsBanUntil) ||
+				ban["ban_reason"] != "Policy violation" || ban["suspend_reason"] != "" {
+				t.Fatalf("ban on status %d = %#v, %v", status, ban, banErr)
+			}
+		}
+		if _, sets := clear["status"]; sets != (status == -1 || status == -2) {
+			t.Fatalf("clear on status %d changes status: %#v", status, clear)
+		}
+		if status < 0 && clear["status"] != 0 {
+			t.Fatalf("clear on status %d = %#v", status, clear)
+		}
 	}
-
-	ban := playerOperationsSanctionUpdates("ban", &until, " Indefinite ban ")
-	if ban["ban_reason"] != "Indefinite ban" || ban["suspend_reason"] != "" {
-		t.Fatalf("ban updates = %#v", ban)
+	if _, err := plan("suspend", 0, &banned); err == nil {
+		t.Fatal("a suspension must not replace a stored ban reason")
 	}
+	if _, err := plan("ban", -3, nil); err == nil {
+		t.Fatal("unknown negative statuses are not player accounts")
+	}
+	// The connections send times in local time; the ban date must stay a
+	// valid DATETIME in every zone, including those east of UTC.
+	if local := playerOperationsBanUntil.In(time.Local); local.Year() != 9999 || local.Month() != time.December || local.Day() != 31 {
+		t.Fatalf("ban date in local time = %v", local)
+	}
+}
 
-	clear := playerOperationsSanctionUpdates("clear", nil, "Clearing sanction")
-	if clear["ban_reason"] != "" || clear["suspend_reason"] != "" {
-		t.Fatalf("clear updates = %#v", clear)
+func TestPlayerOperationsOnlineRefusal(t *testing.T) {
+	want := map[string]string{
+		"profile":  "This character is online. Log them out, or kick them from Player Support, before editing the profile; the game would overwrite the change.",
+		"relocate": "This character is online. Use Move in Player Support, or log them out first; the game would overwrite the change.",
+		"currency": "This character is online. Log them out before changing balances; the game would overwrite the change.",
+		"transfer": "This character is online. Log them out before transferring it; the game would overwrite the change.",
+		"retire":   "This character is online. Log them out before retiring it; the game would overwrite the change.",
+	}
+	for operation, message := range want {
+		if err := playerOperationsOnlineRefusal(operation, 0); err != nil {
+			t.Fatalf("%s offline: %v", operation, err)
+		}
+		err := playerOperationsOnlineRefusal(operation, 1)
+		var conflict playerOperationsConflictError
+		if !errors.As(err, &conflict) || conflict.Error() != message {
+			t.Fatalf("%s online = %v", operation, err)
+		}
 	}
 }
 

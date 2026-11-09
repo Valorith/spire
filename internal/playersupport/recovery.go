@@ -1,16 +1,10 @@
 package playersupport
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/EQEmuTools/spire/internal/telnet"
-	"golang.org/x/net/websocket"
 )
 
 type MoveTarget struct {
@@ -60,21 +54,18 @@ func (w *World) Locate(characterID, accountID uint) (string, *MovePosition) {
 }
 
 func locate(console *telnet.Client, characterID, accountID uint) (string, uint16, *MovePosition) {
-	owner := moveConsole(console, fmt.Sprintf("supportlocation %d %d", characterID, accountID))
-	if owner.Status != "zone" {
-		return owner.Status, 0, nil
+	owner, port := zoneOwner(console, characterID, accountID)
+	if owner != "zone" {
+		return owner, 0, nil
 	}
-	if owner.Port == 0 {
-		return "unavailable", 0, nil
-	}
-	player := moveZoneCall(owner.Port, "get_support_location", MoveTarget{CharacterID: characterID, AccountID: accountID})
+	player := moveZoneCall(port, "get_support_location", MoveTarget{CharacterID: characterID, AccountID: accountID})
 	if player.Status == "offline" {
 		return "offline", 0, nil
 	}
 	if player.Status != "located" || player.Location == nil {
 		return "unavailable", 0, nil
 	}
-	return "located", owner.Port, player.Location
+	return "located", port, player.Location
 }
 
 // Move lets World update an unloaded target or identify the local zone that
@@ -140,44 +131,9 @@ func moveConsole(console *telnet.Client, command string) moveConsoleReply {
 }
 
 func moveZoneCall(port uint16, method string, target MoveTarget) moveZoneReply {
-	unavailable := moveZoneReply{Status: "unavailable"}
-	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(port)))
-	config, err := websocket.NewConfig("ws://"+address+"/", "http://"+address)
-	if err != nil {
-		return unavailable
+	var reply moveZoneReply
+	if result := zoneAPI(port, method, target, &reply); result != "ok" {
+		return moveZoneReply{Status: result}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	conn, err := config.DialContext(ctx)
-	if err != nil {
-		return unavailable
-	}
-	defer conn.Close()
-	conn.MaxPayloadBytes = 16 * 1024
-	if conn.SetDeadline(time.Now().Add(3*time.Second)) != nil {
-		return unavailable
-	}
-
-	type request struct {
-		Method string      `json:"method"`
-		Params interface{} `json:"params"`
-	}
-	type response struct {
-		Data  moveZoneReply `json:"data"`
-		Error string        `json:"error"`
-	}
-	var login response
-	if websocket.JSON.Send(conn, request{Method: "login", Params: []string{"admin", ""}}) != nil ||
-		websocket.JSON.Receive(conn, &login) != nil || login.Data.Status != "Ok" {
-		return unavailable
-	}
-	var moved response
-	if websocket.JSON.Send(conn, request{Method: method, Params: target}) != nil ||
-		websocket.JSON.Receive(conn, &moved) != nil {
-		return moveZoneReply{Status: "unconfirmed"}
-	}
-	if strings.EqualFold(moved.Error, "Unknown Method") {
-		return unavailable
-	}
-	return moved.Data
+	return reply
 }

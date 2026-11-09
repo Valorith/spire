@@ -1,5 +1,10 @@
 package playersupport
 
+import (
+	"encoding/json"
+	"strings"
+)
+
 // Features lists what the World's Player Support patch supports beyond
 // moves, notices and live chat. A World without the patch, or with a patch
 // older than the "supportfeatures" console command, reports none of them.
@@ -27,5 +32,49 @@ type Features struct {
 // Features reports the local World's patch features. It is cached with the
 // companion status and rechecked on the same schedule.
 func (w *World) Features() Features {
-	return Features{}
+	w.Companion()
+	w.rosterMu.Lock()
+	defer w.rosterMu.Unlock()
+	return w.features
+}
+
+// classifyFeatures reads World's answer to "supportfeatures", sent only after
+// the companion probe found a patch.
+func classifyFeatures(reply string, err error, companion CompanionStatus) Features {
+	if err != nil || !companion.Moves() {
+		return Features{}
+	}
+	older := Features{Patch: 2}
+	if companion == CompanionOutdated {
+		older.Patch = 1
+	}
+	if strings.Contains(reply, "Command not found") {
+		return older
+	}
+	var answer struct {
+		Status   string   `json:"status"`
+		Patch    int      `json:"patch"`
+		Features []string `json:"features"`
+	}
+	if json.Unmarshal([]byte(reply), &answer) != nil || answer.Status != "ok" || answer.Patch < 3 {
+		return older
+	}
+	features := Features{Patch: answer.Patch}
+	for _, name := range answer.Features {
+		switch name {
+		case "close_petition":
+			features.ClosePetition = true
+		case "lockouts":
+			features.Lockouts = true
+		case "tasks":
+			features.Tasks = true
+		case "revoke":
+			features.Revoke = true
+		case "corpse_exp":
+			features.CorpseExp = true
+		case "unbury":
+			features.Unbury = true
+		}
+	}
+	return features
 }

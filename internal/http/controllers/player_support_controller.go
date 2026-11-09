@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/EQEmuTools/spire/internal/database"
 	"github.com/EQEmuTools/spire/internal/env"
@@ -36,7 +37,18 @@ type PlayerSupportController struct {
 	log         *logger.AppLogger
 	// postWebhook sends petition alerts; tests replace it.
 	postWebhook func(ctx context.Context, url string, body []byte) error
+	// presence holds who is viewing each case.
+	presence supportPresence
 }
+
+// A live case is aging when nobody has answered it after supportAgingAfter,
+// and overdue after supportOverdueAfter. A waiting case needs a follow-up when
+// the player has not replied within supportFollowUpAfter.
+const (
+	supportAgingAfter    = 30 * time.Minute
+	supportOverdueAfter  = 2 * time.Hour
+	supportFollowUpAfter = 48 * time.Hour
+)
 
 func NewPlayerSupportController(db *database.Resolver, permissions *permissions.Service, mail *MailParcelsEditorController, config *eqemuserverconfig.Config, log *logger.AppLogger) *PlayerSupportController {
 	controller := &PlayerSupportController{db: db, permissions: permissions, mail: mail, log: log}
@@ -108,6 +120,15 @@ type supportCaseView struct {
 	ZoneName    string     `json:"zone_name,omitempty"`
 	// MergedKey is the case this one was merged into.
 	MergedKey string `json:"merged_into,omitempty"`
+	// SuggestedCategory is set while the case has no category.
+	SuggestedCategory string `json:"suggested_category,omitempty"`
+	// AgeState is "fresh", "aging" or "overdue"; FollowUp marks a waiting
+	// case the player has not answered.
+	AgeState string          `json:"age_state"`
+	FollowUp bool            `json:"follow_up"`
+	Viewers  []supportViewer `json:"viewers"`
+	// AccountNotes counts the staff notes on the case's account.
+	AccountNotes int `json:"account_notes"`
 }
 
 type supportActivity struct {
@@ -163,14 +184,20 @@ func supportSourceKey(row models.Petition) string {
 }
 
 func supportView(record models.PlayerSupportCase, row models.Petition, userID uint) supportCaseView {
-	return supportCaseView{
+	view := supportCaseView{
 		PlayerSupportCase: record,
 		NativeOpen:        row.Dib != 0,
 		CheckedOut:        row.Ischeckedout != 0,
 		LastGM:            row.Lastgm,
 		NativeNote:        row.Gmtext.String,
 		Mine:              record.Owner != "" && record.OwnerID == userID,
+		AgeState:          "fresh",
+		Viewers:           []supportViewer{},
 	}
+	if record.Category == "" {
+		view.SuggestedCategory = supportSuggestCategory(record.Message)
+	}
+	return view
 }
 
 func (s supportScope) newCase(row models.Petition) models.PlayerSupportCase {
@@ -187,6 +214,10 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		return supportError(c, err)
 	}
 	filter := c.QueryParam("filter")
+	category := c.QueryParam("category")
+	if _, known := supportCategoryLabel(category); category != "" && !known {
+		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Unknown category"))
+	}
 	// Resolved cases are paginated in Spire; the live inbox merges the native
 	// queue and the unresolved records that were already imported.
 	var native []models.Petition
@@ -228,11 +259,18 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 	for _, row := range unimported {
 		cases = append(cases, supportView(scope.newCase(row), row, scope.user.ID))
 	}
+	if err := scope.decorateAge(cases, time.Now()); err != nil {
+		return supportError(c, err)
+	}
 	summary := supportQueueSummary(cases, scope.user.ID)
 	scope.latestReply(&summary)
+	features := p.features(scope)
 	if filter == "resolved" {
 		query := scope.spire.Model(&models.PlayerSupportCase{}).
 			Where("connection_id = ? AND status = ?", scope.connectionID, "resolved")
+		if category != "" {
+			query = query.Where("category = ?", category)
+		}
 		if search != "" {
 			pattern := "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(search) + "%"
 			query = query.Where("(character_name LIKE ? ESCAPE '!' OR account LIKE ? ESCAPE '!' OR message LIKE ? ESCAPE '!' OR source_key LIKE ? ESCAPE '!')",
@@ -250,16 +288,17 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		for _, record := range records {
 			resolved = append(resolved, supportView(record, byKey[record.SourceKey], scope.user.ID))
 		}
-		p.decoratePresence(scope, resolved)
-		p.decorateZones(c, resolved)
-		decorateConversations(scope, resolved)
-		return c.JSON(http.StatusOK, echo.Map{"cases": resolved, "total": count, "connection_id": scope.connectionID, "summary": summary, "companion": p.companion(scope)})
+		p.decorateCases(c, scope, resolved)
+		return c.JSON(http.StatusOK, echo.Map{
+			"cases": resolved, "total": count, "connection_id": scope.connectionID, "summary": summary,
+			"companion": p.companion(scope), "features": features,
+		})
 	}
 
 	search = strings.ToLower(search)
 	matches := cases[:0]
 	for _, record := range cases {
-		if filter == "mine" && !record.Mine || filter == "unassigned" && record.Owner != "" {
+		if !supportFilterMatches(filter, record) || category != "" && record.Category != category {
 			continue
 		}
 		if search == "" || strings.Contains(strings.ToLower(record.Character+" "+record.Account+" "+record.Message+" "+record.SourceKey), search) {
@@ -267,6 +306,9 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		}
 	}
 	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].Escalated != matches[j].Escalated {
+			return matches[i].Escalated
+		}
 		if matches[i].Urgency != matches[j].Urgency {
 			return matches[i].Urgency > matches[j].Urgency
 		}
@@ -277,13 +319,139 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 	})
 	start := min((page-1)*size, len(matches))
 	end := min(start+size, len(matches))
-	p.decoratePresence(scope, matches[start:end])
-	p.decorateZones(c, matches[start:end])
-	decorateConversations(scope, matches[start:end])
+	p.decorateCases(c, scope, matches[start:end])
 	return c.JSON(http.StatusOK, echo.Map{
 		"cases": matches[start:end], "total": len(matches), "connection_id": scope.connectionID, "summary": summary,
-		"companion": p.companion(scope),
+		"companion": p.companion(scope), "features": features,
 	})
+}
+
+func supportFilterMatches(filter string, record supportCaseView) bool {
+	switch filter {
+	case "mine":
+		return record.Mine
+	case "unassigned":
+		return record.Owner == ""
+	case "waiting":
+		return record.Status == "waiting"
+	case "attention":
+		return supportNeedsAttention(record)
+	default:
+		return true
+	}
+}
+
+func supportNeedsAttention(record supportCaseView) bool {
+	return record.Escalated || record.AgeState == "overdue" || record.FollowUp
+}
+
+// decorateCases adds the per-page details of each case.
+func (p *PlayerSupportController) decorateCases(c echo.Context, scope supportScope, cases []supportCaseView) {
+	p.decoratePresence(scope, cases)
+	p.decorateZones(c, cases)
+	decorateConversations(scope, cases)
+	p.decorateViewers(scope, cases)
+	scope.decorateNoteCounts(cases)
+}
+
+// features reports the patch features of the World behind this connection.
+// Only the local World is checked; another connection has none.
+func (p *PlayerSupportController) features(scope supportScope) playersupport.Features {
+	if !p.localWorld(scope) {
+		return playersupport.Features{}
+	}
+	return p.world.Features()
+}
+
+// supportCaseTimes are the timeline facts that decide a case's age state.
+type supportCaseTimes struct {
+	// Responded: staff sent a tell or a delivery.
+	Responded  bool
+	LastWait   *time.Time
+	LastChatIn *time.Time
+}
+
+// supportAgeState measures an unanswered open case from when it was filed.
+func supportAgeState(status string, submittedAt int64, times supportCaseTimes, now time.Time) string {
+	if status != "open" || times.Responded {
+		return "fresh"
+	}
+	age := now.Sub(time.Unix(submittedAt, 0))
+	switch {
+	case age > supportOverdueAfter:
+		return "overdue"
+	case age >= supportAgingAfter:
+		return "aging"
+	default:
+		return "fresh"
+	}
+}
+
+// supportFollowUp marks a waiting case the player has not answered since
+// staff marked it waiting.
+func supportFollowUp(status string, times supportCaseTimes, now time.Time) bool {
+	if status != "waiting" || times.LastWait == nil || now.Sub(*times.LastWait) < supportFollowUpAfter {
+		return false
+	}
+	return times.LastChatIn == nil || !times.LastChatIn.After(*times.LastWait)
+}
+
+// decorateAge sets the age state and follow-up flag of live cases.
+func (s supportScope) decorateAge(cases []supportCaseView, now time.Time) error {
+	ids := make([]uint, 0, len(cases))
+	for _, record := range cases {
+		if record.ID > 0 {
+			ids = append(ids, record.ID)
+		}
+	}
+	times := map[uint]*supportCaseTimes{}
+	if len(ids) > 0 {
+		var entries []struct {
+			CaseID uint
+			Kind   string
+			Last   time.Time
+		}
+		if err := s.spire.Model(&models.PlayerSupportEntry{}).Select("case_id, kind, MAX(created_at) AS last").
+			Where("case_id IN ? AND kind IN ?", ids, []string{"chat_out", "wait", "chat_in"}).
+			Group("case_id, kind").Scan(&entries).Error; err != nil {
+			return err
+		}
+		var deliveries []uint
+		if err := s.spire.Table("spire_user_event_log").Distinct("support_case_id").
+			Where("support_case_id IN ? AND server_database_connection_id = ? AND support_delivery_state = ?", ids, s.connectionID, "sent").
+			Pluck("support_case_id", &deliveries).Error; err != nil {
+			return err
+		}
+		get := func(id uint) *supportCaseTimes {
+			if times[id] == nil {
+				times[id] = &supportCaseTimes{}
+			}
+			return times[id]
+		}
+		for _, entry := range entries {
+			at := entry.Last
+			switch entry.Kind {
+			case "chat_out":
+				get(entry.CaseID).Responded = true
+			case "wait":
+				get(entry.CaseID).LastWait = &at
+			case "chat_in":
+				get(entry.CaseID).LastChatIn = &at
+			}
+		}
+		for _, id := range deliveries {
+			get(id).Responded = true
+		}
+	}
+	for i := range cases {
+		var known supportCaseTimes
+		if found := times[cases[i].ID]; found != nil && cases[i].ID > 0 {
+			known = *found
+		}
+		cases[i].AgeState = supportAgeState(cases[i].Status, cases[i].SubmittedAt, known, now)
+		cases[i].FollowUp = supportFollowUp(cases[i].Status, known, now)
+	}
+	return nil
 }
 
 // companion reports the Player Support patch status of the World behind this
@@ -347,9 +515,16 @@ func (p *PlayerSupportController) detail(c echo.Context) error {
 		return supportError(c, err)
 	}
 	cases := []supportCaseView{view}
-	p.decoratePresence(scope, cases)
-	p.decorateZones(c, cases)
-	decorateConversations(scope, cases)
+	if view.Status != "resolved" {
+		if err := scope.decorateAge(cases, time.Now()); err != nil {
+			return supportError(c, err)
+		}
+	}
+	p.decorateCases(c, scope, cases)
+	notes, err := scope.accountNotes(view)
+	if err != nil {
+		return supportError(c, err)
+	}
 	if view.MergedInto != 0 {
 		var into models.PlayerSupportCase
 		if scope.spire.Select("source_key").Where("id = ?", view.MergedInto).Take(&into).Error == nil {
@@ -360,7 +535,10 @@ func (p *PlayerSupportController) detail(c echo.Context) error {
 	if err != nil {
 		return supportError(c, err)
 	}
-	return c.JSON(http.StatusOK, echo.Map{"case": cases[0], "activity": activity, "history": history})
+	return c.JSON(http.StatusOK, echo.Map{
+		"case": cases[0], "activity": activity, "history": history,
+		"account_notes": notes, "viewers": cases[0].Viewers, "features": p.features(scope),
+	})
 }
 
 type supportSummary struct {
@@ -369,6 +547,12 @@ type supportSummary struct {
 	Unassigned int `json:"unassigned"`
 	Waiting    int `json:"waiting"`
 	Mine       int `json:"mine"`
+	// Attention counts cases that are escalated, overdue or need a
+	// follow-up, each once.
+	Attention int `json:"attention"`
+	Overdue   int `json:"overdue"`
+	FollowUp  int `json:"follow_up"`
+	Escalated int `json:"escalated"`
 	// The newest petition and the latest player reply let the page alert
 	// staff to arrivals beyond the page they are viewing.
 	NewestAt        int64      `json:"newest_at"`
@@ -397,6 +581,18 @@ func supportQueueSummary(cases []supportCaseView, userID uint) supportSummary {
 		}
 		if record.Mine {
 			summary.Mine++
+		}
+		if supportNeedsAttention(record) {
+			summary.Attention++
+		}
+		if record.AgeState == "overdue" {
+			summary.Overdue++
+		}
+		if record.FollowUp {
+			summary.FollowUp++
+		}
+		if record.Escalated {
+			summary.Escalated++
 		}
 		if record.SubmittedAt > summary.NewestAt {
 			summary.NewestAt, summary.NewestKey, summary.NewestCharacter = record.SubmittedAt, record.SourceKey, record.Character
@@ -580,6 +776,18 @@ type supportUpdate struct {
 	Action   string `json:"action"`
 	Text     string `json:"text"`
 	Revision uint   `json:"revision"`
+	// AssigneeID is the staff member for "assign"; 0 unassigns the case.
+	AssigneeID uint   `json:"assignee_id"`
+	Category   string `json:"category"`
+	// Subject is the reported player's character name, or "" to clear it.
+	Subject string `json:"subject"`
+	// CloseInGame also clears the open in-game petition on "resolve".
+	CloseInGame bool `json:"close_in_game"`
+
+	// Resolved on the server before applySupportUpdate.
+	assigneeName string
+	subjectID    uint
+	subjectName  string
 }
 
 func (p *PlayerSupportController) update(c echo.Context) error {
@@ -591,10 +799,53 @@ func (p *PlayerSupportController) update(c echo.Context) error {
 	if c.Bind(&input) != nil {
 		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Invalid case update"))
 	}
-	view, err := scope.caseByKey(c.Param("key"))
+	if input.Action == "assign" && input.AssigneeID != 0 {
+		staff, err := p.supportStaff(c, scope)
+		if err != nil {
+			return supportError(c, err)
+		}
+		input.assigneeName = supportStaffName(staff, input.AssigneeID)
+	}
+	petition, err := p.updateCase(c, scope, c.Param("key"), input)
 	if err != nil {
 		return supportError(c, err)
 	}
+	if petition == nil {
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.JSON(http.StatusOK, echo.Map{"petition": petition})
+}
+
+// updateCase applies one case action. It returns the in-game petition result
+// when a resolve also cleared the petition.
+func (p *PlayerSupportController) updateCase(c echo.Context, scope supportScope, key string, input supportUpdate) (*supportPetitionClose, error) {
+	view, err := scope.caseByKey(key)
+	if err != nil {
+		return nil, err
+	}
+	if input.Action == "subject" {
+		if input.subjectID, input.subjectName, err = supportFindSubject(scope, view, input.Subject); err != nil {
+			return nil, err
+		}
+	}
+	closing := input.Action == "resolve" && input.CloseInGame && view.NativeOpen
+	var accountID uint
+	if closing {
+		if view.CheckedOut {
+			by := ""
+			if view.LastGM != "" {
+				by = " by " + view.LastGM
+			}
+			return nil, echo.NewHTTPError(http.StatusConflict, fmt.Sprintf("Petition #%d is checked out in game%s. Untick “Also clear petition in game” to resolve without clearing it.", view.PetitionID, by))
+		}
+		if accountID, err = supportAccountID(scope, view); err != nil {
+			return nil, err
+		}
+		if accountID == 0 {
+			return nil, echo.NewHTTPError(http.StatusConflict, "The petition account is unavailable")
+		}
+	}
+	var caseID uint
 	err = scope.writeCase(func(tx *gorm.DB) error {
 		record, err := scope.persist(tx, view.PlayerSupportCase)
 		if err != nil {
@@ -603,6 +854,7 @@ func (p *PlayerSupportController) update(c echo.Context) error {
 		if record.Revision != input.Revision {
 			return echo.NewHTTPError(http.StatusConflict, "The case changed. Refresh it before trying again.")
 		}
+		caseID = record.ID
 		actor := supportActor(scope.user)
 		text, err := applySupportUpdate(&record, input, scope.user.ID, actor)
 		if err != nil {
@@ -610,6 +862,8 @@ func (p *PlayerSupportController) update(c echo.Context) error {
 		}
 		if err := tx.Model(&record).Updates(map[string]interface{}{
 			"status": record.Status, "owner_id": record.OwnerID, "owner": record.Owner, "revision": record.Revision + 1,
+			"category": record.Category, "escalated": record.Escalated,
+			"subject_character_id": record.SubjectCharacterID, "subject_character": record.SubjectCharacter,
 		}).Error; err != nil {
 			return err
 		}
@@ -621,13 +875,49 @@ func (p *PlayerSupportController) update(c echo.Context) error {
 		return tx.Create(&models.PlayerSupportEntry{CaseID: record.ID, Kind: input.Action, Actor: actor, Text: text}).Error
 	})
 	if err != nil {
-		return supportError(c, err)
+		return nil, err
+	}
+	var petition *supportPetitionClose
+	if closing {
+		petition = p.closeInGamePetition(c, scope, view, caseID, accountID)
 	}
 	if input.Action == "resolve" && p.world != nil {
 		p.world.Notify()
 	}
 	p.publishCaseStatus(c, scope, view.SourceKey)
-	return c.NoContent(http.StatusNoContent)
+	return petition, nil
+}
+
+// supportFindSubject finds the reported player by exact name. An empty name
+// clears it.
+func supportFindSubject(scope supportScope, view supportCaseView, name string) (uint, string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return 0, "", nil
+	}
+	if utf8.RuneCountInString(name) > 64 {
+		return 0, "", echo.NewHTTPError(http.StatusConflict, "No character named "+name)
+	}
+	var character struct {
+		ID        uint
+		Name      string
+		AccountID uint
+	}
+	if err := scope.eqemu.Table("character_data").Select("id, name, account_id").
+		Where("LOWER(name) = LOWER(?) AND deleted_at IS NULL", name).Order("id").Limit(1).Scan(&character).Error; err != nil {
+		return 0, "", err
+	}
+	if character.ID == 0 {
+		return 0, "", echo.NewHTTPError(http.StatusConflict, "No character named "+name)
+	}
+	accountID, err := supportAccountID(scope, view)
+	if err != nil {
+		return 0, "", err
+	}
+	if accountID != 0 && character.AccountID == accountID {
+		return 0, "", echo.NewHTTPError(http.StatusConflict, "That character is on the petitioning account")
+	}
+	return character.ID, character.Name, nil
 }
 
 // publishCaseStatus shares the case's workflow state with the game, so the
@@ -679,12 +969,88 @@ func applySupportUpdate(record *models.PlayerSupportCase, input supportUpdate, u
 		}
 		record.OwnerID, record.Owner = userID, actor
 		return "Claimed the case", nil
+	case "take":
+		if record.Owner != "" && record.OwnerID == userID {
+			return conflict("You already own this case")
+		}
+		previous := record.Owner
+		record.OwnerID, record.Owner = userID, actor
+		if previous == "" {
+			return "Took the case", nil
+		}
+		return "Took over the case from " + previous, nil
+	case "assign":
+		if input.AssigneeID == 0 {
+			if record.Owner == "" {
+				return conflict("The case is not assigned")
+			}
+			record.OwnerID, record.Owner = 0, ""
+			return "Unassigned the case", nil
+		}
+		if input.assigneeName == "" {
+			return conflict("That staff member cannot work Player Support on this server")
+		}
+		if record.Owner != "" && record.OwnerID == input.AssigneeID {
+			return conflict("The case is already assigned to " + record.Owner)
+		}
+		record.OwnerID, record.Owner = input.AssigneeID, input.assigneeName
+		return "Assigned the case to " + input.assigneeName, nil
 	case "release":
 		if record.Owner == "" || record.OwnerID != userID {
 			return conflict("Only the current owner can release this case")
 		}
 		record.OwnerID, record.Owner = 0, ""
 		return "Released the case", nil
+	case "escalate":
+		reason := strings.TrimSpace(input.Text)
+		if reason == "" || utf8.RuneCountInString(reason) > 500 {
+			return "", echo.NewHTTPError(http.StatusBadRequest, "Enter a reason of up to 500 characters")
+		}
+		if record.Escalated {
+			return conflict("This case is already escalated")
+		}
+		record.Escalated = true
+		return "Escalated the case\n" + reason, nil
+	case "deescalate":
+		note := strings.TrimSpace(input.Text)
+		if utf8.RuneCountInString(note) > 500 {
+			return "", echo.NewHTTPError(http.StatusBadRequest, "Enter a reason of up to 500 characters")
+		}
+		if !record.Escalated {
+			return conflict("This case is not escalated")
+		}
+		record.Escalated = false
+		if note != "" {
+			return "Cleared the escalation\n" + note, nil
+		}
+		return "Cleared the escalation", nil
+	case "categorize":
+		category := strings.TrimSpace(input.Category)
+		label, known := supportCategoryLabel(category)
+		if category != "" && !known {
+			return "", echo.NewHTTPError(http.StatusBadRequest, "Unknown category")
+		}
+		if category == record.Category {
+			return conflict("The case already has that category")
+		}
+		record.Category = category
+		if category == "" {
+			return "Cleared the category", nil
+		}
+		return "Category: " + label, nil
+	case "subject":
+		if input.subjectID == 0 {
+			if record.SubjectCharacterID == 0 && record.SubjectCharacter == "" {
+				return conflict("The case has no reported player")
+			}
+			record.SubjectCharacterID, record.SubjectCharacter = 0, ""
+			return "Cleared the reported player", nil
+		}
+		if record.SubjectCharacterID == input.subjectID {
+			return conflict(input.subjectName + " is already the reported player")
+		}
+		record.SubjectCharacterID, record.SubjectCharacter = input.subjectID, input.subjectName
+		return "Reported player: " + input.subjectName, nil
 	case "wait":
 		if record.Status != "open" {
 			return conflict("Only open cases can be marked waiting")
@@ -698,6 +1064,7 @@ func applySupportUpdate(record *models.PlayerSupportCase, input supportUpdate, u
 			return "", echo.NewHTTPError(http.StatusBadRequest, "Enter a resolution summary of up to 8,000 bytes")
 		}
 		record.Status = "resolved"
+		record.Escalated = false
 		if summary != "" {
 			return "Resolved the case\n" + summary, nil
 		}

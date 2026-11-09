@@ -182,6 +182,8 @@ const supportReplyLimit = 50
 type supportReplyInput struct {
 	Title string `json:"title"`
 	Body  string `json:"body"`
+	// Resolves offers the reply in the Resolve dialog.
+	Resolves bool `json:"resolves"`
 }
 
 func (in supportReplyInput) clean() (supportReplyInput, error) {
@@ -219,14 +221,16 @@ func (p *PlayerSupportController) saveReply(c echo.Context) error {
 	if input, err = input.clean(); err != nil {
 		return supportError(c, err)
 	}
-	reply := models.PlayerSupportReply{ConnectionID: scope.connectionID, Title: input.Title, Body: input.Body, UpdatedBy: supportActor(scope.user)}
+	reply := models.PlayerSupportReply{
+		ConnectionID: scope.connectionID, Title: input.Title, Body: input.Body, Resolves: input.Resolves, UpdatedBy: supportActor(scope.user),
+	}
 	if id := c.Param("id"); id != "" {
 		value, err := strconv.ParseUint(id, 10, 32)
 		if err != nil {
 			return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Invalid saved reply"))
 		}
 		result := scope.spire.Model(&models.PlayerSupportReply{}).Where("id = ? AND connection_id = ?", value, scope.connectionID).
-			Updates(map[string]interface{}{"title": reply.Title, "body": reply.Body, "updated_by": reply.UpdatedBy})
+			Updates(map[string]interface{}{"title": reply.Title, "body": reply.Body, "resolves": reply.Resolves, "updated_by": reply.UpdatedBy})
 		if result.Error != nil {
 			return supportError(c, result.Error)
 		}

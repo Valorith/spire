@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/EQEmuTools/spire/internal/models"
@@ -72,6 +73,231 @@ type supportSnapshotLine struct {
 	Had      int                          `json:"had"`
 	Has      int                          `json:"has"`
 	Missing  int                          `json:"missing"`
+	// Elsewhere is what was found in other places on the account, in the
+	// order it was subtracted from what is missing.
+	Elsewhere supportElsewhere `json:"elsewhere"`
+	// Accounted: everything the character lost was found elsewhere.
+	Accounted bool `json:"accounted"`
+}
+
+type supportElsewhere struct {
+	Corpse     int `json:"corpse"`
+	Parcel     int `json:"parcel"`
+	SharedBank int `json:"shared_bank"`
+	Alt        int `json:"alt"`
+	Restored   int `json:"restored"`
+	// AltName names the other characters holding it, when Alt is counted.
+	AltName string `json:"alt_name,omitempty"`
+	// RestoredAt is when the newest GM parcel batch holding it was sent,
+	// when Restored is counted.
+	RestoredAt *time.Time `json:"restored_at,omitempty"`
+}
+
+func (e supportElsewhere) total() int {
+	return e.Corpse + e.Parcel + e.SharedBank + e.Alt + e.Restored
+}
+
+// supportItemPlaces counts, per item, what is found in each place other than
+// the character's inventory.
+type supportItemPlaces struct {
+	Corpse, Parcel, SharedBank, Alt, Restored map[supportItemKey]int
+	AltNames                                  map[supportItemKey]string
+	RestoredAt                                map[supportItemKey]time.Time
+}
+
+// supportAccountMissing subtracts what was found elsewhere from what is
+// missing, place by place in the order corpse, parcel, shared bank, other
+// characters, restored, never below zero.
+func supportAccountMissing(missing map[supportItemKey][2]int, places supportItemPlaces) map[supportItemKey]supportElsewhere {
+	result := make(map[supportItemKey]supportElsewhere, len(missing))
+	for key, counts := range missing {
+		left := counts[0] - counts[1]
+		take := func(found map[supportItemKey]int) int {
+			amount := min(max(found[key], 0), left)
+			left -= amount
+			return amount
+		}
+		var elsewhere supportElsewhere
+		elsewhere.Corpse = take(places.Corpse)
+		elsewhere.Parcel = take(places.Parcel)
+		elsewhere.SharedBank = take(places.SharedBank)
+		elsewhere.Alt = take(places.Alt)
+		elsewhere.Restored = take(places.Restored)
+		if elsewhere.Alt > 0 {
+			elsewhere.AltName = places.AltNames[key]
+		}
+		if at, ok := places.RestoredAt[key]; ok && elsewhere.Restored > 0 {
+			elsewhere.RestoredAt = &at
+		}
+		result[key] = elsewhere
+	}
+	return result
+}
+
+// supportCountItems counts rows by item and augments with the snapshot rule.
+func supportCountItems(rows []supportInventoryRow, stackable map[uint]bool, wanted map[supportItemKey][2]int) map[supportItemKey]int {
+	counts := map[supportItemKey]int{}
+	for _, row := range rows {
+		key := supportItemKey{row.ItemID, row.augments()}
+		if _, ok := wanted[key]; ok {
+			counts[key] += toolItemCount(row, stackable)
+		}
+	}
+	return counts
+}
+
+// supportRestoreRow is a GM parcel batch line as an inventory row.
+func supportRestoreRow(item supportRestoreItem) supportInventoryRow {
+	row := supportInventoryRow{ItemID: item.ItemID, Charges: item.Quantity}
+	augments := [6]*uint{&row.A1, &row.A2, &row.A3, &row.A4, &row.A5, &row.A6}
+	for i, augment := range item.AugmentIDs {
+		if i < len(augments) {
+			*augments[i] = augment
+		}
+	}
+	return row
+}
+
+// supportRestoredItems counts items in GM parcel batches. A batch line holds
+// one parcel, so it counts by quantity for stackables and once otherwise.
+func supportRestoredItems(restores []supportRestore, stackable map[uint]bool, wanted map[supportItemKey][2]int) map[supportItemKey]int {
+	rows := []supportInventoryRow{}
+	for _, restore := range restores {
+		for _, item := range restore.Items {
+			rows = append(rows, supportRestoreRow(item))
+		}
+	}
+	return supportCountItems(rows, stackable, wanted)
+}
+
+// supportRestoredAt is, per item, when the newest GM parcel batch holding it
+// was sent.
+func supportRestoredAt(restores []supportRestore, wanted map[supportItemKey][2]int) map[supportItemKey]time.Time {
+	sent := map[supportItemKey]time.Time{}
+	for _, restore := range restores {
+		for _, item := range restore.Items {
+			row := supportRestoreRow(item)
+			key := supportItemKey{row.ItemID, row.augments()}
+			if _, ok := wanted[key]; !ok {
+				continue
+			}
+			if at, ok := sent[key]; !ok || restore.SentAt.After(at) {
+				sent[key] = restore.SentAt
+			}
+		}
+	}
+	return sent
+}
+
+// supportAltNames names, per item, the other characters holding it, in
+// character order: "A", "A and B", "A, B and C".
+func supportAltNames(rows []toolItemRow, characters []toolCharacter, stackable map[uint]bool, wanted map[supportItemKey][2]int) map[supportItemKey]string {
+	byOwner := map[uint][]supportInventoryRow{}
+	for _, row := range rows {
+		byOwner[row.Owner] = append(byOwner[row.Owner], row.Row)
+	}
+	holders := map[supportItemKey][]string{}
+	for _, character := range characters {
+		for key, count := range supportCountItems(byOwner[character.ID], stackable, wanted) {
+			if count > 0 {
+				holders[key] = append(holders[key], character.Name)
+			}
+		}
+	}
+	names := make(map[supportItemKey]string, len(holders))
+	for key, list := range holders {
+		names[key] = list[len(list)-1]
+		if len(list) > 1 {
+			names[key] = strings.Join(list[:len(list)-1], ", ") + " and " + list[len(list)-1]
+		}
+	}
+	return names
+}
+
+func toolRows(rows []toolItemRow) []supportInventoryRow {
+	result := make([]supportInventoryRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, row.Row)
+	}
+	return result
+}
+
+// supportItemsElsewhere reads what the account holds outside the character's
+// inventory, for the items that are missing since the snapshot.
+func supportItemsElsewhere(scope supportScope, view supportCaseView, invCols supportInventoryColumns, since time.Time,
+	missing map[supportItemKey][2]int, stackable map[uint]bool) (supportItemPlaces, error) {
+	places := supportItemPlaces{}
+	if len(missing) == 0 {
+		return places, nil
+	}
+	accountID, err := supportAccountID(scope, view)
+	if err != nil || accountID == 0 {
+		return places, err
+	}
+	characters, err := toolAccountCharacters(scope, accountID, false)
+	if err != nil {
+		return places, err
+	}
+	ids := toolCharacterIDs(characters)
+	itemIDs := []uint{}
+	for key := range missing {
+		itemIDs = append(itemIDs, key.ID)
+	}
+	alts := []uint{}
+	for _, id := range ids {
+		if id != view.CharacterID {
+			alts = append(alts, id)
+		}
+	}
+
+	rows, err := toolReadItems(scope.eqemu, "character_corpse_items", "corpse_id", toolCorpseItemColumns,
+		"item_id IN ? AND corpse_id IN (SELECT id FROM character_corpses WHERE charid IN ?)", itemIDs, ids)
+	if err != nil {
+		return places, err
+	}
+	places.Corpse = supportCountItems(toolRows(rows), stackable, missing)
+
+	restores, err := supportRestoreLedger(scope, toolCharacterNames(characters), since, 1000)
+	if err != nil {
+		return places, err
+	}
+	places.Restored = supportRestoredItems(restores, stackable, missing)
+	places.RestoredAt = supportRestoredAt(restores, missing)
+	skip := []uint{}
+	for _, restore := range restores {
+		skip = append(skip, restore.parcelIDs()...)
+	}
+	parcels, err := toolParcelItems(scope.eqemu, ids, skip, "item_id IN ?", itemIDs)
+	if err != nil {
+		return places, err
+	}
+	parcelRows := make([]supportInventoryRow, 0, len(parcels))
+	for _, parcel := range parcels {
+		parcelRows = append(parcelRows, parcel.Row)
+	}
+	places.Parcel = supportCountItems(parcelRows, stackable, missing)
+
+	bankCols, owner, ok, err := toolSharedBankSchema(scope.eqemu)
+	if err != nil {
+		return places, err
+	}
+	if ok {
+		rows, err := toolReadItems(scope.eqemu, "sharedbank", owner, bankCols, owner+" = ? AND "+bankCols.Item+" IN ?", accountID, itemIDs)
+		if err != nil {
+			return places, err
+		}
+		places.SharedBank = supportCountItems(toolRows(rows), stackable, missing)
+	}
+
+	if len(alts) > 0 {
+		rows, err := toolReadItems(scope.eqemu, "inventory", invCols.Character, invCols, invCols.Character+" IN ? AND "+invCols.Item+" IN ?", alts, itemIDs)
+		if err != nil {
+			return places, err
+		}
+		places.Alt = supportCountItems(toolRows(rows), stackable, missing)
+		places.AltNames = supportAltNames(rows, characters, stackable, missing)
+	}
+	return places, nil
 }
 
 type supportItemKey struct {
@@ -181,9 +407,18 @@ func (p *PlayerSupportController) snapshotDiff(c echo.Context) error {
 	for id, item := range items {
 		stackable[id] = item.Stackable != 0
 	}
+	missing := supportMissingItems(had, has, stackable)
+	places, err := supportItemsElsewhere(scope, view, invCols, time.Unix(timeIndex, 0), missing, stackable)
+	if err != nil {
+		return supportError(c, err)
+	}
+	accounting := supportAccountMissing(missing, places)
 	lines := []supportSnapshotLine{}
-	for key, counts := range supportMissingItems(had, has, stackable) {
-		line := supportSnapshotLine{Item: items[key.ID], Had: counts[0], Has: counts[1], Missing: counts[0] - counts[1]}
+	for key, counts := range missing {
+		elsewhere := accounting[key]
+		line := supportSnapshotLine{Item: items[key.ID], Had: counts[0], Has: counts[1], Elsewhere: elsewhere}
+		line.Missing = max(0, counts[0]-counts[1]-elsewhere.total())
+		line.Accounted = line.Missing == 0
 		if line.Item == nil {
 			line.Item = &mailParcelsItemReference{ID: key.ID, Name: fmt.Sprintf("Item %d", key.ID)}
 		}
