@@ -19,7 +19,7 @@
     </header>
 
     <div v-if="summary" class="support-summary" role="group" aria-label="Queue at a glance">
-      <button type="button" class="support-stat tone-blue" :aria-pressed="filter === 'open'" @click="setFilter('open')">
+      <button type="button" class="support-stat tone-blue" :aria-pressed="String(filter === 'open')" @click="setFilter('open')">
         <span class="support-stat-icon"><i class="fe fe-inbox" aria-hidden="true"></i></span>
         <span><strong>{{ summary.active }}</strong> Active</span>
       </button>
@@ -27,7 +27,7 @@
         <span class="support-stat-icon"><i class="fe fe-flag" aria-hidden="true"></i></span>
         <span><strong>{{ summary.urgent }}</strong> Urgent</span>
       </div>
-      <button type="button" class="support-stat tone-violet" :class="{ 'is-quiet': !summary.unassigned }" :aria-pressed="filter === 'unassigned'" @click="setFilter('unassigned')">
+      <button type="button" class="support-stat tone-violet" :class="{ 'is-quiet': !summary.unassigned }" :aria-pressed="String(filter === 'unassigned')" @click="setFilter('unassigned')">
         <span class="support-stat-icon"><i class="fe fe-user-plus" aria-hidden="true"></i></span>
         <span><strong>{{ summary.unassigned }}</strong> Unassigned</span>
       </button>
@@ -35,7 +35,7 @@
         <span class="support-stat-icon"><i class="fe fe-clock" aria-hidden="true"></i></span>
         <span><strong>{{ summary.waiting }}</strong> Waiting on player</span>
       </div>
-      <button type="button" class="support-stat tone-gold" :class="{ 'is-quiet': !summary.mine }" :aria-pressed="filter === 'mine'" @click="setFilter('mine')">
+      <button type="button" class="support-stat tone-gold" :class="{ 'is-quiet': !summary.mine }" :aria-pressed="String(filter === 'mine')" @click="setFilter('mine')">
         <span class="support-stat-icon"><i class="fe fe-user-check" aria-hidden="true"></i></span>
         <span><strong>{{ summary.mine }}</strong> Assigned to you</span>
       </button>
@@ -63,7 +63,7 @@
             <kbd v-if="!search" class="support-search-key" title="Press / to search">/</kbd>
           </label>
           <div class="support-filters" role="group" aria-label="Filter petitions">
-            <button v-for="option in filters" :key="option.id" type="button" :aria-pressed="filter === option.id" @click="setFilter(option.id)">
+            <button v-for="option in filters" :key="option.id" type="button" :aria-pressed="String(filter === option.id)" @click="setFilter(option.id)">
               {{ option.label }}
             </button>
           </div>
@@ -160,10 +160,10 @@
               <template v-if="record.owner"> · assigned to <strong>{{ record.mine ? 'you' : record.owner }}</strong></template>
             </p>
             <div class="support-thread-tabs" role="group" aria-label="Case view">
-              <button type="button" :aria-pressed="!chatOpen" @click="showTimeline">
+              <button type="button" :aria-pressed="String(!chatOpen)" @click="showTimeline">
                 <i class="fe fe-list" aria-hidden="true"></i> Timeline <span class="support-tab-count">{{ activity.length + 1 }}</span>
               </button>
-              <button type="button" :aria-pressed="chatOpen" @click="chatOpen = true"><i class="fe fe-message-circle" aria-hidden="true"></i> Live chat</button>
+              <button type="button" :aria-pressed="String(chatOpen)" @click="chatOpen = true"><i class="fe fe-message-circle" aria-hidden="true"></i> Live chat</button>
             </div>
           </div>
 
@@ -487,8 +487,16 @@ export default {
     eventIcon (kind) { return icons[kind] || 'fe fe-activity' },
     initial (name) { return initials(name) },
     avatarStyle (name) { return avatarStyle(name) },
-    unread (item) { return this.seenVersion >= 0 && item.key !== this.selectedKey && hasUnseenReply(item) },
+    // On a phone the case is on screen only after it is opened from the queue.
+    caseVisible () {
+      return this.mobileDetail || !window.matchMedia('(max-width: 680px)').matches
+    },
+    unread (item) {
+      return this.seenVersion >= 0 && !(item.key === this.selectedKey && this.caseVisible()) && hasUnseenReply(item)
+    },
+    // A reply counts as seen only while staff can see the case.
     noteSeen (at) {
+      if (document.hidden || !this.caseVisible()) return
       markSeen(this.selectedKey, at)
       this.seenVersion++
     },
@@ -650,6 +658,8 @@ export default {
     selectCase (key) {
       this.mobileDetail = true
       this.notice = null
+      // A case loaded in the background is now on screen.
+      if (this.record && this.record.key === key && this.record.last_reply_at) this.noteSeen(this.record.last_reply_at)
       if (key !== this.selectedKey || !this.record) this.openCase(key)
       this.$router.replace({ path: this.$route.path, query: { case: key } }).catch(() => {})
     },

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"sort"
@@ -181,6 +182,31 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 	page = max(1, min(page, 1000000))
 	const size = 30
 	search := strings.TrimSpace(c.QueryParam("q"))
+	// The live inbox drives the header summary for every filter, so it is
+	// built before the resolved list branches off.
+	var live []models.PlayerSupportCase
+	liveQuery := scope.spire.Where("connection_id = ?", scope.connectionID)
+	if len(keys) > 0 {
+		liveQuery = liveQuery.Where("(status <> ? OR source_key IN ?)", "resolved", keys)
+	} else {
+		liveQuery = liveQuery.Where("status <> ?", "resolved")
+	}
+	if err := liveQuery.Find(&live).Error; err != nil {
+		return supportError(c, err)
+	}
+	unimported := maps.Clone(byKey)
+	cases := make([]supportCaseView, 0, len(live)+len(native))
+	for _, record := range live {
+		row := byKey[record.SourceKey]
+		delete(unimported, record.SourceKey)
+		if record.Status != "resolved" {
+			cases = append(cases, supportView(record, row, scope.user.ID))
+		}
+	}
+	for _, row := range unimported {
+		cases = append(cases, supportView(scope.newCase(row), row, scope.user.ID))
+	}
+	summary := supportQueueSummary(cases, scope.user.ID)
 	if filter == "resolved" {
 		query := scope.spire.Model(&models.PlayerSupportCase{}).
 			Where("connection_id = ? AND status = ?", scope.connectionID, "resolved")
@@ -197,38 +223,16 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		if err := query.Order("updated_at DESC, id DESC").Limit(size).Offset((page - 1) * size).Find(&records).Error; err != nil {
 			return supportError(c, err)
 		}
-		cases := make([]supportCaseView, 0, len(records))
+		resolved := make([]supportCaseView, 0, len(records))
 		for _, record := range records {
-			cases = append(cases, supportView(record, byKey[record.SourceKey], scope.user.ID))
+			resolved = append(resolved, supportView(record, byKey[record.SourceKey], scope.user.ID))
 		}
-		p.decoratePresence(scope, cases)
-		p.decorateZones(c, cases)
-		decorateConversations(scope, cases)
-		return c.JSON(http.StatusOK, echo.Map{"cases": cases, "total": count, "connection_id": scope.connectionID})
+		p.decoratePresence(scope, resolved)
+		p.decorateZones(c, resolved)
+		decorateConversations(scope, resolved)
+		return c.JSON(http.StatusOK, echo.Map{"cases": resolved, "total": count, "connection_id": scope.connectionID, "summary": summary})
 	}
 
-	var records []models.PlayerSupportCase
-	query := scope.spire.Where("connection_id = ?", scope.connectionID)
-	if len(keys) > 0 {
-		query = query.Where("(status <> ? OR source_key IN ?)", "resolved", keys)
-	} else {
-		query = query.Where("status <> ?", "resolved")
-	}
-	if err := query.Find(&records).Error; err != nil {
-		return supportError(c, err)
-	}
-	cases := make([]supportCaseView, 0, len(records)+len(native))
-	for _, record := range records {
-		row := byKey[record.SourceKey]
-		delete(byKey, record.SourceKey)
-		if record.Status != "resolved" {
-			cases = append(cases, supportView(record, row, scope.user.ID))
-		}
-	}
-	for _, row := range byKey {
-		cases = append(cases, supportView(scope.newCase(row), row, scope.user.ID))
-	}
-	summary := supportQueueSummary(cases, scope.user.ID)
 	search = strings.ToLower(search)
 	matches := cases[:0]
 	for _, record := range cases {

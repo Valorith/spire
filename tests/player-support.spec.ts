@@ -379,6 +379,28 @@ test('summarizes the queue, flags new replies, and offers quick text', async ({ 
   await expect(page.getByRole('button', { name: /^Aranel / })).toHaveCount(0);
 });
 
+test('keeps a new reply flagged until the case is on screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockSupport(page, ['player-support'], { id: 7 }, { last_reply_at: '2026-11-08T12:00:00Z' });
+  await page.goto('/admin/player-support');
+  const aranel = page.getByRole('button', { name: /^Aranel / });
+  await expect(aranel.getByText('New', { exact: true })).toBeVisible();
+  await aranel.click();
+  await expect(page.getByRole('heading', { name: 'Aranel', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Petitions', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Aranel / }).getByText('New', { exact: true })).toHaveCount(0);
+});
+
+test('keeps the queue summary current on the resolved list', async ({ page }) => {
+  await mockSupport(page, ['player-support']);
+  await page.goto('/admin/player-support');
+  const summary = page.getByRole('group', { name: 'Queue at a glance' });
+  await expect(summary.getByText('Urgent')).toBeVisible();
+  await page.getByRole('group', { name: 'Filter petitions' }).getByRole('button', { name: 'Resolved' }).click();
+  await expect(summary).toBeVisible();
+  await expect(summary.getByRole('button', { name: /Active/ })).toHaveAttribute('aria-pressed', 'false');
+});
+
 test('refreshes live chat immediately when a case is resolved or reopened', async ({ page }) => {
   await mockSupport(page, ['player-support']);
   await page.goto('/admin/player-support');
