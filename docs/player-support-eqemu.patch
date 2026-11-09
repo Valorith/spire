@@ -95,7 +95,7 @@ index dcbab2f046f9f00f76032d9441dcf88ee3a9b817..f8b2a118f2ea0c31ff9690ecf3f3552a
  			r.account_id = 0;
  			connection->SetAuthorized(true, r.account_name, r.account_id, AccountStatus::Max);
 diff --git a/world/console.cpp b/world/console.cpp
-index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a43f44da6 100644
+index 364d40375917f3a9c0794dac6b523423d4a75779..e37533dbf516e1cbbf02ced767f14064ecd011ad 100644
 --- a/world/console.cpp
 +++ b/world/console.cpp
 @@ -21,9 +21,12 @@
@@ -124,7 +124,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a
  /**
   * @param username
   * @param password
-@@ -373,6 +382,429 @@ void ConsoleTell(
+@@ -373,6 +382,446 @@ void ConsoleTell(
  	ZSList::Instance()->SendChannelMessage(tmpname, to.c_str(), ChatChannel_Tell, 0, Strings::Join(join_args, " ").c_str());
  }
  
@@ -138,7 +138,12 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a
 +	uint32 character_id;
 +	std::unique_ptr<ServerPacket> packet;
 +	SupportChatClock::time_point expires;
++	// Spire's answer, or "timeout". It waits here while the sender is zoning.
++	std::string decision;
 +};
++
++// How long an answer waits for a sender who is zoning.
++constexpr auto SupportTellZoningGrace = std::chrono::seconds(60);
 +
 +std::unordered_map<std::string, PendingPlayerSupportTell> pending_support_tells;
 +
@@ -172,15 +177,20 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a
 +	ZSList::Instance()->SendChannelMessageRaw(from.c_str(), sender.name(), ChatChannel_Tell, 0, message);
 +}
 +
-+void FinishPlayerSupportTell(const PendingPlayerSupportTell &tell, const std::string &decision)
++// Delivers the answer to the sender. Returns false while the sender is
++// zoning, so the answer can wait for them instead of being lost. Statuses
++// past InZone (such as offline trading on some servers) count as gone.
++bool FinishPlayerSupportTell(const PendingPlayerSupportTell &tell)
 +{
 +	auto *sender = ClientList::Instance()->FindCLEByCharacterID(tell.character_id);
-+	if (!sender || sender->AccountID() != tell.account_id || sender->Online() != CLE_Status::InZone || !sender->Server()) {
-+		return;
++	if (!sender || sender->AccountID() != tell.account_id || sender->Online() < CLE_Status::Zoning ||
++		sender->Online() > CLE_Status::InZone) {
++		return true;
 +	}
-+	if (tell.expires <= SupportChatClock::now()) {
-+		RejectPlayerSupportTell(*sender, "timeout");
-+	} else if (decision == "accepted") {
++	if (sender->Online() != CLE_Status::InZone || !sender->Server()) {
++		return false;
++	}
++	if (tell.decision == "accepted") {
 +		const auto *original = reinterpret_cast<const ServerChannelMessage_Struct *>(tell.packet->pBuffer);
 +		const auto text = EscapeChannelText(original->message);
 +		ServerPacket echo(ServerOP_ChannelMessage, sizeof(ServerChannelMessage_Struct) + text.size() + 1);
@@ -192,8 +202,9 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a
 +		message->noreply = true;
 +		sender->Server()->SendPacket(&echo);
 +	} else {
-+		RejectPlayerSupportTell(*sender, decision);
++		RejectPlayerSupportTell(*sender, tell.decision);
 +	}
++	return true;
 +}
 +
 +}
@@ -258,8 +269,11 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a
 +	}
 +	next_check = now + std::chrono::seconds(1);
 +	for (auto it = pending_support_tells.begin(); it != pending_support_tells.end();) {
-+		if (it->second.expires <= now) {
-+			FinishPlayerSupportTell(it->second, "timeout");
++		auto &tell = it->second;
++		if (tell.decision.empty() && tell.expires <= now) {
++			tell.decision = "timeout";
++		}
++		if (!tell.decision.empty() && (FinishPlayerSupportTell(tell) || tell.expires + SupportTellZoningGrace <= now)) {
 +			it = pending_support_tells.erase(it);
 +		} else {
 +			++it;
@@ -281,9 +295,12 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a
 +		return;
 +	} else if (args.size() == 3 && args[0] == "decision") {
 +		auto it = pending_support_tells.find(args[1]);
-+		if (it != pending_support_tells.end() && it->second.console_id == connection->GetUUID()) {
-+			FinishPlayerSupportTell(it->second, args[2]);
-+			pending_support_tells.erase(it);
++		// The first answer stands; a late one cannot replace a timeout.
++		if (it != pending_support_tells.end() && it->second.console_id == connection->GetUUID() && it->second.decision.empty()) {
++			it->second.decision = args[2];
++			if (FinishPlayerSupportTell(it->second)) {
++				pending_support_tells.erase(it);
++			}
 +		}
 +		return;
 +	} else if (args.size() == 1 && args[0] == "ping") {
@@ -554,7 +571,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..5142afc54c4a5ea297700ab459feef5a
  /**
   * @param connection
   * @param command
-@@ -1389,10 +1821,14 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
+@@ -1389,10 +1838,14 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
  	console->RegisterCall("md5", 50, "md5", std::bind(ConsoleMd5, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ooc", 50, "ooc [message]", std::bind(ConsoleOOC, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ping", 50, "ping", std::bind(ConsoleNull, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -865,7 +882,7 @@ index f361a00092e8c1fb8b0c3aee59677dda3969b0af..0b6c1da88e053829c2998cab3f656bf8
  		break;
  	}
 diff --git a/zone/client_packet.cpp b/zone/client_packet.cpp
-index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..650ff121d47542e7936865e7964dff538ba1670e 100644
+index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..a30692fbbd5fa682c06e31aa115e43c2dc077a9e 100644
 --- a/zone/client_packet.cpp
 +++ b/zone/client_packet.cpp
 @@ -547,6 +547,13 @@ void Client::CompleteConnect()
@@ -882,7 +899,7 @@ index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..650ff121d47542e7936865e7964dff53
  	hpupdate_timer.Start();
  	autosave_timer.Start();
  	SetDuelTarget(0);
-@@ -11920,48 +11927,50 @@ void Client::Handle_OP_Petition(const EQApplicationPacket *app)
+@@ -11920,48 +11927,56 @@ void Client::Handle_OP_Petition(const EQApplicationPacket *app)
  {
  	if (app->size <= 1)
  		return;
@@ -954,8 +971,14 @@ index 32bbef8a5e3f5993ccb54449f8ca1f551d7b2b43..650ff121d47542e7936865e7964dff53
 +	pet->SetPetitionText(petition_text.data());
 +	pet->SetZone(zone->GetZoneID());
 +	pet->SetUrgency(0);
++	// Save first, so the player is never told a petition was filed when it
++	// was not.
++	if (!database.InsertPetitionToDB(pet)) {
++		safe_delete(pet);
++		Message(Chat::Red, "Your petition could not be saved. Please try again.");
++		return false;
++	}
 +	PetitionList::Instance()->AddPetition(pet);
-+	database.InsertPetitionToDB(pet);
 +	PetitionList::Instance()->UpdateGMQueue();
 +	PetitionList::Instance()->UpdateZoneListQueue();
 +	worldserver.SendEmoteMessage(
@@ -1316,6 +1339,35 @@ index f42cf277285cf77f11e18d5d0651c10228593322..b16295f40c1c25b3b76179510f15fa32
 +		c->Message(Chat::Red, "Error: World server disconnected");
 +	}
 +}
+diff --git a/zone/petitions.cpp b/zone/petitions.cpp
+index 781c50e4597b346bf720e971df4ea2f0c50612cb..c1fb9464e3ca1d526ddc6815831c017c44f358c5 100644
+--- a/zone/petitions.cpp
++++ b/zone/petitions.cpp
+@@ -211,7 +211,7 @@ void ZoneDatabase::UpdatePetitionToDB(Petition* wpet) {
+     auto results = QueryDatabase(query);
+ }
+ 
+-void ZoneDatabase::InsertPetitionToDB(Petition* wpet)
++bool ZoneDatabase::InsertPetitionToDB(Petition* wpet)
+ {
+ 
+ 	uint32 len = strlen(wpet->GetPetitionText());
+@@ -234,13 +234,14 @@ void ZoneDatabase::InsertPetitionToDB(Petition* wpet)
+     safe_delete_array(petitiontext);
+     auto results = QueryDatabase(query);
+ 	if (!results.Success()) {
+-		return;
++		return false;
+ 	}
+ 
+ #if EQDEBUG >= 5
+ 		LogDebug("New petition created");
+ #endif
+ 
++	return true;
+ }
+ 
+ void ZoneDatabase::RefreshPetitionsFromDB()
 diff --git a/zone/worldserver.cpp b/zone/worldserver.cpp
 index 070fae004d3f861dbccd2d37db361951bfc434b1..a603365d830f8810cf2848b0cef6f20dec8cef33 100644
 --- a/zone/worldserver.cpp
@@ -1398,7 +1450,7 @@ index 879ac6043a946b14d64194d41541673317348935..3b260c1f4b0ae38f5aac8ac49ea280e9
  	auto c = Corpse::LoadCharacterCorpse(e, glm::vec4(e.x, e.y, e.z, e.heading));
  
 diff --git a/zone/zonedb.h b/zone/zonedb.h
-index 4e4198f08d0e3c5868729b3911a616837e0c19e3..6129700d46ce99bb9f7a4767cd7df3896b986b95 100644
+index 4e4198f08d0e3c5868729b3911a616837e0c19e3..0d37bf495673b10e23a9f215842688a1707abf6c 100644
 --- a/zone/zonedb.h
 +++ b/zone/zonedb.h
 @@ -499,7 +499,7 @@ public:
@@ -1410,3 +1462,12 @@ index 4e4198f08d0e3c5868729b3911a616837e0c19e3..6129700d46ce99bb9f7a4767cd7df389
  	bool LoadCharacterCorpses(uint32 zone_id, uint16 instance_id);
  	void MarkCorpseAsResurrected(uint32 corpse_id);
  	uint32 SaveCharacterCorpse(uint32 character_id, const std::string& name, uint32 zone_id, uint16 instance_id, const CharacterCorpseEntry& c, const glm::vec4& position, uint32 guild_consent_id);
+@@ -592,7 +592,7 @@ public:
+ 	/* Petitions   */
+ 	void	DeletePetitionFromDB(Petition* wpet);
+ 	void	UpdatePetitionToDB(Petition* wpet);
+-	void	InsertPetitionToDB(Petition* wpet);
++	bool	InsertPetitionToDB(Petition* wpet);
+ 	void	RefreshPetitionsFromDB();
+ 
+ 	/* Merchants  */
