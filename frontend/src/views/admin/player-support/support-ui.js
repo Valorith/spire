@@ -9,17 +9,28 @@ export function nameHue (name) {
   return Math.abs(hash) % 360
 }
 
+// Muted on purpose: the hue tells names apart without competing with the gold accent.
 export function avatarStyle (name) {
   const hue = nameHue(name)
   return {
-    background: `linear-gradient(145deg, hsl(${hue} 42% 36%), hsl(${hue} 46% 22%))`,
-    color: `hsl(${hue} 85% 88%)`,
-    boxShadow: `inset 0 0 0 1px hsl(${hue} 50% 48% / .45)`
+    background: `hsl(${hue} 22% 24%)`,
+    color: `hsl(${hue} 42% 82%)`,
+    boxShadow: `inset 0 0 0 1px hsl(${hue} 24% 32%)`
   }
 }
 
 export function initials (name) {
   return String(name || '?').trim().charAt(0).toUpperCase() || '?'
+}
+
+// Delivery state of a tell, mail or parcel that has not plainly gone through.
+export function deliveryLabel (status) {
+  return { pending: 'Sending', failed: 'Failed', unconfirmed: 'Unconfirmed', mail: 'Sent by mail' }[status] || status
+}
+
+// Chip tone: colour only where the state means something.
+export function deliveryTone (status) {
+  return { failed: 'is-danger', pending: 'is-warning', unconfirmed: 'is-warning' }[status] || null
 }
 
 export function relativeTime (value, now = Date.now()) {

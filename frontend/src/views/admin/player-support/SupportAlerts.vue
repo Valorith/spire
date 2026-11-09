@@ -1,37 +1,45 @@
 <template>
   <b-modal visible centered modal-class="support-modal" title="Petition alerts" @hide="$emit('close')">
     <div class="alerts">
-      <h3>In this browser</h3>
-      <p class="alerts-hint">Alerts fire for new petitions and player replies while Player Support is open in a tab.</p>
-      <label class="alerts-toggle">
-        <input type="checkbox" :checked="prefs.desktop" :disabled="!desktopSupported || permission === 'denied'" @change="toggleDesktop($event.target.checked)">
-        <span><strong>Desktop notifications</strong><small>{{ desktopHint }}</small></span>
-      </label>
-      <label class="alerts-toggle">
-        <input type="checkbox" :checked="prefs.sound" @change="toggleSound($event.target.checked)">
-        <span><strong>Sound</strong><small>A short chime. <button type="button" class="alerts-link" @click.prevent="preview">Play it</button></small></span>
-      </label>
+      <section class="alerts-section">
+        <h3 class="support-section-label">In this browser</h3>
+        <p class="alerts-hint">Alerts fire for new petitions and player replies while Player Support is open in a tab.</p>
+        <div class="support-settings">
+          <label for="alerts-desktop" class="support-setting" :class="{ 'is-disabled': !desktopSupported || permission === 'denied' }">
+            <span class="support-setting-text"><strong id="alerts-desktop-title">Desktop notifications</strong><small id="alerts-desktop-hint">{{ desktopHint }}</small></span>
+            <input id="alerts-desktop" type="checkbox" class="support-switch" aria-labelledby="alerts-desktop-title" aria-describedby="alerts-desktop-hint"
+                   :checked="prefs.desktop" :disabled="!desktopSupported || permission === 'denied'" @change="toggleDesktop($event.target.checked)">
+          </label>
+          <label for="alerts-sound" class="support-setting">
+            <span class="support-setting-text"><strong id="alerts-sound-title">Sound</strong><small id="alerts-sound-hint">A short chime. <button type="button" class="support-link" @click.prevent="preview">Play it</button></small></span>
+            <input id="alerts-sound" type="checkbox" class="support-switch" aria-labelledby="alerts-sound-title" aria-describedby="alerts-sound-hint"
+                   :checked="prefs.sound" @change="toggleSound($event.target.checked)">
+          </label>
+        </div>
+      </section>
 
-      <h3>For the whole team</h3>
-      <p v-if="loading" class="alerts-hint">Loading…</p>
-      <p v-else-if="!settings.available" class="alerts-hint">
-        Discord alerts are set up from the Spire that runs beside this game server.
-      </p>
-      <template v-else>
-        <p class="alerts-hint">Post each new petition to a Discord channel, using a webhook from EQEmu’s Discord webhooks table. Mentions are turned off.</p>
-        <label for="alerts-webhook">Discord channel</label>
-        <select id="alerts-webhook" v-model.number="webhook" class="form-control" :disabled="!canWrite || saving">
-          <option :value="0">Off</option>
-          <option v-for="option in settings.webhooks" :key="option.id" :value="option.id">{{ option.name || 'Webhook #' + option.id }}</option>
-        </select>
-        <p v-if="!settings.webhooks.length" class="alerts-hint">No webhooks yet. Add one to the <code>discord_webhooks</code> table, then reopen this window.</p>
-      </template>
-      <p v-if="error" class="alerts-error" role="alert">{{ error }}</p>
-      <p v-if="saved" class="alerts-saved" role="status"><i class="fe fe-check" aria-hidden="true"></i> Saved</p>
+      <section class="alerts-section">
+        <h3 class="support-section-label">For the whole team</h3>
+        <p v-if="loading" class="alerts-hint">Loading…</p>
+        <p v-else-if="!settings.available" class="alerts-hint">
+          Discord alerts are set up from the Spire that runs beside this game server.
+        </p>
+        <template v-else>
+          <p class="alerts-hint">Post each new petition to a Discord channel, using a webhook from EQEmu’s Discord webhooks table. Mentions are turned off.</p>
+          <label for="alerts-webhook">Discord channel</label>
+          <select id="alerts-webhook" v-model.number="webhook" class="form-control" :disabled="!canWrite || saving">
+            <option :value="0">Off</option>
+            <option v-for="option in settings.webhooks" :key="option.id" :value="option.id">{{ option.name || 'Webhook #' + option.id }}</option>
+          </select>
+          <p v-if="!settings.webhooks.length" class="alerts-hint alerts-after">No webhooks yet. Add one to the <code>discord_webhooks</code> table, then reopen this window.</p>
+        </template>
+        <p v-if="error" class="support-feedback is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ error }}</p>
+        <p v-if="saved" class="support-feedback is-success" role="status"><i class="fe fe-check" aria-hidden="true"></i> Saved</p>
+      </section>
     </div>
     <template #modal-footer>
-      <button type="button" class="btn btn-outline-light btn-sm" @click="$emit('close')">Done</button>
-      <button v-if="settings.available && canWrite" type="button" class="btn btn-primary btn-sm" :disabled="saving || webhook === settings.discord_webhook_id" @click="save">
+      <button type="button" class="support-button" @click="$emit('close')">Done</button>
+      <button v-if="settings.available && canWrite" type="button" class="support-button is-primary" :disabled="saving || webhook === settings.discord_webhook_id" @click="save">
         {{ saving ? 'Saving…' : 'Save Discord channel' }}
       </button>
     </template>
@@ -115,20 +123,9 @@ export default {
 </script>
 
 <style scoped>
-.alerts h3 { margin: 4px 0 4px; color: #f0f4f8; font-size: .86rem; font-weight: 650; }
-.alerts h3 + .alerts-hint { margin-top: 0; }
-.alerts h3:not(:first-child) { margin-top: 18px; padding-top: 14px; border-top: 1px solid #2a3948; }
-.alerts-hint { margin: 4px 0 8px; color: #8fa1b5; font-size: .78rem; }
-.alerts-toggle {
-  display: flex !important; gap: 10px; align-items: flex-start; margin: 6px 0 !important; padding: 9px 11px;
-  border: 1px solid #2f3d4d; border-radius: 9px; background: #172230; cursor: pointer; font-weight: 400 !important;
-}
-.alerts-toggle input { margin-top: 3px; accent-color: #dfb976; }
-.alerts-toggle span { display: grid; gap: 2px; }
-.alerts-toggle strong { color: #eef3f8; font-size: .82rem; font-weight: 600; }
-.alerts-toggle small { color: #8fa1b5; font-size: .74rem; }
-.alerts-link { padding: 0; border: 0; background: none; color: #dfb976; font-size: inherit; }
-.alerts code { color: #f3dcae; background: #241f18; padding: 1px 5px; border-radius: 4px; }
-.alerts-error { margin: 10px 0 0; color: #ffadbd; font-size: .8rem; }
-.alerts-saved { margin: 10px 0 0; color: #8fd6ad; font-size: .8rem; }
+/* Dialog chrome, fields, buttons, feedback and the switch rows come from support-theme.css. */
+.alerts-section + .alerts-section { margin-top: var(--support-space-5); padding-top: var(--support-space-4); border-top: 1px solid var(--support-border-subtle); }
+.alerts-section .support-section-label { margin-bottom: var(--support-space-1); }
+.alerts-hint { margin: 0 0 var(--support-space-3); color: var(--support-muted); font-size: var(--support-text-sm); line-height: 1.5; }
+.alerts-after { margin: var(--support-space-2) 0 0; }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <b-modal ref="modal" modal-class="mail-parcels-editor-modal item-lookup-modal" title="Choose item"
+  <b-modal ref="modal" :modal-class="['mail-parcels-editor-modal item-lookup-modal', modalClass]" title="Choose item"
            hide-footer @shown="$refs.query.focus()" @hidden="resetSearch">
     <div class="spire-editor-search">
       <i class="fa fa-search" aria-hidden="true"></i>
@@ -39,6 +39,11 @@ import './mail-parcels-controls.css'
 
 export default {
   name: 'MailParcelsItemLookup',
+  props: {
+    // Extra classes for the modal, so a host page can theme the picker without
+    // changing how it looks in the Mail & Parcels editor.
+    modalClass: { type: String, default: '' }
+  },
   data () {
     return { query: '', augment: false, socketType: 0, items: [], searching: false, error: '', timer: null, version: 0 }
   },

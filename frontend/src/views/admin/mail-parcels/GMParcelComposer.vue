@@ -1,6 +1,6 @@
 <template>
   <div>
-    <b-modal ref="modal" modal-class="mail-parcels-editor-modal gm-parcel-modal" dialog-class="gm-parcel-dialog"
+    <b-modal ref="modal" :modal-class="['mail-parcels-editor-modal gm-parcel-modal', modalClass]" dialog-class="gm-parcel-dialog"
              :title="caseKey ? 'Send parcel' : 'GM Send Parcels'" centered scrollable
              :hide-header-close="sending" :no-close-on-esc="sending"
              :no-close-on-backdrop="sending" @hidden="$emit('close')">
@@ -139,7 +139,7 @@
         </div>
       </template>
     </b-modal>
-    <mail-parcels-item-lookup ref="lookup" @selected="setItem" />
+    <mail-parcels-item-lookup ref="lookup" :modal-class="modalClass" @selected="setItem" />
   </div>
 </template>
 
@@ -163,7 +163,10 @@ export default {
     connectionId: { type: Number, default: 0 },
     // Lines to start with, such as items restored from an inventory snapshot:
     // { lines: [{ item, quantity, augments, copies }], reason, note }
-    prefill: { type: Object, default: null }
+    prefill: { type: Object, default: null },
+    // Extra classes for the modal, so a host page can theme the dialog without
+    // changing how it looks in the Mail & Parcels editor.
+    modalClass: { type: String, default: '' }
   },
   data () {
     return {
