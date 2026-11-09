@@ -80,7 +80,11 @@ type supportCaseView struct {
 	// OnlineCharacter is the account's character in a zone, which can differ
 	// from the character that filed the petition.
 	OnlineCharacter string `json:"online_character,omitempty"`
-	ZoneName        string `json:"zone_name,omitempty"`
+	// MessagesOn and LastReplyAt let the queue flag live conversations and
+	// player replies the viewer has not seen.
+	MessagesOn  bool       `json:"messages_on"`
+	LastReplyAt *time.Time `json:"last_reply_at,omitempty"`
+	ZoneName    string     `json:"zone_name,omitempty"`
 }
 
 type supportActivity struct {
@@ -199,6 +203,7 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		}
 		p.decoratePresence(scope, cases)
 		p.decorateZones(c, cases)
+		decorateConversations(scope, cases)
 		return c.JSON(http.StatusOK, echo.Map{"cases": cases, "total": count, "connection_id": scope.connectionID})
 	}
 
@@ -223,6 +228,7 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 	for _, row := range byKey {
 		cases = append(cases, supportView(scope.newCase(row), row, scope.user.ID))
 	}
+	summary := supportQueueSummary(cases, scope.user.ID)
 	search = strings.ToLower(search)
 	matches := cases[:0]
 	for _, record := range cases {
@@ -246,7 +252,10 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 	end := min(start+size, len(matches))
 	p.decoratePresence(scope, matches[start:end])
 	p.decorateZones(c, matches[start:end])
-	return c.JSON(http.StatusOK, echo.Map{"cases": matches[start:end], "total": len(matches), "connection_id": scope.connectionID})
+	decorateConversations(scope, matches[start:end])
+	return c.JSON(http.StatusOK, echo.Map{
+		"cases": matches[start:end], "total": len(matches), "connection_id": scope.connectionID, "summary": summary,
+	})
 }
 
 func (s supportScope) caseByKey(key string) (supportCaseView, error) {
@@ -303,7 +312,78 @@ func (p *PlayerSupportController) detail(c echo.Context) error {
 	cases := []supportCaseView{view}
 	p.decoratePresence(scope, cases)
 	p.decorateZones(c, cases)
+	decorateConversations(scope, cases)
 	return c.JSON(http.StatusOK, echo.Map{"case": cases[0], "activity": activity})
+}
+
+type supportSummary struct {
+	Active     int `json:"active"`
+	Urgent     int `json:"urgent"`
+	Unassigned int `json:"unassigned"`
+	Waiting    int `json:"waiting"`
+	Mine       int `json:"mine"`
+}
+
+// supportQueueSummary counts the live inbox before filters and search, so the
+// header reflects the whole queue.
+func supportQueueSummary(cases []supportCaseView, userID uint) supportSummary {
+	var summary supportSummary
+	for _, record := range cases {
+		summary.Active++
+		if record.Urgency > 0 {
+			summary.Urgent++
+		}
+		if record.Owner == "" {
+			summary.Unassigned++
+		}
+		if record.Status == "waiting" {
+			summary.Waiting++
+		}
+		if record.Mine {
+			summary.Mine++
+		}
+	}
+	return summary
+}
+
+// decorateConversations marks cases with Messages on and the time of the
+// latest player reply. Failures leave the fields empty.
+func decorateConversations(scope supportScope, cases []supportCaseView) {
+	ids := make([]uint, 0, len(cases))
+	for _, record := range cases {
+		if record.ID > 0 {
+			ids = append(ids, record.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	var active []uint
+	if scope.spire.Model(&models.PlayerSupportChat{}).Where("case_id IN ?", ids).Pluck("case_id", &active).Error != nil {
+		return
+	}
+	var replies []struct {
+		CaseID uint
+		Last   time.Time
+	}
+	if scope.spire.Model(&models.PlayerSupportEntry{}).Select("case_id, MAX(created_at) AS last").
+		Where("case_id IN ? AND kind = ?", ids, "chat_in").Group("case_id").Scan(&replies).Error != nil {
+		return
+	}
+	on := make(map[uint]bool, len(active))
+	for _, id := range active {
+		on[id] = true
+	}
+	last := make(map[uint]time.Time, len(replies))
+	for _, reply := range replies {
+		last[reply.CaseID] = reply.Last
+	}
+	for i := range cases {
+		cases[i].MessagesOn = on[cases[i].ID]
+		if at, ok := last[cases[i].ID]; ok {
+			cases[i].LastReplyAt = &at
+		}
+	}
 }
 
 // EQEmu records the zone ID on a petition. Resolve it to a readable name when

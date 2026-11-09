@@ -474,6 +474,8 @@ export default {
 <style>
 .support-recovery-modal .modal-content { color: #e1ebf6; background: #101821; border: 1px solid #354658; }
 .support-recovery-modal .modal-header, .support-recovery-modal .modal-footer { background: #131d28; border-color: #2a3948; padding: 14px 20px; }
+.support-recovery-modal .modal-header { background: radial-gradient(600px 120px at 0 0, rgba(98, 210, 216, .1), transparent 70%), #131d28; }
+.support-recovery-modal .modal-content { border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0, 0, 0, .45); }
 .support-recovery-modal .modal-title { font-size: 1.1rem; }
 .support-recovery-modal .modal-header .close { color: #b4c7d9; }
 .support-recovery-modal .modal-body { padding: 0; }
@@ -487,6 +489,8 @@ export default {
 .recovery-tabs button, .recovery-icon { background: transparent; color: var(--muted); border: 0; }
 .recovery-tabs button { border-bottom: 2px solid transparent; padding: 13px 3px 11px; }
 .recovery-tabs button[aria-pressed=true] { color: var(--gold); border-color: var(--gold); }
+.recovery-tabs button .fe-user { color: #62d2d8; }
+.recovery-tabs button .fe-archive { color: #b9a2ff; }
 .recovery-tabs button i { margin-right: 4px; }
 .recovery-tabs button span, .recovery-inventory h3 span { padding: 1px 6px; margin-left: 4px; border-radius: 10px; background: #293746; font-size: .72rem; }
 .recovery-icon { padding: 6px 8px; font-size: 1rem; }
@@ -497,10 +501,12 @@ export default {
 .recovery-corpse > span { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 6px; }
 .recovery-corpse time, .recovery-coordinates { color: var(--muted); font-size: .76rem; }
 .recovery-corpse:hover, .recovery-zone-results button:hover { background: #202e3d; }
-.recovery-corpse[aria-pressed=true] { background: #202b35; border-color: #80683e; }
+.recovery-corpse[aria-pressed=true] { background: linear-gradient(90deg, rgba(230, 189, 120, .12), #202b35 60%); border-color: #80683e; box-shadow: inset 3px 0 0 var(--gold); }
 .recovery-detail { display: grid; gap: 16px; padding: 18px 20px 20px; min-width: 0; }
 .recovery-positions { display: grid; align-items: stretch; gap: 8px; }
 .recovery-positions.has-move { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.recovery-position:not(.recovery-destination) { border-color: #34506e; background: linear-gradient(160deg, #16243a, #141f2a 70%); }
+.recovery-position:not(.recovery-destination) h3 { color: #9cc5f5; }
 .recovery-position { display: flex; align-content: flex-start; align-items: flex-start; flex-direction: column; gap: 5px; min-width: 0; background: #141f2a; border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
 .recovery-position h3, .recovery-inventory h3 { font-size: .82rem; color: var(--muted); margin: 0 0 3px; }
 .recovery-position h3 i { margin-right: 4px; }

@@ -21,7 +21,11 @@
         <p v-if="canWrite && state === 'ready'">Send a tell to start the conversation. The player can answer from any character on the account with <code>#petition</code>, <code>/reply</code> or <code>/tell *GameMaster</code>.</p>
         <p v-else>Tells exchanged with any character on {{ record.character }}’s account appear here.</p>
       </div>
-      <article v-for="message in messages" :key="message.id" class="chat-message" :class="{ 'is-outgoing': message.kind === 'chat_out' }">
+      <article v-for="message in messages" :key="message.id" class="chat-message" :class="{ 'is-outgoing': message.kind === 'chat_out' }"
+               :style="message.kind === 'chat_out' ? null : { '--hue': hue(message.actor || record.character) }">
+        <span v-if="message.kind === 'chat_out'" class="chat-avatar is-gm" aria-hidden="true"><i class="fe fe-shield"></i></span>
+        <span v-else class="chat-avatar" :style="avatar(message.actor || record.character)" aria-hidden="true">{{ initial(message.actor || record.character) }}</span>
+        <div class="chat-bubble">
         <div class="chat-message-meta">
           <strong>
             <template v-if="message.kind === 'chat_out'">
@@ -37,15 +41,19 @@
         <span v-if="message.delivery && message.delivery !== 'sent'" class="chat-message-status" :class="'is-' + message.delivery">
           <i :class="deliveryIcon(message.delivery)" aria-hidden="true"></i> {{ deliveryLabel(message.delivery) }}
         </span>
+        </div>
       </article>
     </div>
 
     <form v-if="canWrite && (active || composable)" class="chat-composer" @submit.prevent="act('send')">
+      <div v-if="composable" class="chat-quick" role="group" aria-label="Quick replies">
+        <button v-for="reply in quickReplies" :key="reply" type="button" :disabled="busy" @click="useQuickReply(reply)">{{ reply }}</button>
+      </div>
       <label for="support-live-message">{{ mailing ? 'Mail ' + mailTo : 'Tell ' + target }} <span>as GameMaster</span></label>
       <div class="chat-compose-row">
-        <textarea id="support-live-message" v-model="draft" rows="2" maxlength="200" :disabled="busy || !composable"
+        <textarea id="support-live-message" ref="draft" v-model="draft" rows="2" maxlength="200" :disabled="busy || !composable"
                   :placeholder="composable ? 'Type a message…' : 'Waiting for ' + target + ' to be reachable…'"
-                  @keydown.enter.exact.prevent="act('send')" @input="requestId = ''"></textarea>
+                  @keydown.enter.exact.prevent="act('send')" @input="onDraftInput"></textarea>
         <button class="chat-button chat-primary" type="submit" :disabled="!draft.trim() || busy || !composable">
           <i :class="mailing ? 'fe fe-mail' : 'fe fe-send'" aria-hidden="true"></i> {{ mailing ? 'Send as mail' : 'Send' }}
         </button>
@@ -64,6 +72,7 @@
 
 <script>
 import axios from 'axios'
+import { avatarStyle, initials, nameHue } from './support-ui'
 import { SpireApi } from '@/app/api/spire-api'
 
 export default {
@@ -76,6 +85,12 @@ export default {
   data () {
     return {
       state: 'connecting', active: false, messages: [], cursor: 0, draft: '', requestId: '', recipient: '', tellsOff: false, mailTo: '',
+      quickReplies: [
+        'Hi! I am looking into this now.',
+        'Can you tell me more about what happened?',
+        'Please log in on any character so I can help.',
+        'This should be fixed now. Let me know if not.'
+      ],
       busy: false, error: '', timer: null, cancellation: null, version: 0, stopped: false
     }
   },
@@ -138,6 +153,26 @@ export default {
     this.cancelLoad()
   },
   methods: {
+    hue (name) { return nameHue(name) },
+    avatar (name) { return avatarStyle(name) },
+    initial (name) { return initials(name) },
+    // The composer grows with the draft, up to about six lines.
+    onDraftInput () {
+      this.requestId = ''
+      const area = this.$refs.draft
+      if (!area) return
+      area.style.height = 'auto'
+      area.style.height = Math.min(area.scrollHeight + 2, 150) + 'px'
+    },
+    useQuickReply (reply) {
+      const current = this.draft.trim()
+      const next = current ? `${current} ${reply}` : reply
+      this.draft = next.slice(0, 200)
+      this.$nextTick(() => {
+        this.onDraftInput()
+        if (this.$refs.draft) this.$refs.draft.focus()
+      })
+    },
     isAlt (message) {
       const name = message.kind === 'chat_out' ? message.recipient : message.actor
       return Boolean(name) && name.toLowerCase() !== this.record.character.toLowerCase()
@@ -175,6 +210,8 @@ export default {
         this.tellsOff = Boolean(data.tells_off)
         this.mailTo = data.mail_to || ''
         this.messages = data.messages || []
+        const replies = this.messages.filter(message => message.kind === 'chat_in')
+        if (replies.length) this.$emit('seen', replies[replies.length - 1].created_at)
         this.cursor = data.cursor
         delay = this.active ? 350 : 8000
         if (following) this.$nextTick(() => {
@@ -209,6 +246,7 @@ export default {
         if (action === 'send') {
           this.draft = ''
           this.requestId = ''
+          this.$nextTick(this.onDraftInput)
         }
       } catch (error) {
         this.error = this.errorText(error)
@@ -252,15 +290,21 @@ export default {
 .chat-empty strong { color: var(--support-text); font-size: .9rem; }
 .chat-empty p { margin: 0; font-size: .8rem; line-height: 1.5; }
 .chat-empty code { padding: 1px 5px; border-radius: 4px; background: #1d2836; color: var(--support-accent); font-size: .76rem; }
-.chat-message { align-self: flex-start; max-width: 80%; min-width: 130px; }
-.chat-message.is-outgoing { align-self: flex-end; }
+.chat-message { --hue: 210; display: flex; align-items: flex-end; gap: 9px; align-self: flex-start; max-width: 82%; min-width: 150px; }
+.chat-message.is-outgoing { align-self: flex-end; flex-direction: row-reverse; }
+.chat-bubble { min-width: 0; flex: 1; }
+.chat-avatar { display: grid; flex: none; place-items: center; width: 28px; height: 28px; margin-bottom: 2px; border-radius: 9px; font-size: .8rem; font-weight: 700; }
+.chat-avatar.is-gm { color: #241b11; background: linear-gradient(145deg, #f1d19a, #c99a52); box-shadow: 0 0 0 1px rgba(241, 209, 154, .35); font-size: .82rem; }
 .chat-message-meta { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 4px; font-size: .75rem; }
 .chat-message-meta strong { display: inline-flex; align-items: baseline; gap: 6px; font-weight: 650; }
 .chat-recipient { color: var(--support-muted); font-weight: 400; }
 .chat-alt { padding: 0 6px; border-radius: 999px; background: #213650; color: #cfe2fb; font-size: .64rem; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; }
 .chat-message-meta time { color: var(--support-muted); font-size: .7rem; }
-.chat-message p { margin: 0; padding: 8px 12px; border: 1px solid #344a63; border-radius: 2px 12px 12px; background: #1a2637; font-size: .87rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-.chat-message.is-outgoing p { border-radius: 12px 2px 12px 12px; border-color: #5c4b32; background: #2c261d; }
+.chat-message p {
+  margin: 0; padding: 8px 12px; border-radius: 12px 12px 12px 3px; font-size: .87rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+  border: 1px solid hsl(var(--hue) 34% 32%); background: linear-gradient(160deg, hsl(var(--hue) 30% 17%), hsl(var(--hue) 26% 13%));
+}
+.chat-message.is-outgoing p { border-radius: 12px 12px 3px 12px; border-color: #6a5636; background: linear-gradient(160deg, #3a3122, #2a241b); }
 .chat-message-status { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 3px; color: #f4ba83; font-size: .7rem; }
 .chat-message-status.is-failed { color: #ffb2c0; }
 .chat-message-status.is-mail { color: #9cc5f5; }
@@ -270,7 +314,15 @@ export default {
 .chat-composer label { display: block; margin-bottom: 6px; color: var(--support-muted); font-size: .75rem; font-weight: 650; }
 .chat-composer label span { font-weight: 400; color: #7f91a5; }
 .chat-compose-row { align-items: flex-end; }
-.chat-compose-row textarea { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #46586c; border-radius: 8px; background: var(--support-bg); color: var(--support-text); resize: vertical; font-size: .86rem; }
+.chat-compose-row textarea { flex: 1; min-width: 0; max-height: 150px; padding: 8px 10px; border: 1px solid #46586c; border-radius: 9px; background: var(--support-bg); color: var(--support-text); resize: none; font-size: .86rem; line-height: 1.45; transition: border-color 120ms ease; }
+.chat-compose-row textarea:focus { border-color: var(--support-accent); }
+.chat-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+.chat-quick button {
+  padding: 3px 10px; border-radius: 999px; border: 1px solid #3a4c60; background: #18222f; color: #c6d3e0; font-size: .72rem;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.chat-quick button:hover:not(:disabled) { border-color: var(--support-accent); color: #f3dcae; background: #241f18; }
+.chat-quick button:disabled { opacity: .5; }
 .chat-compose-row textarea::placeholder { color: #75879b; }
 .chat-compose-hint { margin-top: 6px; color: #7f91a5; font-size: .7rem; font-variant-numeric: tabular-nums; }
 .chat-compose-hint .is-near { color: #f4ba83; }

@@ -106,3 +106,20 @@ func TestPlayerSupportMoveInputModes(t *testing.T) {
 		}
 	}
 }
+
+func TestPlayerSupportQueueSummary(t *testing.T) {
+	view := func(urgency int, owner string, ownerID uint, status string) supportCaseView {
+		record := models.PlayerSupportCase{Urgency: urgency, Owner: owner, OwnerID: ownerID, Status: status}
+		return supportView(record, models.Petition{}, 7)
+	}
+	got := supportQueueSummary([]supportCaseView{
+		view(2, "", 0, "open"),
+		view(0, "Guide", 7, "waiting"),
+		view(1, "Other", 9, "open"),
+		view(0, "", 0, "waiting"),
+	}, 7)
+	want := supportSummary{Active: 4, Urgent: 2, Unassigned: 2, Waiting: 2, Mine: 1}
+	if got != want {
+		t.Fatalf("summary = %+v, want %+v", got, want)
+	}
+}

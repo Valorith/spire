@@ -23,6 +23,12 @@
       <template v-else>
         <label for="support-mail-subject">Subject</label>
         <input id="support-mail-subject" v-model="subject" class="form-control" maxlength="200">
+        <div class="delivery-templates" role="group" aria-label="Message templates">
+          <span>Start from</span>
+          <button v-for="template in templates" :key="template.label" type="button" @click="useTemplate(template)">
+            <i :class="template.icon" aria-hidden="true"></i> {{ template.label }}
+          </button>
+        </div>
         <div class="delivery-label-row">
           <label for="support-mail-body">Message</label>
           <span class="delivery-count">{{ body.length.toLocaleString() }} characters</span>
@@ -59,9 +65,33 @@ export default {
     }
   },
   computed: {
-    valid () { return Boolean(this.subject.trim() && this.body.trim()) }
+    valid () { return Boolean(this.subject.trim() && this.body.trim()) },
+    templates () {
+      const name = this.record.character
+      return [
+        { label: 'Item restored', icon: 'fe fe-package', body: `Hi ${name},
+
+We restored the item you reported. You can collect it from any parcel merchant.
+
+Thanks for your patience!` },
+        { label: 'Need details', icon: 'fe fe-help-circle', body: `Hi ${name},
+
+Thanks for your petition. Could you tell us a little more about what happened, including roughly when and where?
+
+You can reply with #petition in game.` },
+        { label: 'Resolved', icon: 'fe fe-check-circle', body: `Hi ${name},
+
+Your issue has been resolved. If anything still looks wrong, use #petition in game and we will take another look.` }
+      ]
+    }
   },
   methods: {
+    useTemplate (template) {
+      this.body = this.body.trim() ? `${this.body.trimEnd()}
+
+${template.body}` : template.body
+      this.$nextTick(this.focusBody)
+    },
     focusBody () {
       if (this.$refs.body) this.$refs.body.focus()
     },
@@ -110,6 +140,14 @@ export default {
 .delivery-recipient div span, .delivery-case { font-size: .72rem; color: #a9b9ca; }
 .delivery-case { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: #243241; }
 .delivery-label-row { display: flex; align-items: flex-end; justify-content: space-between; }
+.delivery-templates { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.delivery-templates span { color: #8fa1b5; font-size: .74rem; margin-right: 2px; }
+.delivery-templates button {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid #3c4f63; background: #172230; color: #c9d6e3; font-size: .74rem;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.delivery-templates button:hover { border-color: #dfb976; color: #f3dcae; background: #241f18; }
 .delivery-count { color: #8fa1b5; font-size: .72rem; font-variant-numeric: tabular-nums; }
 .delivery-message { display: grid; gap: 4px; padding: 14px; border: 1px solid #3a4859; border-radius: 10px; background: #0e151d; overflow-wrap: anywhere; }
 .delivery-label { margin-top: 6px; color: #8fa1b5; font-size: .7rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }

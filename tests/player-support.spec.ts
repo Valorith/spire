@@ -11,7 +11,10 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
     status: 'open', owner: '', mine: false, native_open: true, checked_out: false, revision: 0, account_presence: 'online',
   };
   Object.assign(record, overrides);
-  const otherCase = { ...record, key: '730-' + submitted, character: 'Thornwick', account_presence: 'offline' };
+  const otherCase = {
+    ...record, key: '730-' + submitted, character: 'Thornwick', account_presence: 'offline',
+    messages_on: true, last_reply_at: '2026-11-08T12:00:00Z', ...(overrides.otherCase as object || {}),
+  };
   const activity: object[] = [];
   const messages: object[] = [];
   const location = { zone_id: 89, instance_id: 0, zone_name: 'Old Sebilis', x: 3, y: -52, z: 5 };
@@ -67,7 +70,12 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
     }
     if (request.method() === 'GET') {
       if (path === endpoint) {
-        return route.fulfill({ json: { connection_id: connection.id, cases: [record, otherCase], total: 2 } });
+        const filter = url.searchParams.get('filter');
+        const cases = filter === 'unassigned' ? [otherCase] : [record, otherCase];
+        return route.fulfill({ json: {
+          connection_id: connection.id, cases, total: cases.length,
+          summary: { active: 2, urgent: 2, unassigned: 1, waiting: 0, mine: 0 },
+        } });
       }
       if (path.endsWith('/recovery')) return route.fulfill({ json: { character: location, corpses, local_world: true, live_destination: true } });
       if (path.endsWith('/corpses/42')) return route.fulfill({ json: { items: [{ id: 2730, icon: 590, name: 'Fungus Covered Scale Tunic' }] } });
@@ -346,6 +354,29 @@ test('mails a Game Master message when no character on the account is in game', 
   await expect(transcript.getByText('Your tunic is waiting at the parcel merchant.')).toBeVisible();
   await expect(transcript.getByText('Sent by mail')).toBeVisible();
   expect(sends[0]).toMatchObject({ action: 'send', text: 'Your tunic is waiting at the parcel merchant.', request_id: expect.stringMatching(/^[a-f0-9]{32}$/) });
+});
+
+test('summarizes the queue, flags new replies, and offers quick text', async ({ page }) => {
+  await mockSupport(page, ['player-support', 'mail-parcels-editor']);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  const summary = page.getByRole('group', { name: 'Queue at a glance' });
+  await expect(summary.getByText('Urgent')).toBeVisible();
+  const thornwick = page.getByRole('button', { name: /^Thornwick / });
+  await expect(thornwick.getByText('New', { exact: true })).toBeVisible();
+  await expect(thornwick.getByText('Live', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Live chat', exact: true }).click();
+  await page.getByRole('group', { name: 'Quick replies' }).getByRole('button', { name: 'Can you tell me more about what happened?' }).click();
+  await expect(page.getByLabel('Tell Aranel')).toHaveValue('Can you tell me more about what happened?');
+
+  await page.getByRole('button', { name: 'Reply by mail' }).click();
+  await page.getByRole('group', { name: 'Message templates' }).getByRole('button', { name: /Need details/ }).click();
+  await expect(page.getByLabel('Message', { exact: true })).toHaveValue(/^Hi Aranel,/);
+  await page.keyboard.press('Escape');
+
+  await summary.getByRole('button', { name: /Unassigned/ }).click();
+  await expect(page.getByRole('button', { name: /^Thornwick / })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Aranel / })).toHaveCount(0);
 });
 
 test('refreshes live chat immediately when a case is resolved or reopened', async ({ page }) => {

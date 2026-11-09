@@ -18,6 +18,29 @@
       </div>
     </header>
 
+    <div v-if="summary" class="support-summary" role="group" aria-label="Queue at a glance">
+      <button type="button" class="support-stat tone-blue" :aria-pressed="filter === 'open'" @click="setFilter('open')">
+        <span class="support-stat-icon"><i class="fe fe-inbox" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.active }}</strong> Active</span>
+      </button>
+      <div class="support-stat tone-ember" :class="{ 'is-quiet': !summary.urgent }">
+        <span class="support-stat-icon"><i class="fe fe-flag" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.urgent }}</strong> Urgent</span>
+      </div>
+      <button type="button" class="support-stat tone-violet" :class="{ 'is-quiet': !summary.unassigned }" :aria-pressed="filter === 'unassigned'" @click="setFilter('unassigned')">
+        <span class="support-stat-icon"><i class="fe fe-user-plus" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.unassigned }}</strong> Unassigned</span>
+      </button>
+      <div class="support-stat tone-amber" :class="{ 'is-quiet': !summary.waiting }">
+        <span class="support-stat-icon"><i class="fe fe-clock" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.waiting }}</strong> Waiting on player</span>
+      </div>
+      <button type="button" class="support-stat tone-gold" :class="{ 'is-quiet': !summary.mine }" :aria-pressed="filter === 'mine'" @click="setFilter('mine')">
+        <span class="support-stat-icon"><i class="fe fe-user-check" aria-hidden="true"></i></span>
+        <span><strong>{{ summary.mine }}</strong> Assigned to you</span>
+      </button>
+    </div>
+
     <transition name="support-fade">
       <div v-if="notice" class="support-notice" :class="{ 'is-error': notice.error }" :role="notice.error ? 'alert' : 'status'">
         <i :class="notice.error ? 'fe fe-alert-circle' : 'fe fe-check-circle'" aria-hidden="true"></i>
@@ -35,7 +58,9 @@
           </div>
           <label class="support-search">
             <i class="fe fe-search" aria-hidden="true"></i>
-            <input v-model="search" type="search" maxlength="200" placeholder="Character, account or text" aria-label="Search petitions" @input="scheduleSearch">
+            <input ref="search" v-model="search" type="search" maxlength="200" placeholder="Character, account or text" aria-label="Search petitions"
+                   @input="scheduleSearch" @keydown.esc="clearSearch">
+            <kbd v-if="!search" class="support-search-key" title="Press / to search">/</kbd>
           </label>
           <div class="support-filters" role="group" aria-label="Filter petitions">
             <button v-for="option in filters" :key="option.id" type="button" :aria-pressed="filter === option.id" @click="setFilter(option.id)">
@@ -52,22 +77,31 @@
           <strong>{{ queueError ? 'Petitions unavailable' : emptyTitle }}</strong>
           <span>{{ queueError ? 'Check the server connection, then refresh.' : emptyHint }}</span>
         </div>
-        <ul v-else ref="caseList" class="support-case-list" @keydown.up.prevent="moveFocus(-1)" @keydown.down.prevent="moveFocus(1)">
-          <li v-for="item in cases" :key="item.key">
-            <button type="button" class="support-case-row" :class="['urgency-' + Math.min(item.urgency || 0, 2), { 'is-selected': selectedKey === item.key }]"
+        <ul v-else ref="caseList" class="support-case-list" :class="{ 'is-entering': entering }"
+            @keydown.up.prevent="moveFocus(-1)" @keydown.down.prevent="moveFocus(1)">
+          <li v-for="(item, index) in cases" :key="item.key" :style="{ '--i': Math.min(index, 12) }">
+            <button type="button" class="support-case-row" :class="['urgency-' + Math.min(item.urgency || 0, 2), { 'is-selected': selectedKey === item.key, 'is-unread': unread(item) }]"
                     :aria-current="selectedKey === item.key ? 'true' : null" :disabled="busy" @click="selectCase(item.key)">
-              <span class="support-row-top">
-                <strong>{{ item.character }}</strong>
-                <span class="support-presence is-small" :class="'presence-' + (item.account_presence || 'unknown')"
-                      :title="'Account ' + presenceLabel(item.account_presence).toLowerCase()">{{ presenceLabel(item.account_presence) }}</span>
-                <time :datetime="dateTime(item.submitted_at)" :title="formatDate(item.submitted_at)">{{ age(item.submitted_at) }}</time>
+              <span class="support-row-avatar" :style="avatarStyle(item.character)" aria-hidden="true">
+                {{ initial(item.character) }}
+                <span class="support-row-presence" :class="'presence-' + (item.account_presence || 'unknown')"></span>
               </span>
-              <span class="support-case-snippet">{{ item.message }}</span>
-              <span class="support-row-bottom">
-                <span class="support-chip" :class="'status-' + item.status">{{ statusLabel(item.status) }}</span>
-                <span v-if="item.urgency > 0" class="support-chip is-urgent"><i class="fe fe-flag" aria-hidden="true"></i> {{ urgency(item.urgency) }}</span>
-                <span v-if="item.owner" class="support-row-owner" :class="{ 'is-mine': item.mine }" :title="'Assigned to ' + item.owner">
-                  <span class="support-avatar" aria-hidden="true">{{ initial(item.owner) }}</span>{{ item.mine ? 'You' : item.owner }}
+              <span class="support-row-main">
+                <span class="support-row-top">
+                  <strong>{{ item.character }}</strong>
+                  <span v-if="unread(item)" class="support-unread" title="New reply from the player">New</span>
+                  <span class="support-presence is-small" :class="'presence-' + (item.account_presence || 'unknown')"
+                        :title="'Account ' + presenceLabel(item.account_presence).toLowerCase()">{{ presenceLabel(item.account_presence) }}</span>
+                  <time :datetime="dateTime(item.submitted_at)" :title="formatDate(item.submitted_at)">{{ age(item.submitted_at) }}</time>
+                </span>
+                <span class="support-case-snippet">{{ item.message }}</span>
+                <span class="support-row-bottom">
+                  <span class="support-chip" :class="'status-' + item.status">{{ statusLabel(item.status) }}</span>
+                  <span v-if="item.urgency > 0" class="support-chip is-urgent"><i class="fe fe-flag" aria-hidden="true"></i> {{ urgency(item.urgency) }}</span>
+                  <span v-if="item.messages_on" class="support-chip is-live" title="Messages are on for this case"><i class="fe fe-message-circle" aria-hidden="true"></i> Live</span>
+                  <span v-if="item.owner" class="support-row-owner" :class="{ 'is-mine': item.mine }" :title="'Assigned to ' + item.owner">
+                    <span class="support-avatar" :style="item.mine ? null : avatarStyle(item.owner)" aria-hidden="true">{{ initial(item.owner) }}</span>{{ item.mine ? 'You' : item.owner }}
+                  </span>
                 </span>
               </span>
             </button>
@@ -99,6 +133,7 @@
             </div>
             <div class="support-thread-heading">
               <div class="support-identity">
+                <span class="support-hero-avatar" :style="avatarStyle(record.character)" aria-hidden="true">{{ initial(record.character) }}</span>
                 <h2>{{ record.character }}</h2>
                 <span v-if="record.character_presence" class="support-presence" :class="'presence-' + record.character_presence">
                   {{ characterPresenceLabel(record.character_presence) }}
@@ -136,7 +171,8 @@
             <i :class="caseBanner.icon" aria-hidden="true"></i><span>{{ caseBanner.text }}</span>
           </div>
 
-          <support-live-chat v-if="chatOpen" :key="selectedKey" :record="record" :connection-id="connectionId" :can-write="canWrite && record.status !== 'resolved'" />
+          <support-live-chat v-if="chatOpen" :key="selectedKey" :record="record" :connection-id="connectionId" :can-write="canWrite && record.status !== 'resolved'"
+                             @seen="noteSeen" />
           <div v-else ref="timeline" class="support-timeline">
             <article class="support-event support-original">
               <span class="support-event-icon"><i class="fe fe-message-square" aria-hidden="true"></i></span>
@@ -191,26 +227,39 @@
         <section>
           <h2>Character</h2>
           <div class="support-character-card">
-            <span class="support-avatar is-large" aria-hidden="true">{{ initial(record.character) }}</span>
+            <span class="support-avatar is-large" :style="avatarStyle(record.character)" aria-hidden="true">{{ initial(record.character) }}</span>
             <div>
               <strong>{{ record.character }}</strong>
               <span>Filed the petition · {{ characterPresenceLabel(record.character_presence || record.account_presence).toLowerCase() }}</span>
             </div>
+            <button type="button" class="support-copy" :aria-label="'Copy ' + record.character" :title="copied === 'character' ? 'Copied' : 'Copy name'"
+                    @click="copy(record.character, 'character')">
+              <i :class="copied === 'character' ? 'fe fe-check' : 'fe fe-copy'" aria-hidden="true"></i>
+            </button>
           </div>
           <dl>
-            <dt>Account</dt><dd>{{ record.account }}</dd>
+            <dt>Account</dt>
+            <dd class="support-copyable">
+              {{ record.account }}
+              <button type="button" class="support-copy is-inline" :aria-label="'Copy account ' + record.account" :title="copied === 'account' ? 'Copied' : 'Copy account'"
+                      @click="copy(record.account, 'account')">
+                <i :class="copied === 'account' ? 'fe fe-check' : 'fe fe-copy'" aria-hidden="true"></i>
+              </button>
+            </dd>
             <template v-if="onAlt"><dt>Playing now</dt><dd>{{ record.online_character }}</dd></template>
             <dt>Filed from</dt><dd>{{ record.zone_name || record.zone || 'Unknown zone' }}</dd>
             <dt>Assigned to</dt><dd>{{ record.owner || 'Unassigned' }}</dd>
             <dt>In-game petition</dt><dd>{{ record.checked_out ? 'Checked out' : record.native_open ? '#' + record.petition_id : 'Cleared' }}</dd>
           </dl>
           <nav v-if="record.character_id" class="support-related" aria-label="Character tools">
-            <div v-if="canMove || canInspectRecovery" class="support-tool-row">
-              <button v-if="canMove" type="button" class="support-button" :disabled="busy" @click="delivery = 'move'">
-                <i class="fe fe-navigation" aria-hidden="true"></i> Move character
+            <div v-if="canMove || canInspectRecovery" class="support-tiles">
+              <button v-if="canMove" type="button" class="support-tile tone-teal" aria-label="Move character" :disabled="busy" @click="delivery = 'move'">
+                <span class="support-tile-icon"><i class="fe fe-navigation" aria-hidden="true"></i></span>
+                <strong>Move character</strong><small>Zone, spot or player</small>
               </button>
-              <button v-if="canInspectRecovery" type="button" class="support-button" :disabled="busy" @click="delivery = 'corpses'">
-                <i class="fe fe-archive" aria-hidden="true"></i> Corpses
+              <button v-if="canInspectRecovery" type="button" class="support-tile tone-violet" aria-label="Corpses" :disabled="busy" @click="delivery = 'corpses'">
+                <span class="support-tile-icon"><i class="fe fe-archive" aria-hidden="true"></i></span>
+                <strong>Corpses</strong><small>Loot and recovery</small>
               </button>
             </div>
             <router-link v-for="link in characterLinks" :key="link.name" :to="link.to">
@@ -220,15 +269,20 @@
         </section>
         <section v-if="canWrite && record.status !== 'resolved'" class="support-actions">
           <h2>Respond</h2>
-          <button v-if="canDeliver" type="button" class="support-button is-primary" :disabled="busy" @click="delivery = 'reply'">
-            <i class="fe fe-mail" aria-hidden="true"></i> Reply by mail
-          </button>
-          <button v-if="canParcel" type="button" class="support-button" :disabled="busy" @click="delivery = 'parcel'">
-            <i class="fe fe-package" aria-hidden="true"></i> Send parcel
-          </button>
-          <button type="button" class="support-button" :disabled="busy" @click="chatOpen = true">
-            <i class="fe fe-message-circle" aria-hidden="true"></i> Open live chat
-          </button>
+          <div class="support-tiles">
+            <button type="button" class="support-tile tone-gold" aria-label="Open live chat" :disabled="busy" @click="chatOpen = true">
+              <span class="support-tile-icon"><i class="fe fe-message-circle" aria-hidden="true"></i></span>
+              <strong>Live chat</strong><small>{{ record.messages_on ? 'Messages are on' : 'Tells, or mail if offline' }}</small>
+            </button>
+            <button v-if="canDeliver" type="button" class="support-tile tone-blue" aria-label="Reply by mail" :disabled="busy" @click="delivery = 'reply'">
+              <span class="support-tile-icon"><i class="fe fe-mail" aria-hidden="true"></i></span>
+              <strong>Reply by mail</strong><small>To {{ record.character }}’s mailbox</small>
+            </button>
+            <button v-if="canParcel" type="button" class="support-tile tone-green" aria-label="Send parcel" :disabled="busy" @click="delivery = 'parcel'">
+              <span class="support-tile-icon"><i class="fe fe-package" aria-hidden="true"></i></span>
+              <strong>Send parcel</strong><small>Items via parcel merchant</small>
+            </button>
+          </div>
           <h2 class="support-actions-divider">Status</h2>
           <button v-if="record.status === 'open'" type="button" class="support-button" :disabled="busy" @click="updateCase('wait')">
             <i class="fe fe-clock" aria-hidden="true"></i> Wait for player
@@ -257,6 +311,9 @@
              @ok="updateCase('resolve')">
       <p class="support-modal-lead">Resolve <strong>{{ record ? record.character : '' }}</strong>’s case in Spire?</p>
       <label for="support-resolution">Resolution summary <span>(optional)</span></label>
+      <div class="support-quick" role="group" aria-label="Common resolutions">
+        <button v-for="phrase in resolutionPhrases" :key="phrase" type="button" @click="addResolution(phrase)">{{ phrase }}</button>
+      </div>
       <textarea id="support-resolution" ref="resolution" v-model="resolution" class="form-control" rows="3" maxlength="8000"
                 placeholder="What was done? This is added to the case timeline."></textarea>
       <p v-if="record && record.native_open" class="support-modal-hint">
@@ -274,6 +331,7 @@ import SupportMailReply from './SupportMailReply.vue'
 import GmParcelComposer from '../mail-parcels/GMParcelComposer.vue'
 import SupportLiveChat from './SupportLiveChat.vue'
 import SupportRecovery from './SupportRecovery.vue'
+import { avatarStyle, hasUnseenReply, initials, markSeen } from './support-ui'
 
 const endpoint = 'player-support/cases'
 const titles = {
@@ -300,7 +358,9 @@ export default {
       filter: 'open', search: '', page: 1, total: 0, cases: [], connectionId: null, selectedKey: '', record: null, activity: [],
       queueLoading: false, backgroundLoading: false, detailLoading: false, queueError: false, detailError: false, queueVersion: 0, detailVersion: 0,
       mobileDetail: false, searchTimer: null, presenceTimer: null, noticeTimer: null, busy: false, note: '', notice: null, delivery: null,
-      resolveOpen: false, resolution: '', chatOpen: false, refreshedAt: null
+      resolveOpen: false, resolution: '', chatOpen: false, refreshedAt: null,
+      summary: null, now: Date.now(), clockTimer: null, seenVersion: 0, copied: '', copyTimer: null, entering: true,
+      resolutionPhrases: ['Restored the missing item', 'Moved the character to safety', 'Recovered the corpse', 'Explained how it works', 'No action needed']
     }
   },
   computed: {
@@ -403,11 +463,17 @@ export default {
     this.mobileDetail = Boolean(this.$route.query.case)
     this.loadQueue(true)
     this.presenceTimer = setInterval(this.backgroundRefresh, 12000)
+    this.clockTimer = setInterval(() => { this.now = Date.now() }, 30000)
+    window.addEventListener('keydown', this.onShortcut)
+    setTimeout(() => { this.entering = false }, 900)
   },
   beforeDestroy () {
     clearTimeout(this.searchTimer)
     clearTimeout(this.noticeTimer)
     clearInterval(this.presenceTimer)
+    clearInterval(this.clockTimer)
+    clearTimeout(this.copyTimer)
+    window.removeEventListener('keydown', this.onShortcut)
     this.queueVersion++
     this.detailVersion++
   },
@@ -419,7 +485,42 @@ export default {
     urgency (value) { return value > 1 ? 'Urgent' : 'Elevated' },
     eventTitle (kind) { return titles[kind] || 'Case updated' },
     eventIcon (kind) { return icons[kind] || 'fe fe-activity' },
-    initial (name) { return String(name || '?').trim().charAt(0).toUpperCase() || '?' },
+    initial (name) { return initials(name) },
+    avatarStyle (name) { return avatarStyle(name) },
+    unread (item) { return this.seenVersion >= 0 && item.key !== this.selectedKey && hasUnseenReply(item) },
+    noteSeen (at) {
+      markSeen(this.selectedKey, at)
+      this.seenVersion++
+    },
+    // "/" focuses search from anywhere outside a text field.
+    onShortcut (event) {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return
+      const target = event.target
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
+      if (document.querySelector('.modal.show')) return
+      event.preventDefault()
+      if (this.$refs.search) this.$refs.search.focus()
+    },
+    clearSearch () {
+      if (!this.search) return
+      this.search = ''
+      this.scheduleSearch()
+    },
+    async copy (text, which) {
+      try {
+        await navigator.clipboard.writeText(text)
+        this.copied = which
+        clearTimeout(this.copyTimer)
+        this.copyTimer = setTimeout(() => { this.copied = '' }, 1600)
+      } catch (e) {
+        this.notice = { error: true, text: 'Copying is not available in this browser.' }
+      }
+    },
+    addResolution (phrase) {
+      const current = this.resolution.trim()
+      this.resolution = current ? `${current}${/[.!?]$/.test(current) ? '' : '.'} ${phrase}.` : `${phrase}.`
+      this.$nextTick(() => { if (this.$refs.resolution) this.$refs.resolution.focus() })
+    },
     dateTime (value) { return new Date(value * 1000).toISOString() },
     toDate (value) { return new Date(typeof value === 'number' ? value * 1000 : value) },
     formatDate (value) {
@@ -437,7 +538,7 @@ export default {
       return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric' }).format(date)
     },
     age (value, long = false) {
-      const minutes = Math.max(0, Math.floor((Date.now() / 1000 - value) / 60))
+      const minutes = Math.max(0, Math.floor((this.now / 1000 - value) / 60))
       if (minutes < 1) return long ? 'just now' : 'Now'
       const [amount, unit] = minutes < 60 ? [minutes, 'm'] : minutes < 1440 ? [Math.floor(minutes / 60), 'h'] : [Math.floor(minutes / 1440), 'd']
       if (!long) return amount + unit
@@ -485,6 +586,7 @@ export default {
         this.connectionId = data.connection_id
         this.cases = data.cases || []
         this.total = data.total || 0
+        if (data.summary) this.summary = data.summary
         this.refreshedAt = new Date()
         if (!this.selectedKey) {
           const key = (initial && this.$route.query.case) || (this.cases[0] && this.cases[0].key)
@@ -519,6 +621,7 @@ export default {
         const grew = (data.activity || []).length > this.activity.length
         this.record = data.case
         this.activity = data.activity || []
+        if (data.case.last_reply_at) this.noteSeen(data.case.last_reply_at)
         if (!background || (following && grew)) this.$nextTick(this.scrollTimeline)
       } catch (error) {
         if (version === this.detailVersion && !background) {
@@ -633,6 +736,13 @@ export default {
   --support-success: #8fd6ad;
   --support-warning: #f4ba83;
   --support-info: #9cc5f5;
+  --tone-blue: #79adff;
+  --tone-green: #6fd3a0;
+  --tone-amber: #f2c46d;
+  --tone-ember: #ff8f6b;
+  --tone-teal: #62d2d8;
+  --tone-violet: #b9a2ff;
+  --tone-gold: #e7c27f;
   max-width: 1560px;
   margin: 0 auto 2.5rem;
   color: var(--support-text);
@@ -658,6 +768,31 @@ export default {
 @keyframes support-pulse { 0% { transform: scale(.6); opacity: .8; } 100% { transform: scale(1.6); opacity: 0; } }
 .is-spinning { display: inline-block; animation: support-spin 900ms linear infinite; }
 @keyframes support-spin { to { transform: rotate(360deg); } }
+
+/* Queue at a glance */
+.support-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: -4px 0 16px; }
+.support-stat {
+  --tone: var(--tone-blue);
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; text-align: left;
+  border: 1px solid color-mix(in srgb, var(--tone) 28%, var(--support-border)); border-radius: 11px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tone) 14%, #141c26), #131a23 70%);
+  color: var(--support-text); font-size: .78rem; line-height: 1.2;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.support-stat strong { display: block; font-size: 1.25rem; font-weight: 700; letter-spacing: -.02em; color: var(--tone); font-variant-numeric: tabular-nums; }
+.support-stat > span:last-child { min-width: 0; color: var(--support-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-stat-icon { display: grid; flex: none; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, transparent); font-size: 15px; }
+button.support-stat:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--tone) 55%, var(--support-border)); box-shadow: 0 8px 22px rgba(0, 0, 0, .25); }
+.support-stat[aria-pressed="true"] { border-color: var(--tone); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 40%, transparent); }
+.support-stat.is-quiet { opacity: .62; }
+.support-stat.is-quiet strong { color: var(--support-muted); }
+.tone-blue { --tone: var(--tone-blue); }
+.tone-green { --tone: var(--tone-green); }
+.tone-amber { --tone: var(--tone-amber); }
+.tone-ember { --tone: var(--tone-ember); }
+.tone-teal { --tone: var(--tone-teal); }
+.tone-violet { --tone: var(--tone-violet); }
+.tone-gold { --tone: var(--tone-gold); }
 
 /* Buttons */
 .support-button, .support-icon {
@@ -694,9 +829,12 @@ export default {
 
 /* Workspace */
 .support-workspace {
-  display: grid; grid-template-columns: minmax(250px, 27%) minmax(0, 1fr) minmax(220px, 22%);
-  min-height: 640px; border: 1px solid var(--support-border); border-radius: 12px; background: var(--support-bg);
-  overflow: hidden; box-shadow: 0 14px 40px rgba(0, 0, 0, .28);
+  display: grid; grid-template-columns: minmax(260px, 27%) minmax(0, 1fr) minmax(230px, 22%);
+  min-height: 640px; border: 1px solid var(--support-border); border-radius: 14px;
+  background:
+    radial-gradient(900px 320px at 50% -120px, rgba(223, 185, 118, .07), transparent 70%),
+    var(--support-bg);
+  overflow: hidden; box-shadow: 0 18px 50px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .03);
 }
 
 /* Queue */
@@ -709,6 +847,7 @@ export default {
 .support-search:focus-within { border-color: var(--support-accent); }
 .support-search input { width: 100%; min-width: 0; padding: 8px 0; background: transparent; border: 0; color: var(--support-text); font-size: .84rem; }
 .support-search input:focus-visible { outline: none; }
+.support-search-key { flex: none; padding: 0 6px; border-radius: 4px; border: 1px solid var(--support-border-strong); background: #1f2a37; color: var(--support-muted); font-size: .68rem; box-shadow: none; }
 .support-search input::placeholder { color: #7f91a5; }
 .support-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; margin-top: 10px; padding: 3px; border-radius: 8px; background: var(--support-bg); border: 1px solid var(--support-border); }
 .support-filters button { border: 0; border-radius: 6px; padding: 5px 4px; color: var(--support-muted); background: transparent; font-size: .72rem; font-weight: 650; white-space: nowrap; }
@@ -716,15 +855,33 @@ export default {
 .support-filters button[aria-pressed="true"] { color: #1f1910; background: var(--support-accent); }
 .support-case-list { flex: 1; padding: 0; margin: 0; list-style: none; max-height: 640px; overflow: auto; }
 .support-case-row {
-  position: relative; display: block; width: 100%; border: 0; border-bottom: 1px solid #263342;
-  padding: 12px 14px 11px 16px; background: transparent; text-align: left; color: var(--support-text);
+  position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 11px; width: 100%; border: 0; border-bottom: 1px solid #263342;
+  padding: 12px 14px 11px 14px; background: transparent; text-align: left; color: var(--support-text);
   transition: background-color 150ms ease;
 }
+.support-row-main { display: block; min-width: 0; }
+.support-row-avatar {
+  position: relative; display: grid; place-items: center; width: 34px; height: 34px; margin-top: 1px;
+  border-radius: 10px; font-size: .92rem; font-weight: 700;
+}
+.support-row-presence { position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--support-pane); background: #5d6d7f; }
+.support-row-presence.presence-online { background: var(--support-success); }
+.support-row-presence.presence-unknown { background: #3a4757; }
+.support-case-list.is-entering li { animation: support-rise 420ms cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 32ms); }
+@keyframes support-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.support-unread {
+  flex: none; padding: 1px 7px; border-radius: 999px; color: #241b11; background: var(--support-accent);
+  font-size: .62rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  box-shadow: 0 0 0 0 rgba(223, 185, 118, .6); animation: support-glow 2.2s ease-out infinite;
+}
+@keyframes support-glow { 0% { box-shadow: 0 0 0 0 rgba(223, 185, 118, .55); } 70% { box-shadow: 0 0 0 7px rgba(223, 185, 118, 0); } 100% { box-shadow: 0 0 0 0 rgba(223, 185, 118, 0); } }
+.support-case-row.is-unread strong { color: #fff; }
+.support-case-row.is-unread .support-case-snippet { color: #e3ebf3; }
 .support-case-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; }
 .support-case-row.urgency-1::before { background: #a57a45; }
 .support-case-row.urgency-2::before { background: #e07b5a; }
 .support-case-row:hover:not(:disabled) { background: #1d2a38; }
-.support-case-row.is-selected { background: #233041; }
+.support-case-row.is-selected { background: linear-gradient(90deg, rgba(223, 185, 118, .1), #233041 46%); }
 .support-case-row.is-selected::before { background: var(--support-accent); }
 .support-row-top, .support-row-bottom { gap: 8px; min-width: 0; }
 .support-row-top strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
@@ -746,6 +903,7 @@ export default {
 .support-chip.is-alt { margin-left: 4px; padding: 0 6px; font-size: .62rem; letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
 .support-chip.delivery-failed { background: #3d2228; color: #ffb2c0; }
 .support-chip.delivery-mail { background: #1a2a3c; color: var(--support-info); }
+.support-chip.is-live { background: #173229; color: var(--tone-green); }
 .support-chip.delivery-pending, .support-chip.delivery-unconfirmed { background: #3a2c1b; color: var(--support-warning); }
 .support-pagination { justify-content: space-between; padding: 9px 14px; border-top: 1px solid var(--support-border); font-size: .75rem; color: var(--support-muted); }
 .support-empty { display: grid; justify-items: center; gap: 6px; margin: 34px 18px; color: var(--support-muted); text-align: center; font-size: .8rem; }
@@ -764,6 +922,7 @@ export default {
 .support-case-number { font-weight: 650; letter-spacing: .02em; }
 .support-thread-heading { margin-top: 8px; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .support-identity { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.support-hero-avatar { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 12px; font-size: 1.15rem; font-weight: 700; }
 .support-thread-heading h2 { margin: 0; font-size: clamp(1.25rem, 2.3vw, 1.65rem); letter-spacing: -.025em; color: inherit; overflow-wrap: anywhere; }
 .support-heading-actions { display: flex; gap: 8px; }
 .support-presence { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: .72rem; font-weight: 650; color: var(--support-muted); background: #243241; }
@@ -836,14 +995,31 @@ export default {
 .support-inspector section { padding: 16px 15px; }
 .support-inspector section + section { border-top: 1px solid var(--support-border); }
 .support-character-card { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px; border: 1px solid var(--support-border); border-radius: 9px; background: var(--support-bg); }
-.support-character-card div { display: grid; min-width: 0; line-height: 1.3; }
+.support-character-card > div { display: grid; flex: 1; min-width: 0; line-height: 1.3; }
 .support-character-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .support-character-card span { color: var(--support-muted); font-size: .74rem; }
 .support-inspector dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; margin: 14px 0; font-size: .77rem; }
 .support-inspector dt { color: var(--support-muted); font-weight: 400; }
 .support-inspector dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .support-related { display: grid; gap: 2px; }
-.support-tool-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.support-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 7px; margin-bottom: 8px; }
+.support-tile {
+  --tone: var(--tone-blue);
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 9px; align-items: center;
+  padding: 9px 10px; text-align: left; color: var(--support-text);
+  border: 1px solid color-mix(in srgb, var(--tone) 26%, var(--support-border)); border-radius: 10px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--tone) 13%, #17202b), #17202b 75%);
+  transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease;
+}
+.support-tile:hover:not(:disabled) { transform: translateY(-1px); border-color: color-mix(in srgb, var(--tone) 60%, var(--support-border)); box-shadow: 0 8px 20px rgba(0, 0, 0, .28); }
+.support-tile:disabled { opacity: .45; cursor: default; }
+.support-tile-icon { grid-row: span 2; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: var(--tone); background: color-mix(in srgb, var(--tone) 17%, transparent); }
+.support-tile strong { font-size: .8rem; font-weight: 650; line-height: 1.2; }
+.support-tile small { color: var(--support-muted); font-size: .68rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-copy { display: grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--support-muted); }
+.support-copy:hover { color: var(--support-accent); border-color: var(--support-border-strong); background: #1f2a37; }
+.support-copy.is-inline { display: inline-grid; width: 22px; height: 22px; margin-left: 4px; vertical-align: -5px; font-size: .72rem; }
+.support-copyable { white-space: nowrap; }
 .support-related a { display: grid; grid-template-columns: 16px minmax(0, 1fr) 14px; align-items: center; gap: 7px; padding: 6px 4px; border-radius: 6px; color: #d3e1f3; font-size: .77rem; }
 .support-related a:hover { color: var(--support-accent); background: #1d2836; text-decoration: none; }
 .support-related a .fe-arrow-up-right { color: var(--support-muted); }
@@ -853,6 +1029,9 @@ export default {
 .support-actions button { justify-content: flex-start; }
 .support-back { display: none; }
 
+@media (max-width: 1100px) {
+  .support-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 1180px) {
   .support-workspace { grid-template-columns: minmax(230px, 33%) minmax(0, 1fr); }
   .support-queue { grid-row: 1 / span 2; }
@@ -872,10 +1051,17 @@ export default {
   .support-back { display: inline-flex; align-self: flex-start; margin: 10px 0 0 14px; }
   .support-inspector section { padding: 13px 14px; }
   .support-title p, .support-live { display: none; }
+  .support-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .support-summary > :first-child { grid-column: span 2; }
+  .support-stat { gap: 8px; padding: 7px 10px; }
+  .support-stat strong { font-size: 1.02rem; }
+  .support-stat-icon { width: 26px; height: 26px; border-radius: 8px; font-size: 13px; }
+  .support-search-key { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .support-button, .support-icon, .support-case-row { transition: none; }
-  .support-live-dot::after, .is-spinning, .support-skeleton { animation: none; }
+  .support-live-dot::after, .is-spinning, .support-skeleton, .support-unread, .support-case-list.is-entering li { animation: none; }
+  .support-stat, .support-tile { transition: none; }
 }
 </style>
 
@@ -896,4 +1082,10 @@ export default {
 .support-modal-lead { margin: 0; font-size: .92rem; }
 .support-modal-hint { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 0; padding: 9px 11px; border-radius: 8px; color: #d3e6fb; background: #1a2a3c; border: 1px solid #38557a; font-size: .8rem; }
 .support-modal-hint i { margin-top: 2px; }
+.support-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.support-quick button {
+  padding: 3px 10px; border-radius: 999px; border: 1px solid #3c4f63; background: #172230; color: #c9d6e3; font-size: .74rem;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.support-quick button:hover { border-color: #dfb976; color: #f3dcae; background: #241f18; }
 </style>
