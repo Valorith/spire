@@ -1,5 +1,7 @@
 # Player Support live chat
 
+![Player Support: queue summary, petition queue, case timeline and actions](images/player-support/overview.png)
+
 The petition inbox uses the local EQEmu World roster for account presence. **Online** includes another character on the petition’s account and a player at character select. **Unknown** means Spire could not verify presence for the selected server. Messaging is per account: Spire sends tells to whichever character on the petition’s account is in a zone with tells on, and the case header shows **On <character>** when that is not the character that filed the petition.
 
 ## Enable live tells
