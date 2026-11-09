@@ -56,7 +56,7 @@ func NewPlayerSupportController(db *database.Resolver, permissions *permissions.
 }
 
 func (p *PlayerSupportController) Routes() []*routes.Route {
-	return []*routes.Route{
+	list := []*routes.Route{
 		routes.RegisterRoute(http.MethodGet, "player-support/cases", p.list, nil),
 		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key", p.detail, nil),
 		routes.RegisterRoute(http.MethodPatch, "player-support/cases/:key", p.update, nil),
@@ -79,6 +79,8 @@ func (p *PlayerSupportController) Routes() []*routes.Route {
 		routes.RegisterRoute(http.MethodGet, "player-support/cases/:key/corpses/:corpse", p.corpseContents, nil),
 		routes.RegisterRoute(http.MethodPut, "player-support/cases/:key/move", p.moveRecoveryTarget, nil),
 	}
+	list = append(list, p.workflowRoutes()...)
+	return append(list, p.toolRoutes()...)
 }
 
 type supportScope struct {

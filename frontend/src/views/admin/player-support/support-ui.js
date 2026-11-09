@@ -135,6 +135,11 @@ export function fillReply (body, record) {
     .replace(/\{account\}/gi, (record && record.account) || '')
 }
 
+// A request ID for an action the server must apply only once.
+export function newRequestId () {
+  return Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
 // Tells are limited to 200 printable ASCII characters.
 export function fitsTell (text) {
   return text.length > 0 && text.length <= 200 && !/[^\x20-\x7E]/.test(text)

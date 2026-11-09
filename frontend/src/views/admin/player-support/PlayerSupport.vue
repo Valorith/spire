@@ -179,7 +179,8 @@
 
           <support-live-chat v-if="chatOpen" :key="selectedKey" :record="record" :connection-id="connectionId" :can-write="canWrite && record.status !== 'resolved'"
                              :saved-replies="replies" @seen="noteSeen" />
-          <support-evidence v-else-if="evidenceOpen" :key="'evidence-' + selectedKey" :record="record" :connection-id="connectionId" />
+          <support-evidence v-else-if="evidenceOpen" :key="'evidence-' + selectedKey" :record="record" :connection-id="connectionId"
+                            :can-read-chat="canReadChat" :can-restore="canParcel && canWrite && record.status !== 'resolved'" @trace="openItemTrace" />
           <div v-else ref="timeline" class="support-timeline">
             <article class="support-event support-original">
               <span class="support-event-icon"><i class="fe fe-message-square" aria-hidden="true"></i></span>
@@ -301,6 +302,8 @@
             </li>
           </ul>
         </section>
+        <support-bug-reports :key="'bugs-' + record.key" :record="record" :connection-id="connectionId" :can-write="canWrite" @receipt="recoveryReceipt" />
+        <support-linked-accounts v-if="canReadLinked" :key="'linked-' + record.key" :record="record" :connection-id="connectionId" @open-case="selectCase" />
         <section v-if="canWrite && record.status !== 'resolved'" class="support-actions">
           <h2 class="support-section-label">Respond</h2>
           <div class="support-action-list">
@@ -343,7 +346,15 @@
                         :case-key="record.key" :connection-id="connectionId" :prefill="parcelPrefill"
                         modal-class="support-modal support-parcel-modal" @close="closeParcel" @sent="deliverySent('parcel')" @reconcile="loadDetail(selectedKey)" />
     <support-snapshots v-if="delivery === 'snapshots' && record" :key="'snapshots-' + record.key" :record="record" :connection-id="connectionId"
-                       :can-restore="canParcel && canWrite && record.status !== 'resolved'" @close="delivery = null" @restore="restoreSnapshot" />
+                       :can-restore="canParcel && canWrite && record.status !== 'resolved'" @close="delivery = null" @restore="restoreSnapshot" @trace="openItemTrace" />
+    <support-items v-if="delivery === 'items' && record" :key="'items-' + record.key" :record="record" :connection-id="connectionId"
+                   :can-restore="canParcel && canWrite && record.status !== 'resolved'" :initial-item="itemTrace"
+                   @close="closeItemTrace" @restore="prefillParcel" />
+    <support-progress v-if="delivery === 'progress' && record" :key="'progress-' + record.key" :record="record" :connection-id="connectionId"
+                      :features="features" :can-write="canMove" :can-reload-cache="canReloadCache" :initial-tab="progressTab"
+                      @close="delivery = null" @receipt="recoveryReceipt" />
+    <support-discipline v-if="delivery === 'discipline' && record" :key="'discipline-' + record.key" :record="record" :connection-id="connectionId"
+                        :features="features" :can-sanction="canSanction" @close="delivery = null" @receipt="recoveryReceipt" />
     <support-alerts v-if="panel === 'alerts'" :connection-id="connectionId" :can-write="canWrite" @close="panel = null" @change="alertPrefs = $event" />
     <support-replies v-if="panel === 'replies'" :connection-id="connectionId" :can-write="canWrite" :replies="replies" @close="panel = null" @changed="loadReplies" />
     <support-metrics v-if="panel === 'metrics'" :connection-id="connectionId" @close="panel = null" />
@@ -359,7 +370,7 @@
       </template>
     </b-modal>
     <support-recovery v-if="(delivery === 'move' || delivery === 'corpses') && record" :key="record.key"
-                      :record="record" :connection-id="connectionId" :initial-mode="delivery" :allow-move="canMove"
+                      :record="record" :connection-id="connectionId" :initial-mode="delivery" :allow-move="canMove" :features="features"
                       @close="delivery = null" @receipt="recoveryReceipt" />
     <b-modal v-model="resolveOpen" modal-class="support-modal" title="Resolve case" centered
              @shown="$refs.resolution && $refs.resolution.focus()" @ok="updateCase('resolve')">
@@ -396,6 +407,11 @@ import SupportSnapshots from './SupportSnapshots.vue'
 import SupportAlerts from './SupportAlerts.vue'
 import SupportReplies from './SupportReplies.vue'
 import SupportMetrics from './SupportMetrics.vue'
+import SupportItems from './SupportItems.vue'
+import SupportProgress from './SupportProgress.vue'
+import SupportDiscipline from './SupportDiscipline.vue'
+import SupportLinkedAccounts from './SupportLinkedAccounts.vue'
+import SupportBugReports from './SupportBugReports.vue'
 import { avatarStyle, deliveryLabel, deliveryTone, desktopNotify, hasUnseenReply, initials, markSeen, playChime, readAlertPrefs } from './support-ui'
 
 const endpoint = 'player-support/cases'
@@ -418,7 +434,8 @@ const statusKinds = ['claim', 'release', 'wait', 'resolve', 'reopen', 'chat_on',
 export default {
   name: 'PlayerSupport',
   components: {
-    SupportMailReply, GmParcelComposer, SupportLiveChat, SupportRecovery, SupportEvidence, SupportSnapshots, SupportAlerts, SupportReplies, SupportMetrics
+    SupportMailReply, GmParcelComposer, SupportLiveChat, SupportRecovery, SupportEvidence, SupportSnapshots, SupportAlerts, SupportReplies, SupportMetrics,
+    SupportItems, SupportProgress, SupportDiscipline, SupportLinkedAccounts, SupportBugReports
   },
   data () {
     return {
@@ -428,6 +445,9 @@ export default {
       mobileDetail: false, searchTimer: null, presenceTimer: null, noticeTimer: null, busy: false, note: '', notice: null, delivery: null,
       resolveOpen: false, resolution: '', chatOpen: false, evidenceOpen: false, refreshedAt: null,
       history: [], replies: [], panel: null, parcelPrefill: null, mergeSource: null, alertPrefs: readAlertPrefs(), lastSummary: null,
+      // Patch features of the local World (list response "features"), the item
+      // the Items dialog opens with, and the Quests & progress tab to open.
+      features: {}, itemTrace: null, progressTab: 'tasks',
       summary: null, companion: 'unknown', now: Date.now(), clockTimer: null, seenVersion: 0, copied: '', copyTimer: null,
       resolutionPhrases: ['Restored the missing item', 'Moved the character to safety', 'Recovered the corpse', 'Explained how it works', 'No action needed']
     }
@@ -448,6 +468,10 @@ export default {
     },
     caseNumber () { return this.record ? this.record.key.split('-')[0] : '' },
     canReadEvents () { return canReadAdminApi('player_event_logs') },
+    canReadChat () { return canReadAdminApi('player-support-chat-logs') },
+    canReadLinked () { return canReadAdminApi('player-support-linked-accounts') },
+    canSanction () { return this.canWrite && canWriteAdminApi('player-operations/account/0/sanction') },
+    canReloadCache () { return canWriteAdminApi('data-bucket-editor') },
     // Live chat, moves and in-game notices need the Player Support patch on
     // World. Say what is off, and what still works, when it is missing.
     companionNote () {
@@ -734,6 +758,7 @@ export default {
           this.checkArrivals(data.summary)
         }
         this.companion = data.companion || 'unknown'
+        this.features = data.features || {}
         this.refreshedAt = new Date()
         if (!this.selectedKey) {
           const key = (initial && this.$route.query.case) || (this.cases[0] && this.cases[0].key)
@@ -886,6 +911,19 @@ export default {
         note: 'Restored by staff in response to your petition.'
       }
       this.delivery = 'parcel'
+    },
+    // Items chosen in another tool go to the parcel composer for review.
+    prefillParcel ({ lines, reason, note }) {
+      this.parcelPrefill = { lines, reason, note }
+      this.delivery = 'parcel'
+    },
+    openItemTrace (item) {
+      this.itemTrace = item || null
+      this.delivery = 'items'
+    },
+    closeItemTrace () {
+      this.delivery = null
+      this.itemTrace = null
     },
     closeParcel () {
       this.delivery = null

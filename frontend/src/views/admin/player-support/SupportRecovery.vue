@@ -211,7 +211,9 @@ export default {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
     initialMode: { type: String, required: true },
-    allowMove: { type: Boolean, required: true }
+    allowMove: { type: Boolean, required: true },
+    // Patch features of the local World: unbury and corpse_exp.
+    features: { type: Object, default: () => ({}) }
   },
   data () {
     return {

@@ -11,7 +11,9 @@ import (
 
 	"github.com/EQEmuTools/spire/internal/auditlog"
 	"github.com/EQEmuTools/spire/internal/database"
+	"github.com/EQEmuTools/spire/internal/eqemuserverconfig"
 	"github.com/EQEmuTools/spire/internal/http/routes"
+	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
@@ -49,6 +51,10 @@ const (
 type PlayerOperationsController struct {
 	db       *database.Resolver
 	auditLog *auditlog.UserEvent
+	// config and log let a suspension or ban remove an online player from the
+	// local World.
+	config *eqemuserverconfig.Config
+	log    *logger.AppLogger
 }
 
 type playerOperationsPage struct {
@@ -448,8 +454,10 @@ func (e playerOperationsConflictError) Error() string {
 func NewPlayerOperationsController(
 	db *database.Resolver,
 	auditLog *auditlog.UserEvent,
+	config *eqemuserverconfig.Config,
+	log *logger.AppLogger,
 ) *PlayerOperationsController {
-	return &PlayerOperationsController{db: db, auditLog: auditLog}
+	return &PlayerOperationsController{db: db, auditLog: auditLog, config: config, log: log}
 }
 
 func (p *PlayerOperationsController) Routes() []*routes.Route {

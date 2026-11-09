@@ -85,7 +85,11 @@ export default {
   components: { PlayerEventDisplayComponent },
   props: {
     record: { type: Object, required: true },
-    connectionId: { type: Number, required: true }
+    connectionId: { type: Number, required: true },
+    // Chat events need the Player Support Chat Logs permission.
+    canReadChat: { type: Boolean, default: false },
+    // Offer "Trace" on item rows that can lead to a restore.
+    canRestore: { type: Boolean, default: false }
   },
   data () {
     return {

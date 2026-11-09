@@ -91,7 +91,7 @@ func InitializeApplication() (App, error) {
 	alternateCurrencyEditorController := controllers.NewAlternateCurrencyEditorController(resolver, userEvent)
 	mailParcelsEditorController := controllers.NewMailParcelsEditorController(resolver, userEvent, config, appLogger)
 	mercenaryEditorController := controllers.NewMercenaryEditorController(resolver, userEvent)
-	playerOperationsController := controllers.NewPlayerOperationsController(resolver, userEvent)
+	playerOperationsController := controllers.NewPlayerOperationsController(resolver, userEvent, config, appLogger)
 	playerSupportController := controllers.NewPlayerSupportController(resolver, service, mailParcelsEditorController, config, appLogger)
 	inventoryKeyringController := controllers.NewInventoryKeyringController(resolver, userEvent)
 	dataBucketEditorController := controllers.NewDataBucketEditorController(resolver, userEvent)
