@@ -193,13 +193,20 @@ func (p *PlayerSupportController) chatSnapshot(scope supportScope, view supportC
 		state.TellsOff = true
 		return state, nil
 	}
-	switch {
-	case state.Companion == playersupport.CompanionMissing || state.Companion == playersupport.CompanionOutdated:
+	if state.Companion == playersupport.CompanionReady && !p.world.Ready() {
+		// Opening the stream may have found an older patch.
+		state.Companion = p.world.Companion()
+	}
+	switch state.Companion {
+	case playersupport.CompanionMissing, playersupport.CompanionOutdated:
 		state.State = "unsupported"
-	case p.world.Ready():
-		state.State = "ready"
+	case playersupport.CompanionReady:
+		state.State = "unavailable"
+		if p.world.Ready() {
+			state.State = "ready"
+		}
 	default:
-		// The player is in game, but the chat stream is not available.
+		// The player is in game, but World did not answer the patch check.
 		state.State = "unavailable"
 	}
 	return state, nil
@@ -273,7 +280,7 @@ func (p *PlayerSupportController) startChat(scope supportScope, view supportCase
 	if _, ok := p.chatRecipient(accountID); !ok {
 		return echo.NewHTTPError(http.StatusConflict, "No character on this account can receive tells right now")
 	}
-	if err := companionChatError(p.world.Companion()); err != nil {
+	if err := companionChatError(p.world.ChatCompanion()); err != nil {
 		return err
 	}
 	if !p.world.Ready() {
@@ -395,7 +402,7 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 	}
 	// Without the patch, a mailed message still arrives, but the player
 	// cannot answer in game, so it does not turn Messages on.
-	companion := p.world.Companion()
+	companion := p.world.ChatCompanion()
 	replies := companion == playersupport.CompanionReady
 	var refusal error
 	switch {

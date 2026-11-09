@@ -192,7 +192,7 @@ func (w *World) Companion() CompanionStatus {
 		return CompanionUnknown
 	}
 	if time.Now().Before(w.companionUntil) {
-		return w.companion
+		return w.withProtocol(w.companion)
 	}
 	// Character 0 never exists, so World only validates and answers.
 	probe := telnet.CommandConfig{Command: "supportlocation 0 0", AllowEmptyResponse: true}
@@ -203,13 +203,6 @@ func (w *World) Companion() CompanionStatus {
 		reply, err = client.Command(probe)
 	}
 	w.companion = classifyCompanion(reply, err)
-	if w.companion == CompanionReady {
-		w.mu.Lock()
-		if w.outdated {
-			w.companion = CompanionOutdated
-		}
-		w.mu.Unlock()
-	}
 	switch w.companion {
 	case CompanionUnknown:
 		w.companionUntil = time.Now().Add(10 * time.Second)
@@ -218,7 +211,30 @@ func (w *World) Companion() CompanionStatus {
 	default:
 		w.companionUntil = time.Now().Add(30 * time.Second)
 	}
-	return w.companion
+	return w.withProtocol(w.companion)
+}
+
+// withProtocol applies what the chat stream learned. Older patches answer the
+// probe like the current one; only the chat handshake shows their protocol,
+// and opening the stream (Ready) records it.
+func (w *World) withProtocol(status CompanionStatus) CompanionStatus {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if status == CompanionReady && w.outdated {
+		return CompanionOutdated
+	}
+	return status
+}
+
+// ChatCompanion opens the chat stream when World has a patch, so an older
+// patch is reported as outdated before Spire relies on in-game replies.
+func (w *World) ChatCompanion() CompanionStatus {
+	status := w.Companion()
+	if status == CompanionReady {
+		w.Ready()
+		status = w.Companion()
+	}
+	return status
 }
 
 func classifyCompanion(reply string, err error) CompanionStatus {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/EQEmuTools/spire/internal/eqemuserver"
 	"github.com/EQEmuTools/spire/internal/logger"
+	"github.com/EQEmuTools/spire/internal/telnet"
 )
 
 func TestPresenceDistinguishesAccountFromCharacter(t *testing.T) {
@@ -181,5 +182,27 @@ func TestClassifyCompanion(t *testing.T) {
 	}
 	if !CompanionOutdated.Moves() || !CompanionReady.Moves() || CompanionMissing.Moves() || CompanionUnknown.Moves() {
 		t.Error("Moves() should allow only a World with the patch")
+	}
+}
+
+func TestCompanionReportsOlderChatProtocol(t *testing.T) {
+	addr := "127.0.0.1:9000"
+	world := &World{address: func() string { return addr }, logger: logger.NewAppLogger(), change: make(chan struct{})}
+	world.rosterAddr = addr
+	world.rosterClient = telnet.NewClientWithAddress(world.logger, addr)
+	// An older patch answers the probe like the current one.
+	world.companion = CompanionReady
+	world.companionUntil = time.Now().Add(time.Minute)
+	if got := world.Companion(); got != CompanionReady {
+		t.Fatalf("Companion() = %q before the chat handshake, want ready", got)
+	}
+	// The chat handshake then reports a different protocol.
+	world.outdated = true
+	if got := world.Companion(); got != CompanionOutdated {
+		t.Fatalf("Companion() = %q after an older handshake, want outdated", got)
+	}
+	world.outdated = false
+	if got := world.Companion(); got != CompanionReady {
+		t.Fatalf("Companion() = %q after a current handshake, want ready", got)
 	}
 }
