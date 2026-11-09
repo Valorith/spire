@@ -414,6 +414,10 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 	defer cancel()
 	outcome := "sent"
 	if mail {
+		// Mailing turned Messages on without opening the World chat stream,
+		// which a tell would have done. Keep it connected so the player's
+		// reply is not refused as "messaging unavailable".
+		p.world.Resume()
 		outcome = "mail"
 		row := gmMailInsert{
 			CharID: view.CharacterID, Timestamp: time.Now().Unix(), From: playersupport.Identity,
