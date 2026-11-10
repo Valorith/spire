@@ -1,4 +1,4 @@
-## [Unreleased] (Beta) 11/10/2026
+## [5.10.0] (Beta) 11/10/2026
 
 **Player Support: new tools**
 * Items: trace an item across the account and return it by parcel.
