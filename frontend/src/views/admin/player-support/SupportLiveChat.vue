@@ -260,8 +260,12 @@ import SupportMailView from './SupportMailView.vue'
 import SupportPersonaEditor from './SupportPersonaEditor.vue'
 import { dismissPersonaHint, loadPersona, personaHintDismissed, personaState, tellName } from './support-persona'
 
-// How close to the end of the transcript still counts as reading the newest messages.
+// How close to the end of the transcript counts as reading the newest messages, so they
+// are marked seen and New messages goes away.
 const pinSlack = 70
+// How close to the end a scroll by staff must leave the transcript for it to follow new
+// messages again: the end itself, give or take rounding.
+const pinEnd = 2
 
 const builtInReplies = [
   'Hi, I am looking into this now.',
@@ -747,11 +751,12 @@ export default {
     onTranscriptScroll () {
       const area = this.$refs.transcript
       if (!area) return
-      // A scroll this component made keeps the pin; one by staff pins only near the end.
+      // A scroll this component made keeps the pin. One by staff unpins as soon as it
+      // leaves the end, however small, and pins again only back at the end.
       if (this.scrolledTo !== null && Math.abs(area.scrollTop - this.scrolledTo) <= 1) {
         this.scrolledTo = null
       } else {
-        this.pinned = this.transcriptGap() < pinSlack
+        this.pinned = this.transcriptGap() <= pinEnd
       }
       if (this.transcriptGap() >= pinSlack) return
       if (this.newBelow) this.newBelow = false

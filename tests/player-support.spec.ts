@@ -2496,3 +2496,89 @@ test('follows new Live chat messages only while staff are at the newest, and alw
   await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
   await expect(page.getByRole('button', { name: 'New messages' })).toHaveCount(0);
 });
+
+test('leaves a small scroll up in Live chat where staff put it while new checks come in', async ({ page }) => {
+  await mockSupport(page, ['player-support'], { id: 7 }, { messages: longChat() });
+  // Player replies on, so Live chat checks every few hundred milliseconds and redraws each time.
+  const history = longChat();
+  let checks = 0;
+  await page.route('**/api/v1/player-support/cases/*/chat*', route => {
+    if (route.request().method() !== 'GET') return route.fulfill({ status: 204 });
+    checks++;
+    return route.fulfill({ json: { state: 'ready', active: true, messages: history, cursor: history.length, companion: 'ready', recipient: 'Aranel' } });
+  });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  const log = page.getByRole('log', { name: 'Chat messages' });
+  await expect(log.getByText('History message 60:')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+
+  // 30px up, well inside the old 70px slack: it stays through several checks.
+  await log.hover();
+  await page.mouse.wheel(0, -30);
+  await expect.poll(() => chatGap(page)).toBeGreaterThanOrEqual(20);
+  const top = await log.evaluate(element => element.scrollTop);
+  const before = checks;
+  await expect.poll(() => checks, { timeout: 5000 }).toBeGreaterThanOrEqual(before + 4);
+  expect(await log.evaluate(element => element.scrollTop)).toBe(top);
+
+  // Back at the end, it follows new messages again.
+  await log.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  history.push({ ...history[1], id: 999, text: 'Arrived after scrolling back', created_at: '2026-11-09T09:00:00Z' });
+  await expect(log.getByText('Arrived after scrolling back')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+});
+
+test('asks for the persona again on a later load when the first request failed', async ({ page }) => {
+  await mockSupport(page, ['player-support']);
+  let failing = true;
+  let calls = 0;
+  await page.route('**/api/v1/player-support/persona*', route => {
+    calls++;
+    if (failing) return route.fulfill({ status: 500, json: { error: 'Spire could not read the persona' } });
+    return route.fulfill({ json: { persona: 'Aranwen', display: 'Aranwen', available: true } });
+  });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  // Unknown: tells go as GameMaster and nothing offers a name.
+  await expect(page.locator('.chat-identity')).toHaveText(/Speaking as\s*GameMaster/);
+  await expect.poll(() => calls).toBeGreaterThanOrEqual(1);
+  // Let every request made so far answer.
+  await page.waitForTimeout(800);
+  failing = false;
+  const failed = calls;
+  // Live chat opening again loads the persona again.
+  await page.getByRole('tab', { name: /^Timeline/ }).click();
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(page.getByRole('button', { name: 'Speaking as (GM) Aranwen. Change the name players see' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Your name on tells: (GM) Aranwen. Change' })).toBeVisible();
+  expect(calls).toBe(failed + 1);
+  // A load that succeeded is shared: opening Live chat again asks no more.
+  await page.getByRole('tab', { name: /^Timeline/ }).click();
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(page.getByRole('button', { name: /^Speaking as \(GM\) Aranwen/ })).toBeVisible();
+  expect(calls).toBe(failed + 1);
+});
+
+test('drops a persona answer for the connection the page has left', async ({ page }) => {
+  const connection = { id: 7 };
+  await mockSupport(page, ['player-support'], connection);
+  let staleAnswered = false;
+  await page.route('**/api/v1/player-support/persona*', async route => {
+    if (new URL(route.request().url()).searchParams.get('connection_id') === '7') {
+      // The first connection answers late, and would allow a persona.
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      staleAnswered = true;
+      return route.fulfill({ json: { persona: 'Stale', display: 'Stale', available: true } });
+    }
+    return route.fulfill({ json: { persona: 'Stale', display: 'Stale', available: false, reason: 'Needs the game server this Spire runs beside' } });
+  });
+  await page.goto('/admin/player-support');
+  await expect(page.getByRole('heading', { name: 'Player Support' })).toBeVisible();
+  // The queue now comes from another connection.
+  connection.id = 8;
+  await page.locator('.support-refresh').click();
+  await expect.poll(() => staleAnswered, { timeout: 6000 }).toBe(true);
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('button', { name: /^Your name on tells/ })).toHaveCount(0);
+});

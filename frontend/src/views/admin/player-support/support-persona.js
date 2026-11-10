@@ -20,8 +20,13 @@ export const personaState = Vue.observable({
   loaded: false
 })
 
+// The connection the state belongs to, the request that is loading it (kept
+// once it succeeds, so callers share it), and a number that changes whenever
+// an answer still on its way stops counting: a newer load, another
+// connection, or a save.
+let stateConnection = null
 let pending = null
-let pendingConnection = null
+let sequence = 0
 
 function apply (data) {
   if (!data || typeof data.display !== 'string') return
@@ -32,23 +37,61 @@ function apply (data) {
   personaState.warning = data.warning || ''
 }
 
-// Loads the persona once per connection; callers share one request.
-export function loadPersona (connectionId) {
-  if (pending && pendingConnection === connectionId) return pending
-  pendingConnection = connectionId
-  pending = SpireApi.v1().get('player-support/persona', { params: { connection_id: connectionId } })
-    .then(({ data }) => apply(data))
-    .catch(() => {
-      // Unknown: tells go as GameMaster and the control stays off.
-    })
-    .finally(() => { personaState.loaded = true })
-  return pending
+// Whether World takes a persona is a property of the connection: another
+// connection starts unknown, so no control shows what only the last one allowed.
+function forgetConnection (connectionId) {
+  stateConnection = connectionId
+  pending = null
+  sequence++
+  personaState.available = false
+  personaState.reason = ''
+  personaState.warning = ''
+  personaState.loaded = false
 }
 
-// Saves a persona ("" for the default) and returns the server's answer.
+// Loads the persona for a connection; callers share one request. A failed
+// request is tried again on the next call, and an answer for a connection or
+// a request that is no longer current is dropped.
+export function loadPersona (connectionId) {
+  if (connectionId !== stateConnection) forgetConnection(connectionId)
+  if (pending) return pending
+  const ticket = ++sequence
+  const current = () => ticket === sequence && stateConnection === connectionId
+  const request = SpireApi.v1().get('player-support/persona', { params: { connection_id: connectionId } })
+    .then(({ data }) => {
+      if (current()) apply(data)
+    })
+    .catch(() => {
+      // Unknown: tells go as GameMaster and the control stays off, until a later call asks again.
+      if (current()) pending = null
+    })
+    .finally(() => {
+      if (current()) personaState.loaded = true
+    })
+  pending = request
+  return request
+}
+
+// Saves a persona ("" for the default) and returns the server's answer, which
+// a load still on its way cannot overwrite.
 export async function savePersona (connectionId, value) {
-  const { data } = await SpireApi.v1().put('player-support/persona', { persona: (value || '').trim() }, { params: { connection_id: connectionId } })
-  apply(data)
+  // A load on its way answers from before this save.
+  sequence++
+  let data
+  try {
+    ({ data } = await SpireApi.v1().put('player-support/persona', { persona: (value || '').trim() }, { params: { connection_id: connectionId } }))
+  } catch (error) {
+    // The load this save made stale no longer counts: the next call asks again.
+    if (stateConnection === connectionId) pending = null
+    throw error
+  }
+  if (stateConnection === connectionId) {
+    // Nor may a load started while saving overwrite the answer; it stands as loaded.
+    sequence++
+    apply(data)
+    personaState.loaded = true
+    pending = Promise.resolve()
+  }
   return personaState
 }
 
