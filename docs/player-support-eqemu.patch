@@ -144,32 +144,65 @@ index 9399ab701bd14cd3a9a610c95be8e2af9a7af3f7..35e6bd831570072204c2df856892d717
  	char deliverto[64];
  	char to[64];
 diff --git a/ucs/clientlist.cpp b/ucs/clientlist.cpp
-index 03ab790739ff38989de7e48d6149c23162515e96..8be4c4472b1c0ad990a005d06ed7bb68cecc52f8 100644
+index 03ab790739ff38989de7e48d6149c23162515e96..bf00d9603458abf052dc51388fae3c5c6b06bca0 100644
 --- a/ucs/clientlist.cpp
 +++ b/ucs/clientlist.cpp
-@@ -560,9 +560,20 @@ void Clientlist::CheckForStaleConnectionsAll()
+@@ -560,9 +560,21 @@ void Clientlist::CheckForStaleConnectionsAll()
  {
  	LogDebug("Checking for stale connections");
  
-+	// The keepalive reaches the client only as a protocol message, and clients
-+	// close the chat connection after about five minutes without application
-+	// data. Every third run (about three minutes) mail connections get their
-+	// mail headers again, which is application data and also lists mail added
-+	// to the database since login.
++	// An idle mail connection was seen to drop after about five minutes, so
++	// every third run (about three minutes) each mail connection also gets its
++	// mail headers again, which also lists mail added since login. That costs
++	// one indexed query on the character's mailbox per connected mail client
++	// about every three minutes; each connection's remote port picks its run,
++	// so the queries are spread instead of all landing in the same run.
 +	static uint32 runs = 0;
-+	const bool send_headers = ++runs % 3 == 0;
++	++runs;
 +
  	auto it = ClientChatConnections.begin();
  	while (it != ClientChatConnections.end()) {
  		(*it)->SendKeepAlive();
-+		if (send_headers && (*it)->IsMailConnection()) {
++		if ((*it)->IsMailConnection() && (runs + (*it)->ClientStream->GetRemotePort()) % 3 == 0) {
 +			database.SendHeaders(*it);
 +		}
  		++it;
  	}
  }
+@@ -981,6 +993,19 @@ void Client::SendMailBoxes() {
+ 	safe_delete(outapp);
+ }
+ 
++// The character's mail connection; clients with separate chat and mail
++// sessions have two connections under the same name.
++Client *Clientlist::FindMailConnection(const std::string &character_name)
++{
++	for (auto *c : ClientChatConnections) {
++		if (c->IsMailConnection() && c->GetName() == character_name) {
++			return c;
++		}
++	}
++
++	return nullptr;
++}
++
+ Client *Clientlist::FindCharacter(const std::string& CharacterName) {
+ 
+ 	std::list<Client*>::iterator Iterator;
+diff --git a/ucs/clientlist.h b/ucs/clientlist.h
+index 90d9fa19356adfda1cf51bc9ae0784c87885837a..0fb8f28eb41a51dcba387c5c7b0fd7d545475722 100644
+--- a/ucs/clientlist.h
++++ b/ucs/clientlist.h
+@@ -185,6 +185,7 @@ public:
+ 	void	Process();
+ 	void	CloseAllConnections();
+ 	Client *FindCharacter(const std::string& CharacterName);
++	Client *FindMailConnection(const std::string &character_name);
+ 	void	CheckForStaleConnectionsAll();
+ 	void	CheckForStaleConnections(Client *c);
+ 	Client *IsCharacterOnline(const std::string& CharacterName);
 diff --git a/ucs/database.cpp b/ucs/database.cpp
-index 21df0c40b28a7ca738e697ce3c8c9a19d95be034..903800a4aae0f182489787adfd350731a0288d57 100644
+index 21df0c40b28a7ca738e697ce3c8c9a19d95be034..17b644e725bc45e5bb0c51615184960857b0b548 100644
 --- a/ucs/database.cpp
 +++ b/ucs/database.cpp
 @@ -26,8 +26,10 @@
@@ -243,10 +276,10 @@ index 21df0c40b28a7ca738e697ce3c8c9a19d95be034..903800a4aae0f182489787adfd350731
  		characterName[i] = tolower(characterName[i]);
  
 +	// Mail to GameMaster (Player Support in Spire, the console name World uses)
-+	// is stored with charid 0 for Spire to collect and delete, so no character
-+	// with that name can receive it. Only characters may send it, and only a
-+	// few may wait at a time.
-+	if (characterName == "Gamemaster") {
++	// is stored with charid 0 for Spire to collect and delete. A character
++	// already named GameMaster (any case; new ones are refused) still gets its
++	// mail. Only characters may send it, and only a few may wait at a time.
++	if (characterName == "Gamemaster" && FindCharacter(characterName.c_str()) <= 0) {
 +		const auto sender  = Escape(from);
 +		auto       pending = QueryDatabase(fmt::format(
 +			"SELECT COUNT(*) FROM `mail` WHERE `charid` = 0 AND `from` = '{}'",
@@ -289,7 +322,7 @@ index 21df0c40b28a7ca738e697ce3c8c9a19d95be034..903800a4aae0f182489787adfd350731
  
  	return true;
 diff --git a/ucs/worldserver.cpp b/ucs/worldserver.cpp
-index c3ee7a0ca7b1e5425a368219c0b674f50c747357..731c6b08a50efa25b7cc119a904b894c3ad5601e 100644
+index c3ee7a0ca7b1e5425a368219c0b674f50c747357..d806e02b07b67a2da3d326545a1ced661730099a 100644
 --- a/ucs/worldserver.cpp
 +++ b/ucs/worldserver.cpp
 @@ -58,6 +58,13 @@ WorldServer::~WorldServer()
@@ -306,6 +339,18 @@ index c3ee7a0ca7b1e5425a368219c0b674f50c747357..731c6b08a50efa25b7cc119a904b894c
  void WorldServer::ProcessMessage(uint16 opcode, EQ::Net::Packet &p)
  {
  	ServerPacket tpack(opcode, p);
+@@ -116,7 +123,10 @@ void WorldServer::ProcessMessage(uint16 opcode, EQ::Net::Packet &p)
+ 
+ 		LogInfo("Player: [{}], Sent Message: [{}]", From, Message.c_str());
+ 
+-		Client *c = g_Clientlist->FindCharacter(From);
++		// A mail header refresh goes to the character's mail connection only.
++		Client *c = Message.rfind("[getheaders", 0) == 0
++			? g_Clientlist->FindMailConnection(From)
++			: g_Clientlist->FindCharacter(From);
+ 
+ 		safe_delete_array(From);
+ 
 diff --git a/ucs/worldserver.h b/ucs/worldserver.h
 index b4258206946be42f8de8e4623883908ca0816e5a..6e944b170cd69ff4ed7f88b7f5275b4e7c9e4931 100644
 --- a/ucs/worldserver.h
@@ -319,7 +364,7 @@ index b4258206946be42f8de8e4623883908ca0816e5a..6e944b170cd69ff4ed7f88b7f5275b4e
  private:
  
 diff --git a/world/console.cpp b/world/console.cpp
-index 364d40375917f3a9c0794dac6b523423d4a75779..ed90a0712b30ac750a79c0833ae508490f5edfd2 100644
+index 364d40375917f3a9c0794dac6b523423d4a75779..b9ded64942dd97f24a5530e9b0606d6bd82a812b 100644
 --- a/world/console.cpp
 +++ b/world/console.cpp
 @@ -21,12 +21,17 @@
@@ -353,7 +398,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..ed90a0712b30ac750a79c0833ae50849
  /**
   * @param username
   * @param password
-@@ -373,6 +384,865 @@ void ConsoleTell(
+@@ -373,6 +384,870 @@ void ConsoleTell(
  	ZSList::Instance()->SendChannelMessage(tmpname, to.c_str(), ChatChannel_Tell, 0, Strings::Join(join_args, " ").c_str());
  }
  
@@ -659,13 +704,18 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..ed90a0712b30ac750a79c0833ae50849
 +	if (message.deliverto[4] == ' ') {
 +		name = message.deliverto + 5;
 +	} else {
-+		// The longest persona that leads the text as whole words, so "John Smith" beats "John".
++		// The longest of the default name and the personas shown that leads the
++		// text as whole words (or is the whole text), so "John Smith" beats "John".
++		std::vector<std::string> candidates{EQ::Net::PlayerSupportDisplayName};
 +		for (size_t i = 0; shown && i < shown->size(); ++i) {
-+			const auto &persona = (*shown)[i].name;
-+			if (persona.size() > name.size() && text.size() > persona.size() && text[persona.size()] == ' ' &&
++			candidates.push_back((*shown)[i].name);
++		}
++		for (const auto &persona : candidates) {
++			if (persona.size() > name.size() && text.size() >= persona.size() &&
++				(text.size() == persona.size() || text[persona.size()] == ' ') &&
 +				strncasecmp(text.c_str(), persona.c_str(), persona.size()) == 0) {
 +				name = persona;
-+				taken = persona.size() + 1;
++				taken = std::min(text.size(), persona.size() + 1);
 +			}
 +		}
 +		if (name.empty()) {
@@ -1219,7 +1269,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..ed90a0712b30ac750a79c0833ae50849
  /**
   * @param connection
   * @param command
-@@ -1389,10 +2259,17 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
+@@ -1389,10 +2264,17 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
  	console->RegisterCall("md5", 50, "md5", std::bind(ConsoleMd5, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ooc", 50, "ooc [message]", std::bind(ConsoleOOC, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ping", 50, "ping", std::bind(ConsoleNull, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -1847,7 +1897,7 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..492d8da17ab70d85915ddb7f388d75de
  	server->SetMethodHandler("get_mob_list_detail", &ApiGetMobListDetail, 50);
  	server->SetMethodHandler("get_client_list_detail", &ApiGetClientListDetail, 50);
 diff --git a/zone/client.cpp b/zone/client.cpp
-index f361a00092e8c1fb8b0c3aee59677dda3969b0af..db9393fb04adb6beccef05502da357d41e88ea1a 100644
+index f361a00092e8c1fb8b0c3aee59677dda3969b0af..a03bbf3652748114ef3edbbb2ad5c52e7fb1f6fa 100644
 --- a/zone/client.cpp
 +++ b/zone/client.cpp
 @@ -1392,6 +1392,12 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
@@ -1928,7 +1978,7 @@ index f361a00092e8c1fb8b0c3aee59677dda3969b0af..db9393fb04adb6beccef05502da357d4
  			if(TotalKarma < RuleI(Chat, KarmaGlobalChatLimit))
  			{
  				if(GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
-@@ -1537,7 +1537,38 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+@@ -1537,7 +1537,40 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
  				target_name[x] = '\0';
  			}
  
@@ -1946,20 +1996,22 @@ index f361a00092e8c1fb8b0c3aee59677dda3969b0af..db9393fb04adb6beccef05502da357d4
 +			// be named (GM). Other "(GM)" tells go to World as tells to a player,
 +			// and World sends them on to the persona's Player Support or to the
 +			// character. A tell to "Game" with "Master" leading the text goes to
-+			// GameMaster unless a character named Game exists.
++			// GameMaster unless a character named Game exists. A text that is only
++			// the name goes to GameMaster empty and gets its usual answer.
 +			const char *tell_text = message;
 +			if (!console_target) {
 +				if (strcasecmp(recipient, "(GM)") == 0 &&
-+					(strncasecmp(message, "Game Master ", 12) == 0 || strncasecmp(message, "Game_Master ", 12) == 0)) {
++					(strncasecmp(message, "Game Master", 11) == 0 || strncasecmp(message, "Game_Master", 11) == 0) &&
++					(message[11] == '\0' || message[11] == ' ')) {
 +					strn0cpy(target_name, "GameMaster", sizeof(target_name));
-+					tell_text = message + 12;
++					tell_text = message[11] ? message + 12 : message + 11;
 +				} else if (strcasecmp(recipient, "(GM) Game Master") == 0 || strcasecmp(recipient, "Game Master") == 0 ||
 +					strcasecmp(recipient, "Game_Master") == 0) {
 +					strn0cpy(target_name, "GameMaster", sizeof(target_name));
-+				} else if (strcasecmp(recipient, "Game") == 0 && strncasecmp(message, "Master ", 7) == 0 &&
-+					!database.IsNameUsed("Game")) {
++				} else if (strcasecmp(recipient, "Game") == 0 && strncasecmp(message, "Master", 6) == 0 &&
++					(message[6] == '\0' || message[6] == ' ') && !database.IsNameUsed("Game")) {
 +					strn0cpy(target_name, "GameMaster", sizeof(target_name));
-+					tell_text = message + 7;
++					tell_text = message[6] ? message + 7 : message + 6;
 +				}
 +			}
 +			const bool literal = console_target || strcasecmp(recipient, "GameMaster") == 0;
@@ -1968,7 +2020,7 @@ index f361a00092e8c1fb8b0c3aee59677dda3969b0af..db9393fb04adb6beccef05502da357d4
  				Message(0, "Error: World server disconnected");
  		break;
  	}
-@@ -1725,6 +1756,10 @@ void Client::ChannelMessageSend(
+@@ -1725,6 +1758,10 @@ void Client::ChannelMessageSend(
  		strcpy(cm->sender, "ZServer");
  	} else if (from[0] == 0) {
  		strcpy(cm->sender, "ZServer");
