@@ -1,3 +1,34 @@
+## [Unreleased] (Beta) 11/10/2026
+
+**Player Support: new tools**
+* Items: trace an item across the account and return it by parcel.
+* Quests & progress: fix task steps, remove tasks and expedition lockouts, and view flags and keys.
+* Account Action: kick, suspend, ban, or revoke chat. The player is mailed a notice.
+* Restore experience from a corpse, and move buried corpses.
+* Linked accounts (shared IP addresses, masked) and the account's /bug reports.
+* Every change to a player's data needs a reason, recorded on the case and in the audit log.
+
+**Player Support: workflow**
+* Assign, escalate and categorize cases, and name a reported player.
+* Unanswered cases are flagged after 30 minutes and Overdue after 2 hours.
+* Select mode acts on up to 50 cases at once.
+* Resolving can send a saved reply and clear the petition in game.
+* Account notes, a view of who else is on a case, keyboard shortcuts (press ?), and a pending count on the navigation button.
+
+**Player Support: talking to players**
+* Game Master messages arrive as a tell from "(GM) Game Master", or a persona name, and as an on-screen marquee.
+* Mail sent to GameMaster joins the player's case, and players are alerted in game to new mail.
+* A tell that reaches an AFK player is also mailed to them.
+* A new shared look for the queue, timeline, Live chat and tool dialogs.
+
+**Upgrading**
+* The new in-game features need the updated companion EQEmu patch: update Spire first, then rebuild World, zone and UCS (see docs/player-support-chat.md). Without it they turn off and the rest works as before.
+* New permissions: Player Support Chat Logs and Player Support Linked Accounts.
+
+**Player Operations**
+* Suspending or banning now sets the account status, so World blocks the login. Staff accounts are refused.
+* Edits are refused while the character is in game, because the game would overwrite them.
+
 ## [5.9.0] (Beta) 11/9/2026
 
 **Player Support (new Server Admin tool)**
