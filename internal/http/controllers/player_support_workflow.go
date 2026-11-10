@@ -502,6 +502,9 @@ type supportBatchResult struct {
 	OK       bool                  `json:"ok"`
 	Error    string                `json:"error,omitempty"`
 	Petition *supportPetitionClose `json:"petition,omitempty"`
+	// RepliesNotice says how the replies-closed notice went when resolving
+	// turned Player replies off.
+	RepliesNotice string `json:"replies_notice,omitempty"`
 }
 
 func validateSupportBatch(input supportBatchInput) error {
@@ -549,8 +552,8 @@ func (p *PlayerSupportController) batch(c echo.Context) error {
 			Action: input.Action, Text: input.Text, Revision: item.Revision, AssigneeID: input.AssigneeID,
 			Category: input.Category, CloseInGame: input.CloseInGame, assigneeName: assignee,
 		}
-		petition, err := p.updateCase(c, scope, item.Key, update)
-		result := supportBatchResult{Key: item.Key, OK: err == nil, Petition: petition}
+		petition, notice, err := p.updateCase(c, scope, item.Key, update)
+		result := supportBatchResult{Key: item.Key, OK: err == nil, Petition: petition, RepliesNotice: notice}
 		if err != nil {
 			result.Error = supportErrorMessage(c, err)
 		}

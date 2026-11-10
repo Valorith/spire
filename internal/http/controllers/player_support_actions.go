@@ -163,6 +163,12 @@ const (
 type supportNotice struct {
 	CaseID, AccountID uint
 	RequestID, Body   string
+	// Subject, Reason and Key default to the account action notice's. Key is
+	// the delivery key, unique in the audit log, so a notice is written once.
+	Subject, Reason, Key string
+	// NoAlert skips the in-game new-mail alert: the player was already told
+	// in game.
+	NoAlert bool
 }
 
 // supportNoticeKey is the notice's delivery key. It is derived from the
@@ -195,16 +201,28 @@ func (p *PlayerSupportController) noticeResult(c echo.Context, scope supportScop
 	return result
 }
 
-// sendSupportNotice mails the notice to the character that filed the
+// sendSupportNotice mails a fixed notice to the character that filed the
 // petition through the Mail & Parcels direct mail path, which checks its
 // limits and records it as the case's delivery, as Reply by mail does.
 func (p *PlayerSupportController) sendSupportNotice(c echo.Context, scope supportScope, view supportCaseView, notice supportNotice) error {
 	if p.mail == nil || scope.eqemu == nil {
 		return errors.New("mail is unavailable")
 	}
+	if notice.Subject == "" {
+		notice.Subject = supportNoticeSubject
+	}
+	if notice.Reason == "" {
+		notice.Reason = "Account action notice for Player Support case " + view.SourceKey
+	}
+	if notice.Key == "" {
+		notice.Key = supportNoticeKey(notice.CaseID, notice.RequestID)
+	}
+	if view.CharacterID == 0 {
+		return errors.New("the character that filed the petition is unavailable")
+	}
 	input := gmMailSendInput{
-		CharacterIDs: []uint{view.CharacterID}, From: playersupport.Identity, Subject: supportNoticeSubject, Body: notice.Body,
-		Reason: "Account action notice for Player Support case " + view.SourceKey, Confirmation: gmMailConfirmation("direct", 1),
+		CharacterIDs: []uint{view.CharacterID}, From: playersupport.Identity, Subject: notice.Subject, Body: notice.Body,
+		Reason: notice.Reason, Confirmation: gmMailConfirmation("direct", 1), NoAlert: notice.NoAlert,
 	}
 	if err := validateGMMailInput(input); err != nil {
 		return err
@@ -216,7 +234,7 @@ func (p *PlayerSupportController) sendSupportNotice(c echo.Context, scope suppor
 	c.SetRequest(request.WithContext(ctx))
 	c.Set(supportDeliveryContextKey, &supportDeliveryAudit{
 		CaseID: notice.CaseID, ConnectionID: scope.connectionID, Character: view.Character,
-		AccountID: int(notice.AccountID), Key: supportNoticeKey(notice.CaseID, notice.RequestID),
+		AccountID: int(notice.AccountID), Key: notice.Key,
 	})
 	defer func() {
 		c.Set(supportDeliveryContextKey, nil)

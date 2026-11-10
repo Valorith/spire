@@ -11,6 +11,13 @@ type Controller interface {
 	Routes() []*Route
 }
 
+// Starter is a controller with long-lived work that belongs to the web
+// server only, such as background watchers. The HTTP server calls Start once
+// it serves; other commands build the same controllers without starting it.
+type Starter interface {
+	Start()
+}
+
 // NewControllerGroup wraps controllers and their accompanied middleware
 func NewControllerGroup(
 	routePrefix string,

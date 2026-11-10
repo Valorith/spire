@@ -1,12 +1,12 @@
 <template>
-  <b-modal visible scrollable centered size="lg" modal-class="support-modal" :title="record.character + ' · Inventory snapshots'" @hide="$emit('close')">
+  <b-modal ref="modal" visible scrollable centered size="lg" modal-class="support-modal" @hide="$emit('close')" @shown="focusFirst">
+    <template #modal-title>Inventory snapshots <span class="support-modal-subject">· {{ record.character }}</span></template>
     <div class="snapshots">
       <p class="snapshots-lead">
         EQEmu saves inventory snapshots on a schedule and with <code>#invsnapshot</code>. Pick one from the last 30 days to see what
         {{ record.character }} had then but no longer has.
       </p>
-      <p v-if="error" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> <span>{{ error }}</span></p>
-      <p v-else-if="loading" class="snapshots-status" role="status">Loading snapshots…</p>
+      <support-load-state v-if="loading || (error && !snapshots.length)" :error="error" label="Loading snapshots" @retry="loadList" />
       <div v-else-if="!snapshots.length" class="support-empty snapshots-empty">
         <i class="fe fe-camera-off" aria-hidden="true"></i>
         <strong>No snapshots for {{ record.character }}</strong>
@@ -21,7 +21,7 @@
           </button>
         </div>
         <div class="snapshots-diff" aria-live="polite">
-          <p v-if="diffLoading" class="snapshots-status" role="status">Comparing with the current inventory…</p>
+          <support-load-state v-if="diffLoading || error" :error="error" label="Comparing with the current inventory" :rows="2" @retry="choose(selected)" />
           <p v-else-if="!selected" class="snapshots-status">Choose a snapshot.</p>
           <div v-else-if="!missing.length && !accounted.length" class="support-empty snapshots-empty is-good">
             <i class="fe fe-check-circle" aria-hidden="true"></i>
@@ -43,9 +43,9 @@
                 <li v-for="(line, index) in missing" :key="index" class="snapshots-line"
                     :class="{ 'is-chosen': chosen.includes(index), 'is-disabled': !chosen.includes(index) && !fits(index) }">
                   <label>
-                    <input v-model="chosen" type="checkbox" :value="index" :disabled="!chosen.includes(index) && !fits(index)">
+                    <input v-model="chosen" type="checkbox" class="support-check" :value="index" :disabled="!chosen.includes(index) && !fits(index)">
                     <span class="snapshots-item">
-                      <strong>{{ line.item.name }}</strong>
+                      <strong :title="line.item.name">{{ line.item.name }}</strong>
                       <span v-if="augmentNames(line)" class="snapshots-augments">with {{ augmentNames(line) }}</span>
                       <span v-if="partly(line)" class="snapshots-augments">{{ partly(line) }}</span>
                     </span>
@@ -82,11 +82,12 @@
       </div>
     </div>
     <template #modal-footer>
-      <span v-if="!canRestore && missing.length" class="support-footer-note">Restoring needs Mail &amp; Parcels write access.</span>
-      <span v-else-if="overflow" class="support-footer-note is-warning">Only the first 20 parcels fit in one batch. Restore the rest after sending.</span>
+      <span v-if="!canRestore && missing.length && readOnly" class="support-footer-note"><i class="fe fe-lock" aria-hidden="true"></i>{{ readOnly }}</span>
+      <span v-else-if="overflow" class="support-footer-note is-warning"><i class="fe fe-alert-triangle" aria-hidden="true"></i>Only the first 20 parcels fit in one batch. Restore the rest after sending.</span>
       <span v-else-if="parcels" class="support-footer-note">{{ parcels }} of 20 parcels in this batch</span>
+      <span v-else-if="canRestore && missing.length" class="support-footer-note">Tick the items to restore.</span>
       <button type="button" class="support-button" @click="$emit('close')">Close</button>
-      <button v-if="canRestore" type="button" class="support-button is-primary" :disabled="!chosen.length" @click="restore">
+      <button v-if="canRestore && missing.length" type="button" class="support-button is-primary" :disabled="!chosen.length" @click="restore">
         <i class="fe fe-package" aria-hidden="true"></i> Restore {{ Math.min(parcels, 20) || '' }} as parcels
       </button>
     </template>
@@ -95,13 +96,19 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
+import { dialogFocus } from './support-dialog'
+import SupportLoadState from './SupportLoadState.vue'
 
 export default {
   name: 'SupportSnapshots',
+  components: { SupportLoadState },
+  mixins: [dialogFocus],
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
-    canRestore: { type: Boolean, default: false }
+    canRestore: { type: Boolean, default: false },
+    // Why items cannot be restored from here (resolved case, no permission), or ''.
+    readOnly: { type: String, default: '' }
   },
   data () {
     return { snapshots: [], selected: 0, missing: [], accounted: [], showAccounted: false, chosen: [], loading: true, diffLoading: false, error: '', version: 0 }
@@ -115,19 +122,23 @@ export default {
     // One item can need more than a batch holds; only the first 20 go.
     overflow () { return this.parcels > 20 }
   },
-  async mounted () {
-    try {
-      const { data } = await SpireApi.v1().get(this.endpoint, { params: { connection_id: this.connectionId } })
-      this.snapshots = data.snapshots || []
-      if (this.snapshots.length) this.choose(this.snapshots[0].time_index)
-    } catch (error) {
-      this.error = this.errorText(error)
-    } finally {
-      this.loading = false
-    }
-  },
+  mounted () { this.loadList() },
   methods: {
-    errorText (error) { return (error.response && error.response.data && error.response.data.error) || 'Snapshots could not be loaded' },
+    async loadList () {
+      this.loading = true
+      this.error = ''
+      try {
+        const { data } = await SpireApi.v1().get(this.endpoint, { params: { connection_id: this.connectionId } })
+        this.snapshots = data.snapshots || []
+        if (this.snapshots.length) this.choose(this.snapshots[0].time_index)
+      } catch (error) {
+        this.error = this.errorText(error)
+      } finally {
+        this.loading = false
+      }
+    },
+    focusFirst () { if (this.snapshots.length) this.focusInDialog('.snapshots-list [aria-pressed="true"]') },
+    errorText (error) { return (error.response && error.response.data && error.response.data.error) || 'Snapshots could not be loaded.' },
     async choose (time) {
       const version = ++this.version
       this.selected = time
@@ -143,6 +154,7 @@ export default {
         this.missing = lines.filter(line => !line.accounted && line.missing > 0)
         this.accounted = lines.filter(line => line.accounted || !(line.missing > 0))
         this.showAccounted = false
+        this.focusFirst()
       } catch (error) {
         if (version !== this.version) return
         this.missing = []
@@ -315,10 +327,8 @@ export default {
 .snapshots-accounted-toggle:hover { color: var(--support-text); }
 .snapshots-accounted-toggle i { color: var(--support-muted); }
 .snapshots-line.is-accounted .snapshots-item strong { color: var(--support-text-secondary); }
-.snapshots-items input { width: 15px; height: 15px; margin: 0; accent-color: var(--support-accent); }
-.snapshots-items input:disabled { cursor: not-allowed; }
 .snapshots-item { display: grid; gap: 2px; min-width: 0; line-height: 1.35; }
-.snapshots-item strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.snapshots-item strong { overflow: hidden; color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .snapshots-items .snapshots-augments { color: var(--support-muted); font-size: var(--support-text-xs); }
 .snapshots-items .snapshots-count { color: var(--support-text-secondary); font-size: var(--support-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .snapshots-count small { display: block; color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 400; }
@@ -327,5 +337,8 @@ export default {
   .snapshots-line { grid-template-columns: minmax(0, 1fr); }
   .snapshots-items .snapshots-where { justify-self: start; padding: 0 var(--support-space-3) var(--support-space-2) 42px; }
   .snapshots-list { max-height: 160px; }
+}
+@media (max-width: 680px), (pointer: coarse) {
+  .snapshots-accounted-toggle { min-height: var(--support-touch); }
 }
 </style>

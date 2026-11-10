@@ -1,6 +1,9 @@
 package database
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/EQEmuTools/spire/internal/logger"
 	"github.com/EQEmuTools/spire/internal/models"
 	"gorm.io/gorm"
@@ -52,12 +55,17 @@ var spireTables = []models.Modelable{
 	&models.PlayerSupportSettings{},
 	&models.PlayerSupportAccountNote{},
 	&models.PlayerSupportCaseLink{},
+	&models.PlayerSupportPersona{},
 	&models.UserServerResourcePermission{},
 	&models.CrashReport{},
 	&models.Setting{},
 }
 
+// SpireMigrate creates and updates every Spire table. A table that cannot be
+// migrated is logged and skipped, so it never blocks the tables after it; the
+// returned error lists every table that failed.
 func (c *Connections) SpireMigrate(drop bool) error {
+	var failed []string
 	for _, table := range spireTables {
 		if drop {
 			c.logger.Info().Msgf("Dropping table [%v]\n", table.TableName())
@@ -77,10 +85,13 @@ func (c *Connections) SpireMigrate(drop bool) error {
 		}
 
 		// always run migration incase there are schema changes
-		err := migrator.AutoMigrate(table)
-		if err != nil {
-			return err
+		if err := migrator.AutoMigrate(table); err != nil {
+			c.logger.Error().Any("table", table.TableName()).Err(err).Msg("Spire table migration failed")
+			failed = append(failed, fmt.Sprintf("%s: %v", table.TableName(), err))
 		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("spire table migration failed for %d table(s): %s", len(failed), strings.Join(failed, "; "))
 	}
 	return nil
 }

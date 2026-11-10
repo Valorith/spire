@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/labstack/echo/v4"
@@ -118,10 +119,76 @@ func TestPlayerSupportQueueSummary(t *testing.T) {
 		view(1, "Other", 9, "open"),
 		view(0, "", 0, "waiting"),
 	}, 7)
-	want := supportSummary{Active: 4, Urgent: 1, Unassigned: 2, Waiting: 2, Mine: 1}
+	// The two open cases wait on staff; the waiting ones wait on the player.
+	want := supportSummary{Active: 4, Urgent: 1, Unassigned: 2, Waiting: 2, Mine: 1, Pending: 2}
 	got.NewestAt, got.NewestKey, got.NewestCharacter = 0, "", ""
 	if got != want {
 		t.Fatalf("summary = %+v, want %+v", got, want)
+	}
+
+	// A waiting case the player answered since needs staff again.
+	replied := view(0, "", 0, "waiting")
+	replied.PlayerReplied = true
+	if got := supportQueueSummary([]supportCaseView{view(0, "", 0, "waiting"), replied}, 7); got.Pending != 1 || got.Waiting != 2 {
+		t.Fatalf("replied while waiting: %+v", got)
+	}
+}
+
+func TestPlayerSupportQueueFilters(t *testing.T) {
+	view := func(urgency int, owner string, ownerID uint, status string) supportCaseView {
+		record := models.PlayerSupportCase{Urgency: urgency, Owner: owner, OwnerID: ownerID, Status: status}
+		return supportView(record, models.Petition{}, 7)
+	}
+	cases := []supportCaseView{view(2, "", 0, "open"), view(3, "Guide", 7, "waiting"), view(1, "Other", 9, "open"), view(0, "", 0, "waiting")}
+	escalated := view(0, "", 0, "open")
+	escalated.Escalated = true
+	cases = append(cases, escalated)
+	count := func(filter string) int {
+		matched := 0
+		for _, record := range cases {
+			if supportFilterMatches(filter, record) {
+				matched++
+			}
+		}
+		return matched
+	}
+	summary := supportQueueSummary(cases, 7)
+	// Each summary card that filters matches the cases it counts.
+	for _, test := range []struct {
+		filter string
+		want   int
+	}{
+		{"", summary.Active}, {"open", summary.Active}, {"urgent", summary.Urgent}, {"unassigned", summary.Unassigned},
+		{"waiting", summary.Waiting}, {"mine", summary.Mine}, {"attention", summary.Attention},
+	} {
+		if got := count(test.filter); got != test.want {
+			t.Errorf("filter %q matched %d, want %d", test.filter, got, test.want)
+		}
+	}
+	if summary.Urgent != 2 {
+		t.Fatalf("urgent = %d, want 2 (urgency 2 and 3)", summary.Urgent)
+	}
+}
+
+func TestSupportPlayerReplied(t *testing.T) {
+	waited := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	before, after := waited.Add(-time.Minute), waited.Add(time.Minute)
+	cases := []struct {
+		name   string
+		status string
+		times  supportCaseTimes
+		want   bool
+	}{
+		{"open case", "open", supportCaseTimes{LastChatIn: &after}, false},
+		{"waiting, no reply", "waiting", supportCaseTimes{LastWait: &waited}, false},
+		{"waiting, reply before the wait", "waiting", supportCaseTimes{LastWait: &waited, LastChatIn: &before}, false},
+		{"waiting, reply since", "waiting", supportCaseTimes{LastWait: &waited, LastChatIn: &after}, true},
+		{"waiting from an import, with a reply", "waiting", supportCaseTimes{LastChatIn: &after}, true},
+	}
+	for _, test := range cases {
+		if got := supportPlayerReplied(test.status, test.times); got != test.want {
+			t.Errorf("%s: %v, want %v", test.name, got, test.want)
+		}
 	}
 }
 

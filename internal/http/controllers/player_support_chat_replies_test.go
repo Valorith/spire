@@ -110,7 +110,7 @@ func TestRecordChatSendLeavesRepliesOff(t *testing.T) {
 	for _, repliesOn := range []bool{false, true} {
 		state := &chatTestState{caseStatus: "open", repliesOn: repliesOn}
 		db := chatTestDB(t, state)
-		entry, duplicate, err := recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "I am looking into this now.", "Aranel", nil)
+		entry, duplicate, err := recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "I am looking into this now.", "Aranel", "", nil)
 		if err != nil || duplicate {
 			t.Fatalf("replies on %v: duplicate %v, %v", repliesOn, duplicate, err)
 		}
@@ -127,7 +127,7 @@ func TestRecordChatSendRefusals(t *testing.T) {
 	requestID := strings.Repeat("b", 32)
 	state := &chatTestState{caseStatus: "resolved"}
 	db := chatTestDB(t, state)
-	_, _, err := recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "Hello", "Aranel", nil)
+	_, _, err := recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "Hello", "Aranel", "", nil)
 	if toolHTTPCode(err) != http.StatusConflict || err.(*echo.HTTPError).Message != "Reopen this case to message the player" || len(state.created) != 0 {
 		t.Fatalf("resolved: %v, created %v", err, state.kinds())
 	}
@@ -135,7 +135,7 @@ func TestRecordChatSendRefusals(t *testing.T) {
 	state = &chatTestState{caseStatus: "open"}
 	db = chatTestDB(t, state)
 	tellsOff := echo.NewHTTPError(http.StatusConflict, "Aranel has tells turned off")
-	if _, _, err = recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "Hello", "Aranel", tellsOff); err != tellsOff || len(state.created) != 0 {
+	if _, _, err = recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "Hello", "Aranel", "", tellsOff); err != tellsOff || len(state.created) != 0 {
 		t.Fatalf("tells off: %v, created %v", err, state.kinds())
 	}
 
@@ -143,7 +143,7 @@ func TestRecordChatSendRefusals(t *testing.T) {
 	key := "chat-12-" + requestID
 	state = &chatTestState{caseStatus: "open", existing: &models.PlayerSupportEntry{ID: 40, Kind: "chat_out", Delivery: "sent", RequestKey: &key}}
 	db = chatTestDB(t, state)
-	entry, duplicate, err := recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "Hello", "Aranel", tellsOff)
+	entry, duplicate, err := recordChatSend(supportScope{spire: db, eqemu: db}, chatTestView(), requestID, "Hello", "Aranel", "", tellsOff)
 	if err != nil || !duplicate || entry.ID != 40 || entry.Delivery != "sent" || len(state.created) != 0 {
 		t.Fatalf("repeat: %+v duplicate %v, %v, created %v", entry, duplicate, err, state.kinds())
 	}

@@ -1,21 +1,24 @@
 <template>
-  <b-modal visible scrollable centered size="lg" modal-class="support-modal support-items-modal" :title="'Items · ' + record.character" @hide="$emit('close')">
-    <div class="support-tabs tool-tabs" role="group" aria-label="Item tools">
-      <button type="button" :aria-pressed="String(tab === 'find')" @click="setTab('find')">
+  <b-modal ref="modal" visible scrollable centered size="lg" modal-class="support-modal support-items-modal" @hide="$emit('close')" @shown="focusFirst">
+    <template #modal-title>Items <span class="support-modal-subject">· {{ record.character }}</span></template>
+    <div class="support-tabs tool-tabs" role="tablist" aria-label="Item tools" @keydown="tablistKeydown">
+      <button id="support-items-tab-find" type="button" role="tab" :aria-selected="String(tab === 'find')" aria-controls="support-items-panel"
+              :tabindex="tab === 'find' ? 0 : -1" @click="setTab('find')">
         <i class="fe fe-search" aria-hidden="true"></i> Find an item
       </button>
-      <button type="button" :aria-pressed="String(tab === 'history')" @click="setTab('history')">
+      <button id="support-items-tab-history" type="button" role="tab" :aria-selected="String(tab === 'history')" aria-controls="support-items-panel"
+              :tabindex="tab === 'history' ? 0 : -1" @click="setTab('history')">
         <i class="fe fe-clock" aria-hidden="true"></i> Restore history
       </button>
     </div>
 
-    <div v-if="tab === 'find'" class="tool-body">
-      <template v-if="!wanted">
-        <p class="support-modal-lead">Find where an item is on {{ record.account }}’s characters, whether staff returned it before, and the recent events that moved it.</p>
-        <div class="items-choose">
-          <button type="button" class="support-button is-primary" @click="openLookup"><i class="fe fe-search" aria-hidden="true"></i> Choose an item</button>
-        </div>
-      </template>
+    <div v-if="tab === 'find'" id="support-items-panel" class="tool-body" role="tabpanel" aria-labelledby="support-items-tab-find">
+      <div v-if="!wanted" class="support-empty items-start">
+        <i class="fe fe-crosshair" aria-hidden="true"></i>
+        <strong>Trace an item</strong>
+        <p>Find where an item is on {{ record.account }}’s characters, whether staff returned it before, and the recent events that moved it.</p>
+        <button ref="choose" type="button" class="support-button is-primary" @click="openLookup"><i class="fe fe-search" aria-hidden="true"></i> Choose an item</button>
+      </div>
       <template v-else>
         <div class="items-subject">
           <span class="items-icon" aria-hidden="true">
@@ -24,32 +27,32 @@
           </span>
           <div class="items-subject-text">
             <strong>{{ itemName }}</strong>
-            <span>#{{ wanted.item_id }}<template v-if="wanted.label"> · {{ wanted.label }}</template></span>
+            <span class="items-subject-meta">
+              <support-copy :value="wanted.item_id" label="item ID" :show="'#' + wanted.item_id" />
+              <template v-if="wanted.label"><span aria-hidden="true">·</span> {{ wanted.label }}</template>
+            </span>
           </div>
           <button type="button" class="support-button is-sm" :disabled="confirming" @click="openLookup">Change item</button>
         </div>
 
-        <p v-if="error" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
-        <p v-else-if="loading" class="support-feedback" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Looking for {{ itemName }}…</p>
+        <support-load-state v-if="error || loading" :error="error" :label="'Looking for ' + itemName" @retry="load" />
         <template v-else-if="trace">
           <section class="tool-section" aria-labelledby="items-where">
             <h3 id="items-where" class="support-section-label">Where it is now <span v-if="locations.length" class="support-count">{{ locations.length }}</span></h3>
             <div v-if="!locations.length" class="support-empty is-compact">
               <i class="fe fe-search" aria-hidden="true"></i><span>Not found in inventory, bank, corpses or parcels on this account.</span>
             </div>
-            <div v-else class="tool-table-wrap">
-              <table class="support-table">
-                <thead><tr><th scope="col">Place</th><th scope="col">Character</th><th scope="col">Detail</th><th scope="col" class="is-number">Count</th></tr></thead>
-                <tbody>
-                  <tr v-for="(location, index) in locations" :key="index">
-                    <th scope="row">{{ placeLabel(location) }}</th>
-                    <td data-label="Character">{{ location.character || '—' }}</td>
-                    <td data-label="Detail">{{ placeDetail(location) }}</td>
-                    <td data-label="Count" class="is-number">{{ location.count }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <table v-else class="support-table is-sticky tool-table items-where-table">
+              <thead><tr><th scope="col">Place</th><th scope="col">Character</th><th scope="col">Detail</th><th scope="col" class="is-number">Count</th></tr></thead>
+              <tbody>
+                <tr v-for="(location, index) in locations" :key="index">
+                  <th scope="row" class="is-nowrap">{{ placeLabel(location) }}</th>
+                  <td data-label="Character" class="tool-cut" :title="location.character || null">{{ location.character || '—' }}</td>
+                  <td data-label="Detail" class="tool-cut" :title="placeDetail(location)">{{ placeDetail(location) }}</td>
+                  <td data-label="Count" class="is-number">{{ location.count }}</td>
+                </tr>
+              </tbody>
+            </table>
           </section>
 
           <section class="tool-section" aria-labelledby="items-restored">
@@ -82,50 +85,48 @@
             </ol>
           </section>
 
-          <div v-if="confirming" class="support-callout is-warning items-confirm" role="alert">
-            <i class="fe fe-alert-triangle" aria-hidden="true"></i><span>{{ confirmText }}</span>
+          <div v-if="confirming" ref="confirm" class="support-callout is-warning items-confirm" role="alert">
+            <i class="fe fe-alert-triangle" aria-hidden="true"></i>
+            <span>{{ confirmText }}</span>
           </div>
         </template>
       </template>
     </div>
 
-    <div v-else class="tool-body">
+    <div v-else id="support-items-panel" class="tool-body" role="tabpanel" aria-labelledby="support-items-tab-history">
       <p class="support-modal-lead">Items staff sent to any character on {{ record.account }} in the last 90 days.</p>
-      <p v-if="historyError" class="support-callout is-danger tool-gap" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ historyError }}</span></p>
-      <p v-else-if="historyLoading" class="support-feedback" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Loading restore history…</p>
-      <div v-else-if="!history.length" class="support-empty is-compact tool-gap">
+      <support-load-state v-if="historyError || historyLoading" :error="historyError" label="Loading restore history" @retry="loadHistory" />
+      <div v-else-if="!history.length" class="support-empty is-compact">
         <i class="fe fe-package" aria-hidden="true"></i><span>No items were sent to this account by staff in the last 90 days.</span>
       </div>
-      <div v-else class="tool-table-wrap tool-gap">
-        <table class="support-table">
-          <thead><tr><th scope="col">Date</th><th scope="col">Character</th><th scope="col">Items</th><th scope="col">By</th><th scope="col">Source</th></tr></thead>
-          <tbody>
-            <tr v-for="(restore, index) in history" :key="index">
-              <td data-label="Date" class="is-nowrap">{{ formatDate(restore.sent_at) }}</td>
-              <th scope="row" data-label="Character">{{ restore.character }}</th>
-              <td data-label="Items">{{ restoreItems(restore) }}</td>
-              <td data-label="By">{{ restore.actor || '—' }}</td>
-              <td data-label="Source">{{ restore.source }}<template v-if="restore.case_key"> · #{{ restore.case_key.split('-')[0] }}</template></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <table v-else class="support-table is-sticky tool-table items-history-table">
+        <thead><tr><th scope="col">Date</th><th scope="col">Character</th><th scope="col">Items</th><th scope="col">By</th><th scope="col">Source</th></tr></thead>
+        <tbody>
+          <tr v-for="(restore, index) in history" :key="index">
+            <td data-label="Date" class="is-nowrap">{{ formatDate(restore.sent_at) }}</td>
+            <th scope="row" data-label="Character" class="tool-cut" :title="restore.character">{{ restore.character }}</th>
+            <td data-label="Items" class="tool-cut" :title="restoreItems(restore)">{{ restoreItems(restore) }}</td>
+            <td data-label="By" class="tool-cut">{{ restore.actor || '—' }}</td>
+            <td data-label="Source" class="tool-cut" :title="restore.source">{{ restore.source }}<template v-if="restore.case_key"> · #{{ restore.case_key.split('-')[0] }}</template></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <mail-parcels-item-lookup ref="lookup" modal-class="support-modal support-parcel-modal" @selected="pick" />
 
     <template #modal-footer>
-      <span v-if="tab === 'find' && trace && !canRestore" class="support-footer-note">Returning items needs Mail &amp; Parcels write access.</span>
+      <span v-if="tab === 'find' && trace && !canRestore && readOnly" class="support-footer-note"><i class="fe fe-lock" aria-hidden="true"></i>{{ readOnly }}</span>
       <template v-if="confirming">
-        <button type="button" class="support-button" @click="confirming = false">Cancel</button>
+        <button ref="cancelConfirm" type="button" class="support-button" @click="cancelConfirm">Cancel</button>
         <button type="button" class="support-button is-primary" :disabled="preparing" @click="restore">
-          <i class="fe fe-package" aria-hidden="true"></i> {{ preparing ? 'Preparing…' : 'Return anyway' }}
+          <i :class="preparing ? 'fe fe-loader support-spin' : 'fe fe-package'" aria-hidden="true"></i> {{ preparing ? 'Preparing…' : 'Return anyway' }}
         </button>
       </template>
       <template v-else>
         <button type="button" class="support-button" @click="$emit('close')">Close</button>
-        <button v-if="tab === 'find' && canRestore && trace" type="button" class="support-button is-primary" :disabled="loading || preparing" @click="requestRestore">
-          <i class="fe fe-package" aria-hidden="true"></i> {{ preparing ? 'Preparing…' : 'Return by parcel' }}
+        <button v-if="tab === 'find' && canRestore && trace" ref="returnButton" type="button" class="support-button is-primary" :disabled="loading || preparing" @click="requestRestore">
+          <i :class="preparing ? 'fe fe-loader support-spin' : 'fe fe-package'" aria-hidden="true"></i> {{ preparing ? 'Preparing…' : 'Return by parcel' }}
         </button>
       </template>
     </template>
@@ -136,6 +137,10 @@
 import { SpireApi } from '@/app/api/spire-api'
 import { Items } from '@/app/items'
 import MailParcelsItemLookup from '../mail-parcels/MailParcelsItemLookup.vue'
+import { focusLater, tablistKeydown } from './support-ui'
+import { dialogFocus } from './support-dialog'
+import SupportCopy from './SupportCopy.vue'
+import SupportLoadState from './SupportLoadState.vue'
 
 const places = { inventory: 'Inventory', alt: 'Another character', shared_bank: 'Shared bank', corpse: 'Corpse', parcel: 'Parcel' }
 const styles = {
@@ -152,11 +157,14 @@ const styles = {
 
 export default {
   name: 'SupportItems',
-  components: { MailParcelsItemLookup },
+  components: { MailParcelsItemLookup, SupportCopy, SupportLoadState },
+  mixins: [dialogFocus],
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
     canRestore: { type: Boolean, default: false },
+    // Why items cannot be returned from here (resolved case, no permission), or ''.
+    readOnly: { type: String, default: '' },
     // { item_id, quantity, augments: [6], label, copies } from an Evidence row
     // or a snapshot line, or null to start with a search. `quantity` is the
     // stack count of an item that stacks. For one that does not, it is the
@@ -201,7 +209,13 @@ export default {
     if (this.wanted) this.load()
   },
   methods: {
+    tablistKeydown,
     errorText (error, fallback) { return (error.response && error.response.data && error.response.data.error) || fallback },
+    focusFirst () { if (!this.wanted) this.focusInDialog('.items-start .support-button') },
+    cancelConfirm () {
+      this.confirming = false
+      focusLater(() => this.$refs.returnButton)
+    },
     setTab (tab) {
       this.tab = tab
       this.confirming = false
@@ -296,6 +310,9 @@ export default {
     requestRestore () {
       if (this.locations.length || this.restores.length) {
         this.confirming = true
+        // The warning comes into view; Cancel, the safe choice, has focus.
+        this.$nextTick(() => { if (this.$refs.confirm) this.$refs.confirm.scrollIntoView({ block: 'nearest' }) })
+        focusLater(() => this.$refs.cancelConfirm)
         return
       }
       this.restore()
@@ -350,19 +367,28 @@ export default {
 
 <style scoped>
 /* Layout only. Colours, type, radius and spacing come from support-theme.css. */
-.tool-tabs { padding: 0 var(--support-space-5); border-bottom: 1px solid var(--support-border); }
-.tool-body { display: grid; gap: var(--support-space-4); padding: var(--support-space-4) var(--support-space-5) var(--support-space-5); }
+/* The tab bar stays in view while the body scrolls; table headers stick under it. */
+/* The bar's line is an inset shadow, so the active underline covers it and nothing overflows the scrolling tab bar. */
+.tool-tabs { position: sticky; top: 0; z-index: 2; margin-bottom: 0; padding: 0 var(--support-space-5); background: var(--support-bg); box-shadow: inset 0 -1px 0 var(--support-border); }
+.tool-body { --support-sticky-offset: var(--support-tab-height); display: grid; gap: var(--support-space-4); padding: var(--support-space-4) var(--support-space-5) var(--support-space-5); }
 .tool-section { display: grid; gap: var(--support-space-2); min-width: 0; }
 .tool-section .support-section-label { margin: 0; }
 .tool-section .support-count { letter-spacing: 0; }
 .tool-quiet { margin: 0; color: var(--support-muted); font-size: var(--support-text-sm); }
-.tool-table-wrap { min-width: 0; overflow-x: auto; }
-.tool-table-wrap .support-table { min-width: 460px; }
-.support-table .is-number { text-align: right; }
-.support-table .is-nowrap { white-space: nowrap; }
-.tool-body > .support-feedback { margin: 0; }
+.tool-body > .support-modal-lead { color: var(--support-text-secondary); font-size: var(--support-text-sm); }
+/* Fixed columns: long names and details are cut, with the full text as a title. */
+.tool-table { table-layout: fixed; }
+.tool-table .tool-cut { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.items-where-table th:nth-child(1) { width: 26%; }
+.items-where-table th:nth-child(2) { width: 22%; }
+.items-where-table th:nth-child(4) { width: 72px; }
+.items-history-table th:nth-child(1) { width: 25%; }
+.items-history-table th:nth-child(2) { width: 16%; }
+.items-history-table th:nth-child(4) { width: 14%; }
+.items-history-table th:nth-child(5) { width: 22%; }
 
-.items-choose { display: flex; }
+.items-start { padding: var(--support-space-5) var(--support-space-4); }
+.items-start .support-button { margin-top: var(--support-space-2); }
 .items-subject {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
@@ -376,13 +402,14 @@ export default {
 .items-icon { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--support-border); border-radius: var(--support-radius); background: var(--support-sunken); color: var(--support-faint); }
 .items-subject-text { display: grid; gap: 2px; min-width: 0; }
 .items-subject-text strong { color: var(--support-text); font-size: var(--support-text-lg); font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
-.items-subject-text span { color: var(--support-muted); font-size: var(--support-text-xs); }
+.items-subject-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--support-muted); font-size: var(--support-text-xs); }
 
 .items-restores { display: grid; gap: var(--support-space-1); margin: 0; padding: 0; list-style: none; }
 .items-restores li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: baseline; gap: var(--support-space-2); color: var(--support-text-secondary); font-size: var(--support-text-sm); }
 .items-restores li > i { color: var(--support-muted); }
 .items-restores strong { color: var(--support-text); font-weight: 600; }
 .items-restore-source { color: var(--support-muted); font-size: var(--support-text-xs); text-align: right; }
+.items-confirm { margin: 0; scroll-margin-bottom: var(--support-space-4); }
 
 /* The Evidence row look */
 .items-events { margin: 0; padding: 0; list-style: none; }
@@ -398,15 +425,14 @@ export default {
 
 /* Phones: each row becomes a small card of label and value instead of a wide table. */
 @media (max-width: 600px) {
-  .tool-table-wrap .support-table { min-width: 0; }
-  .tool-table-wrap .support-table thead { display: none; }
-  .tool-table-wrap .support-table tr { display: grid; gap: 2px; padding: var(--support-space-2) 0; border-bottom: 1px solid var(--support-border-subtle); }
-  .tool-table-wrap .support-table th,
-  .tool-table-wrap .support-table td { display: flex; justify-content: space-between; gap: var(--support-space-3); padding: 0; border: 0; text-align: right; white-space: normal; }
-  .tool-table-wrap .support-table [data-label]::before { content: attr(data-label); flex: none; color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 400; text-align: left; }
-  .tool-table-wrap .support-table td:not([data-label]) { justify-content: flex-end; }
-}
-@media (max-width: 600px) {
+  .tool-table { table-layout: auto; }
+  .tool-table thead { display: none; }
+  .tool-table tr { display: grid; gap: 2px; padding: var(--support-space-2) 0; border-bottom: 1px solid var(--support-border-subtle); }
+  .tool-table th,
+  .tool-table td { display: flex; justify-content: space-between; gap: var(--support-space-3); padding: 0; border: 0; text-align: right; white-space: normal; }
+  .tool-table .tool-cut { overflow: visible; white-space: normal; }
+  .tool-table [data-label]::before { content: attr(data-label); flex: none; color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 400; text-align: left; }
+  .tool-table td:not([data-label]) { justify-content: flex-end; }
   .tool-tabs { padding: 0 var(--support-space-4); }
   .tool-body { padding: var(--support-space-3) var(--support-space-4) var(--support-space-4); }
   .items-subject { grid-template-columns: 40px minmax(0, 1fr); }

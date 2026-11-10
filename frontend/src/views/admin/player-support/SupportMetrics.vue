@@ -1,5 +1,5 @@
 <template>
-  <b-modal visible centered size="lg" modal-class="support-modal" title="Support insights" @hide="$emit('close')">
+  <b-modal ref="modal" visible centered scrollable size="lg" modal-class="support-modal" title="Support insights" @hide="$emit('close')">
     <div class="metrics">
       <div class="metrics-bar">
         <p>Petitions filed in the last {{ days }} days.</p>
@@ -7,8 +7,7 @@
           <button v-for="option in [7, 30, 90]" :key="option" type="button" :aria-pressed="String(days === option)" @click="setDays(option)">{{ option }} days</button>
         </div>
       </div>
-      <p v-if="error" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> <span>{{ error }}</span></p>
-      <p v-else-if="!data" class="metrics-muted metrics-loading" role="status">Loading…</p>
+      <support-load-state v-if="error || !data" :error="error" label="Loading insights" :rows="3" @retry="load" />
       <template v-else>
         <div class="metrics-cards">
           <div class="support-stat" :class="{ 'is-quiet': !data.filed }"><strong>{{ data.filed }}</strong><span>Filed</span></div>
@@ -19,12 +18,12 @@
         <h3 class="support-section-label metrics-heading">By staff member</h3>
         <p v-if="!data.staff.length" class="support-empty is-compact metrics-empty">No responses or resolutions in this period.</p>
         <table v-else class="support-table metrics-table">
-          <thead><tr><th scope="col">Staff</th><th scope="col">Responses</th><th scope="col">Resolved</th><th scope="col"><span class="sr-only">Share</span></th></tr></thead>
+          <thead><tr><th scope="col">Staff</th><th scope="col" class="is-number">Responses</th><th scope="col" class="is-number">Resolved</th><th scope="col"><span class="sr-only">Share</span></th></tr></thead>
           <tbody>
             <tr v-for="member in data.staff" :key="member.name">
               <th scope="row">{{ member.name }}</th>
-              <td>{{ member.responses }}</td>
-              <td>{{ member.resolved }}</td>
+              <td class="is-number">{{ member.responses }}</td>
+              <td class="is-number">{{ member.resolved }}</td>
               <td class="metrics-share"><span :style="{ width: share(member) + '%' }"></span></td>
             </tr>
           </tbody>
@@ -40,9 +39,13 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
+import { dialogFocus } from './support-dialog'
+import SupportLoadState from './SupportLoadState.vue'
 
 export default {
   name: 'SupportMetrics',
+  components: { SupportLoadState },
+  mixins: [dialogFocus],
   props: { connectionId: { type: Number, required: true } },
   data () { return { days: 30, data: null, error: '', version: 0 } },
   computed: {
@@ -62,7 +65,7 @@ export default {
         const { data } = await SpireApi.v1().get('player-support/metrics', { params: { connection_id: this.connectionId, days: this.days } })
         if (version === this.version) this.data = data
       } catch (error) {
-        if (version === this.version) this.error = (error.response && error.response.data && error.response.data.error) || 'Insights could not be loaded'
+        if (version === this.version) this.error = (error.response && error.response.data && error.response.data.error) || 'Insights could not be loaded.'
       }
     },
     duration (minutes) {
@@ -88,11 +91,10 @@ export default {
 .metrics-cards .support-stat > span { white-space: normal; }
 .metrics-heading { margin: var(--support-space-5) 0 var(--support-space-1); }
 .metrics-table td:nth-child(2), .metrics-table td:nth-child(3) { width: 96px; }
-.metrics-share { width: 36%; }
+.metrics-share { width: 36%; padding-left: var(--support-space-5); }
 .metrics-share span { display: block; min-width: 2px; height: 6px; border-radius: var(--support-radius-sm); background: var(--support-accent); }
 .metrics-empty { margin: var(--support-space-2) 0 0; }
 .metrics-muted { margin: var(--support-space-4) 0 0; color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.5; }
-.metrics-loading { margin: 0; padding: var(--support-space-5) 0; font-size: var(--support-text-sm); text-align: center; }
 @media (max-width: 560px) {
   .metrics-range { width: 100%; }
 }

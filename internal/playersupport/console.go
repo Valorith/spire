@@ -30,6 +30,77 @@ const (
 	KickUnavailable = "unavailable"
 )
 
+// Results of MailNotice.
+const (
+	MailNoticeShown       = "shown"
+	MailNoticeBusy        = "busy"
+	MailNoticeOffline     = "offline"
+	MailNoticeStale       = "stale"
+	MailNoticeUnavailable = "unavailable"
+	MailNoticeUnconfirmed = "unconfirmed"
+	// MailNoticeNoCommand: World answered without "supportmailnotice".
+	MailNoticeNoCommand = "no_command"
+)
+
+// MailNoticeSender makes a mail's sender acceptable to "supportmailnotice":
+// at most 64 printable ASCII characters and no '%'. It returns "" when nothing
+// usable is left, and the notice then names no sender.
+func MailNoticeSender(name string) string {
+	kept := strings.Map(func(r rune) rune {
+		if r < 32 || r > 126 || r == '%' {
+			return -1
+		}
+		return r
+	}, name)
+	kept = strings.Join(strings.Fields(kept), " ")
+	if len(kept) > 64 {
+		return ""
+	}
+	return kept
+}
+
+// MailNotice asks World to tell a character in a zone that new mail arrived
+// ("supportmailnotice <character id> [sender]"), with a chat line and a
+// marquee. It never retries; World answers at once.
+func (w *World) MailNotice(characterID uint, sender string) string {
+	if characterID == 0 {
+		return MailNoticeStale
+	}
+	address := w.address()
+	if address == "" {
+		return MailNoticeUnavailable
+	}
+	command := fmt.Sprintf("supportmailnotice %d", characterID)
+	if sender = MailNoticeSender(sender); sender != "" {
+		command += " " + sender
+	}
+	console := telnet.NewClientWithAddress(w.logger, address)
+	defer console.Close()
+	reply, err := console.Command(telnet.CommandConfig{Command: command, AllowEmptyResponse: true})
+	return classifyMailNotice(reply, err)
+}
+
+func classifyMailNotice(reply string, err error) string {
+	if err != nil {
+		return MailNoticeUnconfirmed
+	}
+	if strings.Contains(reply, "Command not found") {
+		return MailNoticeNoCommand
+	}
+	var answer struct {
+		Status string `json:"status"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(reply)), &answer) != nil {
+		return MailNoticeUnavailable
+	}
+	switch answer.Status {
+	case MailNoticeShown, MailNoticeBusy, MailNoticeOffline, MailNoticeStale:
+		return answer.Status
+	default:
+		return MailNoticeUnavailable
+	}
+}
+
 // World's console kick copies the name into a 64-byte buffer.
 var kickName = regexp.MustCompile(`^[A-Za-z]{1,63}$`)
 

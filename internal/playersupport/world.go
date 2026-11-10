@@ -3,10 +3,8 @@ package playersupport
 import (
 	"bufio"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"regexp"
 	"strconv"
@@ -20,7 +18,14 @@ import (
 	"github.com/EQEmuTools/spire/internal/telnet"
 )
 
+// Identity is the in-game name of Player Support: the tell destination, and
+// the sender of every mail Spire writes for a case, so the player's Reply
+// reaches it. It is one word because EverQuest names are.
 const Identity = "GameMaster"
+
+// DisplayName is how players and staff read that sender in sentences and
+// display-only fields, such as a parcel's sender or the new-mail alert.
+const DisplayName = "Game Master"
 const MaxMessage = 200
 const framePrefix = "SPIRE_SUPPORT "
 const protocolVersion = 2
@@ -442,7 +447,9 @@ func ValidateMessage(text string) bool {
 
 // Send waits for World to accept or reject the tell. A lost acknowledgement is
 // ambiguous, so callers retain the request key and do not replay the tell.
-func (w *World) Send(ctx context.Context, id string, accountID, characterID uint, text string) error {
+// persona is the Game Master's persona for this tell (see PersonaArgument), or
+// "" for none.
+func (w *World) Send(ctx context.Context, id string, accountID, characterID uint, text, persona string) error {
 	w.mu.Lock()
 	conn := w.connectLocked()
 	w.mu.Unlock()
@@ -458,7 +465,7 @@ func (w *World) Send(ctx context.Context, id string, accountID, characterID uint
 		delete(conn.pending, id)
 		conn.mu.Unlock()
 	}()
-	command := fmt.Sprintf("supportchat send %s %d %d %s", id, accountID, characterID, hex.EncodeToString([]byte(text)))
+	command := chatSendCommand(id, accountID, characterID, text, persona)
 	if err := conn.write(command); err != nil {
 		conn.Close()
 		return ErrDeliveryUnknown

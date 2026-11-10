@@ -83,6 +83,7 @@ func (c *Server) Serve(port uint) error {
 	if err := BootstrapControllers(e, c.router.ControllerGroups()...); err != nil {
 		c.logger.Fatal().Err(err).Msg("Failed to bootstrap controllers")
 	}
+	StartControllers(c.router.ControllerGroups()...)
 
 	// basic auth if env passed
 	if len(os.Getenv("BASIC_AUTH_USER")) > 0 && len(os.Getenv("BASIC_AUTH_PASSWORD")) > 0 {
@@ -173,6 +174,18 @@ func BootstrapControllers(e *echo.Echo, controllerGroups ...*routes.ControllerGr
 	}
 
 	return nil
+}
+
+// StartControllers starts the background work of the controllers that have
+// some (routes.Starter). Only the web server calls it.
+func StartControllers(controllerGroups ...*routes.ControllerGroup) {
+	for _, cg := range controllerGroups {
+		for _, c := range cg.Controllers() {
+			if starter, ok := c.(routes.Starter); ok {
+				starter.Start()
+			}
+		}
+	}
 }
 
 func registerRoutes(controller routes.Controller, g *echo.Group) error {

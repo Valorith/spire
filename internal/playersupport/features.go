@@ -31,6 +31,15 @@ type Features struct {
 	// character as an on-screen marquee, "Game Master: <message>", cut to
 	// MarqueeLength characters. Mail, notices and rejects get none.
 	Marquee bool `json:"marquee"`
+	// MailReplies: the patched UCS stores mail a player sends to GameMaster as
+	// a mail row with charid 0, which Spire collects and files on the case.
+	MailReplies bool `json:"mail_replies"`
+	// MailNotice: "supportmailnotice" shows a character in a zone a chat line
+	// and marquee about new mail.
+	MailNotice bool `json:"mail_notice"`
+	// Persona: "supportchat send" takes a sixth argument, the Game Master's
+	// persona, shown on the tell as "(GM) <persona>".
+	Persona bool `json:"persona"`
 }
 
 // MarqueeLength is the longest marquee World shows, prefix included; a longer
@@ -84,6 +93,12 @@ func classifyFeatures(reply string, err error, companion CompanionStatus) Featur
 			features.Unbury = true
 		case "marquee":
 			features.Marquee = true
+		case "mail_replies":
+			features.MailReplies = true
+		case "mail_notice":
+			features.MailNotice = true
+		case "persona":
+			features.Persona = true
 		}
 	}
 	return features

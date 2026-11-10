@@ -28,12 +28,15 @@
     </p>
 
     <p v-if="loggingNote && !error" class="evidence-message support-callout is-warning"><i class="fe fe-mic-off" aria-hidden="true"></i><span>{{ loggingNote }}</span></p>
-    <p v-if="error" class="evidence-message support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
-    <p v-else-if="loading && !events.length" class="evidence-message support-feedback" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Loading events…</p>
+    <support-load-state v-if="error || (loading && !events.length)" class="evidence-message" :error="error" label="Loading events" :rows="4" @retry="load(page)" />
     <div v-else-if="!events.length" class="evidence-empty support-empty">
       <i class="fe fe-search" aria-hidden="true"></i>
       <strong>No events in this window</strong>
       <p>Try a longer window or another type. Events only appear for types turned on in Player Event Log settings.</p>
+      <div class="evidence-empty-actions">
+        <button v-if="nextWindow" type="button" class="support-button is-sm" @click="widen">Look back {{ nextWindow.label }}</button>
+        <button v-if="group !== ''" type="button" class="support-button is-sm is-ghost" @click="setGroup('')">Show all types</button>
+      </div>
     </div>
     <ol v-else ref="list" class="evidence-list" :class="{ 'is-loading': loading }">
       <template v-for="item in rows">
@@ -75,6 +78,7 @@ import { SpireApi } from '@/app/api/spire-api'
 import PlayerEventDisplayComponent from '@/views/admin/player-event-logs/components/PlayerEventDisplayComponent.vue'
 import { PLAYER_EVENT } from '@/views/admin/player-event-logs/player-events'
 import { Items } from '@/app/items'
+import SupportLoadState from './SupportLoadState.vue'
 
 // Event types the shared Player Event Logs display knows how to draw.
 const rendered = new Set([
@@ -113,7 +117,7 @@ const traced = new Map([['Item Destroy', 'destroyed'], ['Merchant Sell', 'sold']
 
 export default {
   name: 'SupportEvidence',
-  components: { PlayerEventDisplayComponent },
+  components: { PlayerEventDisplayComponent, SupportLoadState },
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
@@ -169,6 +173,8 @@ export default {
     firstShown () { return (this.page - 1) * this.pageSize + 1 },
     lastShown () { return Math.min(this.total, this.page * this.pageSize) },
     windowLabel () { return (this.windows.find(option => option.hours === this.hours) || {}).label || '24 hours' },
+    // The next longer time window, offered when a window comes back empty.
+    nextWindow () { return this.windows.find(option => option.hours > this.hours) || null },
     // Events are newest first. The server counts the events newer than the
     // petition, so the filing marker appears once, on the page it falls on.
     rows () {
@@ -194,6 +200,11 @@ export default {
     setGroup (group) {
       if (this.group === group) return
       this.group = group
+      this.load(1)
+    },
+    widen () {
+      if (!this.nextWindow) return
+      this.hours = this.nextWindow.hours
       this.load(1)
     },
     setSubject (subject) {
@@ -224,7 +235,7 @@ export default {
         this.events = []
         this.total = 0
         this.logging = null
-        this.error = (error.response && error.response.data && error.response.data.error) || 'Events could not be loaded'
+        this.error = (error.response && error.response.data && error.response.data.error) || 'Events could not be loaded.'
       } finally {
         if (version === this.version) this.loading = false
       }
@@ -325,6 +336,23 @@ export default {
 .evidence-lead strong { color: var(--support-text-secondary); font-weight: 600; }
 .evidence-message { margin: var(--support-space-2) 0 0; }
 .evidence-empty { flex: 1; }
+.evidence-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--support-space-2); margin-top: var(--support-space-2); }
+/* The shared Player Event Logs display draws a bright "show detail" button;
+   here it takes the quiet secondary look of the other row buttons. */
+.evidence-detail ::v-deep .btn-warning {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: var(--support-space-2) !important;
+  padding: 0;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius-sm);
+  background: var(--support-raised);
+  color: var(--support-muted);
+  vertical-align: middle;
+}
+.evidence-detail ::v-deep .btn-warning:hover { border-color: var(--support-border-hover); background: var(--support-hover); color: var(--support-text); }
 
 /* Rows: neutral, divided like the queue, icons like the timeline */
 .evidence-list { margin: 0; padding: 0; list-style: none; }
@@ -362,5 +390,8 @@ export default {
 @media (max-width: 680px) {
   .support-evidence { padding: var(--support-space-3) var(--support-space-4) var(--support-space-4); }
   .evidence-filters i { display: none; }
+}
+@media (max-width: 680px), (pointer: coarse) {
+  .evidence-window select { min-height: var(--support-touch); }
 }
 </style>

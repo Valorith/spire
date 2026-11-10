@@ -86,7 +86,9 @@ func (o *Init) Init() {
 	// otherwise these settings get populated when a user first sets up their
 	// spire instance
 	if o.isInitialized {
-		_ = o.connections.SpireMigrate(false)
+		if err := o.connections.SpireMigrate(false); err != nil {
+			o.logger.Error().Err(err).Msg("Spire database migration did not complete")
+		}
 		o.settings.InitSettings()
 
 		// get admin user

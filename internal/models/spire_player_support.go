@@ -44,9 +44,19 @@ type PlayerSupportEntry struct {
 	Delivery string `json:"delivery,omitempty" gorm:"size:16"`
 	// Recipient is the character a Game Master tell reached. It can be any
 	// character on the petitioning account.
-	Recipient  string    `json:"recipient,omitempty" gorm:"size:64"`
-	RequestKey *string   `json:"-" gorm:"size:96;uniqueIndex"`
-	CreatedAt  time.Time `json:"created_at"`
+	Recipient string `json:"recipient,omitempty" gorm:"size:64"`
+	// Subject is set on a player's message that arrived by mail.
+	Subject string `json:"subject,omitempty" gorm:"size:200"`
+	// Persona is the name a Game Master's tell showed players, "(GM)
+	// <persona>", when it was not the default.
+	Persona string `json:"persona,omitempty" gorm:"size:24"`
+	// Afk is set on a Game Master tell the player's client answered as AFK:
+	// "pending", then "mailed" or "failed" once the tell was mailed to them.
+	Afk string `json:"afk,omitempty" gorm:"size:16"`
+	// AfkAt is when the AFK answer came and the tell was forwarded.
+	AfkAt      *time.Time `json:"afk_at,omitempty"`
+	RequestKey *string    `json:"-" gorm:"size:96;uniqueIndex"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 func (PlayerSupportEntry) TableName() string       { return "spire_player_support_entries" }
@@ -97,6 +107,19 @@ type PlayerSupportAccountNote struct {
 func (PlayerSupportAccountNote) TableName() string       { return "spire_player_support_account_notes" }
 func (PlayerSupportAccountNote) Relationships() []string { return nil }
 func (PlayerSupportAccountNote) Connection() string      { return "spire" }
+
+// PlayerSupportPersona is the name players see on a Game Master's tells from
+// Spire, one per Spire user. UserID 0 is a local install with authentication
+// off.
+type PlayerSupportPersona struct {
+	UserID    uint      `json:"-" gorm:"primaryKey;autoIncrement:false"`
+	Persona   string    `json:"persona" gorm:"size:24"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (PlayerSupportPersona) TableName() string       { return "spire_player_support_personas" }
+func (PlayerSupportPersona) Relationships() []string { return nil }
+func (PlayerSupportPersona) Connection() string      { return "spire" }
 
 // PlayerSupportSettings holds Player Support options for the game server this
 // Spire runs beside. There is one row.

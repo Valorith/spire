@@ -1,16 +1,14 @@
 <template>
   <section v-if="reports.length || error" class="bugs" aria-labelledby="bugs-heading">
     <h2 id="bugs-heading" class="support-section-label">Bug reports <span v-if="reports.length" class="support-count">{{ reports.length }}</span></h2>
-    <p v-if="error && !reports.length" class="support-feedback is-error" role="alert">
-      {{ error }} <button type="button" class="support-link" @click="load">Try again</button>
-    </p>
+    <support-load-state v-if="error && !reports.length" :error="error" @retry="load" />
     <ul v-else class="bugs-list">
       <li v-for="report in reports" :key="report.id" class="bugs-report">
         <div class="bugs-top">
-          <strong>#{{ report.id }}</strong>
+          <support-copy :value="report.id" label="bug report ID" :show="'#' + report.id" class="bugs-id" />
           <span v-if="report.linked" class="support-chip is-accent"><i class="fe fe-link" aria-hidden="true"></i> Linked</span>
           <span v-if="reviewed(report)" class="support-chip"><i class="fe fe-check" aria-hidden="true"></i> Reviewed</span>
-          <time :datetime="report.reported_at" :title="formatDate(report.reported_at)">{{ formatDay(report.reported_at) }}</time>
+          <time :datetime="report.reported_at" :title="timeTitle(report.reported_at)">{{ formatDay(report.reported_at) }}</time>
         </div>
         <div class="bugs-meta">{{ [report.character_name, report.category, report.zone].filter(Boolean).join(' · ') }}</div>
         <p class="bugs-text">{{ expanded[report.id] ? report.text : short(report.text) }}
@@ -27,8 +25,8 @@
           </button>
         </div>
         <div v-if="reviewing === report.id" class="bugs-review">
-          <label :for="'bugs-note-' + report.id" class="support-label bugs-label">Review note <span class="support-label-hint">(optional)</span></label>
-          <textarea :id="'bugs-note-' + report.id" ref="note" v-model="note" class="support-field bugs-note" rows="2" maxlength="1000" :disabled="busy"></textarea>
+          <support-reason :id="'bugs-note-' + report.id" ref="note" v-model="note" class="bugs-note" label="Review note" hint="(optional)" :min="0" :max="1000"
+                          :bytes="false" :disabled="busy" @submit="act(report, 'review')" />
           <div class="bugs-actions">
             <button type="button" class="support-button is-sm" :disabled="busy" @click="reviewing = 0">Cancel</button>
             <button type="button" class="support-button is-sm is-primary" :disabled="busy" @click="act(report, 'review')">Mark reviewed</button>
@@ -43,11 +41,16 @@
 <script>
 import { SpireApi } from '@/app/api/spire-api'
 import { canWriteAdminApi } from '@/app/user/server-admin-access'
+import { timeTitle } from './support-ui'
+import SupportCopy from './SupportCopy.vue'
+import SupportLoadState from './SupportLoadState.vue'
+import SupportReason from './SupportReason.vue'
 
-// Inspector section: the account's /bug reports, linked to the case (T12).
+// Inspector section: the account's /bug reports, linked to the case.
 // Renders nothing when the account has none. Events: receipt({ status, message }).
 export default {
   name: 'SupportBugReports',
+  components: { SupportCopy, SupportLoadState, SupportReason },
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
@@ -101,9 +104,7 @@ export default {
         this.busy = false
       }
     },
-    formatDate (value) {
-      return value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : ''
-    },
+    timeTitle (value) { return value ? timeTitle(value) : '' },
     formatDay (value) {
       return value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value)) : ''
     }
@@ -117,7 +118,7 @@ export default {
 .bugs-list { display: grid; gap: var(--support-space-2); margin: 0; padding: 0; list-style: none; }
 .bugs-report { display: grid; gap: 6px; padding: var(--support-space-2) 10px; border: 1px solid var(--support-border); border-radius: var(--support-radius); background: var(--support-bg); }
 .bugs-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--support-space-2); font-size: var(--support-text-sm); }
-.bugs-top strong { color: var(--support-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.bugs-top .bugs-id { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; }
 .bugs-top time { margin-left: auto; color: var(--support-faint); font-size: var(--support-text-xs); }
 .bugs-meta,
 .bugs-reviewed { margin: 0; color: var(--support-muted); font-size: var(--support-text-xs); }
@@ -126,7 +127,7 @@ export default {
 .bugs-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
 .bugs-review { display: grid; gap: 6px; }
 .bugs-review .bugs-actions { justify-content: flex-end; }
-.bugs .bugs-label { margin: var(--support-space-1) 0 0; font-size: var(--support-text-xs); }
-.bugs-note { font-size: var(--support-text-sm); }
+.bugs-note ::v-deep .support-reason-label { margin-top: var(--support-space-1); font-size: var(--support-text-xs); }
+.bugs-note ::v-deep .support-field { font-size: var(--support-text-sm); }
 .bugs .support-feedback { margin: 0; font-size: var(--support-text-xs); }
 </style>

@@ -1,5 +1,6 @@
 <template>
-  <b-modal visible centered scrollable modal-class="support-modal" :title="'Account notes · ' + record.account" @shown="focusField" @hidden="$emit('close')">
+  <b-modal ref="modal" visible centered scrollable modal-class="support-modal" @shown="focusField" @hidden="$emit('close')">
+    <template #modal-title>Account notes <span class="support-modal-subject">· {{ record.account }}</span></template>
     <p class="support-modal-lead notes-lead">Shown on every case from this account. Staff only.</p>
     <p v-if="error" class="support-callout is-danger notes-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
 
@@ -35,6 +36,7 @@
                 placeholder="Something every Game Master should know about this account."
                 @keydown.enter.ctrl.exact.prevent="add" @keydown.enter.meta.exact.prevent="add"></textarea>
       <div class="notes-actions">
+        <span class="notes-hint"><kbd class="support-kbd is-quiet">Ctrl</kbd> + <kbd class="support-kbd is-quiet">Enter</kbd> to add</span>
         <button type="submit" class="support-button is-primary" :disabled="busy || !text.trim()">Add note</button>
       </div>
     </form>
@@ -47,6 +49,7 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
+import { focusLater, touchLayout } from './support-ui'
 
 export default {
   name: 'SupportAccountNotes',
@@ -70,22 +73,15 @@ export default {
       const date = new Date(value)
       return isNaN(date) ? '' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
     },
-    focusField () { if (this.$refs.field) this.$refs.field.focus() },
+    focusField () { if (this.$refs.field && !touchLayout()) this.$refs.field.focus() },
+    // The b-modal re-renders a tick after the page, so focus waits for it.
     askDelete (note) {
       this.confirming = note.id
-      this.$nextTick(() => {
-        const cancel = this.$refs.cancelDelete
-        const button = Array.isArray(cancel) ? cancel[0] : cancel
-        if (button) button.focus()
-      })
+      focusLater(() => this.$refs.cancelDelete)
     },
     cancelDelete (note) {
       this.confirming = 0
-      this.$nextTick(() => {
-        const refs = this.$refs['delete-' + note.id]
-        const button = Array.isArray(refs) ? refs[0] : refs
-        if (button) button.focus()
-      })
+      focusLater(() => this.$refs['delete-' + note.id])
     },
     async add () {
       const text = this.text.trim()
@@ -101,7 +97,7 @@ export default {
         this.error = this.errorText(error)
       } finally {
         this.busy = false
-        this.$nextTick(this.focusField)
+        focusLater(() => this.$refs.field)
       }
     },
     async remove (note) {
@@ -117,7 +113,7 @@ export default {
         this.error = this.errorText(error)
       } finally {
         this.busy = false
-        if (!this.confirming) this.$nextTick(this.focusField)
+        if (!this.confirming) focusLater(() => this.$refs.field)
       }
     }
   }
@@ -149,5 +145,6 @@ export default {
 .notes-label-row label { margin: 0; }
 .notes-count { color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
 .notes-count.is-near { color: var(--support-warning); }
-.notes-actions { display: flex; justify-content: flex-end; margin-top: var(--support-space-3); }
+.notes-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--support-space-3); margin-top: var(--support-space-3); }
+.notes-hint { margin-right: auto; color: var(--support-faint); font-size: var(--support-text-xs); }
 </style>

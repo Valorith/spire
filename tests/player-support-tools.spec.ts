@@ -118,7 +118,7 @@ const trace = {
 test('traces a destroyed item from Evidence and returns it through the reviewed parcel composer', async ({ page }) => {
   const { requests } = await mockTools(page, { responses: { events: events([destroyed]), items: trace } });
   await openCase(page);
-  await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  await page.getByRole('tab', { name: 'Evidence', exact: true }).click();
   const evidence = page.getByRole('region', { name: 'Evidence' });
   await evidence.getByRole('button', { name: 'Trace Fungus Covered Scale Tunic' }).click();
 
@@ -139,7 +139,7 @@ test('traces a destroyed item from Evidence and returns it through the reviewed 
   await composer.getByRole('button', { name: /Cancel|Close/ }).first().click();
   await page.getByRole('navigation', { name: 'Character tools' }).getByRole('button', { name: 'Items', exact: true }).click();
   const fresh = page.getByRole('dialog', { name: 'Items · Aranel' });
-  await fresh.getByRole('button', { name: 'Restore history' }).click();
+  await fresh.getByRole('tab', { name: 'Restore history' }).click();
   await expect(fresh.getByText('No items were sent to this account by staff in the last 90 days.')).toBeVisible();
 });
 
@@ -189,12 +189,17 @@ test('removes a lockout offline, explains the patch in game, and shows the rewar
   await openCase(page);
   await page.getByRole('button', { name: 'Quests & progress' }).click();
   const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
-  await dialog.getByRole('button', { name: 'Lockouts', exact: true }).click();
+  await dialog.getByRole('tab', { name: 'Lockouts', exact: true }).click();
   await expect(dialog.getByText('Aranel is offline: changes are saved to the database.')).toBeVisible();
   await expect(dialog.getByText('Instance membership is read-only here. The player can leave an expedition with /dzquit.')).toBeVisible();
   await dialog.getByRole('button', { name: /Remove lockout Veeshan’s Peak/ }).click();
   const confirm = dialog.getByRole('button', { name: 'Remove lockout', exact: true });
-  await expect(confirm).toBeDisabled();
+  // It states what the removal does, and the reason is asked inline: nothing is sent without one.
+  await expect(dialog.getByText('Aranel can enter again before the lockout would have ended.')).toBeVisible();
+  await expect(dialog.getByLabel(reasonField)).toBeFocused();
+  await confirm.click();
+  await expect(dialog.getByRole('alert')).toHaveText('Add a reason of 8 to 240 characters.');
+  expect(writes.filter(item => item.path === 'lockouts')).toHaveLength(0);
   await dialog.getByLabel(reasonField).fill('Lockout from a crashed raid');
   await confirm.click();
   await expect(dialog.getByRole('status')).toHaveText('Removed. Aranel can enter again.');
@@ -206,7 +211,7 @@ test('disables lockout removal in game without the patch', async ({ page }) => {
   await openCase(page);
   await page.getByRole('button', { name: 'Quests & progress' }).click();
   const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
-  await dialog.getByRole('button', { name: 'Lockouts', exact: true }).click();
+  await dialog.getByRole('tab', { name: 'Lockouts', exact: true }).click();
   await expect(dialog.getByText('In game. Changing this in game needs the updated Player Support patch.')).toBeVisible();
   await expect(dialog.getByRole('button', { name: /Remove lockout Veeshan’s Peak/ })).toBeDisabled();
 });
@@ -220,7 +225,7 @@ test('says whether an unconfirmed state means World is down or runs on another h
   await page.getByRole('button', { name: 'Quests & progress' }).click();
   const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
   await expect(dialog.getByText('Spire cannot confirm Aranel is offline. Aranel is marked in game, and World is down or not answering.')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Lockouts', exact: true }).click();
+  await dialog.getByRole('tab', { name: 'Lockouts', exact: true }).click();
   await expect(dialog.getByText("Spire cannot confirm Aranel is offline. This server's World runs on another host, so changes wait until Aranel logs out.")).toBeVisible();
   await expect(dialog.getByRole('button', { name: /Remove lockout Veeshan’s Peak/ })).toBeDisabled();
 });
@@ -356,7 +361,7 @@ test('restores corpse experience only where the player is and moves buried corps
   });
   await openCase(page);
   await page.getByRole('button', { name: 'Corpses', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Aranel · Recovery' });
+  const dialog = page.getByRole('dialog', { name: 'Recovery · Aranel' });
   await expect(dialog.getByText('Experience: 54,321')).toBeVisible();
   await dialog.getByRole('button', { name: 'Restore experience' }).click();
   await dialog.getByLabel(reasonField).fill('Died to a server crash');
@@ -375,7 +380,7 @@ test('offers a buried corpse for moves when the patch can unbury it', async ({ p
   await mockTools(page, { features: { unbury: true }, responses: { recovery: recovery({ unbury: true }) } });
   await openCase(page);
   await page.getByRole('button', { name: 'Corpses', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Aranel · Recovery' });
+  const dialog = page.getByRole('dialog', { name: 'Recovery · Aranel' });
   await dialog.getByRole('button', { name: /#17/ }).click();
   await expect(dialog.getByText('Buried · will be unburied').first()).toBeVisible();
   await expect(dialog.getByText('Moving a buried corpse needs the updated Player Support patch.')).toHaveCount(0);
@@ -392,7 +397,7 @@ const say = {
 test('hides chat Evidence without the chat log permission', async ({ page }) => {
   await mockTools(page, { responses: { events: events([destroyed]) } });
   await openCase(page);
-  await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  await page.getByRole('tab', { name: 'Evidence', exact: true }).click();
   const evidence = page.getByRole('region', { name: 'Evidence' });
   await expect(evidence.getByRole('button', { name: 'Tasks' })).toBeVisible();
   await expect(evidence.getByRole('button', { name: 'Hacks' })).toBeVisible();
@@ -408,7 +413,7 @@ test('shows chat Evidence with its logging note and switches to the reported pla
       : events([destroyed])(url) },
   });
   await openCase(page);
-  await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  await page.getByRole('tab', { name: 'Evidence', exact: true }).click();
   const evidence = page.getByRole('region', { name: 'Evidence' });
   await evidence.getByRole('button', { name: 'Chat', exact: true }).click();
   await expect(evidence.getByText('Speech logging is off on this server. Turn on Say and Player Speech in Player Event Log settings to keep chat for future cases.')).toBeVisible();
@@ -470,9 +475,13 @@ test('links a bug report to the case and marks it reviewed', async ({ page }) =>
   await expect(section.getByRole('button', { name: 'Show less' })).toBeVisible();
   await section.getByRole('button', { name: 'Link to case' }).click();
   await expect(section.getByText('Linked', { exact: true })).toBeVisible();
+  // The report's number can be copied.
+  await expect(section.getByRole('button', { name: 'Copy bug report ID 12' })).toBeVisible();
   await section.getByRole('button', { name: 'Mark reviewed' }).click();
+  // The shared note field: Ctrl+Enter marks it reviewed.
   await section.getByLabel(/^Review note/).fill('Zoning bug, reported upstream');
-  await section.getByRole('button', { name: 'Mark reviewed' }).click();
+  await section.getByLabel(/^Review note/).press('Control+Enter');
+  await expect(section.getByLabel(/^Review note/)).toHaveCount(0);
   expect(writes.filter(item => item.path === 'bug-reports/12').map(item => item.input)).toEqual([
     { action: 'link', note: '' },
     { action: 'review', note: 'Zoning bug, reported upstream' },
@@ -495,7 +504,7 @@ test('lists flags, keys, data buckets and quest globals and reloads the game cac
   await openCase(page);
   await page.getByRole('button', { name: 'Quests & progress' }).click();
   const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
-  await dialog.getByRole('button', { name: 'Flags', exact: true }).click();
+  await dialog.getByRole('tab', { name: 'Flags', exact: true }).click();
   await expect(dialog.getByText('Veeshan’s Peak')).toBeVisible();
   await expect(dialog.getByText('Key of Veeshan')).toBeVisible();
   await expect(dialog.getByText('flag_vp')).toBeVisible();
@@ -525,7 +534,7 @@ test('returns a charged item that does not stack as one parcel, and missing copi
     },
   });
   await openCase(page);
-  await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  await page.getByRole('tab', { name: 'Evidence', exact: true }).click();
   const evidence = page.getByRole('region', { name: 'Evidence' });
   const composer = page.locator('.modal.show').filter({ hasText: 'Reason for delivery' });
 
@@ -558,7 +567,7 @@ test('shows the cache reload only to a viewer who may write Player Support', asy
   await openCase(page);
   await page.getByRole('button', { name: 'Quests & progress' }).click();
   const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
-  await dialog.getByRole('button', { name: 'Flags', exact: true }).click();
+  await dialog.getByRole('tab', { name: 'Flags', exact: true }).click();
   await expect(dialog.getByText('Zone flags')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Reload game cache' })).toHaveCount(0);
 });
@@ -569,7 +578,7 @@ const versions = [
   { name: 'stock EQEmu without the patch', companion: 'missing', features: { patch: 0 }, patched: false },
   { name: 'the first Player Support patch', companion: 'ready', features: { patch: 2 }, patched: false },
   { name: 'the updated Player Support patch', companion: 'ready', patched: true,
-    features: { patch: 3, close_petition: true, lockouts: true, tasks: true, revoke: true, corpse_exp: true, unbury: true } },
+    features: { patch: 3, close_petition: true, lockouts: true, tasks: true, revoke: true, corpse_exp: true, unbury: true, marquee: true, mail_replies: true, mail_notice: true } },
 ];
 
 for (const version of versions) {
@@ -606,7 +615,7 @@ for (const version of versions) {
     // Lockouts: in game needs the updated patch; offline works everywhere.
     await page.getByRole('button', { name: 'Quests & progress' }).click();
     const progress = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
-    await progress.getByRole('button', { name: 'Lockouts', exact: true }).click();
+    await progress.getByRole('tab', { name: 'Lockouts', exact: true }).click();
     const remove = progress.getByRole('button', { name: /Remove lockout Veeshan’s Peak/ });
     if (version.patched) {
       await expect(progress.getByText('Aranel is in game: changes apply in game.')).toBeVisible();
@@ -628,7 +637,7 @@ for (const version of versions) {
 
     // Corpse experience: only the updated patch restores it.
     await page.getByRole('button', { name: 'Corpses', exact: true }).click();
-    const recoveryDialog = page.getByRole('dialog', { name: 'Aranel · Recovery' });
+    const recoveryDialog = page.getByRole('dialog', { name: 'Recovery · Aranel' });
     await expect(recoveryDialog.getByText('Experience: 54,321')).toBeVisible();
     const restore = recoveryDialog.getByRole('button', { name: 'Restore experience' });
     if (version.patched) {
@@ -639,3 +648,164 @@ for (const version of versions) {
     }
   });
 }
+
+// The tool dialogs as one family: shared reason, results, load states and focus.
+
+test('returns focus to the tool that opened a dialog when Esc closes it', async ({ page }) => {
+  await mockTools(page, { responses: { tasks: { state: 'offline', features: {}, tasks: [], completed: [], timers: [] } } });
+  await openCase(page);
+  const opener = page.getByRole('button', { name: 'Quests & progress' });
+  await opener.click();
+  const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
+  await expect(dialog.getByText('Aranel has no active tasks.')).toBeVisible();
+  await expect(dialog.getByRole('tab', { name: 'Tasks', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});
+
+test('says why a tool is read only on a resolved case', async ({ page }) => {
+  await mockTools(page, { record: { status: 'resolved' }, responses: { lockouts: lockouts('offline') } });
+  await openCase(page);
+  await page.getByRole('button', { name: 'Quests & progress' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
+  await dialog.getByRole('tab', { name: 'Lockouts', exact: true }).click();
+  await expect(dialog.getByRole('cell', { name: 'Replay Timer', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Remove lockout/ })).toHaveCount(0);
+  await expect(dialog.getByText('The case is resolved. Reopen it to make changes.')).toBeVisible();
+});
+
+test('shows a load error with Try again, then the loaded tab', async ({ page }) => {
+  await mockTools(page, { responses: { lockouts: lockouts('offline') } });
+  let failed = false;
+  await page.route(`**${endpoint}/${caseKey}/lockouts?*`, route => {
+    if (failed || route.request().method() !== 'GET') return route.fallback();
+    failed = true;
+    return route.fulfill({ status: 500, json: { error: 'Lockouts could not be read.' } });
+  });
+  await openCase(page);
+  await page.getByRole('button', { name: 'Quests & progress' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
+  await dialog.getByRole('tab', { name: 'Lockouts', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('Lockouts could not be read.');
+  await dialog.getByRole('button', { name: 'Try again' }).click();
+  await expect(dialog.getByRole('cell', { name: 'Replay Timer', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+});
+
+test('confirms a ban with the danger button, focus on Back, and records it on the timeline', async ({ page }) => {
+  const { writes } = await mockTools(page, {
+    responses: { discipline: discipline() },
+    replies: { sanction: { status: 200, json: { status: 'sent', message: 'The account is blocked at login.' } } },
+  });
+  await openCase(page);
+  await page.getByRole('button', { name: 'Account Action', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Account Action · norrathguide' });
+  await dialog.getByRole('button', { name: /^Ban/ }).click();
+  await expect(dialog.getByText('Blocks login until lifted.')).toBeVisible();
+  const ban = dialog.getByRole('button', { name: 'Ban account' });
+  await expect(ban).toHaveClass(/is-danger/);
+  await ban.click();
+  await expect(dialog.getByRole('alert')).toHaveText('Add a reason of 8 to 240 characters.');
+  await expect(dialog.getByLabel(reasonField)).toBeFocused();
+  await dialog.getByLabel(reasonField).fill('Real money trading');
+  // Ctrl+Enter in the reason goes on to the second confirmation, not straight to the ban.
+  await dialog.getByLabel(reasonField).press('Control+Enter');
+  await expect(dialog.getByText('Ban norrathguide?')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Back' })).toBeFocused();
+  expect(writes.filter(item => item.path === 'sanction')).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Ban account' }).click();
+  await expect(dialog.getByRole('status')).toHaveText('The account is blocked at login.');
+  await expect(dialog.getByText('Recorded on the case timeline.')).toBeVisible();
+  expect(writes.find(item => item.path === 'sanction')!.input).toMatchObject({ mode: 'ban', reason: 'Real money trading' });
+});
+
+test('offers suspension lengths and kicks with Ctrl+Enter in the reason', async ({ page }) => {
+  const { writes } = await mockTools(page, {
+    responses: { discipline: discipline() },
+    replies: { kick: { status: 200, json: { status: 'sent', message: 'Kick sent.' } } },
+  });
+  await openCase(page);
+  await page.getByRole('button', { name: 'Account Action', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Account Action · norrathguide' });
+  await dialog.getByRole('button', { name: /^Suspend/ }).click();
+  const lengths = dialog.getByRole('group', { name: 'Suspension length' });
+  await expect(lengths.getByRole('button', { name: '3 days' })).toHaveAttribute('aria-pressed', 'true');
+  await lengths.getByRole('button', { name: '7 days' }).click();
+  const until = await dialog.getByLabel('Until').inputValue();
+  const days = (new Date(until).getTime() - Date.now()) / 86400000;
+  expect(days).toBeGreaterThan(6.9);
+  expect(days).toBeLessThan(7.1);
+
+  await dialog.getByRole('button', { name: /^Kick Aranel/ }).click();
+  await dialog.getByLabel(reasonField).fill('Disconnect to clear a stuck state');
+  await dialog.getByLabel(reasonField).press('Control+Enter');
+  await expect(dialog.getByRole('status')).toHaveText('Kick sent.');
+  expect(writes.find(item => item.path === 'kick')!.input).toMatchObject({ reason: 'Disconnect to clear a stuck state' });
+});
+
+test('filters long flag lists', async ({ page }) => {
+  const buckets = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, key: `step_${i}`, value: String(i), expires_at: null, scope: 'character' }));
+  await mockTools(page, { responses: { flags: { zone_flags: [], keys: [], buckets: [...buckets, { id: 99, key: 'flag_vp', value: '1', expires_at: null, scope: 'account' }], quest_globals: [], local_world: true } } });
+  await openCase(page);
+  await page.getByRole('button', { name: 'Quests & progress' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
+  await dialog.getByRole('tab', { name: 'Flags', exact: true }).click();
+  await expect(dialog.getByRole('row')).toHaveCount(12);
+  await dialog.getByLabel('Filter flags').fill('vp');
+  await expect(dialog.getByText('1 of 11')).toBeVisible();
+  await expect(dialog.getByRole('row', { name: /flag_vp/ })).toBeVisible();
+  await expect(dialog.getByRole('row', { name: /step_3/ })).toHaveCount(0);
+});
+
+test('finds a staff member in a long Assign list', async ({ page }) => {
+  await mockTools(page);
+  await page.route('**/api/v1/player-support/staff**', route => route.fulfill({ json: { staff: [
+    { id: 2, name: 'Guide' }, ...['Pat', 'Valorith', 'Ilsabeth', 'Morwen', 'Taliesin', 'Brannoc', 'Cyrene'].map((name, i) => ({ id: i + 3, name })),
+  ] } }));
+  await openCase(page);
+  await page.getByRole('button', { name: 'Change assignee' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Assign case' });
+  const filter = dialog.getByLabel('Find a staff member');
+  await expect(filter).toBeFocused();
+  await filter.fill('tal');
+  await expect(dialog.getByRole('group', { name: 'Assign to' }).getByRole('button')).toHaveCount(1);
+  await filter.press('Enter');
+  await expect(dialog.getByRole('button', { name: 'Taliesin' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('offers a longer window from an empty Evidence list', async ({ page }) => {
+  const { requests } = await mockTools(page, { responses: { events: events([]) } });
+  await openCase(page);
+  await page.getByRole('tab', { name: 'Evidence', exact: true }).click();
+  const evidence = page.getByRole('region', { name: 'Evidence' });
+  await expect(evidence.getByText('No events in this window')).toBeVisible();
+  await evidence.getByRole('button', { name: 'Look back 3 days' }).click();
+  await expect.poll(() => requests.filter(url => url.pathname.endsWith('/events')).pop()!.searchParams.get('hours')).toBe('72');
+  await expect(evidence.getByLabel('Time window')).toHaveValue('72');
+});
+
+test('moves between a tool dialog’s tabs with the arrow keys and reads the reason rule, not its counter', async ({ page }) => {
+  await mockTools(page, { responses: { tasks: { state: 'offline', features: {}, tasks: [], completed: [], timers: [] }, lockouts: lockouts('offline'), discipline: discipline() } });
+  await openCase(page);
+  await page.getByRole('button', { name: 'Quests & progress' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Quests & progress · Aranel' });
+  const tabs = dialog.getByRole('tablist', { name: 'Progress tools' });
+  const tasks = tabs.getByRole('tab', { name: 'Tasks', exact: true });
+  await expect(tasks).toBeFocused();
+  await expect(tasks).toHaveAttribute('aria-controls', 'support-quests-panel');
+  await page.keyboard.press('ArrowRight');
+  const lockoutTab = tabs.getByRole('tab', { name: 'Lockouts', exact: true });
+  await expect(lockoutTab).toBeFocused();
+  await expect(lockoutTab).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByRole('tabpanel', { name: 'Lockouts' }).getByRole('cell', { name: 'Replay Timer', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Account Action', exact: true }).click();
+  const action = page.getByRole('dialog', { name: 'Account Action · norrathguide' });
+  await action.getByRole('button', { name: /^Ban/ }).click();
+  const reason = action.getByLabel(reasonField);
+  await expect(reason).toHaveAccessibleDescription(/^8 to 240 characters/);
+  await expect(reason).not.toHaveAccessibleDescription(/\/240/);
+});

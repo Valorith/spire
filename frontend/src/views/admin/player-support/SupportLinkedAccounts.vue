@@ -6,9 +6,9 @@
         <i class="fe fe-share-2" aria-hidden="true"></i> Check shared IP addresses
       </button>
       <small>Viewing is recorded on the case.</small>
-      <p v-if="error" class="support-feedback is-error" role="alert">{{ error }}</p>
+      <support-load-state v-if="error" class="linked-error" :error="error" @retry="load" />
     </div>
-    <p v-else-if="loading" class="support-feedback" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Checking shared addresses…</p>
+    <support-load-state v-else-if="loading" label="Checking shared addresses" shape="lines" :rows="2" />
     <template v-else>
       <p v-if="!accounts.length" class="linked-none">No other account shares an address with {{ record.account }}.</p>
       <ul v-else class="linked-list">
@@ -37,11 +37,13 @@
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
+import SupportLoadState from './SupportLoadState.vue'
 
 // Inspector section: accounts that share an IP address with the case's
 // account (T11). Events: open-case(key).
 export default {
   name: 'SupportLinkedAccounts',
+  components: { SupportLoadState },
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true }
@@ -89,7 +91,7 @@ export default {
 .linked-start { display: grid; justify-items: start; gap: var(--support-space-1); }
 .linked-start .linked-check { margin-left: -12px; }
 .linked-start small { color: var(--support-muted); font-size: var(--support-text-xs); }
-.linked-start .support-feedback { margin: var(--support-space-1) 0 0; }
+.linked-start .linked-error { justify-self: stretch; margin-top: var(--support-space-1); }
 .linked-none,
 .linked-note { margin: 0; color: var(--support-muted); font-size: var(--support-text-sm); line-height: 1.5; }
 .linked-note { margin-top: var(--support-space-2); font-size: var(--support-text-xs); }

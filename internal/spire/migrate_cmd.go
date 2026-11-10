@@ -1,6 +1,9 @@
 package spire
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/EQEmuTools/spire/internal/database"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +40,11 @@ func NewMigrateCommand(
 
 // Handle implementation of the Command interface
 func (c *MigrateCommand) Handle(_ *cobra.Command, args []string) {
-	c.connections.SpireMigrate(dropTables)
+	if err := c.connections.SpireMigrate(dropTables); err != nil {
+		fmt.Fprintln(os.Stderr, "spire:migrate:", err)
+		os.Exit(1)
+	}
+	fmt.Println("spire:migrate: Spire tables are up to date")
 }
 
 func (c *MigrateCommand) Validate(_ *cobra.Command, args []string) error {

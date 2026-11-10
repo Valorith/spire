@@ -1,34 +1,34 @@
 <template>
-  <b-modal visible scrollable centered size="xl" modal-class="support-modal support-recovery-modal" :title="record.character + ' · Recovery'"
-           :no-close-on-backdrop="sending" :no-close-on-esc="sending" :hide-header-close="sending" @hide="$emit('close')">
+  <b-modal ref="modal" visible scrollable centered size="xl" modal-class="support-modal support-recovery-modal"
+           :no-close-on-backdrop="sending || expSending" :no-close-on-esc="sending || expSending" :hide-header-close="sending || expSending" @hide="onHide" @shown="focusFirst">
+    <template #modal-title>Recovery <span class="support-modal-subject">· {{ record.character }}</span></template>
     <div class="recovery">
       <div class="recovery-bar">
-        <div class="support-tabs recovery-tabs" role="group" aria-label="Recovery tools">
-          <button type="button" :aria-pressed="String(mode === 'move')" :disabled="sending || unconfirmed" @click="changeMode('move')">
+        <div class="support-tabs recovery-tabs" role="tablist" aria-label="Recovery tools" @keydown="tablistKeydown">
+          <button id="support-recovery-tab-move" type="button" role="tab" :aria-selected="String(mode === 'move')" aria-controls="support-recovery-panel"
+                  :tabindex="mode === 'move' ? 0 : -1" :disabled="sending || unconfirmed" @click="changeMode('move')">
             <i class="fe fe-user" aria-hidden="true"></i> Character
           </button>
-          <button type="button" :aria-pressed="String(mode === 'corpses')" :disabled="sending || unconfirmed" @click="changeMode('corpses')">
+          <button id="support-recovery-tab-corpses" type="button" role="tab" :aria-selected="String(mode === 'corpses')" aria-controls="support-recovery-panel"
+                  :tabindex="mode === 'corpses' ? 0 : -1" :disabled="sending || unconfirmed" @click="changeMode('corpses')">
             <i class="fe fe-archive" aria-hidden="true"></i> Corpses <span v-if="data" class="support-count">{{ data.corpses.length }}</span>
           </button>
         </div>
-        <button type="button" class="support-button is-ghost is-icon is-sm" aria-label="Refresh locations" :disabled="loading || sending" @click="load">
-          <i class="fe fe-refresh-cw" aria-hidden="true"></i>
+        <button type="button" class="support-button is-ghost is-icon is-sm" aria-label="Refresh locations" title="Refresh locations" :disabled="loading || sending" @click="load">
+          <i class="fe fe-refresh-cw" :class="{ 'support-spin': loading }" aria-hidden="true"></i>
         </button>
       </div>
-      <p v-if="loadError" class="support-callout is-danger recovery-banner" role="alert">
-        <i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ loadError }}</span>
-      </p>
-      <p v-else-if="loading" class="recovery-status recovery-banner" role="status">Loading locations…</p>
-      <div v-else-if="mode === 'corpses' && data && !data.corpses.length" class="support-empty recovery-none">
+      <support-load-state v-if="loadError || loading" id="support-recovery-panel" role="tabpanel" :aria-labelledby="'support-recovery-tab-' + mode" class="recovery-banner" :error="loadError" label="Loading locations" @retry="load" />
+      <div v-else-if="mode === 'corpses' && data && !data.corpses.length" id="support-recovery-panel" role="tabpanel" aria-labelledby="support-recovery-tab-corpses" class="support-empty recovery-none">
         <i class="fe fe-archive" aria-hidden="true"></i>
         <strong>No corpses found</strong>
         <span>{{ record.character }} has no corpses to recover.</span>
       </div>
-      <div v-else-if="data" class="recovery-workspace" :class="{ 'has-corpses': mode === 'corpses' }">
+      <div v-else-if="data" id="support-recovery-panel" role="tabpanel" :aria-labelledby="'support-recovery-tab-' + mode" class="recovery-workspace" :class="{ 'has-corpses': mode === 'corpses' }">
         <aside v-if="mode === 'corpses'" aria-label="Player corpses" class="recovery-list">
           <button v-for="corpse in data.corpses" :key="corpse.id" type="button" class="support-option recovery-corpse"
                   :aria-pressed="String(corpse.id === selectedId)" :disabled="sending || unconfirmed" @click="selectCorpse(corpse.id)">
-            <span class="recovery-corpse-line"><strong>{{ zoneName(corpse.location) }}</strong><span class="recovery-corpse-id">#{{ corpse.id }}</span></span>
+            <span class="recovery-corpse-line"><strong :title="zoneName(corpse.location)">{{ zoneName(corpse.location) }}</strong><span class="recovery-corpse-id">#{{ corpse.id }}</span></span>
             <span class="recovery-corpse-line is-meta"><time :datetime="corpse.time_of_death">{{ dateLabel(corpse.time_of_death) }}</time><span v-if="corpse.buried" class="support-chip">{{ canUnbury ? 'Buried · will be unburied' : 'Buried' }}</span></span>
             <span class="recovery-corpse-line is-meta">
               <span><i class="fe fe-package" aria-hidden="true"></i> {{ corpse.item_count }} {{ corpse.item_count === 1 ? 'item' : 'items' }}</span>
@@ -39,7 +39,10 @@
         <div v-if="source" class="recovery-detail">
           <div class="recovery-positions" :class="{ 'has-move': canMove }">
             <section class="recovery-position">
-              <h3><i class="fe fe-map-pin" aria-hidden="true"></i> {{ mode === 'move' ? 'Last saved location' : 'Corpse #' + selectedId }}</h3>
+              <div class="recovery-position-head">
+                <h3><i class="fe fe-map-pin" aria-hidden="true"></i> {{ mode === 'move' ? 'Last saved location' : 'Corpse #' + selectedId }}</h3>
+                <support-copy v-if="mode === 'corpses' && selectedId" :value="selectedId" label="corpse ID" />
+              </div>
               <strong>{{ zoneName(source) }}</strong>
               <span class="recovery-meta recovery-coordinates">{{ coordinates(source) }}</span>
               <span v-if="source.instance_id" class="support-chip">Instance #{{ source.instance_id }}</span>
@@ -91,14 +94,14 @@
             </section>
           </div>
 
-          <p v-if="buriedBlocked" class="support-callout is-warning">
+          <p v-if="buriedBlocked" class="support-callout">
             <i class="fe fe-lock" aria-hidden="true"></i><span>Moving a buried corpse needs the updated Player Support patch.</span>
           </p>
 
           <div v-if="choosing" class="recovery-panel">
             <label for="recovery-zone" class="recovery-panel-label">Search zones</label>
             <input id="recovery-zone" ref="zoneSearch" v-model="zoneQuery" type="search" class="support-field" maxlength="120" @input="scheduleZones">
-            <p v-if="zoneError" class="support-feedback is-error" role="alert">{{ zoneError }}</p>
+            <p v-if="zoneError" class="support-feedback is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ zoneError }}</p>
             <p v-else-if="zonesLoading" class="recovery-status" role="status">Searching zones…</p>
             <p v-else-if="!zones.length" class="recovery-status">No matching zones</p>
             <div v-else class="recovery-results">
@@ -112,7 +115,7 @@
             <label for="recovery-player" class="recovery-panel-label">Search characters</label>
             <input id="recovery-player" ref="playerSearch" v-model="playerQuery" type="search" class="support-field" maxlength="64"
                    placeholder="Character name or ID" @input="schedulePlayers">
-            <p v-if="playerError" class="support-feedback is-error" role="alert">{{ playerError }}</p>
+            <p v-if="playerError" class="support-feedback is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ playerError }}</p>
             <p v-else-if="playersLoading" class="recovery-status" role="status">Searching characters…</p>
             <p v-else-if="playerQuery.trim().length < 2" class="recovery-status">Type at least 2 characters</p>
             <p v-else-if="!players.length" class="recovery-status">No matching characters</p>
@@ -136,7 +139,7 @@
             </div>
             <div class="recovery-loc-row">
               <input v-model="locPaste" class="support-field" type="text" maxlength="120" aria-label="Paste a /loc result"
-                     placeholder="Paste /loc output, e.g. Your Location is 120.5, -45.0, 3.1" :disabled="sending" @input="applyLoc">
+                     placeholder="Paste /loc output, such as Your Location is 120.5, -45.0, 3.1" :disabled="sending" @input="applyLoc">
               <button type="button" class="support-button" :disabled="sending" @click="useSavedCoordinates">
                 <i class="fe fe-map-pin" aria-hidden="true"></i> Use saved location
               </button>
@@ -150,30 +153,26 @@
             <div class="recovery-exp-row">
               <div class="recovery-exp-text">
                 <strong><i class="fe fe-trending-up" aria-hidden="true"></i> Experience: {{ Number(selectedCorpse.exp || 0).toLocaleString() }}</strong>
-                <small v-if="allowMove && expBlocked && !expResult" class="is-blocked">{{ expBlocked }}</small>
+                <small v-if="allowMove && expBlocked && !expResult" class="support-blocked"><i class="fe fe-lock" aria-hidden="true"></i><span>{{ expBlocked }}</span></small>
                 <small v-else-if="allowMove && !expOpen && !expResult">Returned to {{ record.character }} once, where they are now. The corpse is then marked resurrected.</small>
               </div>
-              <button v-if="allowMove && !expOpen" type="button" class="support-button is-sm" :disabled="Boolean(expBlocked) || sending" @click="openExp">
+              <button v-if="allowMove && !expOpen" ref="expOpener" type="button" class="support-button is-sm" :disabled="Boolean(expBlocked) || sending" @click="openExp">
                 <i class="fe fe-rotate-ccw" aria-hidden="true"></i> Restore experience
               </button>
             </div>
             <div v-if="expOpen" class="recovery-exp-form">
               <p class="recovery-exp-lead">Returns the corpse’s full resurrection experience to {{ record.character }} once and marks the corpse resurrected.</p>
-              <label for="recovery-exp-reason" class="recovery-panel-label">Reason <span>(required, recorded on the case)</span></label>
-              <textarea id="recovery-exp-reason" ref="expReason" v-model="expReason" class="support-field" rows="2" maxlength="240" :disabled="expSending"
-                        placeholder="Why is this experience being returned?" aria-describedby="recovery-exp-hint" @input="expError = ''"></textarea>
+              <support-reason id="recovery-exp-reason" ref="expReason" v-model="expReason" :disabled="expSending"
+                              placeholder="Why is this experience being returned?" @input="expError = ''" @submit="restoreExp" />
               <div class="recovery-exp-actions">
-                <span id="recovery-exp-hint" class="recovery-hint" :class="{ 'is-short': expReason.trim() && expReasonBytes < 8 }">8–240 characters · {{ expReasonBytes }}/240</span>
-                <button type="button" class="support-button is-sm" :disabled="expSending" @click="expOpen = false">Cancel</button>
-                <button type="button" class="support-button is-primary is-sm" :disabled="expSending || expReasonBytes < 8 || expReasonBytes > 240 || Boolean(expBlocked)" @click="restoreExp">
-                  <i class="fe fe-rotate-ccw" aria-hidden="true"></i> {{ expSending ? 'Restoring…' : 'Restore experience' }}
+                <button type="button" class="support-button is-sm" :disabled="expSending" @click="closeExp">Cancel</button>
+                <button type="button" class="support-button is-primary is-sm" :disabled="expSending || Boolean(expBlocked)" @click="restoreExp">
+                  <i :class="expSending ? 'fe fe-loader support-spin' : 'fe fe-rotate-ccw'" aria-hidden="true"></i> {{ expSending ? 'Restoring…' : 'Restore experience' }}
                 </button>
               </div>
             </div>
             <p v-if="expError" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ expError }}</span></p>
-            <p v-if="expResult" class="support-callout" :class="expResult.status === 'unconfirmed' ? 'is-warning' : 'is-success'" :role="expResult.status === 'unconfirmed' ? 'alert' : 'status'">
-              <i :class="expResult.status === 'unconfirmed' ? 'fe fe-alert-triangle' : 'fe fe-check-circle'" aria-hidden="true"></i><span>{{ expResult.message }}</span>
-            </p>
+            <support-result v-if="expResult" :result="expResult" />
           </section>
 
           <section v-if="selectedCorpse" class="recovery-inventory" aria-label="Corpse inventory">
@@ -187,68 +186,63 @@
             <div v-if="coins.length" class="recovery-coins" aria-label="Coin">
               <span v-for="coin in coins" :key="coin.unit" :class="'coin-' + coin.unit">{{ coin.amount.toLocaleString() }} {{ coin.unit }}</span>
             </div>
-            <p v-if="lootLoading" class="recovery-status" role="status">Loading loot…</p>
-            <p v-else-if="lootError" class="support-feedback is-error" role="alert">{{ lootError }}</p>
+            <support-load-state v-if="lootLoading || lootError" :error="lootError" label="Loading loot" shape="lines" :rows="2" @retry="loadLoot(selectedCorpse)" />
             <ul v-else-if="items.length" class="recovery-loot">
               <li v-for="(item, index) in items" :key="index">
                 <i v-if="item.icon" :class="'item-' + item.icon + '-sm'" aria-hidden="true"></i>
                 <i v-else class="fe fe-package" aria-hidden="true"></i>
-                <strong>{{ item.name || 'Item #' + item.id }}</strong>
+                <strong :title="item.name || 'Item #' + item.id">{{ item.name || 'Item #' + item.id }}</strong>
                 <span v-if="item.charges > 1">×{{ item.charges }}</span>
               </li>
             </ul>
-            <p v-else class="recovery-status">No items</p>
+            <p v-else class="recovery-status">No items on this corpse.</p>
           </section>
 
-          <div v-if="canMove && !result" class="recovery-reason">
-            <label for="recovery-reason" class="recovery-panel-label">Reason for move</label>
-            <textarea id="recovery-reason" ref="reason" v-model="reason" class="support-field" rows="2" maxlength="240"
-                      :disabled="sending" placeholder="Why is this move needed? It is recorded on the case timeline."
-                      aria-describedby="recovery-reason-hint" @input="moveError = ''"></textarea>
-            <span id="recovery-reason-hint" class="recovery-hint" :class="{ 'is-short': reason.trim() && reason.trim().length < 8 }">
-              8–240 characters · {{ reason.trim().length }}/240
-            </span>
-          </div>
+          <support-reason v-if="canMove && !result" id="recovery-reason" ref="reason" v-model="reason" label="Reason for move" :disabled="sending"
+                          placeholder="Why is this move needed?" @input="moveError = ''" @submit="move" />
           <p v-if="moveError" class="support-callout is-danger" role="alert">
             <i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ moveError }}</span>
           </p>
-          <p v-if="result" class="support-callout" :class="warning ? 'is-warning' : 'is-success'" :role="warning ? 'alert' : 'status'">
-            <i :class="warning ? 'fe fe-alert-triangle' : 'fe fe-check-circle'" aria-hidden="true"></i> <span>{{ result.message }}</span>
-          </p>
+          <support-result v-if="result" :result="result" />
         </div>
       </div>
     </div>
     <template #modal-footer>
-      <div class="recovery-footer">
-        <span v-if="data && !data.local_world && allowMove" class="recovery-note">
-          <i class="fe fe-info" aria-hidden="true"></i> Moves require the local game server
-        </span>
-        <span v-else-if="data && data.companion === 'missing' && allowMove" class="recovery-note">
-          <i class="fe fe-cpu" aria-hidden="true"></i> Moves need the Player Support patch on World and zones
-        </span>
-        <button type="button" class="support-button" :disabled="sending" @click="$emit('close')">{{ result ? 'Done' : 'Close' }}</button>
-        <button v-if="canMove && !result" type="button" class="support-button is-primary"
-                :disabled="sending || choosing || choosingPlayer || !reason.trim() || !destinationReady" @click="move">
-          <i class="fe fe-navigation" aria-hidden="true"></i> {{ sending ? 'Moving…' : mode === 'move' ? 'Move character' : 'Move corpse' }}
-        </button>
-      </div>
+      <span v-if="!allowMove && readOnly" class="support-footer-note"><i class="fe fe-lock" aria-hidden="true"></i>{{ readOnly }}</span>
+      <span v-else-if="data && !data.local_world && allowMove" class="support-footer-note"><i class="fe fe-lock" aria-hidden="true"></i>Moves need the game server this Spire runs beside</span>
+      <span v-else-if="data && data.companion === 'missing' && allowMove" class="support-footer-note"><i class="fe fe-lock" aria-hidden="true"></i>Moves need the Player Support patch on World and zones</span>
+      <span v-else-if="canMove && !result && !destinationReady" class="support-footer-note">{{ destinationHint }}</span>
+      <button type="button" class="support-button" :disabled="sending" @click="$emit('close')">{{ result ? 'Done' : 'Close' }}</button>
+      <button v-if="canMove && !result" type="button" class="support-button is-primary"
+              :disabled="sending || choosing || choosingPlayer || !destinationReady" @click="move">
+        <i :class="sending ? 'fe fe-loader support-spin' : 'fe fe-navigation'" aria-hidden="true"></i> {{ sending ? 'Moving…' : mode === 'move' ? 'Move character' : 'Move corpse' }}
+      </button>
     </template>
   </b-modal>
 </template>
 
 <script>
 import { SpireApi } from '@/app/api/spire-api'
-import { newRequestId } from './support-ui'
+import { focusLater, newRequestId, tablistKeydown, touchLayout } from './support-ui'
+import { dialogFocus } from './support-dialog'
+import SupportCopy from './SupportCopy.vue'
+import SupportLoadState from './SupportLoadState.vue'
+import SupportReason from './SupportReason.vue'
+import SupportResult from './SupportResult.vue'
 
 export default {
   name: 'SupportRecovery',
+  components: { SupportCopy, SupportLoadState, SupportReason, SupportResult },
+  mixins: [dialogFocus],
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
     initialMode: { type: String, required: true },
     allowMove: { type: Boolean, required: true },
     // Patch features of the local World: unbury and corpse_exp.
-    features: { type: Object, default: () => ({}) }
+    features: { type: Object, default: () => ({}) },
+    // Why moves are not offered (resolved case, no permission), or ''.
+    readOnly: { type: String, default: '' }
   },
   data () {
     return {
@@ -335,7 +329,6 @@ export default {
       return Boolean(this.allowMove && this.selectedCorpse && this.selectedCorpse.buried && !this.canUnbury && this.data.local_world &&
         this.data.companion !== 'missing')
     },
-    expReasonBytes () { return new TextEncoder().encode(this.expReason.trim()).length },
     // Why "Restore experience" is unavailable for the selected corpse, or ''.
     expBlocked () {
       const corpse = this.selectedCorpse
@@ -376,7 +369,12 @@ export default {
       return Boolean(this.destination)
     },
     unconfirmed () { return this.result && ['unconfirmed', 'moved_arrival_unconfirmed'].includes(this.result.status) },
-    warning () { return this.unconfirmed || (this.result && this.result.status === 'moved_notice_unavailable') },
+    // Why the move button is not ready yet, beside it in the footer.
+    destinationHint () {
+      if (this.mode === 'move' && this.target === 'player') return 'Choose the player to move to.'
+      if (this.mode === 'move' && this.target === 'coordinates') return 'Enter X, Y and Z, and a heading from 0 to 511.'
+      return 'Choose a destination zone.'
+    },
     coins () {
       const { platinum, gold, silver, copper } = this.selectedCorpse || {}
       return [{ unit: 'pp', amount: platinum }, { unit: 'gp', amount: gold }, { unit: 'sp', amount: silver }, { unit: 'cp', amount: copper }]
@@ -389,6 +387,19 @@ export default {
     clearTimeout(this.playerTimer)
   },
   methods: {
+    tablistKeydown,
+    onHide (event) {
+      if (this.sending || this.expSending) {
+        event.preventDefault()
+        return
+      }
+      this.$emit('close')
+    },
+    // The reason is the one thing a move always needs: the destination starts
+    // at the safe point of the zone the character is in.
+    focusFirst () {
+      if (this.data) this.focusInDialog(this.canMove && !touchLayout() ? '#recovery-reason' : '.recovery-tabs [aria-selected="true"]')
+    },
     errorText (error, fallback) {
       const response = error.response
       if (response && response.status === 422) return 'Recovery is unavailable on this Spire server.'
@@ -408,10 +419,12 @@ export default {
           this.loadError = 'Recovery is unavailable on this Spire server.'
           return
         }
+        const first = !this.data
         this.data = data
         if (!data.corpses.some(corpse => corpse.id === this.selectedId)) this.selectedId = data.corpses.length ? data.corpses[0].id : null
         this.resetDraft()
         if (this.selectedCorpse) this.loadLoot(this.selectedCorpse)
+        if (first) this.$nextTick(this.focusFirst)
       } catch (error) {
         this.loadError = this.errorText(error, 'Could not load character and corpse locations.')
       } finally { this.loading = false }
@@ -448,7 +461,7 @@ export default {
         const heading = Number(bind.heading) || 0
         this.coords = { x: this.round(bind.x), y: this.round(bind.y), z: this.round(bind.z), heading: this.round(((heading % 512) + 512) % 512) }
       }
-      this.$nextTick(() => { if (this.$refs.reason) this.$refs.reason.focus() })
+      focusLater(() => this.$refs.reason)
     },
     setTarget (target) {
       if (this.target === target) return
@@ -481,7 +494,7 @@ export default {
         this.playerQuery = ''
         this.players = []
         this.playerError = ''
-        this.$nextTick(() => { if (this.$refs.playerSearch) this.$refs.playerSearch.focus() })
+        focusLater(() => this.$refs.playerSearch)
       }
     },
     schedulePlayers () {
@@ -509,6 +522,7 @@ export default {
       this.targetPlayer = player
       this.choosingPlayer = false
       this.moveError = ''
+      focusLater(() => this.$refs.reason)
     },
     resetExp () {
       this.expOpen = false
@@ -519,11 +533,17 @@ export default {
     openExp () {
       this.expOpen = true
       this.expError = ''
-      this.$nextTick(() => { if (this.$refs.expReason) this.$refs.expReason.focus() })
+      focusLater(() => this.$refs.expReason)
+    },
+    closeExp () {
+      this.expOpen = false
+      this.expError = ''
+      focusLater(() => this.$refs.expOpener)
     },
     async restoreExp () {
       const corpse = this.selectedCorpse
-      if (!corpse || this.expSending || this.expBlocked || this.expReasonBytes < 8 || this.expReasonBytes > 240) return
+      if (!corpse || this.expSending || this.expBlocked) return
+      if (!this.$refs.expReason.check()) return
       this.expSending = true
       this.expError = ''
       let receipt = null
@@ -573,7 +593,7 @@ export default {
       if (!this.lootLoading) return
       try {
         const { data } = await SpireApi.v1().get(this.endpoint + '/corpses/' + corpse.id, { params: this.params })
-        if (version === this.lootVersion) this.items = data.items
+        if (version === this.lootVersion) this.items = (data && data.items) || []
       } catch (error) {
         if (version === this.lootVersion) this.lootError = this.errorText(error, 'Could not load corpse loot.')
       } finally {
@@ -586,7 +606,7 @@ export default {
       if (this.choosing) {
         this.zoneQuery = ''
         this.scheduleZones()
-        this.$nextTick(() => { if (this.$refs.zoneSearch) this.$refs.zoneSearch.focus() })
+        focusLater(() => this.$refs.zoneSearch)
       }
     },
     scheduleZones () {
@@ -610,6 +630,7 @@ export default {
       this.choosing = false
       this.toPlayer = false
       this.moveError = ''
+      focusLater(() => this.$refs.reason)
     },
     choosePlayer () {
       this.toPlayer = true
@@ -618,13 +639,8 @@ export default {
     },
     async move () {
       if (!this.canMove || this.sending || this.result || this.choosing || this.choosingPlayer || !this.destinationReady) return
+      if (!this.$refs.reason.check()) return
       const reason = this.reason.trim()
-      const length = new TextEncoder().encode(reason).length
-      if (length < 8 || length > 240) {
-        this.moveError = 'Use 8 to 240 characters for the reason.'
-        this.$refs.reason.focus()
-        return
-      }
       this.sending = true
       this.moveError = ''
       const requestId = newRequestId()
@@ -651,13 +667,14 @@ export default {
           : { ...data, status: 'unconfirmed' }
       } catch (error) {
         if (!error.response || (error.response.status >= 500 && error.response.status !== 503)) {
-          this.result = { status: 'unconfirmed', message: 'Check the target location before retrying. The move could not be confirmed.' }
+          this.result = { status: 'unconfirmed', message: 'The game server did not confirm the move. Check the target location before trying again.' }
         } else {
           this.moveError = this.errorText(error, 'Could not move the target.')
         }
       } finally {
         this.sending = false
         this.$emit('receipt', this.result)
+        if (this.result) focusLater(() => this.dialogElement())
       }
     }
   }
@@ -683,12 +700,16 @@ export default {
 
 /* Tab bar */
 .recovery-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--support-space-3);
   padding: 0 var(--support-space-4) 0 var(--support-space-5);
   border-bottom: 1px solid var(--support-border);
+  background: var(--support-bg);
 }
 .recovery-tabs .support-count { margin-left: 2px; }
 .recovery-status { margin: 0; padding: var(--support-space-2) 0; color: var(--support-muted); font-size: var(--support-text-sm); }
@@ -698,18 +719,21 @@ export default {
 /* Corpse list */
 .recovery-workspace.has-corpses { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(0, 2.65fr); }
 .recovery-list {
+  position: sticky;
+  top: var(--support-tab-height);
   display: grid;
   align-content: start;
+  align-self: start;
   gap: var(--support-space-1);
-  max-height: 540px;
+  max-height: min(540px, calc(100vh - 220px));
   padding: var(--support-space-3);
   overflow: auto;
-  border-right: 1px solid var(--support-border);
 }
+.recovery-workspace.has-corpses .recovery-detail { border-left: 1px solid var(--support-border); }
 .recovery-corpse { gap: var(--support-space-1); }
 .recovery-corpse:disabled { cursor: not-allowed; }
 .recovery-corpse-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--support-space-1) var(--support-space-2); min-width: 0; }
-.recovery-corpse-line strong { font-weight: 600; overflow-wrap: anywhere; }
+.recovery-corpse-line strong { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .recovery-corpse-line.is-meta { color: var(--support-muted); font-size: var(--support-text-xs); }
 .recovery-corpse-line.is-meta i { margin-right: 2px; }
 .recovery-corpse-id { color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
@@ -746,6 +770,7 @@ export default {
   text-transform: uppercase;
 }
 .recovery-position h3 i { font-size: 13px; }
+.recovery-position-head { display: flex; align-items: center; gap: var(--support-space-2); min-width: 0; }
 .recovery-destination h3 i { color: var(--support-accent); }
 .recovery-position strong { color: var(--support-text); font-size: var(--support-text-lg); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .recovery-meta { display: inline-flex; align-items: center; gap: 6px; color: var(--support-muted); font-size: var(--support-text-sm); }
@@ -829,7 +854,7 @@ export default {
 .recovery-loot li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: var(--support-space-2); padding: 6px 10px; }
 .recovery-loot li + li { border-top: 1px solid var(--support-border-subtle); }
 .recovery-loot li > .fe { color: var(--support-faint); text-align: center; }
-.recovery-loot strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.recovery-loot strong { min-width: 0; overflow: hidden; color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .recovery-loot li span { color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
 
 /* Experience on the corpse */
@@ -839,29 +864,21 @@ export default {
 .recovery-exp-text strong { display: inline-flex; align-items: center; gap: 6px; color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
 .recovery-exp-text strong i { color: var(--support-muted); }
 .recovery-exp-text small { color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.45; }
-.recovery-exp-text small.is-blocked { color: var(--support-warning); }
 .recovery-exp-form { display: grid; padding-top: var(--support-space-3); border-top: 1px solid var(--support-border-subtle); }
 .recovery-exp-lead { margin: 0 0 var(--support-space-3); color: var(--support-text-secondary); font-size: var(--support-text-sm); line-height: 1.5; }
 .recovery-exp-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--support-space-2); margin-top: var(--support-space-2); }
-.recovery-exp-actions .recovery-hint { margin: 0 auto 0 0; }
 .recovery-exp > .support-callout { margin: 0; }
 
-/* Reason */
-.recovery-reason { display: grid; }
-.recovery-reason .recovery-panel-label { margin-top: 0; }
+/* Hint under the /loc paste */
 .recovery-hint { margin-top: 6px; color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
 .recovery-hint.is-short { color: var(--support-warning); }
-
-/* Footer */
-.recovery-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--support-space-2); width: 100%; }
-.recovery-note { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; color: var(--support-muted); font-size: var(--support-text-sm); }
-.recovery-note i { color: var(--support-warning); }
 
 @media (max-width: 600px) {
   .recovery-bar { padding-left: var(--support-space-3); padding-right: var(--support-space-2); }
   .recovery-banner { margin-left: var(--support-space-3); margin-right: var(--support-space-3); }
   .recovery-workspace.has-corpses { grid-template-columns: minmax(0, 1fr); }
-  .recovery-list { max-height: 150px; border-right: 0; border-bottom: 1px solid var(--support-border); }
+  .recovery-list { position: static; max-height: 150px; border-bottom: 1px solid var(--support-border); }
+  .recovery-workspace.has-corpses .recovery-detail { border-left: 0; }
   .recovery-detail { padding: var(--support-space-3); }
   .recovery-position,
   .recovery-panel { padding: var(--support-space-3); }

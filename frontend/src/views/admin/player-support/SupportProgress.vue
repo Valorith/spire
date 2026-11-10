@@ -1,54 +1,54 @@
 <template>
-  <b-modal visible scrollable centered size="lg" modal-class="support-modal support-quests-modal" :title="'Quests & progress · ' + record.character"
-           :no-close-on-backdrop="saving" :no-close-on-esc="saving" :hide-header-close="saving" @hide="onHide">
+  <b-modal ref="modal" visible scrollable centered size="lg" modal-class="support-modal support-quests-modal"
+           :no-close-on-backdrop="saving" :no-close-on-esc="saving" :hide-header-close="saving" @hide="onHide" @shown="focusFirst">
+    <template #modal-title>Quests &amp; progress <span class="support-modal-subject">· {{ record.character }}</span></template>
     <div class="quests-bar">
-      <div class="support-tabs" role="group" aria-label="Progress tools">
-        <button v-for="option in tabOptions" :key="option.id" type="button" :aria-pressed="String(tab === option.id)" :disabled="Boolean(pending) || saving"
+      <div class="support-tabs" role="tablist" aria-label="Progress tools" @keydown="tablistKeydown">
+        <button v-for="option in tabOptions" :id="'support-quests-tab-' + option.id" :key="option.id" type="button" role="tab" :aria-selected="String(tab === option.id)"
+                aria-controls="support-quests-panel" :tabindex="tab === option.id ? 0 : -1" :disabled="Boolean(pending) || saving"
                 @click="setTab(option.id)">
           <i :class="option.icon" aria-hidden="true"></i> {{ option.label }}
         </button>
       </div>
       <button type="button" class="support-button is-ghost is-icon is-sm" aria-label="Refresh" title="Refresh" :disabled="current.loading || saving || Boolean(pending)" @click="load(tab)">
-        <i class="fe fe-refresh-cw" aria-hidden="true"></i>
+        <i class="fe fe-refresh-cw" :class="{ 'support-spin': current.loading && current.data }" aria-hidden="true"></i>
       </button>
     </div>
 
-    <div class="quests-body">
+    <div id="support-quests-panel" class="quests-body" role="tabpanel" :aria-labelledby="'support-quests-tab-' + tab">
       <p v-if="stateLine" class="support-callout quests-state" :class="stateLine.tone">
         <i :class="stateLine.icon" aria-hidden="true"></i><span>{{ stateLine.text }}</span>
       </p>
-      <p v-if="result && !pending" class="support-callout" :class="resultTone" :role="result.status === 'sent' ? 'status' : 'alert'">
-        <i :class="resultIcon" aria-hidden="true"></i><span>{{ result.message }}</span>
-      </p>
+      <support-result v-if="result && !pending" :result="result" dismissible @dismiss="result = null" />
 
       <!-- Confirmation for every change, with the reason -->
       <section v-if="pending" class="quests-confirm" aria-label="Confirm change">
-        <p class="support-modal-lead">{{ pending.question }}</p>
-        <dl class="support-dl quests-confirm-dl">
+        <p class="support-modal-lead"><strong>{{ pending.question }}</strong></p>
+        <dl class="support-dl is-boxed">
           <template v-for="row in pending.details"><dt :key="row.label + '-t'">{{ row.label }}</dt><dd :key="row.label + '-d'">{{ row.value }}</dd></template>
           <dt>Applies</dt><dd>{{ appliesText }}</dd>
         </dl>
-        <template v-if="pending.action === 'update_activity'">
+        <p v-if="pending.consequence" class="support-callout quests-consequence" :class="pending.danger ? 'is-warning' : null">
+          <i :class="pending.danger ? 'fe fe-alert-triangle' : 'fe fe-info'" aria-hidden="true"></i><span>{{ pending.consequence }}</span>
+        </p>
+        <div v-if="pending.action === 'update_activity'" class="quests-amount">
           <label for="quests-count" class="support-label">Amount to add <span class="support-label-hint">(1 to {{ addLimit(pending.task, pending.activity) }})</span></label>
-          <input id="quests-count" v-model.number="count" class="support-field quests-count" type="number" min="1" :max="addLimit(pending.task, pending.activity)"
-                 step="1" inputmode="numeric" :disabled="saving">
-          <p v-if="offlineCapped(pending.activity)" class="quests-note">Complete this step while {{ record.character }} is in game.</p>
+          <input id="quests-count" ref="count" v-model.number="count" class="support-field quests-count" type="number" min="1" :max="addLimit(pending.task, pending.activity)"
+                 step="1" inputmode="numeric" :disabled="saving" :aria-invalid="countValid ? null : 'true'" aria-describedby="quests-count-hint">
+          <p v-if="!countValid" id="quests-count-hint" class="support-feedback is-error"><i class="fe fe-alert-circle" aria-hidden="true"></i> Enter a whole number from 1 to {{ addLimit(pending.task, pending.activity) }}.</p>
+          <p v-else-if="offlineCapped(pending.activity)" id="quests-count-hint" class="support-blocked quests-gap-sm"><i class="fe fe-info" aria-hidden="true"></i><span>Complete this step while {{ record.character }} is in game.</span></p>
           <p v-if="completes" class="support-callout is-accent quests-gap"><i class="fe fe-award" aria-hidden="true"></i><span>{{ completesText }}</span></p>
-        </template>
-        <label for="quests-reason" class="support-label">Reason <span class="support-label-hint">(required, recorded on the case)</span></label>
-        <textarea id="quests-reason" ref="reason" v-model="reason" class="support-field" rows="2" maxlength="240" :disabled="saving"
-                  aria-describedby="quests-reason-hint" @input="error = ''"></textarea>
-        <span id="quests-reason-hint" class="quests-hint" :class="{ 'is-short': reason.trim() && reasonBytes < 8 }">8–240 characters · {{ reasonBytes }}/240</span>
+        </div>
+        <support-reason id="quests-reason" ref="reason" v-model="reason" :disabled="saving" @input="error = ''" @submit="submit" />
         <p v-if="error" class="support-callout is-danger quests-gap" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
       </section>
 
       <template v-else>
-        <p v-if="current.error" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ current.error }}</span></p>
-        <p v-else-if="current.loading && !current.data" class="support-feedback" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Loading…</p>
+        <support-load-state v-if="current.error || (current.loading && !current.data)" :error="current.error" :label="'Loading ' + tabLabel" @retry="load(tab)" />
 
         <!-- Tasks -->
         <template v-else-if="tab === 'tasks' && current.data">
-          <div v-if="!tasks.length" class="support-empty is-compact"><i class="fe fe-check-square" aria-hidden="true"></i><span>No active tasks.</span></div>
+          <div v-if="!tasks.length" class="support-empty is-compact"><i class="fe fe-check-square" aria-hidden="true"></i><span>{{ record.character }} has no active tasks.</span></div>
           <article v-for="task in tasks" :key="task.task_id" class="quests-card" :aria-label="task.title">
             <header class="quests-card-head">
               <div class="quests-card-title">
@@ -60,22 +60,22 @@
                 </span>
               </div>
               <button v-if="canWrite && task.type !== 'shared'" type="button" class="support-button is-danger is-sm" :disabled="!canChangeTasks"
-                      @click="ask('remove_task', task)">Remove task</button>
+                      :aria-label="'Remove task ' + task.title" @click="ask('remove_task', task)">Remove task…</button>
             </header>
-            <p v-if="task.type === 'shared'" class="quests-note">Read-only. Shared tasks are managed by the shared task system; use #task in game.</p>
+            <p v-if="task.type === 'shared'" class="support-blocked"><i class="fe fe-lock" aria-hidden="true"></i><span>Read-only. Shared tasks are managed by the shared task system; use #task in game.</span></p>
             <ul class="quests-steps">
               <li v-for="activity in task.activities" :key="activity.activity_id" class="quests-step" :class="{ 'is-done': activity.completed }">
                 <i :class="activity.completed ? 'fe fe-check-circle' : 'fe fe-circle'" aria-hidden="true"></i>
                 <div class="quests-step-text">
-                  <span>{{ activity.description }} · <span class="quests-numbers">{{ activity.done }}/{{ activity.goal }}</span>
-                    <span v-if="activity.optional" class="support-chip">Optional</span></span>
-                  <small v-if="canWrite && task.type !== 'shared' && canChangeTasks && !activity.completed && addLimit(task, activity) < 1">
-                    Complete this step while {{ record.character }} is in game.
+                  <span>{{ activity.description }} <span v-if="activity.optional" class="support-chip">Optional</span></span>
+                  <small v-if="canWrite && task.type !== 'shared' && canChangeTasks && !activity.completed && addLimit(task, activity) < 1" class="support-blocked">
+                    <i class="fe fe-info" aria-hidden="true"></i><span>Complete this step while {{ record.character }} is in game.</span>
                   </small>
                 </div>
+                <span class="quests-numbers">{{ activity.done }}/{{ activity.goal }}</span>
                 <div v-if="canWrite && task.type !== 'shared'" class="quests-step-actions">
                   <button v-if="activity.done > 0" type="button" class="support-button is-sm" :disabled="!canChangeTasks"
-                          :aria-label="'Reset ' + activity.description" @click="ask('reset_activity', task, activity)">Reset</button>
+                          :aria-label="'Reset ' + activity.description" @click="ask('reset_activity', task, activity)">Reset…</button>
                   <button v-if="!activity.completed" type="button" class="support-button is-sm" :disabled="!canChangeTasks || addLimit(task, activity) < 1"
                           :aria-label="'Add progress to ' + activity.description" @click="ask('update_activity', task, activity)">Add…</button>
                 </div>
@@ -86,14 +86,14 @@
           <section class="quests-section" aria-labelledby="quests-completed">
             <div class="quests-section-head">
               <h3 id="quests-completed" class="support-section-label">Completed <span v-if="completed.length" class="support-count">{{ completed.length }}</span></h3>
-              <span v-if="canWrite && completed.length && state !== 'offline'" class="quests-note">Clear completed records while {{ record.character }} is offline.</span>
+              <span v-if="canWrite && completed.length && state !== 'offline'" class="support-blocked"><i class="fe fe-lock" aria-hidden="true"></i><span>Clear completed records while {{ record.character }} is offline.</span></span>
             </div>
             <p v-if="!completed.length" class="quests-quiet">No completed tasks on record.</p>
             <ul v-else class="quests-rows">
               <li v-for="item in completed" :key="'c' + item.task_id + item.completed_at">
                 <span class="quests-row-text"><strong>{{ item.title }}</strong><small>Completed {{ formatDate(item.completed_at) }}</small></span>
                 <button v-if="canWrite" type="button" class="support-button is-sm" :disabled="state !== 'offline'"
-                        :aria-label="'Clear record of ' + item.title" @click="ask('clear_completed', item)">Clear record</button>
+                        :aria-label="'Clear record of ' + item.title" @click="ask('clear_completed', item)">Clear record…</button>
               </li>
             </ul>
           </section>
@@ -101,14 +101,14 @@
           <section class="quests-section" aria-labelledby="quests-timers">
             <div class="quests-section-head">
               <h3 id="quests-timers" class="support-section-label">Timers <span v-if="timers.length" class="support-count">{{ timers.length }}</span></h3>
-              <span v-if="canWrite && timers.length && state !== 'offline'" class="quests-note">Clear timers while {{ record.character }} is offline.</span>
+              <span v-if="canWrite && timers.length && state !== 'offline'" class="support-blocked"><i class="fe fe-lock" aria-hidden="true"></i><span>Clear timers while {{ record.character }} is offline.</span></span>
             </div>
             <p v-if="!timers.length" class="quests-quiet">No task timers.</p>
             <ul v-else class="quests-rows">
               <li v-for="timer in timers" :key="'t' + timer.id">
                 <span class="quests-row-text"><strong>{{ timer.title }}</strong><small>{{ timer.kind === 'request' ? 'Request' : 'Replay' }} timer · ends {{ formatDate(timer.expires_at) }}</small></span>
                 <button v-if="canWrite" type="button" class="support-button is-sm" :disabled="state !== 'offline'"
-                        :aria-label="'Clear timer of ' + timer.title" @click="ask('clear_timer', timer)">Clear</button>
+                        :aria-label="'Clear timer of ' + timer.title" @click="ask('clear_timer', timer)">Clear…</button>
               </li>
             </ul>
           </section>
@@ -118,40 +118,36 @@
         <template v-else-if="tab === 'lockouts' && current.data">
           <section class="quests-section" aria-labelledby="quests-lockouts">
             <h3 id="quests-lockouts" class="support-section-label">Lockouts <span v-if="lockouts.length" class="support-count">{{ lockouts.length }}</span></h3>
-            <div v-if="!lockouts.length" class="support-empty is-compact"><i class="fe fe-clock" aria-hidden="true"></i><span>No lockouts.</span></div>
-            <div v-else class="quests-table-wrap">
-              <table class="support-table">
-                <thead><tr><th scope="col">Expedition</th><th scope="col">Event</th><th scope="col">Expires in</th><th v-if="canWrite" scope="col"><span class="sr-only">Action</span></th></tr></thead>
-                <tbody>
-                  <tr v-for="lockout in lockouts" :key="lockout.id">
-                    <th scope="row">{{ lockout.expedition }}</th>
-                    <td data-label="Event">{{ lockout.event }}</td>
-                    <td data-label="Expires in" class="quests-nowrap" :title="formatDate(lockout.expires_at)">{{ remaining(lockout.remaining_seconds) }}</td>
-                    <td v-if="canWrite" class="quests-cell-action">
-                      <button type="button" class="support-button is-sm" :disabled="!canChangeLockouts" :aria-label="'Remove lockout ' + lockout.expedition + ': ' + lockout.event"
-                              @click="ask('remove_lockout', lockout)">Remove…</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <div v-if="!lockouts.length" class="support-empty is-compact"><i class="fe fe-clock" aria-hidden="true"></i><span>{{ record.character }} has no lockouts.</span></div>
+            <table v-else class="support-table is-sticky quests-table">
+              <thead><tr><th scope="col">Expedition</th><th scope="col">Event</th><th scope="col" class="is-number">Expires in</th><th v-if="canWrite" scope="col"><span class="sr-only">Action</span></th></tr></thead>
+              <tbody>
+                <tr v-for="lockout in lockouts" :key="lockout.id">
+                  <th scope="row">{{ lockout.expedition }}</th>
+                  <td data-label="Event">{{ lockout.event }}</td>
+                  <td data-label="Expires in" class="is-number is-nowrap" :title="formatDate(lockout.expires_at)">{{ remaining(lockout.remaining_seconds) }}</td>
+                  <td v-if="canWrite" class="is-action">
+                    <button type="button" class="support-button is-sm" :disabled="!canChangeLockouts" :aria-label="'Remove lockout ' + lockout.expedition + ': ' + lockout.event"
+                            @click="ask('remove_lockout', lockout)">Remove…</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </section>
           <section class="quests-section" aria-labelledby="quests-instances">
             <h3 id="quests-instances" class="support-section-label">Instances <span v-if="instances.length" class="support-count">{{ instances.length }}</span></h3>
             <p v-if="!instances.length" class="quests-quiet">No instances.</p>
-            <div v-else class="quests-table-wrap">
-              <table class="support-table">
-                <thead><tr><th scope="col">Zone</th><th scope="col">Expedition</th><th scope="col">Instance</th><th scope="col">Expires</th></tr></thead>
-                <tbody>
-                  <tr v-for="instance in instances" :key="instance.instance_id">
-                    <th scope="row">{{ instance.zone_name || 'Zone #' + instance.zone_id }}</th>
-                    <td data-label="Expedition">{{ instance.dz_name || '—' }}</td>
-                    <td data-label="Instance">#{{ instance.instance_id }} · v{{ instance.version }}</td>
-                    <td data-label="Expires" class="quests-nowrap">{{ instance.never_expires ? 'Never' : formatDate(instance.expires_at) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <table v-else class="support-table is-sticky quests-table">
+              <thead><tr><th scope="col">Zone</th><th scope="col">Expedition</th><th scope="col">Instance</th><th scope="col" class="is-number">Expires</th></tr></thead>
+              <tbody>
+                <tr v-for="instance in instances" :key="instance.instance_id">
+                  <th scope="row">{{ instance.zone_name || 'Zone #' + instance.zone_id }}</th>
+                  <td data-label="Expedition">{{ instance.dz_name || '—' }}</td>
+                  <td data-label="Instance" class="is-nowrap">#{{ instance.instance_id }} · v{{ instance.version }}</td>
+                  <td data-label="Expires" class="is-number is-nowrap">{{ instance.never_expires ? 'Never' : formatDate(instance.expires_at) }}</td>
+                </tr>
+              </tbody>
+            </table>
             <p class="quests-line"><i class="fe fe-home" aria-hidden="true"></i>
               <span>Safe return: <strong>{{ safeReturn ? (safeReturn.zone_name || 'Zone #' + safeReturn.zone_id) : 'None set' }}</strong></span>
             </p>
@@ -161,12 +157,17 @@
 
         <!-- Flags -->
         <template v-else-if="tab === 'flags' && current.data">
+          <label v-if="flagTotal > 8" class="support-search quests-filter">
+            <i class="fe fe-search" aria-hidden="true"></i>
+            <input v-model="flagQuery" type="search" maxlength="80" placeholder="Filter by name or value" aria-label="Filter flags">
+            <span v-if="flagQuery.trim()" class="quests-filter-count">{{ flagMatches }} of {{ flagTotal }}</span>
+          </label>
           <div class="quests-flags">
             <section class="quests-flag-list" aria-labelledby="flags-zones">
               <div class="quests-section-head"><h3 id="flags-zones" class="support-section-label">Zone flags <span v-if="flags.zone_flags.length" class="support-count">{{ flags.zone_flags.length }}</span></h3></div>
-              <p v-if="!flags.zone_flags.length" class="quests-quiet">None.</p>
+              <p v-if="!shown.zone_flags.length" class="quests-quiet">{{ flags.zone_flags.length ? 'No match.' : 'None.' }}</p>
               <ul v-else class="quests-compact">
-                <li v-for="flag in flags.zone_flags" :key="flag.zone_id">{{ flag.zone_name || 'Zone #' + flag.zone_id }}</li>
+                <li v-for="flag in shown.zone_flags" :key="flag.zone_id">{{ flag.zone_name || 'Zone #' + flag.zone_id }}</li>
               </ul>
             </section>
             <section class="quests-flag-list" aria-labelledby="flags-keys">
@@ -174,9 +175,9 @@
                 <h3 id="flags-keys" class="support-section-label">Keys <span v-if="flags.keys.length" class="support-count">{{ flags.keys.length }}</span></h3>
                 <router-link v-if="links.keyring" :to="links.keyring" class="support-link quests-open">Open in Inventory &amp; Keyring <i class="fe fe-arrow-up-right" aria-hidden="true"></i></router-link>
               </div>
-              <p v-if="!flags.keys.length" class="quests-quiet">None.</p>
+              <p v-if="!shown.keys.length" class="quests-quiet">{{ flags.keys.length ? 'No match.' : 'None.' }}</p>
               <ul v-else class="quests-compact">
-                <li v-for="key in flags.keys" :key="key.item_id">{{ key.name || 'Item #' + key.item_id }}</li>
+                <li v-for="key in shown.keys" :key="key.item_id">{{ key.name || 'Item #' + key.item_id }}</li>
               </ul>
             </section>
             <section class="quests-flag-list is-wide" aria-labelledby="flags-buckets">
@@ -184,33 +185,42 @@
                 <h3 id="flags-buckets" class="support-section-label">Data buckets <span v-if="flags.buckets.length" class="support-count">{{ flags.buckets.length }}</span></h3>
                 <router-link v-if="links.buckets" :to="links.buckets" class="support-link quests-open">Open in Data Buckets <i class="fe fe-arrow-up-right" aria-hidden="true"></i></router-link>
               </div>
-              <p v-if="!flags.buckets.length" class="quests-quiet">None.</p>
-              <ul v-else class="quests-compact">
-                <li v-for="bucket in flags.buckets" :key="bucket.id" class="quests-kv">
-                  <code>{{ bucket.key }}</code><span class="quests-value">{{ bucket.value }}</span>
-                  <span class="support-chip">{{ bucket.scope === 'account' ? 'Account' : 'Character' }}</span>
-                  <small v-if="bucket.expires_at">until {{ formatDate(bucket.expires_at) }}</small>
-                </li>
-              </ul>
+              <p v-if="!shown.buckets.length" class="quests-quiet">{{ flags.buckets.length ? 'No match.' : 'None.' }}</p>
+              <table v-else class="support-table is-sticky quests-table quests-kv-table">
+                <thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Scope</th><th scope="col" class="is-number">Expires</th></tr></thead>
+                <tbody>
+                  <tr v-for="bucket in shown.buckets" :key="bucket.id">
+                    <th scope="row"><code :title="bucket.key">{{ bucket.key }}</code></th>
+                    <td class="quests-value" :title="bucket.value">{{ bucket.value }}</td>
+                    <td><span class="support-chip">{{ bucket.scope === 'account' ? 'Account' : 'Character' }}</span></td>
+                    <td class="is-number is-nowrap">{{ bucket.expires_at ? formatDate(bucket.expires_at) : 'Never' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </section>
             <section class="quests-flag-list is-wide" aria-labelledby="flags-globals">
               <div class="quests-section-head">
                 <h3 id="flags-globals" class="support-section-label">Quest globals <span v-if="flags.quest_globals.length" class="support-count">{{ flags.quest_globals.length }}</span></h3>
                 <router-link v-if="links.qglobals" :to="links.qglobals" class="support-link quests-open">Open in QGlobals <i class="fe fe-arrow-up-right" aria-hidden="true"></i></router-link>
               </div>
-              <p v-if="!flags.quest_globals.length" class="quests-quiet">None.</p>
-              <ul v-else class="quests-compact">
-                <li v-for="global in flags.quest_globals" :key="global.name + global.npc_id + global.zone_id" class="quests-kv">
-                  <code>{{ global.name }}</code><span class="quests-value">{{ global.value }}</span>
-                  <small v-if="global.expires_at">until {{ formatDate(global.expires_at) }}</small>
-                </li>
-              </ul>
+              <p v-if="!shown.quest_globals.length" class="quests-quiet">{{ flags.quest_globals.length ? 'No match.' : 'None.' }}</p>
+              <table v-else class="support-table is-sticky quests-table quests-kv-table">
+                <thead><tr><th scope="col">Name</th><th scope="col">Value</th><th scope="col" class="is-number">Expires</th></tr></thead>
+                <tbody>
+                  <tr v-for="global in shown.quest_globals" :key="global.name + global.npc_id + global.zone_id">
+                    <th scope="row"><code :title="global.name">{{ global.name }}</code></th>
+                    <td class="quests-value" :title="global.value">{{ global.value }}</td>
+                    <td class="is-number is-nowrap">{{ global.expires_at ? formatDate(global.expires_at) : 'Never' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </section>
           </div>
           <div v-if="canReloadCache" class="quests-reload">
             <div class="quests-row-text">
               <strong>Game cache</strong>
-              <small>{{ flags.local_world ? 'After editing data buckets, this makes zones read them again.' : 'Needs the game server this Spire runs beside' }}</small>
+              <small v-if="flags.local_world">After editing data buckets, this makes zones read them again.</small>
+              <small v-else class="support-blocked"><i class="fe fe-lock" aria-hidden="true"></i><span>Needs the game server this Spire runs beside</span></small>
             </div>
             <button type="button" class="support-button" :disabled="!flags.local_world || saving" @click="reloadCache">
               <i :class="saving ? 'fe fe-loader support-spin' : 'fe fe-refresh-cw'" aria-hidden="true"></i> Reload game cache
@@ -221,10 +231,11 @@
     </div>
 
     <template #modal-footer>
+      <span v-if="!pending && readOnly && tab !== 'flags'" class="support-footer-note"><i class="fe fe-lock" aria-hidden="true"></i>{{ readOnly }}</span>
       <template v-if="pending">
-        <button type="button" class="support-button" :disabled="saving" @click="cancelPending">Back</button>
-        <button type="button" class="support-button is-primary" :disabled="!canSubmit" @click="submit">
-          {{ saving ? 'Saving…' : primaryLabel }}
+        <button ref="back" type="button" class="support-button" :disabled="saving" @click="cancelPending">Back</button>
+        <button type="button" class="support-button" :class="pending.danger ? 'is-danger is-solid' : 'is-primary'" :disabled="saving" @click="submit">
+          <i v-if="saving" class="fe fe-loader support-spin" aria-hidden="true"></i> {{ saving ? 'Saving…' : primaryLabel }}
         </button>
       </template>
       <button v-else type="button" class="support-button" :disabled="saving" @click="$emit('close')">Close</button>
@@ -236,18 +247,27 @@
 import { SpireApi } from '@/app/api/spire-api'
 import { canReadAdminApi } from '@/app/user/server-admin-access'
 import { ROUTE } from '@/routes'
-import { newRequestId } from './support-ui'
+import { focusLater, newRequestId, tablistKeydown } from './support-ui'
+import { dialogFocus } from './support-dialog'
+import SupportLoadState from './SupportLoadState.vue'
+import SupportReason from './SupportReason.vue'
+import SupportResult from './SupportResult.vue'
 
 function blank () { return { data: null, loading: false, error: '' } }
 
 export default {
   name: 'SupportProgress',
+  components: { SupportLoadState, SupportReason, SupportResult },
+  mixins: [dialogFocus],
   props: {
     record: { type: Object, required: true },
     connectionId: { type: Number, required: true },
     features: { type: Object, default: () => ({}) },
     canWrite: { type: Boolean, default: false },
     canReloadCache: { type: Boolean, default: false },
+    // Why this viewer cannot change tasks and lockouts here (resolved case,
+    // no permission), shown in the footer; '' when they can.
+    readOnly: { type: String, default: '' },
     // 'tasks', 'lockouts' or 'flags'
     initialTab: { type: String, default: 'tasks' }
   },
@@ -256,11 +276,14 @@ export default {
       tab: ['tasks', 'lockouts', 'flags'].includes(this.initialTab) ? this.initialTab : 'tasks',
       panes: { tasks: blank(), lockouts: blank(), flags: blank() },
       pending: null,
+      // The row button that asked for the confirmation, focused again on Back.
+      pendingOpener: null,
       count: 1,
       reason: '',
       saving: false,
       error: '',
       result: null,
+      flagQuery: '',
       tabOptions: [
         { id: 'tasks', label: 'Tasks', icon: 'fe fe-check-square' },
         { id: 'lockouts', label: 'Lockouts', icon: 'fe fe-clock' },
@@ -328,12 +351,26 @@ export default {
         qglobals: canReadAdminApi('qglobal-editor') ? { path: ROUTE.QGLOBALS } : null
       }
     },
-    reasonBytes () { return new TextEncoder().encode(this.reason.trim()).length },
+    tabLabel () { return { tasks: 'tasks', lockouts: 'lockouts', flags: 'flags' }[this.tab] },
+    // Flags filter: zone flags, keys, data buckets and quest globals by name or value.
+    flagTotal () { return this.flags.zone_flags.length + this.flags.keys.length + this.flags.buckets.length + this.flags.quest_globals.length },
+    shown () {
+      const query = this.flagQuery.trim().toLowerCase()
+      const flags = this.flags
+      if (!query) return flags
+      const has = (...values) => values.some(value => String(value == null ? '' : value).toLowerCase().includes(query))
+      return {
+        zone_flags: flags.zone_flags.filter(flag => has(flag.zone_name, flag.zone_id)),
+        keys: flags.keys.filter(key => has(key.name, key.item_id)),
+        buckets: flags.buckets.filter(bucket => has(bucket.key, bucket.value)),
+        quest_globals: flags.quest_globals.filter(global => has(global.name, global.value))
+      }
+    },
+    flagMatches () { return this.shown.zone_flags.length + this.shown.keys.length + this.shown.buckets.length + this.shown.quest_globals.length },
     countValid () {
       if (!this.pending || this.pending.action !== 'update_activity') return true
       return Number.isInteger(this.count) && this.count >= 1 && this.count <= this.addLimit(this.pending.task, this.pending.activity)
     },
-    canSubmit () { return Boolean(this.pending) && !this.saving && this.reasonBytes >= 8 && this.reasonBytes <= 240 && this.countValid },
     // An in-game update that reaches the goal of the last open required step.
     completes () {
       const pending = this.pending
@@ -357,12 +394,11 @@ export default {
       if (!this.pending) return ''
       if (this.completes) return 'Complete task'
       return this.pending.button
-    },
-    resultTone () { return { sent: 'is-success', unconfirmed: 'is-warning' }[this.result && this.result.status] || 'is-danger' },
-    resultIcon () { return { sent: 'fe fe-check-circle', unconfirmed: 'fe fe-alert-triangle' }[this.result && this.result.status] || 'fe fe-alert-circle' }
+    }
   },
   mounted () { this.load(this.tab) },
   methods: {
+    tablistKeydown,
     onHide (event) {
       if (this.saving) {
         event.preventDefault()
@@ -402,39 +438,60 @@ export default {
       const name = this.record.character
       const step = activity ? activity.description : ''
       const pending = { action, task: null, activity, target, details: [], danger: false }
+      // Every change but adding progress takes something away: it says what
+      // is lost and confirms with the danger button.
       if (action === 'reset_activity') {
-        Object.assign(pending, { task: target, question: `Reset “${step}” of ${target.title} to 0?`, button: 'Reset step' })
+        Object.assign(pending, { task: target, question: `Reset “${step}” of ${target.title} to 0?`, button: 'Reset step', danger: true })
+        pending.consequence = `The step’s progress is lost; ${name} has to do it again.`
         pending.details = [{ label: 'Step', value: step }, { label: 'Progress', value: `${activity.done}/${activity.goal} → 0/${activity.goal}` }]
       } else if (action === 'update_activity') {
         Object.assign(pending, { task: target, question: `Add progress to “${step}” of ${target.title}?`, button: 'Add progress' })
         pending.details = [{ label: 'Step', value: step }, { label: 'Progress', value: `${activity.done}/${activity.goal}` }]
         this.count = 1
       } else if (action === 'remove_task') {
-        Object.assign(pending, { task: target, question: `Remove ${target.title} from ${name}’s tasks? Its progress is lost.`, button: 'Remove task', danger: true })
+        Object.assign(pending, { task: target, question: `Remove ${target.title} from ${name}’s tasks?`, button: 'Remove task', danger: true })
+        pending.consequence = 'The task and all of its progress are lost. Giving it back means starting over.'
         pending.details = [{ label: 'Task', value: target.title }]
       } else if (action === 'clear_completed') {
-        Object.assign(pending, { question: `Clear the completed record of ${target.title}? ${name} may be able to take it again.`, button: 'Clear record' })
+        Object.assign(pending, { question: `Clear the completed record of ${target.title}?`, button: 'Clear record', danger: true })
+        pending.consequence = `${name} may be able to take the task, and earn its reward, again.`
         pending.details = [{ label: 'Task', value: target.title }, { label: 'Completed', value: this.formatDate(target.completed_at) }]
       } else if (action === 'clear_timer') {
         const kind = target.kind === 'request' ? 'request' : 'replay'
-        Object.assign(pending, { question: `Clear the ${kind} timer of ${target.title}?`, button: 'Clear timer' })
+        Object.assign(pending, { question: `Clear the ${kind} timer of ${target.title}?`, button: 'Clear timer', danger: true })
+        pending.consequence = `${name} can ${kind === 'request' ? 'request' : 'replay'} the task again right away.`
         pending.details = [{ label: 'Task', value: target.title }, { label: 'Ends', value: this.formatDate(target.expires_at) }]
       } else if (action === 'remove_lockout') {
-        Object.assign(pending, { question: `Remove the lockout ${target.expedition}: ${target.event}? ${name} can enter again.`, button: 'Remove lockout' })
+        Object.assign(pending, { question: `Remove the lockout ${target.expedition}: ${target.event}?`, button: 'Remove lockout', danger: true })
+        pending.consequence = `${name} can enter again before the lockout would have ended.`
         pending.details = [{ label: 'Expedition', value: target.expedition }, { label: 'Event', value: target.event }, { label: 'Expires in', value: this.remaining(target.remaining_seconds) }]
       }
+      const active = document.activeElement
+      this.pendingOpener = active && active.getAttribute ? active.getAttribute('aria-label') : null
       this.pending = pending
       this.reason = ''
       this.error = ''
       this.result = null
-      this.$nextTick(() => { if (this.$refs.reason) this.$refs.reason.focus() })
+      focusLater(() => action === 'update_activity' ? this.$refs.count : this.$refs.reason)
     },
     cancelPending () {
+      const label = this.pendingOpener
       this.pending = null
       this.error = ''
+      // Back to the row button that asked, found again by its name.
+      focusLater(() => {
+        const content = this.dialogElement()
+        return content && label ? Array.from(content.querySelectorAll('button[aria-label]')).find(button => button.getAttribute('aria-label') === label) : null
+      })
     },
+    focusFirst () { this.focusInDialog('.quests-bar [aria-selected="true"]') },
     async submit () {
-      if (!this.canSubmit) return
+      if (!this.pending || this.saving) return
+      if (!this.countValid) {
+        focusLater(() => this.$refs.count)
+        return
+      }
+      if (!this.$refs.reason.check()) return
       const pending = this.pending
       const lockout = pending.action === 'remove_lockout'
       const body = lockout
@@ -458,10 +515,11 @@ export default {
         receipt = { status: status === 202 || (data && data.status === 'unconfirmed') ? 'unconfirmed' : (data && data.status) || 'sent', message: (data && data.message) || 'Done.' }
         this.result = receipt
         this.pending = null
+        focusLater(() => this.dialogElement())
       } catch (error) {
         const response = error.response
         if (!response || (response.status >= 500 && response.status !== 503)) {
-          receipt = { status: 'unconfirmed', message: 'Check the result in game before retrying. The change could not be confirmed.' }
+          receipt = { status: 'unconfirmed', message: 'The game server did not confirm the change. Check the result in game before trying again.' }
           this.result = receipt
           this.pending = null
         } else {
@@ -523,23 +581,35 @@ export default {
 
 <style scoped>
 /* Layout only. Colours, type, radius and spacing come from support-theme.css. */
-.quests-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--support-space-3); padding: 0 var(--support-space-4) 0 var(--support-space-5); border-bottom: 1px solid var(--support-border); }
-.quests-body { display: grid; gap: var(--support-space-4); padding: var(--support-space-4) var(--support-space-5) var(--support-space-5); }
+/* The tab bar stays in view while the body scrolls; tables stick under it. */
+.quests-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--support-space-3);
+  padding: 0 var(--support-space-4) 0 var(--support-space-5);
+  border-bottom: 1px solid var(--support-border);
+  background: var(--support-bg);
+}
+.quests-body { --support-sticky-offset: var(--support-tab-height); display: grid; gap: var(--support-space-4); padding: var(--support-space-4) var(--support-space-5) var(--support-space-5); }
 .quests-body > .support-callout,
 .quests-body > .support-feedback { margin: 0; }
 .quests-gap { margin: var(--support-space-3) 0 0; }
-.quests-note { margin: 0; color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.45; }
+.quests-gap-sm { margin-top: 6px; }
 .quests-quiet { margin: 0; color: var(--support-muted); font-size: var(--support-text-sm); }
-.quests-hint { display: block; margin-top: 6px; color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
-.quests-hint.is-short { color: var(--support-warning); }
-.quests-nowrap { white-space: nowrap; }
 
 /* Confirmation */
-.quests-confirm { display: grid; }
-.quests-confirm-dl { margin-top: var(--support-space-3); padding: var(--support-space-3); border: 1px solid var(--support-border); border-radius: var(--support-radius); background: var(--support-pane); }
-.quests-confirm .support-label { margin-top: var(--support-space-4); }
-.quests-confirm .quests-count { width: 120px; font-variant-numeric: tabular-nums; }
-.quests-confirm .quests-note { margin-top: 6px; }
+.quests-confirm { display: grid; gap: var(--support-space-3); }
+.quests-confirm .support-modal-lead,
+.quests-confirm > .support-callout { margin: 0; }
+.quests-amount { display: grid; justify-items: start; }
+.quests-amount .support-label { margin-top: 0; }
+.quests-amount .support-feedback { margin-top: 6px; }
+.quests-amount .support-callout { justify-self: stretch; }
+.quests-count { width: 120px; font-variant-numeric: tabular-nums; }
 
 /* Task cards */
 .quests-card { display: grid; gap: var(--support-space-2); padding: var(--support-space-3) var(--support-space-4); border: 1px solid var(--support-border); border-radius: var(--support-radius-lg); background: var(--support-pane); }
@@ -548,15 +618,15 @@ export default {
 .quests-card-title strong { color: var(--support-text); font-size: var(--support-text-md); font-weight: 600; overflow-wrap: anywhere; }
 .quests-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--support-muted); font-size: var(--support-text-xs); }
 .quests-steps { display: grid; margin: 0; padding: 0; list-style: none; }
-.quests-step { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--support-space-2) var(--support-space-3); padding: var(--support-space-2) 0; border-top: 1px solid var(--support-border-subtle); }
+/* Icon, step, progress and actions in fixed columns, so numbers line up. */
+.quests-step { display: grid; grid-template-columns: 16px minmax(0, 1fr) 48px 132px; align-items: center; gap: var(--support-space-2) var(--support-space-3); min-height: 44px; padding: var(--support-space-1) 0; border-top: 1px solid var(--support-border-subtle); }
 .quests-step > i { color: var(--support-faint); font-size: 14px; }
 .quests-step.is-done > i { color: var(--support-success); }
 .quests-step-text { display: grid; gap: 2px; min-width: 0; color: var(--support-text-secondary); font-size: var(--support-text-sm); overflow-wrap: anywhere; }
-.quests-step-text small { color: var(--support-muted); font-size: var(--support-text-xs); }
 .quests-step.is-done .quests-step-text { color: var(--support-muted); }
-.quests-numbers { color: var(--support-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.quests-numbers { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
 .quests-step.is-done .quests-numbers { color: var(--support-muted); }
-.quests-step-actions { display: flex; gap: 6px; }
+.quests-step-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
 /* Sections and rows */
 .quests-section { display: grid; gap: var(--support-space-2); min-width: 0; }
@@ -569,15 +639,14 @@ export default {
 .quests-row-text { display: grid; gap: 2px; min-width: 0; }
 .quests-row-text strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; overflow-wrap: anywhere; }
 .quests-row-text small { color: var(--support-muted); font-size: var(--support-text-xs); }
-.quests-table-wrap { min-width: 0; overflow-x: auto; }
-.quests-table-wrap .support-table { min-width: 440px; }
-.quests-cell-action { text-align: right; }
 .quests-line { display: flex; align-items: center; gap: var(--support-space-2); margin: var(--support-space-1) 0 0; color: var(--support-text-secondary); font-size: var(--support-text-sm); }
 .quests-line i { color: var(--support-muted); }
 .quests-line strong { color: var(--support-text); font-weight: 600; }
 .quests-section > .support-callout { margin: 0; }
 
 /* Flags */
+.quests-filter { max-width: 360px; }
+.quests-filter-count { flex: none; color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .quests-flags { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--support-space-4); }
 .quests-flag-list { display: grid; align-content: start; gap: var(--support-space-2); min-width: 0; }
 .quests-flag-list.is-wide { grid-column: 1 / -1; }
@@ -585,30 +654,30 @@ export default {
 .quests-compact { display: grid; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--support-border); border-radius: var(--support-radius); background: var(--support-sunken); list-style: none; }
 .quests-compact li { padding: 6px 10px; color: var(--support-text-secondary); font-size: var(--support-text-sm); overflow-wrap: anywhere; }
 .quests-compact li + li { border-top: 1px solid var(--support-border-subtle); }
-.quests-kv { display: flex; flex-wrap: wrap; align-items: center; gap: var(--support-space-1) var(--support-space-2); }
-.quests-kv code { overflow-wrap: anywhere; }
-.quests-value { min-width: 0; color: var(--support-text); overflow-wrap: anywhere; }
-.quests-kv small { margin-left: auto; color: var(--support-muted); font-size: var(--support-text-xs); }
+/* Key and value columns: long names and values are cut with a title. */
+.quests-kv-table { table-layout: fixed; }
+.quests-kv-table th:first-child { width: 42%; }
+.quests-kv-table td:last-child { width: 170px; }
+.quests-kv-table code { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.quests-kv-table td.quests-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quests-value { color: var(--support-text); font-weight: 600; }
 .quests-reload { display: flex; align-items: center; justify-content: space-between; gap: var(--support-space-4); padding: var(--support-space-3); border: 1px solid var(--support-border); border-radius: var(--support-radius-lg); background: var(--support-pane); }
 
 /* Phones: each row becomes a small card of label and value instead of a wide table. */
 @media (max-width: 600px) {
-  .quests-table-wrap .support-table { min-width: 0; }
-  .quests-table-wrap .support-table thead { display: none; }
-  .quests-table-wrap .support-table tr { display: grid; gap: 2px; padding: var(--support-space-2) 0; border-bottom: 1px solid var(--support-border-subtle); }
-  .quests-table-wrap .support-table th,
-  .quests-table-wrap .support-table td { display: flex; justify-content: space-between; gap: var(--support-space-3); padding: 0; border: 0; text-align: right; white-space: normal; }
-  .quests-table-wrap .support-table [data-label]::before { content: attr(data-label); flex: none; color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 400; text-align: left; }
-  .quests-table-wrap .support-table td:not([data-label]) { justify-content: flex-end; }
-}
-@media (max-width: 600px) {
+  .quests-table thead { display: none; }
+  .quests-table tr { display: grid; gap: 2px; padding: var(--support-space-2) 0; border-bottom: 1px solid var(--support-border-subtle); }
+  .quests-table th,
+  .quests-table td { display: flex; justify-content: space-between; gap: var(--support-space-3); width: auto !important; padding: 0; border: 0; text-align: right; white-space: normal; }
+  .quests-table [data-label]::before { content: attr(data-label); flex: none; color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 400; text-align: left; }
+  .quests-table td:not([data-label]) { justify-content: flex-end; }
   .quests-bar { padding: 0 var(--support-space-2) 0 var(--support-space-4); }
   .quests-bar .support-tabs { gap: var(--support-space-4); }
   .quests-body { padding: var(--support-space-3) var(--support-space-4) var(--support-space-4); }
   .quests-card { padding: var(--support-space-3); }
   .quests-card-head { flex-direction: column; }
-  .quests-step { grid-template-columns: 16px minmax(0, 1fr); }
-  .quests-step-actions { grid-column: 2; }
+  .quests-step { grid-template-columns: 16px minmax(0, 1fr) auto; }
+  .quests-step-actions { grid-column: 2 / -1; justify-content: flex-start; }
   .quests-flags { grid-template-columns: minmax(0, 1fr); }
   .quests-reload { flex-direction: column; align-items: flex-start; }
 }
