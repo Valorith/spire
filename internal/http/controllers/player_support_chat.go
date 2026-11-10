@@ -540,13 +540,20 @@ func recordChatSend(scope supportScope, view supportCaseView, requestID, text, r
 func (p *PlayerSupportController) receiveChat(frame playersupport.Frame) playersupport.TellDecision {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	// An AFK client answering a Game Master tell is not the player writing:
-	// the tell goes to them by mail instead, and World is told it was taken.
-	if p.forwardAFK(ctx, p.db.GetEqemuDb(), p.db.GetSpireDb(), frame, time.Now()) {
+	return p.handleTell(ctx, p.db.GetEqemuDb(), p.db.GetSpireDb(), frame, time.Now())
+}
+
+// handleTell decides a player's tell to GameMaster received at now.
+func (p *PlayerSupportController) handleTell(ctx context.Context, eqemu, db *gorm.DB, frame playersupport.Frame, now time.Time) playersupport.TellDecision {
+	// A tell an AFK client answered goes to the player by mail. The client's
+	// stock AFK text is not the player writing: World is told it was taken,
+	// and it is not recorded. Any other reply, a fast one included, is
+	// recorded like any other.
+	if p.forwardAFK(ctx, eqemu, db, frame, now) {
 		return playersupport.TellAccepted
 	}
-	decision, recorded := acceptChat(ctx, p.db.GetEqemuDb(), p.db.GetSpireDb(), frame)
-	if recorded {
+	decision, recorded := acceptChat(ctx, eqemu, db, frame)
+	if recorded && p.world != nil {
 		p.world.Notify()
 	}
 	return decision

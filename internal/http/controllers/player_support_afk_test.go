@@ -14,24 +14,24 @@ import (
 	gormLogger "gorm.io/gorm/logger"
 )
 
-func TestSupportIsAFKReply(t *testing.T) {
+func TestSupportAFKReply(t *testing.T) {
 	sent := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
 	cases := []struct {
 		name string
 		text string
 		gap  time.Duration
-		want bool
+		want supportAFKAnswer
 	}{
-		{"stock text at once", "Sorry, I am A.F.K. (Away From Keyboard) right now.", 0, true},
-		{"stock text, other case and spaces", "  sorry, i am a.f.k. (away from keyboard) right now. ", 20 * time.Second, true},
-		{"stock prefix", "Sorry, I am A.F.K. Back soon", 10 * time.Second, true},
-		{"stock text too late", "Sorry, I am A.F.K. (Away From Keyboard) right now.", 31 * time.Second, false},
-		{"custom AFK text within 2 seconds", "brb, dinner", 2 * time.Second, true},
-		{"a person answering", "Thanks, it is back now.", 3 * time.Second, false},
-		{"database clock slightly ahead", "anything", -500 * time.Millisecond, true},
+		{"stock text at once", "Sorry, I am A.F.K. (Away From Keyboard) right now.", 0, supportAFKStock},
+		{"stock text, other case and spaces", "  sorry, i am a.f.k. (away from keyboard) right now. ", 20 * time.Second, supportAFKStock},
+		{"stock prefix", "Sorry, I am A.F.K. Back soon", 10 * time.Second, supportAFKStock},
+		{"stock text too late", "Sorry, I am A.F.K. (Away From Keyboard) right now.", 31 * time.Second, supportAFKNone},
+		{"custom AFK text within 2 seconds", "brb, dinner", 2 * time.Second, supportAFKFast},
+		{"a person answering", "Thanks, it is back now.", 3 * time.Second, supportAFKNone},
+		{"database clock slightly ahead", "anything", -500 * time.Millisecond, supportAFKFast},
 	}
 	for _, test := range cases {
-		if got := supportIsAFKReply(test.text, sent, sent.Add(test.gap)); got != test.want {
+		if got := supportAFKReply(test.text, sent, sent.Add(test.gap)); got != test.want {
 			t.Errorf("%s: %v, want %v", test.name, got, test.want)
 		}
 	}
@@ -62,6 +62,12 @@ func (s *afkTestDB) open(t *testing.T) *gorm.DB {
 	pool, _ := db.DB()
 	t.Cleanup(func() { _ = pool.Close() })
 	db.Statement.ConnPool = committedPool{db.Statement.ConnPool}
+	return s.install(t, db)
+}
+
+// install adds the AFK reads and writes to a dry-run database.
+func (s *afkTestDB) install(t *testing.T, db *gorm.DB) *gorm.DB {
+	t.Helper()
 	must := func(err error) {
 		if err != nil {
 			t.Fatal(err)
@@ -173,11 +179,72 @@ func TestForwardAFKOnlyForAutoReplies(t *testing.T) {
 	if p.forwardAFK(context.Background(), db, db, afkFrame(supportAFKText), afkNow) {
 		t.Fatal("an AFK text without a tell was taken for AFK")
 	}
-	// A custom AFK text within two seconds is AFK.
+	// Any text within two seconds forwards the tell, but it is not the stock
+	// text, so the caller still records it.
 	state = &afkTestDB{tells: []models.PlayerSupportEntry{afkTell(40, afkNow.Add(-time.Second), "Hi")}, claims: 1}
 	db = state.open(t)
-	if !p.forwardAFK(context.Background(), db, db, afkFrame("brb, dinner"), afkNow) || len(state.mails) != 1 {
-		t.Fatal("a custom AFK answer was missed")
+	if p.forwardAFK(context.Background(), db, db, afkFrame("brb, dinner"), afkNow) || len(state.mails) != 1 {
+		t.Fatalf("a fast reply: %d mails, or it was dropped", len(state.mails))
+	}
+	if len(state.states) != 1 || state.states[0] != supportAFKMailed {
+		t.Errorf("tell state %v", state.states)
+	}
+}
+
+// handleTell end to end: the stock AFK text is dropped and the tell mailed; a
+// fast reply is mailed and recorded; a normal reply is recorded only.
+func TestHandleTellAFK(t *testing.T) {
+	tell := afkTell(40, afkNow.Add(-time.Second), "Your tunic is at the parcel merchant.")
+	cases := []struct {
+		name     string
+		text     string
+		tellAt   time.Time
+		mails    int
+		recorded bool
+	}{
+		{"stock AFK text", supportAFKText, afkNow.Add(-time.Second), 1, false},
+		{"fast custom reply", "Yes, got it, thanks!", afkNow.Add(-time.Second), 1, true},
+		{"normal reply", "Thanks, I see it.", afkNow.Add(-5 * time.Second), 0, true},
+	}
+	for _, test := range cases {
+		tell.CreatedAt = test.tellAt
+		afk := &afkTestDB{tells: []models.PlayerSupportEntry{tell}, claims: 1}
+		chat := &chatTestState{caseStatus: "open", repliesOn: true}
+		db := afk.install(t, chatTestDB(t, chat))
+		p := &PlayerSupportController{notifyMail: func(*gorm.DB, []uint, string) {}}
+		frame := afkFrame(test.text)
+		if decision := p.handleTell(context.Background(), db, db, frame, afkNow); decision != playersupport.TellAccepted {
+			t.Errorf("%s: decision %s", test.name, decision)
+		}
+		if len(afk.mails) != test.mails {
+			t.Errorf("%s: %d mails, want %d", test.name, len(afk.mails), test.mails)
+		}
+		var replies []*models.PlayerSupportEntry
+		for _, row := range chat.created {
+			if entry, ok := row.(*models.PlayerSupportEntry); ok && entry.Kind == "chat_in" {
+				replies = append(replies, entry)
+			}
+		}
+		if !test.recorded {
+			if len(replies) != 0 {
+				t.Errorf("%s: recorded %+v", test.name, replies)
+			}
+			continue
+		}
+		if len(replies) != 1 || replies[0].Text != test.text || replies[0].Actor != "Vayle" || replies[0].CaseID != 12 || *replies[0].RequestKey != "tell-"+frame.RequestID {
+			t.Errorf("%s: replies %+v", test.name, replies)
+		}
+	}
+
+	// A fast reply while player replies are off still forwards the tell, and
+	// World tells the player the reply was not sent rather than dropping it.
+	tell.CreatedAt = afkNow.Add(-time.Second)
+	afk := &afkTestDB{tells: []models.PlayerSupportEntry{tell}, claims: 1}
+	chat := &chatTestState{caseStatus: "open"}
+	db := afk.install(t, chatTestDB(t, chat))
+	p := &PlayerSupportController{notifyMail: func(*gorm.DB, []uint, string) {}}
+	if decision := p.handleTell(context.Background(), db, db, afkFrame("Yes, got it"), afkNow); decision != playersupport.TellMessagesOff || len(afk.mails) != 1 {
+		t.Errorf("replies off: decision %s, %d mails", decision, len(afk.mails))
 	}
 }
 

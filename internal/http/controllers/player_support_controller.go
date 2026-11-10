@@ -351,7 +351,9 @@ func (p *PlayerSupportController) list(c echo.Context) error {
 		}
 		var count int64
 		var records []models.PlayerSupportCase
-		if err := query.Count(&count).Error; err != nil {
+		// Count on its own session, so the page fetch below starts from the
+		// unmodified filter.
+		if err := query.Session(&gorm.Session{}).Count(&count).Error; err != nil {
 			return supportError(c, err)
 		}
 		if err := query.Order("updated_at DESC, id DESC").Limit(size).Offset((page - 1) * size).Find(&records).Error; err != nil {

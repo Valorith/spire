@@ -319,7 +319,7 @@ index b4258206946be42f8de8e4623883908ca0816e5a..6e944b170cd69ff4ed7f88b7f5275b4e
  private:
  
 diff --git a/world/console.cpp b/world/console.cpp
-index 364d40375917f3a9c0794dac6b523423d4a75779..079e83b972cec9f439cec27c482edc99214d85e7 100644
+index 364d40375917f3a9c0794dac6b523423d4a75779..ed90a0712b30ac750a79c0833ae508490f5edfd2 100644
 --- a/world/console.cpp
 +++ b/world/console.cpp
 @@ -21,12 +21,17 @@
@@ -353,7 +353,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..079e83b972cec9f439cec27c482edc99
  /**
   * @param username
   * @param password
-@@ -373,6 +384,858 @@ void ConsoleTell(
+@@ -373,6 +384,865 @@ void ConsoleTell(
  	ZSList::Instance()->SendChannelMessage(tmpname, to.c_str(), ChatChannel_Tell, 0, Strings::Join(join_args, " ").c_str());
  }
  
@@ -659,9 +659,10 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..079e83b972cec9f439cec27c482edc99
 +	if (message.deliverto[4] == ' ') {
 +		name = message.deliverto + 5;
 +	} else {
-+		for (size_t i = 0; shown && name.empty() && i < shown->size(); ++i) {
++		// The longest persona that leads the text as whole words, so "John Smith" beats "John".
++		for (size_t i = 0; shown && i < shown->size(); ++i) {
 +			const auto &persona = (*shown)[i].name;
-+			if (text.size() > persona.size() && text[persona.size()] == ' ' &&
++			if (persona.size() > name.size() && text.size() > persona.size() && text[persona.size()] == ' ' &&
 +				strncasecmp(text.c_str(), persona.c_str(), persona.size()) == 0) {
 +				name = persona;
 +				taken = persona.size() + 1;
@@ -690,6 +691,11 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..079e83b972cec9f439cec27c482edc99
 +		if (strcasecmp((*shown)[i].name.c_str(), name.c_str()) == 0) {
 +			persona = (*shown)[i].name;
 +		}
++	}
++	// An empty tell to Player Support gets its usual "empty or too long" answer;
++	// a name with nothing after it is not a tell to that character.
++	if (persona.empty() && text.empty()) {
++		return;
 +	}
 +	if (!persona.empty()) {
 +		strn0cpy(message.deliverto, EQ::Net::PlayerSupportConsoleName, sizeof(message.deliverto));
@@ -1005,10 +1011,11 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..079e83b972cec9f439cec27c482edc99
 +		return;
 +	}
 +	// A buried corpse is past its decay time, so unbury it the way CharacterCorpsesRepository::UnburyCorpse
-+	// does: restart the decay clock. Both are set before is_buried so they read its old value.
++	// does: restart the decay clock. Both are set before is_buried so they read its old value. The clock
++	// starts a second back because a zone that loads the corpse at age 0 gives it only a 2 second timer.
 +	auto result = corpse_id ? database.QueryDatabase(fmt::format(
 +		"UPDATE character_corpses SET {}, instance_id = {}, "
-+		"time_of_death = IF(is_buried = 0, time_of_death, NOW()), "
++		"time_of_death = IF(is_buried = 0, time_of_death, NOW() - INTERVAL 1 SECOND), "
 +		"was_at_graveyard = IF(is_buried = 0, was_at_graveyard, 0), "
 +		"is_buried = 0 WHERE id = {} AND charid = {} "
 +		"AND zone_id = {} AND instance_id = {} "
@@ -1212,7 +1219,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..079e83b972cec9f439cec27c482edc99
  /**
   * @param connection
   * @param command
-@@ -1389,10 +2252,17 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
+@@ -1389,10 +2259,17 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
  	console->RegisterCall("md5", 50, "md5", std::bind(ConsoleMd5, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ooc", 50, "ooc [message]", std::bind(ConsoleOOC, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ping", 50, "ping", std::bind(ConsoleNull, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -1324,7 +1331,7 @@ index 7de8f2143871aa6ac3cadb1ff54d129e058e22d4..7f43d47ecf67918d648090e9807ee8d4
  						auto con = console->FindByAccountName(&scm->deliverto[1]);
  						if (
 diff --git a/zone/api_service.cpp b/zone/api_service.cpp
-index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..b0552aa9618faf62f4ead4825a344b091b0de3d1 100644
+index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..492d8da17ab70d85915ddb7f388d75de8e7cd793 100644
 --- a/zone/api_service.cpp
 +++ b/zone/api_service.cpp
 @@ -22,14 +22,18 @@
@@ -1346,7 +1353,7 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..b0552aa9618faf62f4ead4825a344b09
  #include <memory>
  
  extern Zone *zone;
-@@ -893,6 +897,477 @@ void RegisterApiLogEvent(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+@@ -893,6 +897,478 @@ void RegisterApiLogEvent(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  	);
  }
  
@@ -1755,8 +1762,9 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..b0552aa9618faf62f4ead4825a344b09
 +		client->RemoveTaskByTaskID(task_id);
 +	}
 +	bool saved = client->SaveTaskState();
-+	if (remove && saved) {
-+		// Removing a task clears it in memory even when deleting its rows failed, and the save skips it.
++	if (saved && !client->IsTaskActive(task_id)) {
++		// Removing a task, or an update that completes it, clears it in memory even when deleting its
++		// rows failed, and the save skips it. A completed task is recorded in completed_tasks, not here.
 +		auto left = database.QueryDatabase(fmt::format(
 +			"SELECT (SELECT COUNT(*) FROM character_tasks WHERE charid = {0} AND taskid = {1}) + "
 +			"(SELECT COUNT(*) FROM character_activities WHERE charid = {0} AND taskid = {1})",
@@ -1824,7 +1832,7 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..b0552aa9618faf62f4ead4825a344b09
  void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  {
  	server->SetLoginHandler(CheckLogin);
-@@ -901,6 +1376,13 @@ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+@@ -901,6 +1377,13 @@ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  	server->SetMethodHandler("get_npc_list_detail", &ApiGetNpcListDetail, 50);
  	server->SetMethodHandler("get_door_list_detail", &ApiGetDoorListDetail, 50);
  	server->SetMethodHandler("get_corpse_list_detail", &ApiGetCorpseListDetail, 50);
@@ -2480,7 +2488,7 @@ index 781c50e4597b346bf720e971df4ea2f0c50612cb..c1fb9464e3ca1d526ddc6815831c017c
  
  void ZoneDatabase::RefreshPetitionsFromDB()
 diff --git a/zone/worldserver.cpp b/zone/worldserver.cpp
-index 070fae004d3f861dbccd2d37db361951bfc434b1..9044e929cc2a93c7a2efab04ae74353e6476c674 100644
+index 070fae004d3f861dbccd2d37db361951bfc434b1..aff5c221856bf1a1243e2996a7affadcd0803934 100644
 --- a/zone/worldserver.cpp
 +++ b/zone/worldserver.cpp
 @@ -314,7 +314,11 @@ void WorldServer::HandleMessage(uint16 opcode, const EQ::Net::Packet &p)
@@ -2508,7 +2516,26 @@ index 070fae004d3f861dbccd2d37db361951bfc434b1..9044e929cc2a93c7a2efab04ae74353e
  		if (c) {
  			c->Spawn();
  		}
-@@ -4609,6 +4616,16 @@ bool WorldServer::SendChannelMessage(Client* from, const char* to, uint8 chan_nu
+@@ -2099,11 +2106,15 @@ void WorldServer::HandleMessage(uint16 opcode, const EQ::Net::Packet &p)
+ 	{
+ 		auto ucsss = (UCSServerStatus_Struct *) pack->pBuffer;
+ 		if (zone) {
+-			zone->SetUCSServerAvailable((ucsss->available != 0), ucsss->timestamp);
++			const bool became_available = zone->SetUCSServerAvailable((ucsss->available != 0), ucsss->timestamp);
+ 			LogInfo("UCS Server is now [{}]", (ucsss->available == 1 ? "online" : "offline"));
+ 
+-			for (auto &e : entity_list.GetClientList()) {
+-				e.second->ReconnectUCS();
++			// A client that is still connected to UCS drops that connection when it
++			// is sent the chat server again, so only do it when UCS came back.
++			if (became_available) {
++				for (auto &e : entity_list.GetClientList()) {
++					e.second->ReconnectUCS();
++				}
+ 			}
+ 		}
+ 		break;
+@@ -4609,6 +4620,16 @@ bool WorldServer::SendChannelMessage(Client* from, const char* to, uint8 chan_nu
  	va_end(argptr);
  	buffer[length - 1] = '\0';
  
@@ -2525,7 +2552,7 @@ index 070fae004d3f861dbccd2d37db361951bfc434b1..9044e929cc2a93c7a2efab04ae74353e
  	auto pack = new ServerPacket(ServerOP_ChannelMessage, sizeof(ServerChannelMessage_Struct) + length);
  	ServerChannelMessage_Struct* scm = (ServerChannelMessage_Struct*)pack->pBuffer;
  
-@@ -4634,11 +4651,10 @@ bool WorldServer::SendChannelMessage(Client* from, const char* to, uint8 chan_nu
+@@ -4634,11 +4655,10 @@ bool WorldServer::SendChannelMessage(Client* from, const char* to, uint8 chan_nu
  	scm->language = language;
  	scm->lang_skill = lang_skill;
  	scm->queued = 0;
@@ -2550,6 +2577,51 @@ index 7699d3f331a3acf480910fd0ccc74a99ccc0cb85..54454c56b663e281fe7539f6f72cb6f0
  	bool SendEmoteMessage(const char* to, uint32 to_guilddbid, uint32 type, const char* message, ...);
  	bool SendEmoteMessage(const char* to, uint32 to_guilddbid, int16 to_minstatus, uint32 type, const char* message, ...);
  	bool SendVoiceMacro(Client* From, uint32 Type, char* Target, uint32 MacroNumber, uint32 GroupOrRaidID = 0);
+diff --git a/zone/zone.cpp b/zone/zone.cpp
+index 0078aa7a4441503687a903ab62b4da2a165b6beb..7b5472a85afd873b4759db5fbf4a2ce3f44d8715 100644
+--- a/zone/zone.cpp
++++ b/zone/zone.cpp
+@@ -2713,14 +2713,22 @@ void Zone::RequestUCSServerStatus() {
+ 	safe_delete(outapp);
+ }
+ 
+-void Zone::SetUCSServerAvailable(bool ucss_available, uint32 update_timestamp) {
+-	if (m_last_ucss_update == update_timestamp && m_ucss_available != ucss_available) {
++// Returns true when UCS became available after this zone knew it was not. The
++// first reply after zone boot only sets the state. m_last_ucss_update was never
++// stored before, so it stayed 0 and every reply was applied; it now records the
++// last reply (0 means none yet). Replies arrive in order over the one World
++// connection, so the newest always applies.
++bool Zone::SetUCSServerAvailable(bool ucss_available, uint32 update_timestamp) {
++	const bool known = m_last_ucss_update != 0;
++	if (known && m_last_ucss_update == update_timestamp && m_ucss_available != ucss_available) {
+ 		m_ucss_available = false;
+ 		RequestUCSServerStatus();
+-		return;
++		return false;
+ 	}
+-	if (m_last_ucss_update < update_timestamp)
+-		m_ucss_available = ucss_available;
++	const bool became_available = known && !m_ucss_available && ucss_available;
++	m_ucss_available = ucss_available;
++	m_last_ucss_update = update_timestamp ? update_timestamp : 1;
++	return became_available;
+ }
+ 
+ bool Zone::IsQuestHotReloadQueued() const
+diff --git a/zone/zone.h b/zone/zone.h
+index ce6a731fd7b229b8f52d30bbb0669068a58d1695..197e0d56e6a498cd7b3861dca78399916c406020 100755
+--- a/zone/zone.h
++++ b/zone/zone.h
+@@ -332,7 +332,7 @@ public:
+ 	void SetInstanceTimer(uint32 new_duration);
+ 	void SetStaticZone(bool sz) { staticzone = sz; }
+ 	void SetTime(uint8 hour, uint8 minute, bool update_world = true);
+-	void SetUCSServerAvailable(bool ucss_available, uint32 update_timestamp);
++	bool SetUCSServerAvailable(bool ucss_available, uint32 update_timestamp);
+ 	void SpawnConditionChanged(const SpawnCondition &c, int16 old_value);
+ 	void StartShutdownTimer(uint32 set_time = (RuleI(Zone, AutoShutdownDelay)));
+ 	void ResetShutdownTimer();
 diff --git a/zone/zonedb.cpp b/zone/zonedb.cpp
 index 879ac6043a946b14d64194d41541673317348935..3b260c1f4b0ae38f5aac8ac49ea280e94b41d015 100644
 --- a/zone/zonedb.cpp

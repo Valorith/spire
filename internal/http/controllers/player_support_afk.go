@@ -14,9 +14,12 @@ import (
 // ---------------------------------------------------------------------------
 // AFK forwarding. A player who is AFK answers a tell by themselves at once:
 // the client sends "Sorry, I am A.F.K. (Away From Keyboard) right now." back
-// to the sender, so it reaches Spire as a reply. That is not the player
-// writing: it is not recorded, and each Game Master tell it answers is
-// mailed to the character instead, through the offline mail path.
+// to the sender, so it reaches Spire as a reply. Each Game Master tell such an
+// answer is for is mailed to the character, through the offline mail path.
+// The stock text is not the player writing and is not recorded. Any other
+// text is recorded as a player message as usual: it may be a custom /afk
+// text, but it may also be a person typing fast, and nothing a player sends
+// is dropped.
 
 const (
 	// supportAFKText is the stock RoF2 answer; a text starting with
@@ -24,8 +27,9 @@ const (
 	supportAFKText   = "Sorry, I am A.F.K. (Away From Keyboard) right now."
 	supportAFKPrefix = "Sorry, I am A.F.K."
 	// supportAFKTextWindow is how long after a tell the stock text counts as
-	// its answer. Any reply within supportAFKFastWindow counts, whatever it
-	// says: nobody types that fast, and a custom /afk text can say anything.
+	// its answer. Any reply within supportAFKFastWindow counts too, whatever
+	// it says, since a custom /afk text can say anything; such a reply still
+	// goes on the case.
 	supportAFKTextWindow = 30 * time.Second
 	supportAFKFastWindow = 2 * time.Second
 
@@ -41,17 +45,41 @@ const (
 	supportAFKFailed  = "failed"
 )
 
-// supportIsAFKReply reports whether a reply received at receivedAt is the
-// player's client answering a tell sent at sentAt by itself.
-func supportIsAFKReply(text string, sentAt, receivedAt time.Time) bool {
+// supportAFKAnswer is how a reply relates to a Game Master tell.
+type supportAFKAnswer int
+
+const (
+	// supportAFKNone: a reply, not an AFK answer to the tell.
+	supportAFKNone supportAFKAnswer = iota
+	// supportAFKFast: any text within supportAFKFastWindow. The tell is
+	// forwarded by mail, and the reply is recorded like any other.
+	supportAFKFast
+	// supportAFKStock: the client's stock AFK text. The tell is forwarded by
+	// mail, and the reply is not recorded.
+	supportAFKStock
+)
+
+// supportAFKReply tells how a reply received at receivedAt relates to a tell
+// sent at sentAt.
+func supportAFKReply(text string, sentAt, receivedAt time.Time) supportAFKAnswer {
 	gap := receivedAt.Sub(sentAt)
 	if gap < 0 {
 		// Spire's and the database's clocks can disagree by a little.
 		gap = 0
 	}
+	if gap <= supportAFKTextWindow && supportIsAFKText(text) {
+		return supportAFKStock
+	}
+	if gap <= supportAFKFastWindow {
+		return supportAFKFast
+	}
+	return supportAFKNone
+}
+
+// supportIsAFKText reports whether text is the client's stock AFK answer.
+func supportIsAFKText(text string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(text))
-	stock := trimmed == strings.ToLower(supportAFKText) || strings.HasPrefix(trimmed, strings.ToLower(supportAFKPrefix))
-	return (stock && gap <= supportAFKTextWindow) || gap <= supportAFKFastWindow
+	return trimmed == strings.ToLower(supportAFKText) || strings.HasPrefix(trimmed, strings.ToLower(supportAFKPrefix))
 }
 
 // supportAccountName is an EQEmu account's name.
@@ -61,8 +89,9 @@ type supportAccountName struct {
 
 // forwardAFK handles a reply that is an AFK answer to Game Master tells: each
 // such tell not forwarded yet is mailed to the character, once. It reports
-// whether the reply was an AFK answer, in which case it is not a player
-// message.
+// whether the reply is the stock AFK text answering a tell, which is not a
+// player message and is not recorded; any other reply is recorded by the
+// caller, whether or not it caused a tell to be mailed.
 func (p *PlayerSupportController) forwardAFK(ctx context.Context, eqemu, db *gorm.DB, frame playersupport.Frame, now time.Time) bool {
 	if eqemu == nil || db == nil || frame.CharacterID == 0 || frame.AccountID == 0 {
 		return false
@@ -84,12 +113,14 @@ func (p *PlayerSupportController) forwardAFK(ctx context.Context, eqemu, db *gor
 	if err != nil {
 		return false
 	}
-	answered := false
+	answered, stock := false, false
 	for _, tell := range tells {
-		if !supportIsAFKReply(frame.Text, tell.CreatedAt, now) {
+		answer := supportAFKReply(frame.Text, tell.CreatedAt, now)
+		if answer == supportAFKNone {
 			continue
 		}
 		answered = true
+		stock = stock || answer == supportAFKStock
 		if tell.Afk != "" {
 			continue
 		}
@@ -98,7 +129,7 @@ func (p *PlayerSupportController) forwardAFK(ctx context.Context, eqemu, db *gor
 	if answered && p.world != nil {
 		p.world.Notify()
 	}
-	return answered
+	return stock
 }
 
 // forwardAFKTell mails one tell, claimed first so a tell is forwarded once
