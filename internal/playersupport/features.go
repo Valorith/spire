@@ -27,7 +27,15 @@ type Features struct {
 	CorpseExp bool `json:"corpse_exp"`
 	// Unbury: "supportmove" accepts a buried corpse and unburies it.
 	Unbury bool `json:"unbury"`
+	// Marquee: a tell World delivers from Spire is also shown to the
+	// character as an on-screen marquee, "Game Master: <message>", cut to
+	// MarqueeLength characters. Mail, notices and rejects get none.
+	Marquee bool `json:"marquee"`
 }
+
+// MarqueeLength is the longest marquee World shows, prefix included; a longer
+// one ends in "...". The tell keeps the full message.
+const MarqueeLength = 120
 
 // Features reports the local World's patch features. It is cached with the
 // companion status and rechecked on the same schedule.
@@ -74,6 +82,8 @@ func classifyFeatures(reply string, err error, companion CompanionStatus) Featur
 			features.CorpseExp = true
 		case "unbury":
 			features.Unbury = true
+		case "marquee":
+			features.Marquee = true
 		}
 	}
 	return features

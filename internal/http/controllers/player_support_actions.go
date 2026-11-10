@@ -31,6 +31,12 @@ type supportAction struct {
 	Event string
 	// Details are added to the audit payload.
 	Details map[string]interface{}
+	// Notice is the body of the mail the petition character gets once the
+	// action succeeds, from a supportNoticeBody template. Empty sends none.
+	Notice string
+	// AccountID is the case's account, which the notice's recipient must
+	// still belong to.
+	AccountID uint
 }
 
 // supportActionResult is what an action's work reports.
@@ -50,7 +56,16 @@ func (p *PlayerSupportController) runSupportAction(c echo.Context, scope support
 	if err != nil {
 		return supportError(c, err)
 	}
-	result := work()
+	return p.finishSupportAction(c, scope, view, action, entry, work())
+}
+
+// finishSupportAction mails the action's notice when the action succeeded,
+// completes its timeline entry and writes the response. A repeated request ID
+// never gets here: recordSupportAction refuses it.
+func (p *PlayerSupportController) finishSupportAction(c echo.Context, scope supportScope, view supportCaseView, action supportAction, entry models.PlayerSupportEntry, result supportActionResult) error {
+	if result.Delivery == "sent" && action.Notice != "" {
+		result = p.noticeResult(c, scope, view, action, entry.CaseID, result)
+	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request().Context()), 3*time.Second)
 	defer cancel()
 	update := scope.spire.WithContext(ctx).Model(&models.PlayerSupportEntry{}).Where("id = ?", entry.ID).
@@ -129,6 +144,121 @@ func (p *PlayerSupportController) recordSupportAction(c echo.Context, scope supp
 		return entry, echo.NewHTTPError(http.StatusServiceUnavailable, "Required operation audit could not be saved")
 	}
 	return entry, nil
+}
+
+// ---------------------------------------------------------------------------
+// Account action notices: the mail a player gets after a kick, sanction or
+// chat change made from a case.
+
+// supportNoticeSubject is the subject of every account action notice.
+const supportNoticeSubject = "Notice of account action"
+
+// Appended to the action's message once the notice was or was not mailed.
+const (
+	supportNoticeSent   = "The player was notified by mail."
+	supportNoticeFailed = "The notice could not be mailed to the player."
+)
+
+// supportNotice is one account action notice to the petition character.
+type supportNotice struct {
+	CaseID, AccountID uint
+	RequestID, Body   string
+}
+
+// supportNoticeKey is the notice's delivery key. It is derived from the
+// action's request ID, so one action can never record a second notice.
+func supportNoticeKey(caseID uint, requestID string) string {
+	return fmt.Sprintf("%d-%s-notice", caseID, requestID)
+}
+
+// noticeResult mails the action's notice and says so in its message. The
+// action stands whether or not the mail can be written.
+func (p *PlayerSupportController) noticeResult(c echo.Context, scope supportScope, view supportCaseView, action supportAction, caseID uint, result supportActionResult) supportActionResult {
+	send := p.mailNotice
+	if send == nil {
+		send = p.sendSupportNotice
+	}
+	notice := supportNotice{CaseID: caseID, AccountID: action.AccountID, RequestID: action.RequestID, Body: action.Notice}
+	data := map[string]interface{}{}
+	for key, value := range result.Data {
+		data[key] = value
+	}
+	if err := send(c, scope, view, notice); err != nil {
+		c.Logger().Errorf("Player Support: notice for %s on case %s could not be mailed: %v", action.Kind, view.SourceKey, err)
+		result.Message += " " + supportNoticeFailed
+		data["notice"] = "failed"
+	} else {
+		result.Message += " " + supportNoticeSent
+		data["notice"] = "mailed"
+	}
+	result.Data = data
+	return result
+}
+
+// sendSupportNotice mails the notice to the character that filed the
+// petition through the Mail & Parcels direct mail path, which checks its
+// limits and records it as the case's delivery, as Reply by mail does.
+func (p *PlayerSupportController) sendSupportNotice(c echo.Context, scope supportScope, view supportCaseView, notice supportNotice) error {
+	if p.mail == nil || scope.eqemu == nil {
+		return errors.New("mail is unavailable")
+	}
+	input := gmMailSendInput{
+		CharacterIDs: []uint{view.CharacterID}, From: playersupport.Identity, Subject: supportNoticeSubject, Body: notice.Body,
+		Reason: "Account action notice for Player Support case " + view.SourceKey, Confirmation: gmMailConfirmation("direct", 1),
+	}
+	if err := validateGMMailInput(input); err != nil {
+		return err
+	}
+	// The action is done; finish the notice even if the client goes away.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request().Context()), 5*time.Second)
+	defer cancel()
+	request := c.Request()
+	c.SetRequest(request.WithContext(ctx))
+	c.Set(supportDeliveryContextKey, &supportDeliveryAudit{
+		CaseID: notice.CaseID, ConnectionID: scope.connectionID, Character: view.Character,
+		AccountID: int(notice.AccountID), Key: supportNoticeKey(notice.CaseID, notice.RequestID),
+	})
+	defer func() {
+		c.Set(supportDeliveryContextKey, nil)
+		c.SetRequest(request)
+	}()
+	_, err := p.mail.writeDirectMail(c, scope.eqemu.WithContext(ctx), input, input.CharacterIDs)
+	return err
+}
+
+// supportNoticeBody is the fixed notice to the petition character. It never
+// names the staff member or quotes their reason, which is an internal note.
+func supportNoticeBody(character, statement string) string {
+	return "Hello " + character + ",\n\n" +
+		"This is a notice from the Game Master team about your account.\n\n" +
+		statement + "\n\n" +
+		"If you have questions about this action, please file a petition in game with #petition.\n\n" +
+		"The Game Master team"
+}
+
+func supportKickNotice(character, kicked string) string {
+	return supportNoticeBody(character, "Your character "+kicked+" was disconnected from the game by a Game Master.")
+}
+
+func supportSanctionNotice(character, mode string, until *time.Time) string {
+	switch mode {
+	case "suspend":
+		if until == nil {
+			return supportNoticeBody(character, "Your account has been suspended.")
+		}
+		return supportNoticeBody(character, "Your account has been suspended until "+until.UTC().Format("January 2, 2006 at 15:04")+" UTC. You can log in again after that time.")
+	case "ban":
+		return supportNoticeBody(character, "Your account has been banned. Its characters can no longer log in.")
+	default:
+		return supportNoticeBody(character, "The restriction on your account has been lifted. You can log in again.")
+	}
+}
+
+func supportRevokeNotice(character string, revoked bool) string {
+	if revoked {
+		return supportNoticeBody(character, "Your chat privileges have been restricted by a Game Master.")
+	}
+	return supportNoticeBody(character, "Your chat privileges have been restored.")
 }
 
 // supportCharacterState says where the case's character is, which decides
@@ -302,6 +432,7 @@ func (p *PlayerSupportController) kick(c echo.Context) error {
 		Kind: "kick", RequestID: input.RequestID, Reason: input.Reason, Event: supportEventKick,
 		Summary: "Kicked " + online.Name + " from the game",
 		Details: map[string]interface{}{"kicked_character_id": online.ID, "kicked_character": online.Name},
+		Notice:  supportKickNotice(view.Character, online.Name), AccountID: account.ID,
 	}
 	return p.runSupportAction(c, scope, view, action, func() supportActionResult {
 		switch p.world.Kick(online.Name) {
@@ -356,6 +487,7 @@ func (p *PlayerSupportController) sanction(c echo.Context) error {
 			"mode": input.Mode, "account_name": account.Name, "previous_status": account.Status,
 			"previous_until": account.SuspendedUntil, "until": input.Until,
 		},
+		Notice: supportSanctionNotice(view.Character, input.Mode, input.Until), AccountID: account.ID,
 	}
 	local := p.localWorld(scope)
 	return p.runSupportAction(c, scope, view, action, func() supportActionResult {
@@ -387,6 +519,32 @@ func (p *PlayerSupportController) sanction(c echo.Context) error {
 		}
 		return supportActionResult{Delivery: "sent", Message: message, Data: map[string]interface{}{"kick": state, "kicked": kicked}}
 	})
+}
+
+// supportRevokeSummary is the timeline line for a chat change. Only the
+// updated patch has a fixed policy: OOC, auction and shout are blocked and
+// tells still work. Elsewhere the channels depend on the server build (stock
+// EQEmu blocks tells, and OOC and auction only when they are server-wide).
+func supportRevokeSummary(account string, revoked bool, features playersupport.Features) string {
+	switch {
+	case revoked && features.Revoke:
+		return "Revoked OOC, auction and shout for " + account
+	case revoked:
+		return "Revoked chat for " + account
+	case features.Revoke:
+		return "Restored OOC, auction and shout for " + account
+	default:
+		return "Restored chat for " + account
+	}
+}
+
+// supportRevokeAppliedInGame answers a chat change the game applied at once.
+// That needs the updated patch, whose policy is fixed.
+func supportRevokeAppliedInGame(revoked bool) string {
+	if revoked {
+		return "OOC, auction and shout are blocked now. Tells still work."
+	}
+	return "OOC, auction and shout are allowed again."
 }
 
 // supportRevokeRefusal is the 409 for a chat change Spire cannot make now.
@@ -433,23 +591,22 @@ func (p *PlayerSupportController) revoke(c echo.Context) error {
 	if state.Online.ID != 0 {
 		name = state.Online.Name
 	}
-	if err := supportRevokeRefusal(state.State, inGame, p.localWorld(scope), p.features(scope), name); err != nil {
+	features := p.features(scope)
+	if err := supportRevokeRefusal(state.State, inGame, p.localWorld(scope), features, name); err != nil {
 		return supportError(c, err)
 	}
-	summary := "Restored OOC, auction and shout for " + account.Name
-	if input.Revoked {
-		summary = "Revoked OOC, auction and shout for " + account.Name
-	}
+	summary := supportRevokeSummary(account.Name, input.Revoked, features)
 	action := supportAction{
 		Kind: "revoke", RequestID: input.RequestID, Reason: input.Reason, Event: supportEventRevoke, Summary: summary,
 		Details: map[string]interface{}{"revoked": input.Revoked, "account_name": account.Name, "in_game": inGame},
+		Notice:  supportRevokeNotice(view.Character, input.Revoked), AccountID: account.ID,
 	}
 	online := state.Online
 	return p.runSupportAction(c, scope, view, action, func() supportActionResult {
 		if inGame {
 			switch p.world.SetRevoked(online.ID, account.ID, input.Revoked) {
 			case "applied":
-				return supportActionResult{Delivery: "sent", Message: "Tells still work. The change applies at once in game."}
+				return supportActionResult{Delivery: "sent", Message: supportRevokeAppliedInGame(input.Revoked)}
 			case "offline":
 				return supportActionResult{Delivery: "failed", Message: online.Name + " left the game. Try again."}
 			default:

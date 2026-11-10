@@ -6,12 +6,16 @@
         <h3>{{ status }}</h3>
         <p>{{ statusHint }}</p>
       </div>
-      <button v-if="active && canWrite" class="support-button is-sm" type="button" :disabled="busy" @click="act('end')">
-        <i class="fe fe-toggle-left" aria-hidden="true"></i> Turn off messages
-      </button>
-      <button v-else-if="canWrite" class="support-button is-sm" type="button" :disabled="busy || state !== 'ready'" @click="act('start')">
-        <i class="fe fe-toggle-right" aria-hidden="true"></i> Enable messages
-      </button>
+      <!-- Player replies: whether the player's answers are accepted onto this case. Sending never depends on it. -->
+      <div v-if="active || (canWrite && petitionAvailable)" class="chat-replies">
+        <span class="support-chip" :class="active ? 'is-success' : null">Player replies: {{ active ? 'On' : 'Off' }}</span>
+        <button v-if="active && canWrite" class="support-button is-sm" type="button" :disabled="busy" @click="act('end')">
+          <i class="fe fe-toggle-left" aria-hidden="true"></i> Turn off replies
+        </button>
+        <button v-else-if="canWrite" class="support-button is-sm" type="button" :disabled="busy || !canTurnOnReplies" @click="act('start')">
+          <i class="fe fe-toggle-right" aria-hidden="true"></i> Turn on replies
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="chat-error support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
@@ -19,7 +23,7 @@
       <div v-if="!messages.length" class="chat-empty support-empty">
         <i class="fe fe-message-circle" aria-hidden="true"></i>
         <strong>No messages yet</strong>
-        <p v-if="canWrite && state === 'ready'">Send a tell to start the conversation. The player can answer from any character on the account with <code>#petition</code>, <code>/reply</code> or <code>/tell *GameMaster</code>.</p>
+        <p v-if="canWrite && state === 'ready'">Send a tell to start the conversation. With player replies on, the player can answer from any character on the account with <code>#petition</code>, <code>/reply</code> or <code>/tell *GameMaster</code>.</p>
         <p v-else>Tells exchanged with any character on {{ record.character }}’s account appear here.</p>
       </div>
       <article v-for="message in messages" :key="message.id" class="chat-message" :class="{ 'is-outgoing': message.kind === 'chat_out' }">
@@ -45,7 +49,8 @@
       </article>
     </div>
 
-    <form v-if="canWrite && (active || composable)" class="chat-composer" @submit.prevent="act('send')">
+    <!-- Shown whenever a message can be sent, and kept (disabled) during a conversation while the player zones. -->
+    <form v-if="canWrite && (composable || (petitionAvailable && messages.length > 0))" class="chat-composer" @submit.prevent="act('send')">
       <div v-if="composable" class="chat-quick support-suggestions" role="group" aria-label="Quick replies">
         <button v-for="reply in quickReplyList" :key="reply.key" type="button" :disabled="busy"
                 :title="reply.saved ? reply.text : null" @click="useQuickReply(reply.text)">
@@ -67,6 +72,14 @@
           <i :class="mailing ? 'fe fe-mail' : 'fe fe-send'" aria-hidden="true"></i> {{ mailing ? 'Send as mail' : 'Send' }}
         </button>
       </div>
+      <p v-if="composable && !active && patched" class="chat-mail-note">
+        <i class="fe fe-message-square" aria-hidden="true"></i>
+        <span>Player replies are off. The player can read this but cannot answer on this case; if they try, the game tells them their message was not sent.</span>
+      </p>
+      <p v-if="marqueeCut" class="chat-mail-note">
+        <i class="fe fe-monitor" aria-hidden="true"></i>
+        <span>The on-screen marquee shows the first part; the tell has the full message.</span>
+      </p>
       <p v-if="mailing" class="chat-mail-note">
         <i class="fe fe-mail" aria-hidden="true"></i>
         <span>No character on the account is in game, so this goes to {{ mailTo }}’s mailbox. It starts with “This message was sent to you in response to your petition while you were offline:”
@@ -99,7 +112,9 @@ export default {
     connectionId: { type: Number, required: true },
     canWrite: { type: Boolean, default: false },
     // Other staff on this case ({ name, composing }), from presence.
-    viewers: { type: Array, default: () => [] }
+    viewers: { type: Array, default: () => [] },
+    // Patch features of the World behind this connection.
+    features: { type: Object, default: () => ({}) }
   },
   data () {
     return {
@@ -140,9 +155,19 @@ export default {
     target () { return this.recipient || this.record.character },
     // With no character on the account in game, messages are mailed instead.
     mailing () { return this.state === 'offline' && Boolean(this.mailTo) },
+    // Sending depends only on reaching the player, never on Player replies.
     composable () { return this.state === 'ready' || this.mailing },
     // World answered without the Player Support patch, or with an older one.
     patched () { return this.companion !== 'missing' && this.companion !== 'outdated' },
+    // World also shows a delivered tell as an on-screen marquee, "Game Master: "
+    // plus the message, cut to 120 characters.
+    marquee () { return this.state === 'ready' && Boolean(this.features && this.features.marquee) },
+    marqueeCut () { return this.marquee && this.draft.trim().length > 120 - 'Game Master: '.length },
+    // Replies arrive only through the current patch, which need not wait for
+    // the player to be in game. An older patch never turns them on.
+    canTurnOnReplies () {
+      return this.petitionAvailable && this.companion === 'ready' && (this.state === 'ready' || this.state === 'offline')
+    },
     quickReplyList () {
       const saved = this.savedReplies
         .map(reply => ({ key: 'saved-' + reply.id, label: reply.title, text: fillReply(reply.body, this.record), saved: true }))
@@ -152,16 +177,16 @@ export default {
     },
     onAlt () { return Boolean(this.recipient) && this.recipient.toLowerCase() !== this.record.character.toLowerCase() },
     status () {
-      if (this.state === 'ready') return this.active ? 'Messages on' : 'Messages off'
+      if (this.state === 'ready') return 'Player in game'
       if (this.state === 'offline') return this.tellsOff ? 'Tells turned off' : 'Player not in game'
       if (this.state === 'connecting') return 'Connecting…'
       if (this.state === 'unsupported') return this.companion === 'outdated' ? 'Server patch out of date' : 'Needs the server patch'
       return 'Live chat unavailable'
     },
-    // Colour only where it carries meaning: messages are live, or World needs work.
+    // Colour only where it carries meaning: player replies are on, or World needs work.
     statusTone () {
-      if (this.state === 'ready' && this.active) return 'is-success'
-      return this.state === 'unsupported' ? 'is-warning' : null
+      if (this.state === 'unsupported') return 'is-warning'
+      return this.active ? 'is-success' : null
     },
     statusIcon () {
       if (this.state === 'ready') return 'fe fe-message-circle'
@@ -180,17 +205,18 @@ export default {
       }
       const where = this.onAlt ? ` The account is playing ${this.recipient}, so tells go there.` : ''
       if (this.state === 'ready') {
+        const reach = this.marquee ? 'Tells you send reach the player now and also show on their screen as a marquee.' : 'Tells you send reach the player now.'
         return this.active
-          ? `Tells to GameMaster from any character on ${name}’s account are recorded here.${where}`
-          : `Your first tell turns messages on. The player cannot write first until then.${where}`
+          ? `${reach} Their replies to GameMaster from any character on ${name}’s account are recorded here.${where}`
+          : `${reach} Turn on replies to record their answers here.${where}`
       }
       if (this.state === 'offline') {
         return this.tellsOff
-          ? `${this.recipient} has tells turned off. Messaging resumes when they turn tells back on.`
+          ? `${this.recipient} has tells turned off. You can send tells again when they turn tells back on.`
           : this.mailTo
             ? `No character on ${name}’s account is in game. Messages you send now are mailed to ${this.mailTo} and kept here.` +
               (this.patched ? '' : ' The player cannot reply in game until World has the Player Support patch.')
-            : `No character on ${name}’s account is in a zone. Messaging resumes when the player logs in on any character.`
+            : `No character on ${name}’s account is in a zone. You can send tells when the player logs in on any character.`
       }
       if (this.state === 'connecting') return 'Checking World for this character…'
       if (this.state === 'unsupported') {
@@ -310,7 +336,7 @@ export default {
     },
     async act (action) {
       if (!this.canWrite || this.busy) return
-      if ((action === 'start' && this.state !== 'ready') || (action === 'send' && !this.composable)) return
+      if ((action === 'start' && !this.canTurnOnReplies) || (action === 'send' && !this.composable)) return
       const text = this.draft.trim()
       if (action === 'send' && !text) return
       if (action === 'send' && /[^\x20-\x7E]/.test(text)) {
@@ -364,7 +390,7 @@ export default {
 .support-chat { flex: 1; display: flex; flex-direction: column; min-height: 440px; }
 
 /* Status: a callout row flush with the pane, like the composer: state, reason, one action.
-   The left edge takes a tone only when it means something (messages on, World needs the patch). */
+   The left edge takes a tone only when it means something (player replies on, World needs the patch). */
 .chat-status {
   margin: 0; padding: 10px var(--support-space-5) 10px calc(var(--support-space-5) - 3px);
   border-top: 0; border-right: 0; border-bottom: 1px solid var(--support-border); border-radius: 0;
@@ -375,6 +401,7 @@ export default {
 .chat-status h3 { margin: 0; color: var(--support-text); font-family: inherit; font-size: var(--support-text-sm); font-weight: 600; line-height: 1.5; }
 .chat-status p { color: var(--support-muted); }
 .chat-status .support-button { flex: none; align-self: center; }
+.chat-replies { display: flex; flex: none; flex-wrap: wrap; align-items: center; align-self: center; gap: var(--support-space-2); }
 .chat-error { margin: var(--support-space-3) var(--support-space-5) 0; }
 
 /* Transcript */
@@ -431,7 +458,7 @@ export default {
 @media (max-width: 680px) {
   .chat-status { flex-wrap: wrap; padding-right: var(--support-space-4); padding-left: calc(var(--support-space-4) - 3px); }
   .chat-status-text { flex-basis: calc(100% - 30px); }
-  .chat-status .support-button { margin-left: 24px; }
+  .chat-status .chat-replies { margin-left: 24px; }
   .chat-error { margin-right: var(--support-space-4); margin-left: var(--support-space-4); }
   .chat-transcript, .chat-composer { padding-right: var(--support-space-4); padding-left: var(--support-space-4); }
   .chat-message { max-width: 92%; }

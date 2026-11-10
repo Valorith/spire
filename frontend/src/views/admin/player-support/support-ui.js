@@ -160,7 +160,7 @@ export const supportCategories = [
   { id: 'corpse', label: 'Corpse or death', hint: 'Find the corpse, move it to the player, or restore its experience.', tools: ['corpses'] },
   { id: 'stuck', label: 'Stuck or location', hint: 'Move the character to their bind point or a safe spot.', tools: ['move'] },
   { id: 'quest', label: 'Quest or progress', hint: 'Check tasks, lockouts and flags.', tools: ['tasks', 'lockouts'] },
-  { id: 'conduct', label: 'Player conduct', hint: 'Set the reported player, review their chat in Evidence, then use Discipline.', tools: ['evidence', 'discipline'] },
+  { id: 'conduct', label: 'Player conduct', hint: 'Set the reported player, review their chat in Evidence, then use Account Action.', tools: ['evidence', 'discipline'] },
   { id: 'bug', label: 'Bug report', hint: 'Link the player’s /bug reports from the Bug reports section.', tools: [] },
   { id: 'account', label: 'Account or access', hint: 'Check the account’s restrictions and linked accounts.', tools: ['discipline'] },
   { id: 'other', label: 'Other', hint: '', tools: [] }

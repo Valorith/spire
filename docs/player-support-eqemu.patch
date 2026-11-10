@@ -95,7 +95,7 @@ index dcbab2f046f9f00f76032d9441dcf88ee3a9b817..f8b2a118f2ea0c31ff9690ecf3f3552a
  			r.account_id = 0;
  			connection->SetAuthorized(true, r.account_name, r.account_id, AccountStatus::Max);
 diff --git a/world/console.cpp b/world/console.cpp
-index 364d40375917f3a9c0794dac6b523423d4a75779..c3d1c4fef8890504fc456c7d7ab6cf3223920a5e 100644
+index 364d40375917f3a9c0794dac6b523423d4a75779..3c6ad890dea5cc65b689536f0b9ef337f3f34e6c 100644
 --- a/world/console.cpp
 +++ b/world/console.cpp
 @@ -21,9 +21,13 @@
@@ -125,7 +125,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..c3d1c4fef8890504fc456c7d7ab6cf32
  /**
   * @param username
   * @param password
-@@ -373,6 +383,541 @@ void ConsoleTell(
+@@ -373,6 +383,572 @@ void ConsoleTell(
  	ZSList::Instance()->SendChannelMessage(tmpname, to.c_str(), ChatChannel_Tell, 0, Strings::Join(join_args, " ").c_str());
  }
  
@@ -162,13 +162,38 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..c3d1c4fef8890504fc456c7d7ab6cf32
 +	return escaped;
 +}
 +
++// Shows a Game Master message as a marquee too, through the stock cross-zone
++// marquee packet sent only to the recipient's zone. The tell keeps the full text.
++void SendPlayerSupportMarquee(ClientListEntry &recipient, const std::string &text)
++{
++	constexpr size_t max_length = 120;
++	auto marquee = "Game Master: " + text;
++	if (marquee.size() > max_length) {
++		marquee.resize(max_length - 3);
++		marquee.erase(marquee.find_last_not_of(' ') + 1);
++		marquee += "...";
++	}
++	ServerPacket packet(ServerOP_CZMarquee, sizeof(CZMarquee_Struct));
++	auto *m = reinterpret_cast<CZMarquee_Struct *>(packet.pBuffer);
++	m->update_type = CZUpdateType_Character;
++	m->update_identifier = static_cast<int>(recipient.CharID());
++	m->type = Chat::Yellow;
++	m->priority = 510;
++	m->fade_in = 0;
++	m->fade_out = 3000;
++	// About 70 ms a character, from 6 to 15 seconds.
++	m->duration = static_cast<uint32>(std::clamp<size_t>(marquee.size() * 70, 6000, 15000));
++	strn0cpy(m->message, marquee.c_str(), sizeof(m->message));
++	recipient.Server()->SendPacket(&packet);
++}
++
 +void RejectPlayerSupportTell(ClientListEntry &sender, const std::string &decision)
 +{
 +	const char *message = "Game Master messaging is unavailable right now. Please try again.";
 +	if (decision == "no_petition") {
-+		message = "Your account has no active petition. Use #petition [message] or /guidehelp to file one.";
++		message = "Your account has no active petition. Use #petition [message] to file one.";
 +	} else if (decision == "messages_off") {
-+		message = "Your petition is in the queue. A Game Master will turn on messages when they are ready to reply.";
++		message = "Your message was not sent. Replies to Game Master are not open on your petition right now; a Game Master will open them when they need your answer.";
 +	} else if (decision == "invalid") {
 +		message = "Your message was empty or too long. Please shorten it and try again.";
 +	} else if (decision == "timeout") {
@@ -331,6 +356,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..c3d1c4fef8890504fc456c7d7ab6cf32
 +			const auto from = fmt::format("*{}", EQ::Net::PlayerSupportConsoleName);
 +			ZSList::Instance()->SendChannelMessageRaw(from.c_str(), recipient->name(), ChatChannel_Tell, 0, EscapeChannelText(message).c_str());
 +			response["kind"] = "sent";
++			SendPlayerSupportMarquee(*recipient, message);
 +		}
 +	} else {
 +		return;
@@ -499,8 +525,13 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..c3d1c4fef8890504fc456c7d7ab6cf32
 +		reply("unavailable");
 +		return;
 +	}
++	// A buried corpse is past its decay time, so unbury it the way CharacterCorpsesRepository::UnburyCorpse
++	// does: restart the decay clock. Both are set before is_buried so they read its old value.
 +	auto result = corpse_id ? database.QueryDatabase(fmt::format(
-+		"UPDATE character_corpses SET {}, instance_id = {}, is_buried = 0 WHERE id = {} AND charid = {} "
++		"UPDATE character_corpses SET {}, instance_id = {}, "
++		"time_of_death = IF(is_buried = 0, time_of_death, NOW()), "
++		"was_at_graveyard = IF(is_buried = 0, was_at_graveyard, 0), "
++		"is_buried = 0 WHERE id = {} AND charid = {} "
 +		"AND zone_id = {} AND instance_id = {} "
 +		"AND EXISTS (SELECT 1 FROM character_data cd WHERE cd.id = {} AND cd.account_id = {})",
 +		position, destination_instance, corpse_id, character_id, source_zone, source_instance, character_id, account_id
@@ -558,7 +589,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..c3d1c4fef8890504fc456c7d7ab6cf32
 +	}
 +	connection->SendLine(
 +		"{\"status\":\"ok\",\"patch\":3,"
-+		"\"features\":[\"close_petition\",\"lockouts\",\"tasks\",\"revoke\",\"corpse_exp\",\"unbury\"]}"
++		"\"features\":[\"close_petition\",\"lockouts\",\"tasks\",\"revoke\",\"corpse_exp\",\"unbury\",\"marquee\"]}"
 +	);
 +}
 +
@@ -667,7 +698,7 @@ index 364d40375917f3a9c0794dac6b523423d4a75779..c3d1c4fef8890504fc456c7d7ab6cf32
  /**
   * @param connection
   * @param command
-@@ -1389,10 +1934,16 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
+@@ -1389,10 +1965,16 @@ void RegisterConsoleFunctions(std::unique_ptr<EQ::Net::ConsoleServer>& console)
  	console->RegisterCall("md5", 50, "md5", std::bind(ConsoleMd5, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ooc", 50, "ooc [message]", std::bind(ConsoleOOC, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
  	console->RegisterCall("ping", 50, "ping", std::bind(ConsoleNull, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -744,7 +775,7 @@ index 7de8f2143871aa6ac3cadb1ff54d129e058e22d4..2ca2a5298e44ae1756c240e0314fa34c
  						auto con = console->FindByAccountName(&scm->deliverto[1]);
  						if (
 diff --git a/zone/api_service.cpp b/zone/api_service.cpp
-index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..74fcc0eb7b5464ea136d75d13a8e823ff45f2ab3 100644
+index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..b0552aa9618faf62f4ead4825a344b091b0de3d1 100644
 --- a/zone/api_service.cpp
 +++ b/zone/api_service.cpp
 @@ -22,14 +22,18 @@
@@ -766,7 +797,7 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..74fcc0eb7b5464ea136d75d13a8e823f
  #include <memory>
  
  extern Zone *zone;
-@@ -893,6 +897,456 @@ void RegisterApiLogEvent(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+@@ -893,6 +897,477 @@ void RegisterApiLogEvent(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  	);
  }
  
@@ -1047,6 +1078,12 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..74fcc0eb7b5464ea136d75d13a8e823f
 +		client->GetAAXP(),
 +		true
 +	);
++	// The claim above is already saved, so save the award now rather than at the next character save.
++	// The award stays in memory if this fails and is saved later; the claim is kept so it cannot pay twice.
++	if (!database.SaveCharacterData(client, &client->GetPP(), &client->GetEPP())) {
++		response["status"] = "unconfirmed";
++		return response;
++	}
 +	client->Message(Chat::Yellow, "A Game Master restored the experience from your corpse.");
 +	response["status"] = "restored";
 +	response["exp"] = static_cast<Json::Int64>(exp);
@@ -1168,8 +1205,23 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..74fcc0eb7b5464ea136d75d13a8e823f
 +	} else {
 +		client->RemoveTaskByTaskID(task_id);
 +	}
-+	client->SaveTaskState();
++	bool saved = client->SaveTaskState();
++	if (remove && saved) {
++		// Removing a task clears it in memory even when deleting its rows failed, and the save skips it.
++		auto left = database.QueryDatabase(fmt::format(
++			"SELECT (SELECT COUNT(*) FROM character_tasks WHERE charid = {0} AND taskid = {1}) + "
++			"(SELECT COUNT(*) FROM character_activities WHERE charid = {0} AND taskid = {1})",
++			client->CharacterID(), task_id
++		));
++		auto row = left.begin();
++		saved = left.Success() && left.RowCount() == 1 && row[0] && Strings::ToInt(row[0]) == 0;
++	}
++	// The change already shows in the player's task window, so tell them even if it was not saved.
 +	client->Message(Chat::Yellow, "A Game Master updated your tasks.");
++	if (!saved) {
++		response["status"] = "unavailable";
++		return response;
++	}
 +
 +	const bool active = client->IsTaskActive(task_id);
 +	response["status"] = "updated";
@@ -1213,7 +1265,7 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..74fcc0eb7b5464ea136d75d13a8e823f
 +	client->SetRevoked(revoked);
 +	client->Message(
 +		Chat::Yellow,
-+		revoked ? "A Game Master has blocked your OOC, auction and shout channels."
++		revoked ? "A Game Master has blocked your OOC, auction and shout channels. You can still send tells."
 +		        : "A Game Master has restored your OOC, auction and shout channels."
 +	);
 +	response["status"] = "applied";
@@ -1223,7 +1275,7 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..74fcc0eb7b5464ea136d75d13a8e823f
  void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  {
  	server->SetLoginHandler(CheckLogin);
-@@ -901,6 +1355,13 @@ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
+@@ -901,6 +1376,13 @@ void RegisterApiService(std::unique_ptr<EQ::Net::WebsocketServer> &server)
  	server->SetMethodHandler("get_npc_list_detail", &ApiGetNpcListDetail, 50);
  	server->SetMethodHandler("get_door_list_detail", &ApiGetDoorListDetail, 50);
  	server->SetMethodHandler("get_corpse_list_detail", &ApiGetCorpseListDetail, 50);
@@ -1238,9 +1290,87 @@ index c4c1d3c6b086a69366eced2a48bc205e4387c8d0..74fcc0eb7b5464ea136d75d13a8e823f
  	server->SetMethodHandler("get_mob_list_detail", &ApiGetMobListDetail, 50);
  	server->SetMethodHandler("get_client_list_detail", &ApiGetClientListDetail, 50);
 diff --git a/zone/client.cpp b/zone/client.cpp
-index f361a00092e8c1fb8b0c3aee59677dda3969b0af..9e40bffe70cbe590ea1d8c2914d560de5542d897 100644
+index f361a00092e8c1fb8b0c3aee59677dda3969b0af..0569ea407133c9fdd989114b50938a73471ca564 100644
 --- a/zone/client.cpp
 +++ b/zone/client.cpp
+@@ -1392,6 +1392,12 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+ 		break;
+ 	}
+ 	case ChatChannel_Shout: { /* Shout */
++		if(GetRevoked())
++		{
++			Message(0, "You have been revoked. You may not talk on Shout.");
++			return;
++		}
++
+ 		Mob *sender = this;
+ 		if (GetPet() && GetTarget() == GetPet() && GetPet()->FindType(SpellEffect::VoiceGraft))
+ 			sender = GetPet();
+@@ -1400,6 +1406,12 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+ 		break;
+ 	}
+ 	case ChatChannel_Auction: { /* Auction */
++		if(GetRevoked())
++		{
++			Message(0, "You have been revoked. You may not talk on Auction.");
++			return;
++		}
++
+ 		if(RuleB(Chat, ServerWideAuction))
+ 		{
+ 			if(!global_channel_timer.Check())
+@@ -1410,12 +1422,6 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+ 					return;
+ 			}
+ 
+-			if(GetRevoked())
+-			{
+-				Message(0, "You have been revoked. You may not talk on Auction.");
+-				return;
+-			}
+-
+ 			if(TotalKarma < RuleI(Chat, KarmaGlobalChatLimit))
+ 			{
+ 				if(GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
+@@ -1439,6 +1445,12 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+ 		break;
+ 	}
+ 	case ChatChannel_OOC: { /* OOC */
++		if(GetRevoked())
++		{
++			Message(0, "You have been revoked. You may not talk on OOC.");
++			return;
++		}
++
+ 		if(RuleB(Chat, ServerWideOOC))
+ 		{
+ 			if(!global_channel_timer.Check())
+@@ -1454,12 +1466,6 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+ 				return;
+ 			}
+ 
+-			if(GetRevoked())
+-			{
+-				Message(0, "You have been revoked. You may not talk on OOC.");
+-				return;
+-			}
+-
+ 			if(TotalKarma < RuleI(Chat, KarmaGlobalChatLimit))
+ 			{
+ 				if(GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
+@@ -1502,12 +1508,6 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
+ 					return;
+ 			}
+ 
+-			if(GetRevoked())
+-			{
+-				Message(0, "You have been revoked. You may not send tells.");
+-				return;
+-			}
+-
+ 			if(TotalKarma < RuleI(Chat, KarmaGlobalChatLimit))
+ 			{
+ 				if(GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
 @@ -1537,7 +1537,14 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
  				target_name[x] = '\0';
  			}
@@ -1461,7 +1591,7 @@ index 2dbfc3986b8c0c06e83ca75774937b4336c0148f..8c8693e237cd45a04528ea91865ec55a
  	uint32 GetCharID() { return m_character_id; }
  
 diff --git a/zone/gm_commands/delpetition.cpp b/zone/gm_commands/delpetition.cpp
-index f42cf277285cf77f11e18d5d0651c10228593322..d57b60ad4fe85b7c2099a29a1c34ac7fba1819f5 100755
+index f42cf277285cf77f11e18d5d0651c10228593322..a99773d01193e5bd261c4961d0cf42ed74aabcfd 100755
 --- a/zone/gm_commands/delpetition.cpp
 +++ b/zone/gm_commands/delpetition.cpp
 @@ -18,3 +18,249 @@ void command_delpetition(Client *c, const Seperator *sep)
@@ -1581,7 +1711,7 @@ index f42cf277285cf77f11e18d5d0651c10228593322..d57b60ad4fe85b7c2099a29a1c34ac7f
 +		}
 +		messages = spire.substr(first + 1, second - first - 1) == "1"
 +			? "On - reply with #petition [message]"
-+			: "Off - a Game Master will turn them on to talk with you";
++			: "Off - a Game Master will open them when they need your answer";
 +	}
 +	if (petition.checked_out) {
 +		status = petition.last_gm.empty()
@@ -1599,7 +1729,7 @@ index f42cf277285cf77f11e18d5d0651c10228593322..d57b60ad4fe85b7c2099a29a1c34ac7f
 +	c->Message(Chat::White, divider);
 +	if (petitions.empty()) {
 +		c->Message(Chat::White, "You have no open petitions.");
-+		c->Message(Chat::White, "File one with #petition [message] or /guidehelp.");
++		c->Message(Chat::White, "File one with #petition [message].");
 +		c->Message(Chat::White, divider);
 +		return;
 +	}
@@ -1619,7 +1749,7 @@ index f42cf277285cf77f11e18d5d0651c10228593322..d57b60ad4fe85b7c2099a29a1c34ac7f
 +		);
 +		Show(c, Chat::White, fmt::format("Status | {}", status));
 +		if (!messages.empty()) {
-+			Show(c, Chat::White, fmt::format("Messages | {}", messages));
++			Show(c, Chat::White, fmt::format("Replies | {}", messages));
 +		}
 +		Show(c, Chat::White, fmt::format("Request | {}", preview));
 +		Show(c, Chat::White, fmt::format(

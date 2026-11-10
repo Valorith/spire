@@ -238,7 +238,7 @@ func (p *PlayerSupportController) updateChat(c echo.Context) error {
 				if result.Error != nil || result.RowsAffected == 0 {
 					return result.Error
 				}
-				return tx.Create(&models.PlayerSupportEntry{CaseID: view.ID, Kind: "chat_off", Actor: supportActor(scope.user), Text: "Turned off messages"}).Error
+				return tx.Create(&models.PlayerSupportEntry{CaseID: view.ID, Kind: "chat_off", Actor: supportActor(scope.user), Text: "Turned off player replies"}).Error
 			})
 			if err != nil {
 				return supportError(c, err)
@@ -288,19 +288,14 @@ func tellDelivery(err error) string {
 	return "failed"
 }
 
-// chatRecipient picks the account's character that can receive a tell now.
-func (p *PlayerSupportController) chatRecipient(accountID uint) (playersupport.OnlineCharacter, bool) {
-	online, ok := p.world.Roster().InZone[accountID]
-	return online, ok && !online.TellsOff
-}
-
+// startChat turns on player replies: the player's tells and #petition
+// messages are accepted onto this case. The player need not be in game, since
+// replies only arrive through the patched World's chat stream, which must be
+// open. An older patch is refused, so it never turns replies on.
 func (p *PlayerSupportController) startChat(scope supportScope, view supportCaseView) error {
 	accountID, err := chatAccount(scope, view)
 	if err != nil {
 		return err
-	}
-	if _, ok := p.chatRecipient(accountID); !ok {
-		return echo.NewHTTPError(http.StatusConflict, "No character on this account can receive tells right now")
 	}
 	if err := companionChatError(p.world.ChatCompanion()); err != nil {
 		return err
@@ -347,15 +342,14 @@ func chatAccount(scope supportScope, view supportCaseView) (uint, error) {
 	return petition.AccountID, err
 }
 
-// The caller holds the case row lock. Enabling a route and recording a first
-// outgoing tell can therefore happen in the same transaction. A new route is
-// recorded in the case timeline.
+// enableChat routes the account's replies to this case. The caller holds the
+// case row lock. A new route is recorded in the case timeline.
 func enableChat(tx *gorm.DB, record models.PlayerSupportCase, accountID uint, actor string) error {
 	if record.Status == "resolved" {
-		return echo.NewHTTPError(http.StatusConflict, "Reopen this case to enable messages")
+		return echo.NewHTTPError(http.StatusConflict, "Reopen this case to turn on player replies")
 	}
 	enabled := func() error {
-		return tx.Create(&models.PlayerSupportEntry{CaseID: record.ID, Kind: "chat_on", Actor: actor, Text: "Turned on messages"}).Error
+		return tx.Create(&models.PlayerSupportEntry{CaseID: record.ID, Kind: "chat_on", Actor: actor, Text: "Turned on player replies"}).Error
 	}
 	chat := models.PlayerSupportChat{AccountID: accountID, CaseID: record.ID}
 	created := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&chat)
@@ -378,7 +372,7 @@ func enableChat(tx *gorm.DB, record models.PlayerSupportCase, accountID uint, ac
 		return err
 	}
 	if previous.SourceKey == record.SourceKey && previous.Status != "resolved" {
-		return echo.NewHTTPError(http.StatusConflict, "This petition already has messaging enabled in another case")
+		return echo.NewHTTPError(http.StatusConflict, "Player replies for this petition are already on in another case")
 	}
 	// The selected case was verified against the account's newest petition.
 	// An older binding for this account must not carry over to that petition.
@@ -424,10 +418,9 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 	if mail {
 		recipient = view.Character
 	}
-	// Without the patch, a mailed message still arrives, but the player
-	// cannot answer in game, so it does not turn Messages on.
+	// Sending never changes whether the player's replies are accepted; that
+	// is the case's reply setting alone (startChat and "end").
 	companion := p.world.ChatCompanion()
-	replies := companion == playersupport.CompanionReady
 	var refusal error
 	switch {
 	case !roster.Known:
@@ -441,37 +434,7 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 	case mail && view.CharacterID == 0:
 		refusal = echo.NewHTTPError(http.StatusConflict, "The player is offline and the character that filed the petition is unavailable for mail")
 	}
-	var entry models.PlayerSupportEntry
-	var duplicate bool
-	err = scope.writeCase(func(tx *gorm.DB) error {
-		duplicate = false
-		record, err := scope.persist(tx, view.PlayerSupportCase)
-		if err != nil {
-			return err
-		}
-		key := fmt.Sprintf("chat-%d-%s", record.ID, input.RequestID)
-		err = tx.Where("request_key = ?", key).Take(&entry).Error
-		if err == nil {
-			duplicate = true
-			return nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if refusal != nil {
-			return refusal
-		}
-		if replies {
-			if err := enableChat(tx, record, accountID, supportActor(scope.user)); err != nil {
-				return err
-			}
-		}
-		entry = models.PlayerSupportEntry{
-			CaseID: record.ID, Kind: "chat_out", Actor: supportActor(scope.user), Text: text,
-			Delivery: "pending", Recipient: recipient, RequestKey: &key,
-		}
-		return tx.Create(&entry).Error
-	})
+	entry, duplicate, err := recordChatSend(scope, view, input.RequestID, text, recipient, refusal)
 	if err != nil {
 		return "", err
 	}
@@ -482,12 +445,6 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 	defer cancel()
 	outcome := "sent"
 	if mail {
-		// Mailing turned Messages on without opening the World chat stream,
-		// which a tell would have done. Keep it connected so the player's
-		// reply is not refused as "messaging unavailable".
-		if replies {
-			p.world.Resume()
-		}
 		outcome = "mail"
 		row := gmMailInsert{
 			CharID: view.CharacterID, Timestamp: time.Now().Unix(), From: playersupport.Identity,
@@ -508,23 +465,71 @@ func (p *PlayerSupportController) sendChat(scope supportScope, view supportCaseV
 	return outcome, nil
 }
 
+// recordChatSend records an outgoing message as pending before it is sent. A
+// repeated request ID returns the first request's entry with duplicate set.
+// It never touches the case's reply setting: sending neither turns player
+// replies on nor off.
+func recordChatSend(scope supportScope, view supportCaseView, requestID, text, recipient string, refusal error) (models.PlayerSupportEntry, bool, error) {
+	var entry models.PlayerSupportEntry
+	var duplicate bool
+	err := scope.writeCase(func(tx *gorm.DB) error {
+		duplicate = false
+		record, err := scope.persist(tx, view.PlayerSupportCase)
+		if err != nil {
+			return err
+		}
+		key := fmt.Sprintf("chat-%d-%s", record.ID, requestID)
+		err = tx.Where("request_key = ?", key).Take(&entry).Error
+		if err == nil {
+			duplicate = true
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if refusal != nil {
+			return refusal
+		}
+		if record.Status == "resolved" {
+			return echo.NewHTTPError(http.StatusConflict, "Reopen this case to message the player")
+		}
+		entry = models.PlayerSupportEntry{
+			CaseID: record.ID, Kind: "chat_out", Actor: supportActor(scope.user), Text: text,
+			Delivery: "pending", Recipient: recipient, RequestKey: &key,
+		}
+		return tx.Create(&entry).Error
+	})
+	return entry, duplicate, err
+}
+
 func (p *PlayerSupportController) receiveChat(frame playersupport.Frame) playersupport.TellDecision {
-	eqemu := p.db.GetEqemuDb()
-	if eqemu == nil {
-		return playersupport.TellUnavailable
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	decision, recorded := acceptChat(ctx, p.db.GetEqemuDb(), p.db.GetSpireDb(), frame)
+	if recorded {
+		p.world.Notify()
+	}
+	return decision
+}
+
+// acceptChat decides whether a player's tell joins a case. It is accepted
+// only while player replies are on for the account's open petition; with
+// replies off World tells the player their message was not sent. recorded is
+// false for a repeated request.
+func acceptChat(ctx context.Context, eqemu, db *gorm.DB, frame playersupport.Frame) (playersupport.TellDecision, bool) {
+	if eqemu == nil {
+		return playersupport.TellUnavailable, false
+	}
 	// World names the sending character; confirm it belongs to the account.
 	var sender int64
 	err := eqemu.WithContext(ctx).Table("character_data").
 		Where("id = ? AND account_id = ? AND name = ? AND deleted_at IS NULL", frame.CharacterID, frame.AccountID, frame.Character).
 		Count(&sender).Error
 	if err != nil {
-		return playersupport.TellUnavailable
+		return playersupport.TellUnavailable, false
 	}
 	if sender == 0 {
-		return playersupport.TellInvalid
+		return playersupport.TellInvalid, false
 	}
 	var petition models.Petition
 	err = eqemu.WithContext(ctx).Table("petitions AS p").Select("p.*").
@@ -532,14 +537,13 @@ func (p *PlayerSupportController) receiveChat(frame playersupport.Frame) players
 		Where("acct.id = ?", frame.AccountID).
 		Order("p.dib DESC").Take(&petition).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return playersupport.TellNoPetition
+		return playersupport.TellNoPetition, false
 	}
 	if err != nil {
-		return playersupport.TellUnavailable
+		return playersupport.TellUnavailable, false
 	}
-	db := p.db.GetSpireDb()
 	if db == nil {
-		return playersupport.TellUnavailable
+		return playersupport.TellUnavailable, false
 	}
 	text := strings.TrimSpace(strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -548,7 +552,7 @@ func (p *PlayerSupportController) receiveChat(frame playersupport.Frame) players
 		return r
 	}, frame.Text))
 	if text == "" || len(text) > 4096 {
-		return playersupport.TellInvalid
+		return playersupport.TellInvalid, false
 	}
 	decision := playersupport.TellMessagesOff
 	recorded := false
@@ -579,10 +583,7 @@ func (p *PlayerSupportController) receiveChat(frame playersupport.Frame) players
 		return result.Error
 	})
 	if err != nil {
-		return playersupport.TellUnavailable
+		return playersupport.TellUnavailable, false
 	}
-	if recorded {
-		p.world.Notify()
-	}
-	return decision
+	return decision, recorded
 }

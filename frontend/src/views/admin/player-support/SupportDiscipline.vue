@@ -1,5 +1,5 @@
 <template>
-  <b-modal visible scrollable centered size="lg" modal-class="support-modal" :title="'Discipline · ' + record.account"
+  <b-modal visible scrollable centered size="lg" modal-class="support-modal" :title="'Account Action · ' + record.account"
            :no-close-on-backdrop="saving" :no-close-on-esc="saving" :hide-header-close="saving" @hide="onHide">
     <p v-if="loadError" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ loadError }}</span></p>
     <p v-else-if="loading && !info" class="support-feedback discipline-flush" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Loading the account…</p>
@@ -53,13 +53,14 @@
         <p v-if="action === 'kick'" class="support-callout"><i class="fe fe-log-out" aria-hidden="true"></i>
           <span>{{ info.online_character }} is disconnected from the game. The account is not restricted and can log in again.</span></p>
         <p v-if="action === 'revoke'" class="support-callout"><i class="fe fe-mic-off" aria-hidden="true"></i>
-          <span>{{ info.account.revoked ? 'OOC, auction and shout are allowed again.' : 'Blocks OOC, auction and shout. Tells still work.' }}
+          <span>{{ info.account.revoked ? revokePolicy.restore : revokePolicy.revoke }}
             {{ info.online_character ? 'The change applies at once in game.' : 'It applies when the player next logs in.' }}</span></p>
 
         <label for="discipline-reason" class="support-label">Reason <span class="support-label-hint">(required, recorded on the case)</span></label>
         <textarea id="discipline-reason" ref="reason" v-model="reason" class="support-field" rows="2" maxlength="240" :disabled="saving"
-                  aria-describedby="discipline-reason-hint" @input="error = ''"></textarea>
+                  aria-describedby="discipline-reason-hint discipline-notice-hint" @input="error = ''"></textarea>
         <span id="discipline-reason-hint" class="discipline-hint" :class="{ 'is-short': reason.trim() && reasonBytes < 8 }">8–240 characters · {{ reasonBytes }}/240</span>
+        <span id="discipline-notice-hint" class="discipline-hint">The player is mailed a notice of this action. Your reason is not included.</span>
         <p v-if="error" class="support-callout is-danger discipline-gap" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
       </section>
     </div>
@@ -161,11 +162,19 @@ export default {
         options.push({ id: 'clear', label: 'Lift restriction', icon: 'fe fe-unlock', text: 'Lets the account log in again.', blocked: noWrite, button: 'Lift restriction' })
       }
       options.push(this.account.revoked
-        ? { id: 'revoke', label: 'Restore chat', icon: 'fe fe-mic', text: 'Allows OOC, auction and shout again.', blocked: revokeBlocked, button: 'Restore chat' }
-        : { id: 'revoke', label: 'Revoke chat', icon: 'fe fe-mic-off', text: 'Blocks OOC, auction and shout. Tells still work.', blocked: revokeBlocked, button: 'Revoke chat' })
+        ? { id: 'revoke', label: 'Restore chat', icon: 'fe fe-mic', text: this.revokePolicy.restore, blocked: revokeBlocked, button: 'Restore chat' }
+        : { id: 'revoke', label: 'Revoke chat', icon: 'fe fe-mic-off', text: this.revokePolicy.revoke, blocked: revokeBlocked, button: 'Revoke chat' })
       return options
     },
     currentOption () { return this.options.find(option => option.id === this.action) || {} },
+    // Only the updated patch has a fixed chat policy. On stock EQEmu and the
+    // earlier patch the revoked flag also blocks tells, blocks OOC and auction
+    // only when they are server-wide, and never blocks shout.
+    revokePolicy () {
+      return this.features.revoke
+        ? { revoke: 'Blocks OOC, auction and shout. Tells still work.', restore: 'Allows OOC, auction and shout again.' }
+        : { revoke: 'Restricts the account’s chat. Exactly which channels depends on the server build.', restore: 'Lifts the account’s chat restriction.' }
+    },
     reasonBytes () { return new TextEncoder().encode(this.reason.trim()).length },
     minUntil () { return localValue(new Date(this.now + 60000)) },
     untilIso () {

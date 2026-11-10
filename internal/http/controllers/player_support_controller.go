@@ -37,6 +37,8 @@ type PlayerSupportController struct {
 	log         *logger.AppLogger
 	// postWebhook sends petition alerts; tests replace it.
 	postWebhook func(ctx context.Context, url string, body []byte) error
+	// mailNotice mails an account action notice; tests replace it.
+	mailNotice func(c echo.Context, scope supportScope, view supportCaseView, notice supportNotice) error
 	// presence holds who is viewing each case.
 	presence supportPresence
 }

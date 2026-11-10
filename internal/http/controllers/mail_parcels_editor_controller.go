@@ -556,6 +556,17 @@ func (m *MailParcelsEditorController) deliverDirectMail(c echo.Context, db *gorm
 	if db == nil {
 		db = m.db.Get(models.Mail{}, c)
 	}
+	result, err := m.writeDirectMail(c, db, input, characterIDs)
+	if err != nil {
+		return mailParcelsMutationError(c, err, "GM direct message")
+	}
+	return c.JSON(http.StatusCreated, result)
+}
+
+// writeDirectMail writes validated direct mail and its audit in one
+// transaction. With a Player Support delivery on the context, the audit is the
+// case's delivery record and the recipient must be the petition character.
+func (m *MailParcelsEditorController) writeDirectMail(c echo.Context, db *gorm.DB, input gmMailSendInput, characterIDs []uint) (gmMailSendResult, error) {
 	result := gmMailSendResult{Audience: "direct", Recipients: []mailParcelsCharacterReference{}}
 	var auditID uint
 	err := db.Transaction(func(tx *gorm.DB) error {
@@ -581,10 +592,7 @@ func (m *MailParcelsEditorController) deliverDirectMail(c echo.Context, db *gorm
 		result.AuditID = auditID
 		return err
 	})
-	if err := m.finishDelivery(c, auditID, err); err != nil {
-		return mailParcelsMutationError(c, err, "GM direct message")
-	}
-	return c.JSON(http.StatusCreated, result)
+	return result, m.finishDelivery(c, auditID, err)
 }
 
 func (m *MailParcelsEditorController) broadcastAudience(c echo.Context) error {

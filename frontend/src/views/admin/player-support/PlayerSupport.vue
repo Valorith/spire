@@ -138,7 +138,7 @@
                 <span class="support-row-bottom">
                   <span class="support-chip" :class="statusTone(item.status)">{{ statusLabel(item.status) }}</span>
                   <span v-if="item.urgency > 0" class="support-chip" :class="urgencyTone(item.urgency)"><i class="fe fe-flag" aria-hidden="true"></i> {{ urgency(item.urgency) }}</span>
-                  <span v-if="item.messages_on" class="support-chip is-success" title="Messages are on for this case"><i class="fe fe-message-circle" aria-hidden="true"></i> Live</span>
+                  <span v-if="item.messages_on" class="support-chip is-success" title="Player replies are on for this case"><i class="fe fe-message-circle" aria-hidden="true"></i> Replies on</span>
                   <span v-if="item.escalated" class="support-chip is-danger"><i class="fe fe-alert-octagon" aria-hidden="true"></i> Escalated</span>
                   <span v-if="item.age_state === 'overdue'" class="support-chip is-danger" title="No staff response for over 2 hours">Overdue</span>
                   <span v-if="item.follow_up" class="support-chip is-warning" title="Waiting on the player for 48 hours">Follow up</span>
@@ -265,7 +265,7 @@
           </div>
 
           <support-live-chat v-if="chatOpen" :key="selectedKey" :record="record" :connection-id="connectionId" :can-write="canWrite && record.status !== 'resolved'"
-                             :saved-replies="replies" :viewers="viewers" @seen="noteSeen" @composing="setComposing" />
+                             :saved-replies="replies" :viewers="viewers" :features="features" @seen="noteSeen" @composing="setComposing" />
           <support-evidence v-else-if="evidenceOpen" :key="'evidence-' + selectedKey + '-' + evidenceVersion" :record="record" :connection-id="connectionId"
                             :can-read-chat="canReadChat" :can-restore="canParcel && canWrite && record.status !== 'resolved'" @trace="openItemTrace" />
           <div v-else ref="timeline" class="support-timeline">
@@ -387,9 +387,9 @@
                 <span class="support-action-text"><strong>Quests &amp; progress</strong><small>Tasks, lockouts and flags</small></span>
                 <i class="fe fe-chevron-right support-action-chevron" aria-hidden="true"></i>
               </button>
-              <button v-if="canDiscipline" type="button" class="support-action" aria-label="Discipline" :disabled="busy" @click="delivery = 'discipline'">
+              <button v-if="canDiscipline" type="button" class="support-action" aria-label="Account Action" :disabled="busy" @click="delivery = 'discipline'">
                 <i class="fe fe-shield" aria-hidden="true"></i>
-                <span class="support-action-text"><strong>Discipline</strong><small>Kick, suspend, ban, chat</small></span>
+                <span class="support-action-text"><strong>Account Action</strong><small>Kick, suspend, ban, chat</small></span>
                 <i class="fe fe-chevron-right support-action-chevron" aria-hidden="true"></i>
               </button>
             </div>
@@ -516,7 +516,7 @@
           <span>This reply may have reached {{ record.character }}, but its delivery was not confirmed. Check the conversation and in-game mail before sending it again.</span>
         </p>
         <p v-else-if="resolveReplyRecord && record" class="support-resolve-hint">
-          Sent as a tell if {{ record.online_character || record.character }} is in game with messages on, otherwise by in-game mail to {{ record.character }}.
+          Sent as a tell if {{ record.online_character || record.character }} is in game and it fits in a tell, otherwise by in-game mail to {{ record.character }}.
         </p>
       </template>
       <div v-if="record && (record.native_open || record.checked_out)" class="support-settings support-resolve-close">
@@ -599,8 +599,8 @@ const titles = {
   pending: 'Delivery unverified',
   chat_in: 'Player tell',
   chat_out: 'Game Master tell',
-  chat_on: 'Messages on',
-  chat_off: 'Messages off',
+  chat_on: 'Player replies on',
+  chat_off: 'Player replies off',
   character_move: 'Character move',
   corpse_move: 'Corpse move',
   claim: 'Claimed',
@@ -845,7 +845,7 @@ export default {
         move: { label: 'Move character', allowed: this.canMove && this.companion !== 'missing', open: () => { this.delivery = 'move' } },
         tasks: { label: 'Tasks', allowed: this.canInspectRecovery, open: () => this.openProgress('tasks') },
         lockouts: { label: 'Lockouts', allowed: this.canInspectRecovery, open: () => this.openProgress('lockouts') },
-        discipline: { label: 'Discipline', allowed: this.canDiscipline, open: () => { this.delivery = 'discipline' } }
+        discipline: { label: 'Account Action', allowed: this.canDiscipline, open: () => { this.delivery = 'discipline' } }
       }
       return { hint: category.hint, tools: category.tools.map(id => ({ id, ...tools[id] })).filter(tool => tool.allowed).slice(0, 2) }
     },
@@ -909,7 +909,7 @@ export default {
     },
     chatTileHint () {
       if (this.companion === 'missing' || this.companion === 'outdated') return 'History, and mail if offline'
-      return this.record && this.record.messages_on ? 'Messages are on' : 'Tells, or mail if offline'
+      return this.record && this.record.messages_on ? 'Player replies on' : 'Tells, or mail if offline'
     },
     // The account is in game on a character other than the one that filed.
     onAlt () {
@@ -989,7 +989,7 @@ export default {
         resolved: 'Resolved cases are kept here for reference.',
         attention: 'Overdue, escalated and follow-up cases appear here.',
         waiting: 'Cases you mark Wait for player appear here.'
-      }[this.filter] || 'Petitions players file with /guidehelp or #petition appear here automatically.'
+      }[this.filter] || 'Petitions players file with #petition appear here automatically.'
     }
   },
   watch: {
@@ -1623,7 +1623,8 @@ export default {
         this.resolveBusy = false
       }
     },
-    // A tell when live chat is ready and the reply fits; otherwise in-game mail.
+    // A tell when the player can get one and the reply fits; otherwise in-game
+    // mail. Player replies do not matter: they only affect the player's answers.
     // Returns the delivery.
     async sendSavedReply (reply) {
       const record = this.record
@@ -1635,7 +1636,7 @@ export default {
       } catch (error) {
         chat = null
       }
-      if (chat && chat.state === 'ready' && chat.active && fitsTell(body)) {
+      if (chat && chat.state === 'ready' && fitsTell(body)) {
         const response = await SpireApi.v1().put(url + '/chat', { action: 'send', text: body, request_id: this.resolveRequestId }, this.params())
         // "sent", "mail", "failed", "unconfirmed" or "pending". An empty answer
         // is the older 204, which did not report the outcome, so it counts as sent.
@@ -1651,7 +1652,7 @@ export default {
         ? 'the petition is checked out in game.'
         : !record.character_id
             ? 'the petitioning character is no longer available.'
-            : 'messages are off, and mailing it needs Mail & Parcels send access.'
+            : 'the player cannot get a tell now, and mailing it needs Mail & Parcels send access.'
       throw new Error(`This reply cannot be sent: ${reason}`)
     },
 

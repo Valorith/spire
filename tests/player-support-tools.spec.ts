@@ -1,7 +1,7 @@
 import { expect, Page, test } from '@playwright/test';
 
 // Player Support tools: Evidence, Snapshots, Items, Recovery, Quests & progress,
-// Discipline, Linked accounts and Bug reports. Every API route is mocked.
+// Account Action, Linked accounts and Bug reports. Every API route is mocked.
 
 const submitted = 1794116400;
 const endpoint = '/api/v1/player-support/cases';
@@ -259,40 +259,49 @@ const discipline = (overrides: Json = {}) => ({
   online_character: 'Aranel', local_world: true, sanctionable: true, sanction_note: '', legacy_sanction: false, ...overrides,
 });
 
+const noticeHint = 'The player is mailed a notice of this action. Your reason is not included.';
+
 test('suspends after a second confirmation, refuses staff accounts, and kicks', async ({ page }) => {
   const { writes } = await mockTools(page, {
     responses: { discipline: discipline() },
     replies: {
-      sanction: { status: 200, json: { status: 'sent', message: 'The account is blocked at login. Aranel was in game and has been kicked.' } },
-      kick: { status: 200, json: { status: 'sent', message: 'Kick sent. Aranel should leave the game within a few seconds.' } },
+      sanction: { status: 200, json: { status: 'sent', notice: 'mailed', message: 'The account is blocked at login. Aranel was in game and has been kicked. The player was notified by mail.' } },
+      kick: { status: 200, json: { status: 'sent', notice: 'failed', message: 'Kick sent. Aranel should leave the game within a few seconds. The notice could not be mailed to the player.' } },
     },
   });
   await openCase(page);
-  await page.getByRole('button', { name: 'Discipline', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Discipline · norrathguide' });
+  await page.getByRole('button', { name: 'Account Action', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Account Action · norrathguide' });
   await expect(dialog.getByText('Player', { exact: true })).toBeVisible();
   // Revoking chat while Aranel is in game needs the patch.
   await expect(dialog.getByRole('button', { name: /Revoke chat/ })).toBeDisabled();
   await expect(dialog.getByText('Aranel is in game. Revoking chat for a player in game needs the updated Player Support patch; kick them first or wait until they log out.')).toBeVisible();
+  // Without the updated patch the channels depend on the server build.
+  await expect(dialog.getByText('Restricts the account’s chat. Exactly which channels depends on the server build.')).toBeVisible();
+  await expect(dialog.getByText(/Tells still work/)).toHaveCount(0);
 
   await dialog.getByRole('button', { name: /^Suspend/ }).click();
   await dialog.getByLabel('Until').fill('2030-01-02T15:30');
+  await expect(dialog.getByText(noticeHint)).toBeVisible();
+  await expect(dialog.getByLabel(reasonField)).toHaveAccessibleDescription(new RegExp(noticeHint.replace(/\./g, '\\.') + '$'));
   await dialog.getByLabel(reasonField).fill('Repeated harassment in OOC');
   await dialog.getByRole('button', { name: 'Suspend account' }).click();
   await expect(dialog.getByText(/^Suspend norrathguide until .+\?$/)).toBeVisible();
   await expect(dialog.getByText('Every character on it is blocked at login and kicked if in game.')).toBeVisible();
   expect(writes.filter(item => item.path === 'sanction')).toHaveLength(0);
   await dialog.getByRole('button', { name: 'Suspend account' }).click();
-  await expect(dialog.getByRole('status')).toHaveText('The account is blocked at login. Aranel was in game and has been kicked.');
+  await expect(dialog.getByRole('status')).toHaveText('The account is blocked at login. Aranel was in game and has been kicked. The player was notified by mail.');
   expect(writes.find(item => item.path === 'sanction')!.input).toEqual({
     mode: 'suspend', until: new Date('2030-01-02T15:30').toISOString(), expected_suspended_until: null,
     reason: 'Repeated harassment in OOC', request_id: requestId,
   });
 
   await dialog.getByRole('button', { name: /^Kick Aranel/ }).click();
+  await expect(dialog.getByText(noticeHint)).toBeVisible();
   await dialog.getByLabel(reasonField).fill('Disconnect to clear a stuck state');
   await dialog.getByRole('button', { name: 'Kick', exact: true }).click();
-  await expect(dialog.getByRole('status')).toHaveText('Kick sent. Aranel should leave the game within a few seconds.');
+  // A notice that could not be mailed does not undo the kick.
+  await expect(dialog.getByRole('status')).toHaveText('Kick sent. Aranel should leave the game within a few seconds. The notice could not be mailed to the player.');
   expect(writes.find(item => item.path === 'kick')!.input).toEqual({ reason: 'Disconnect to clear a stuck state', request_id: requestId });
 });
 
@@ -300,12 +309,31 @@ test('disables suspend and ban for a staff account with the sanction note', asyn
   const note = 'This account has status 100. Spire suspends and bans player accounts only.';
   await mockTools(page, { responses: { discipline: discipline({ account: { ...discipline().account, status: 100 }, sanctionable: false, sanction_note: note }) } });
   await openCase(page);
-  await page.getByRole('button', { name: 'Discipline', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Discipline · norrathguide' });
+  await page.getByRole('button', { name: 'Account Action', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Account Action · norrathguide' });
   await expect(dialog.getByText('Status 100', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /^Suspend/ })).toBeDisabled();
   await expect(dialog.getByRole('button', { name: /^Ban/ })).toBeDisabled();
   await expect(dialog.getByText(note)).toHaveCount(2);
+});
+
+test('states the exact chat policy on the updated patch', async ({ page }) => {
+  const { writes } = await mockTools(page, {
+    features: { revoke: true },
+    responses: { discipline: discipline({ online_character: '' }) },
+    replies: { revoke: { status: 200, json: { status: 'sent', notice: 'mailed', message: 'It applies when the player next logs in. The player was notified by mail.' } } },
+  });
+  await openCase(page);
+  await page.getByRole('button', { name: 'Account Action', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Account Action · norrathguide' });
+  const revoke = dialog.getByRole('button', { name: /Revoke chat/ });
+  await expect(revoke).toContainText('Blocks OOC, auction and shout. Tells still work.');
+  await revoke.click();
+  await expect(dialog.getByText('Blocks OOC, auction and shout. Tells still work. It applies when the player next logs in.')).toBeVisible();
+  await dialog.getByLabel(reasonField).fill('Spamming the auction channel');
+  await dialog.getByRole('button', { name: 'Revoke chat', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('It applies when the player next logs in. The player was notified by mail.');
+  expect(writes.find(item => item.path === 'revoke')!.input).toEqual({ revoked: true, reason: 'Spamming the auction channel', request_id: requestId });
 });
 
 function recovery(features: Json) {

@@ -84,12 +84,11 @@ async function mockSupport(page: Page, write: string[], connection = { id: 7 }, 
       if (input.action === 'start') active = true;
       if (input.action === 'end') active = false;
       if (input.action === 'send') {
-        active = true;
+        // Sending never changes Player replies; the player's answer is
+        // recorded only while replies are on, as the server does.
         const created_at = new Date().toISOString();
-        messages.push(
-          { id: 1, kind: 'chat_out', text: input.text, delivery: 'sent', created_at },
-          { id: 2, kind: 'chat_in', text: 'Thanks, I found it.', created_at },
-        );
+        messages.push({ id: messages.length + 1, kind: 'chat_out', text: input.text, delivery: 'sent', created_at });
+        if (active) messages.push({ id: messages.length + 1, kind: 'chat_in', text: 'Thanks, I found it.', created_at });
       }
       return route.fulfill({ status: 204 });
     }
@@ -407,28 +406,65 @@ test('moves a corpse to the player and shows the notice receipt', async ({ page 
   expect(writes[0].input).toMatchObject({ to_player: true, destination: 0, corpse_id: 42, source_instance: 8 });
 });
 
-test('shows account presence and enables petition messages on the first Game Master tell', async ({ page }) => {
+const repliesOffHint = 'Player replies are off. The player can read this but cannot answer on this case; if they try, the game tells them their message was not sent.';
+
+test('shows account presence and sends tells whatever Player replies says', async ({ page }) => {
   const writes = await mockSupport(page, ['player-support']);
   await page.goto('/admin/player-support');
   await expect(page.getByRole('button', { name: /^Aranel / }).getByText('Online', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Thornwick / }).getByText('Offline', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Live chat', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Messages off' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Player in game' })).toBeVisible();
+  const replies = page.getByText(/^Player replies: (On|Off)$/);
+  await expect(replies).toHaveText('Player replies: Off');
+  // The composer is enabled with replies off, and says what the player sees.
+  await expect(page.getByLabel('Tell Aranel')).toBeEnabled();
+  await expect(page.getByText(repliesOffHint)).toBeVisible();
+  // Without the marquee feature, nothing mentions a marquee.
+  await expect(page.getByText('Tells you send reach the player now. Turn on replies to record their answers here.')).toBeVisible();
+  await expect(page.getByText(/marquee/)).toHaveCount(0);
   await page.getByLabel('Tell Aranel').fill('Your parcel is 100% ready.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   const transcript = page.getByRole('log', { name: 'Chat messages' });
-  await expect(transcript.getByText('Game Master', { exact: true })).toBeVisible();
+  await expect(transcript.getByText('Your parcel is 100% ready.')).toBeVisible();
+  // Sending leaves replies off; the player's answer is not recorded.
+  await expect(replies).toHaveText('Player replies: Off');
+  await expect(transcript.getByText('Thanks, I found it.')).toHaveCount(0);
+  await expect(page.getByLabel('Tell Aranel')).toBeEnabled();
+
+  await page.getByRole('button', { name: 'Turn on replies' }).click();
+  await expect(replies).toHaveText('Player replies: On');
+  await expect(page.getByText(repliesOffHint)).toHaveCount(0);
+  await page.getByLabel('Tell Aranel').fill('Did it arrive?');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(transcript.getByText('Thanks, I found it.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Messages on' })).toBeVisible();
-  await page.getByRole('button', { name: 'Turn off messages' }).click();
-  await expect(page.getByRole('heading', { name: 'Messages off' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Enable messages' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Turn off replies' }).click();
+  await expect(replies).toHaveText('Player replies: Off');
+  await expect(page.getByRole('button', { name: 'Turn on replies' })).toBeEnabled();
   await expect(page.getByLabel('Tell Aranel')).toBeEnabled();
   await expect(transcript.getByText('Thanks, I found it.')).toBeVisible();
-  expect(writes.map(write => write.input.action)).toEqual(['send', 'end']);
+  expect(writes.map(write => write.input.action)).toEqual(['send', 'start', 'send', 'end']);
   expect(writes[0]).toMatchObject({
     connection: '7', input: { text: 'Your parcel is 100% ready.', request_id: expect.stringMatching(/^[a-f0-9]{32}$/) },
   });
+});
+
+test('says a tell also shows as a marquee when World has the feature, and when the marquee is cut', async ({ page }) => {
+  const writes = await mockSupport(page, ['player-support'], { id: 7 }, { features: { patch: 3, revoke: true, marquee: true } });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('button', { name: 'Live chat', exact: true }).click();
+  await expect(page.getByText('Tells you send reach the player now and also show on their screen as a marquee. Turn on replies to record their answers here.')).toBeVisible();
+  const cut = page.getByText('The on-screen marquee shows the first part; the tell has the full message.');
+  // "Game Master: " plus 107 characters fits the 120-character marquee.
+  await page.getByLabel('Tell Aranel').fill('a'.repeat(107));
+  await expect(cut).toHaveCount(0);
+  await page.getByLabel('Tell Aranel').fill('a'.repeat(108));
+  await expect(cut).toBeVisible();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByLabel('Tell Aranel')).toHaveValue('');
+  await expect(cut).toHaveCount(0);
+  expect(writes[0].input).toMatchObject({ action: 'send', text: 'a'.repeat(108) });
 });
 
 test('messages the player on any character of the petitioning account', async ({ page }) => {
@@ -459,7 +495,7 @@ test('mails a Game Master message when no character on the account is in game', 
   const sends: Record<string, unknown>[] = [];
   await page.route(`**${endpoint}/${caseKey}/chat?*`, route => {
     if (route.request().method() === 'GET') {
-      return route.fulfill({ json: { state: 'offline', active: messages.length > 0, mail_to: 'Aranel', cursor: messages.length, messages } });
+      return route.fulfill({ json: { state: 'offline', active: false, mail_to: 'Aranel', cursor: messages.length, messages, companion: 'ready' } });
     }
     const input = route.request().postDataJSON();
     sends.push(input);
@@ -469,12 +505,19 @@ test('mails a Game Master message when no character on the account is in game', 
   await page.goto(`/admin/player-support?case=${caseKey}`);
   await page.getByRole('button', { name: 'Live chat', exact: true }).click();
   await expect(page.getByText(/Messages you send now are mailed to Aranel/)).toBeVisible();
+  await expect(page.getByText(/marquee/)).toHaveCount(0);
   await expect(page.getByText(/This message was sent to you in response to your petition while you were offline/)).toBeVisible();
+  // Replies can be turned on while nobody is in game; mailing does not do it.
+  await expect(page.getByText('Player replies: Off', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Turn on replies' })).toBeEnabled();
+  await expect(page.getByText(repliesOffHint)).toBeVisible();
   await page.getByLabel('Mail Aranel').fill('Your tunic is waiting at the parcel merchant.');
   await page.getByRole('button', { name: 'Send as mail' }).click();
   const transcript = page.getByRole('log', { name: 'Chat messages' });
   await expect(transcript.getByText('Your tunic is waiting at the parcel merchant.')).toBeVisible();
   await expect(transcript.getByText('Sent by mail')).toBeVisible();
+  await expect(page.getByText('Player replies: Off', { exact: true })).toBeVisible();
+  expect(sends).toHaveLength(1);
   expect(sends[0]).toMatchObject({ action: 'send', text: 'Your tunic is waiting at the parcel merchant.', request_id: expect.stringMatching(/^[a-f0-9]{32}$/) });
 });
 
@@ -495,7 +538,8 @@ test('turns off patch-only tools when the game server lacks the Player Support p
   await page.getByRole('button', { name: 'Open live chat' }).click();
   await expect(page.getByRole('heading', { name: 'Needs the server patch' })).toBeVisible();
   await expect(page.getByText('Aranel is in game, but World does not have the Player Support patch')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Enable messages' })).toBeDisabled();
+  // An older or missing patch never turns replies on.
+  await expect(page.getByRole('button', { name: 'Turn on replies' })).toBeDisabled();
   await expect(page.getByLabel('Tell Aranel')).toHaveCount(0);
 });
 
@@ -506,7 +550,7 @@ test('summarizes the queue, flags new replies, and offers quick text', async ({ 
   await expect(summary.getByText('Urgent')).toBeVisible();
   const thornwick = page.getByRole('button', { name: /^Thornwick / });
   await expect(thornwick.getByText('New', { exact: true })).toBeVisible();
-  await expect(thornwick.getByText('Live', { exact: true })).toBeVisible();
+  await expect(thornwick.getByText('Replies on', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Live chat', exact: true }).click();
   await page.getByRole('group', { name: 'Quick replies' }).getByRole('button', { name: 'Can you tell me more about what happened?' }).click();
@@ -797,7 +841,7 @@ test('mails a saved reply before resolving, and keeps the case open when the mai
   await expect(select.locator('optgroup[label="Reply and resolve"] option')).toHaveText(['Item restored']);
   await expect(select.locator('optgroup[label="Saved replies"] option')).toHaveText(['Need details']);
   await select.selectOption({ label: 'Item restored' });
-  await expect(dialog.getByText('Sent as a tell if Aranel is in game with messages on, otherwise by in-game mail to Aranel.')).toBeVisible();
+  await expect(dialog.getByText('Sent as a tell if Aranel is in game and it fits in a tell, otherwise by in-game mail to Aranel.')).toBeVisible();
   const send = dialog.getByRole('button', { name: 'Send and resolve' });
   await send.click();
   await expect(dialog.getByRole('alert')).toHaveText('Mail delivery is unavailable right now.');
@@ -914,7 +958,8 @@ test('treats the duplicate answer to a retried saved reply as sent and resolves'
   expect(writes[0].input).toMatchObject({ text: 'Sent saved reply: Item restored' });
 });
 
-// The player is in game with messages on, so the saved reply goes as a tell.
+// The player is in game, so the saved reply goes as a tell, though Player
+// replies are off.
 // Each tell is answered with the next delivery; once they run out, the shared
 // mock answers the older empty 204.
 async function mockTellReply(page: Page, deliveries: string[]) {
@@ -923,7 +968,7 @@ async function mockTellReply(page: Page, deliveries: string[]) {
   });
   const sends: string[] = [];
   await page.route(`**${endpoint}/${caseKey}/chat?*`, route => {
-    if (route.request().method() === 'GET') return route.fulfill({ json: { state: 'ready', active: true, recipient: 'Aranel', cursor: 0, messages: [] } });
+    if (route.request().method() === 'GET') return route.fulfill({ json: { state: 'ready', active: false, recipient: 'Aranel', cursor: 0, messages: [] } });
     sends.push(route.request().postDataJSON().request_id);
     const delivery = deliveries[sends.length - 1];
     return delivery ? route.fulfill({ json: { delivery } }) : route.fallback();

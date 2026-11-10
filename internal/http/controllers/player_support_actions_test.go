@@ -148,6 +148,34 @@ func TestSupportPresenceState(t *testing.T) {
 	}
 }
 
+func TestRevokeSummary(t *testing.T) {
+	updated := playersupport.Features{Patch: 3, Revoke: true}
+	cases := []struct {
+		revoked  bool
+		features playersupport.Features
+		want     string
+	}{
+		{true, updated, "Revoked OOC, auction and shout for norrathguide"},
+		{false, updated, "Restored OOC, auction and shout for norrathguide"},
+		{true, playersupport.Features{Patch: 2}, "Revoked chat for norrathguide"},
+		{false, playersupport.Features{}, "Restored chat for norrathguide"},
+	}
+	for _, test := range cases {
+		if got := supportRevokeSummary("norrathguide", test.revoked, test.features); got != test.want {
+			t.Errorf("revoked %v, %+v: %q, want %q", test.revoked, test.features, got, test.want)
+		}
+	}
+}
+
+func TestRevokeAppliedInGame(t *testing.T) {
+	if got := supportRevokeAppliedInGame(true); got != "OOC, auction and shout are blocked now. Tells still work." {
+		t.Errorf("revoke: %q", got)
+	}
+	if got := supportRevokeAppliedInGame(false); got != "OOC, auction and shout are allowed again." {
+		t.Errorf("restore: %q", got)
+	}
+}
+
 func TestRevokeRefusal(t *testing.T) {
 	patched := playersupport.Features{Patch: 3, Revoke: true}
 	cases := []struct {

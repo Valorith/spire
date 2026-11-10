@@ -286,7 +286,7 @@ func TestPetitionCloseResult(t *testing.T) {
 		message      string
 	}{
 		{"closed", false, "closed", "sent", "Removed from the in-game queue. The player can file a new petition."},
-		{"deleted", true, "deleted", "sent", "Removed from the database. Zones that loaded it keep it until the next petition is filed or withdrawn; #petition works now, /petition may still say one is open."},
+		{"deleted", true, "deleted", "sent", "Removed from the database. Zones that loaded it keep it until the next petition is filed or withdrawn; #petition already sees the change."},
 		{"deleted", false, "deleted", "sent", "Removed from the database. Zones that loaded it keep it until the next petition is filed or withdrawn, so the player may be told one is still open until then."},
 		{"checked_out", false, "checked_out", "failed", "Not cleared: a Game Master checked it out in game. Clear it with #delpetition."},
 		{"gone", false, "gone", "sent", "It was already cleared in game."},

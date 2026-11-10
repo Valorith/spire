@@ -20,7 +20,7 @@ Player Support works on a stock EQEmu World. Spire checks the local World for th
 |---|---|
 | The queue, case workflow and notes, mail and parcel delivery, corpse inspection, presence, and every tool marked "stock" in [What each server gets](#what-each-server-gets) | Live chat and in-game replies, character and corpse moves, move and parcel notices in game, and the `#petition` command and menu |
 
-- **Live chat** shows the conversation history. A message to a player with no character in game is still mailed, but it doesn't turn on **Messages**, because the player can't reply in game. When the player is in game, Live chat says tells need the patch and points to **Reply by mail**.
+- **Live chat** shows the conversation history. A message to a player with no character in game is still mailed. **Player replies** cannot be turned on, because the player can't reply in game. When the player is in game, Live chat says tells need the patch and points to **Reply by mail**.
 - **Move character** is unavailable, and the recovery window explains why. Corpses can still be inspected.
 - A World with an older revision of the patch keeps moves and notices, and turns off Live chat until World and zones are rebuilt with the current patch.
 
@@ -36,11 +36,15 @@ Spire rechecks World about every 30 seconds while the patch is missing, so the t
 
    It only calls APIs that both trees share. For example, it starts transactions with a plain `START TRANSACTION` query because `TransactionBegin()` returns a result in Valorith/Server but `void` upstream.
 2. Build and install the patched World and zone binaries on your test installation. Keep the World console reachable from Spire on IPv4 loopback. Spire reads its port from `server.world.telnet` in `eqemu_config.json`.
-3. Open **Server Admin → Player Support** and select a petition. Send a tell from **Live chat** to turn on **Messages** automatically. Use **Enable messages** if you want the player to write first. In EverQuest, the player can answer with `#petition <message>`, `/reply <message>` after a Game Master tell, or `/tell *GameMaster <message>`.
+3. Open **Server Admin → Player Support** and select a petition. Send a tell from **Live chat**, and use **Turn on replies** when you want the player's answers on the case. In EverQuest, the player can answer with `#petition <message>`, `/reply <message>` after a Game Master tell, or `/tell *GameMaster <message>`.
 
-Turning **Messages** on or off is recorded on the case timeline with the staff member's name. When you resolve a case you can add an optional resolution summary, which is shown on the timeline next to the status change.
+**Player replies** decides only whether the player's answers are accepted onto the case. It never limits what staff send: with write access, the message box works on any open case whatever the setting, as a tell when the player is in game and by mail when nobody on the account is. Sending does not turn replies on or off. **Turn on replies** works while the player is offline too; it needs the current patch on the server Spire runs beside, and an older patch never turns replies on. While replies are off, the message box says so: the player can read your messages, and if they answer, the game tells them "Your message was not sent. Replies to Game Master are not open on your petition right now; a Game Master will open them when they need your answer." Nothing is recorded on the case.
 
-Spire grants chat actions through Player Support write access. The patch reserves `GameMaster` and `*GameMaster` as tell destinations. A reply is recorded and acknowledged when it comes from any character on the petitioning account, the in-game petition is active, and **Messages** is on for that case. Every tell, in either direction, lands in the same conversation, labelled with the character that sent or received it and marked **alt** when that is not the character that filed the petition. Players receive a private reason if they have no active petition or **Messages** is off. Turning off **Messages** or resolving the case preserves the transcript.
+With the updated patch, a message World delivers as a tell is also shown to that character as a yellow on-screen marquee, "Game Master: <message>", for 6 to 15 seconds depending on its length. The marquee is cut to 120 characters and ends in "..."; the tell always has the full message, and Live chat says so while a draft is longer than the marquee. Mail, account action notices and replies World turns away get no marquee. Live chat mentions the marquee only when World reports the `marquee` feature.
+
+Turning **Player replies** on or off is recorded on the case timeline with the staff member's name. When you resolve a case you can add an optional resolution summary, which is shown on the timeline next to the status change.
+
+Spire grants chat actions through Player Support write access. The patch reserves `GameMaster` and `*GameMaster` as tell destinations. A reply is recorded and acknowledged when it comes from any character on the petitioning account, the in-game petition is active, and **Player replies** is on for that case. Every tell, in either direction, lands in the same conversation, labelled with the character that sent or received it and marked **alt** when that is not the character that filed the petition. Players receive a private reason if they have no active petition or **Player replies** is off. Turning off **Player replies** or resolving the case preserves the transcript.
 
 When no character on the petition's account is in game, a message sent from **Live chat** is mailed to the character that filed the petition instead, from GameMaster with the subject "Response to your petition". The mail reads "This message was sent to you in response to your petition while you were offline: " followed by the message. It is kept in the same conversation, marked **Sent by mail** with a mail icon. A player who is in game with tells turned off is not mailed; Live chat explains that tells are off.
 
@@ -48,17 +52,17 @@ Spire and the patched World use console protocol version 2 to confirm replies. I
 
 The patched World also refreshes the parcel window and shows the native arrival notice for online recipients when Spire sends a parcel to the local server. Parcels are committed before World is notified. Players can collect queued parcels from a parcel merchant when they next open the window.
 
-Test an account with its petitioning character offline and an alternate online. The queue should show **Online**, the case header **On <alternate>**, and tells should reach the alternate and appear in the same conversation. Also test that reconnecting World restores messaging on an enabled petition and that switching to an unrelated database connection shows **Unknown** for presence.
+Test an account with its petitioning character offline and an alternate online. The queue should show **Online**, the case header **On <alternate>**, and tells should reach the alternate and appear in the same conversation. Also test that reconnecting World restores replies on a petition with **Player replies** on and that switching to an unrelated database connection shows **Unknown** for presence.
 
 ## Filing petitions with #petition
 
-The patch adds a `#petition` command for players. It works alongside `/guidehelp`, which is how current clients open the petition window. Petitions are one per account, and any character on the account can use the command.
+The patch adds a `#petition` command for players. Petitions are one per account, and any character on the account can use the command.
 
-- `#petition` with no message shows the petition menu: each open petition on the account with its number, the character that filed it, how long ago, its status, whether **Messages** is on, and a preview of the request. Saylinks refresh the menu, explain how to add a message, and withdraw the petition after a confirmation.
-- `#petition <message>` files a petition when the account has none. It creates the same petition as `/guidehelp`, so it appears in Player Support right away.
-- While the account has an open petition, `#petition <message>` adds to it. The text goes to Game Master like a tell. Spire records it on the case when **Messages** is on, and otherwise tells the player why it could not.
+- `#petition` with no message shows the petition menu: each open petition on the account with its number, the character that filed it, how long ago, its status, a **Replies** line from Spire's **Player replies** setting ("On - reply with #petition [message]" or "Off - a Game Master will open them when they need your answer"), and a preview of the request. Saylinks refresh the menu, explain how to add a message, and withdraw the petition after a confirmation.
+- `#petition <message>` files a petition when the account has none. It creates the same petition as the client's own petition window (`/guidehelp`), so it appears in Player Support right away.
+- While the account has an open petition, `#petition <message>` adds to it. The text goes to Game Master like a tell. Spire records it on the case when **Player replies** is on, and otherwise tells the player why it could not.
 
-The menu's status comes from Spire when Spire tracks the case: waiting for a Game Master, assigned to a staff member, waiting for the player's reply, or resolved. Spire stores it in the `spire:petition:<petition>` data bucket whenever the case or its messaging changes. Without it, the menu shows the in-game queue state. A petition checked out in game shows who is reviewing it.
+The menu's status comes from Spire when Spire tracks the case: waiting for a Game Master, assigned to a staff member, waiting for the player's reply, or resolved. Spire stores it in the `spire:petition:<petition>` data bucket whenever the case or its **Player replies** setting changes. Without it, the menu shows the in-game queue state. A petition checked out in game shows who is reviewing it.
 
 The menu's links use `#petition reply` and `#petition withdraw <number> [confirm]`; those exact phrases are actions, not messages. Server operators can rename or restrict the command in the `command_settings` table like any other command.
 
@@ -76,7 +80,7 @@ A cross-zone character receipt confirms that the zone requested the move. If a r
 
 For a corpse, choose **Player's current location** to use the petitioning character's live coordinates and instance. The character must be in game. The destination zone sends a chat notice when it confirms the corpse arrived.
 
-Buried corpses can always be inspected. With the updated patch, a buried corpse can also be moved: it shows **Buried · will be unburied**, and the move clears its buried flag. A buried corpse that is not loaded in any zone (Shadowrest) is moved in the database. Without the updated patch, only unburied corpses can be moved, and the recovery window says why.
+Buried corpses can always be inspected. With the updated patch, a buried corpse can also be moved: it shows **Buried · will be unburied**, and the move clears its buried flag and restarts the corpse's decay timer. A buried corpse that is not loaded in any zone (Shadowrest) is moved in the database. Without the updated patch, only unburied corpses can be moved, and the recovery window says why.
 
 Spire character moves send **You have been moved by a Game Master**. If Spire relocates a saved character, the patched zone displays the notice when the player next enters the game.
 
@@ -91,7 +95,7 @@ The corpse details show the experience the corpse holds. **Restore experience** 
 - the corpse loaded in the player's current zone and instance. Use **Player's current location** to move it to them first;
 - a corpse that has not been resurrected and still holds experience.
 
-The button stays disabled with the reason until all of these hold. The player is told in game that a Game Master restored the experience.
+The button stays disabled with the reason until all of these hold. The player is told in game that a Game Master restored the experience. The zone saves the character right away; if that save fails, Spire reports the restore as unconfirmed, so check the player's experience before trying again.
 
 ## Case workflow
 
@@ -101,7 +105,7 @@ The button stays disabled with the reason until all of these hold. The player is
 - **Escalate:** an escalated case needs a reason, sorts to the top of the queue, and shows an **Escalated** chip. Resolving a case clears the escalation.
 - **Categories:** a case can have one of eight categories: lost or missing items, corpse or death, stuck or location, quest or progress, player conduct, bug report, account or access, and other. Spire suggests one from words in the petition, and staff apply it. Each category shows a short hint with buttons for the matching tools.
 - **Reported player:** a case can name another character as the reported player, so Evidence can show that character's events. The character must exist and must not be on the petitioning account.
-- **Needs attention:** an open case nobody has answered is **aging** after 30 minutes (its time turns amber) and **Overdue** after 2 hours. A case marked waiting needs a **Follow up** when the player has not replied within 48 hours. A tell or a sent mail or parcel counts as an answer. The **Needs attention** card counts escalated, overdue and follow-up cases once each, and filters the queue to them. **Alerts** can also chime when a follow-up comes due.
+- **Needs attention:** an open case nobody has answered is **aging** after 30 minutes (its time turns amber) and **Overdue** after 2 hours. A case marked waiting needs a **Follow up** when the player has not replied within 48 hours. A tell or a sent mail or parcel, including an account action notice, counts as an answer. The **Needs attention** card counts escalated, overdue and follow-up cases once each, and filters the queue to them. **Alerts** can also chime when a follow-up comes due.
 - **Account notes:** staff can keep up to 20 notes of up to 2,000 characters per account on a connection. The newest shows above every case from that account. Adding or removing a note is recorded on the case where it was done.
 - **Viewers:** the queue and the case header show who else has the case open and who is writing to the player. Before a tell or mail is sent while another staff member is writing, or within two minutes after one sent a message, Spire asks for confirmation. Nothing is locked.
 - **Resolve and clear the petition:** **Also clear petition #N in game** is on by default. A petition checked out in game is not cleared and the option is off; clear it in game with `#delpetition`, or resolve without it. The case stays resolved whatever the result, and the result is recorded on the case:
@@ -109,9 +113,9 @@ The button stays disabled with the reason until all of these hold. The player is
   | Server | What happens |
   |---|---|
   | Updated patch | World removes the petition and every zone refreshes its list. The player can file a new petition right away. |
-  | Patch without `supportfeatures`, no patch, or a server Spire does not run beside | Spire deletes the petition from the database. A zone that already loaded it keeps it until the next petition is filed or withdrawn, so `/petition` may still say one is open until then. With the earlier patch, `#petition` already sees the change. |
+  | Patch without `supportfeatures`, no patch, or a server Spire does not run beside | Spire deletes the petition from the database. A zone that already loaded it keeps it until the next petition is filed or withdrawn, so the player may be told one is still open until then. With the earlier patch, `#petition` already sees the change. |
 
-- **Reply and resolve:** a saved reply can be marked **Reply and resolve** in **Replies**. The Resolve dialog can send any saved reply first: as a tell when the player is in game with messages on, and by in-game mail otherwise. The case is resolved only after the reply was sent; if the send fails, including a tell that World refuses, the dialog stays open with the error and the next try is a new send. If delivery was not confirmed, the dialog says so and does not send the reply again on its own: check the conversation, then choose **Send again and resolve** or **Resolve without sending again**.
+- **Reply and resolve:** a saved reply can be marked **Reply and resolve** in **Replies**. The Resolve dialog can send any saved reply first: as a tell when the player is in game and the reply fits in a tell, and by in-game mail otherwise, whatever **Player replies** says. The case is resolved only after the reply was sent; if the send fails, including a tell that World refuses, the dialog stays open with the error and the next try is a new send. If delivery was not confirmed, the dialog says so and does not send the reply again on its own: check the conversation, then choose **Send again and resolve** or **Resolve without sending again**.
 
 ### Select mode
 
@@ -146,23 +150,29 @@ All of these are in the case's side panel or tabs. Tools that change a player's 
 
 **Quests & progress** has three tabs. A line at the top says whether changes go to the database (the character is offline) or apply in game.
 
-- **Tasks** lists active tasks with their steps, completed tasks and task timers. A step can be reset or advanced, and a task removed. In game this needs the updated patch. Offline, a step can be advanced to one short of its goal but never completed, because the reward is only granted in a zone; the dialog says to complete it while the player is in game. When an in-game change completes the task, the confirmation shows the reward first. Completed records and timers can be cleared while the character is offline. Shared tasks are read-only: the shared task system owns them, so use `#task` in game.
+- **Tasks** lists active tasks with their steps, completed tasks and task timers. A step can be reset or advanced, and a task removed. In game this needs the updated patch. Offline, a step can be advanced to one short of its goal but never completed, because the reward is only granted in a zone; the dialog says to complete it while the player is in game. When an in-game change completes the task, the confirmation shows the reward first. If the zone cannot save an in-game change, Spire says the game server did not confirm it. Completed records and timers can be cleared while the character is offline. Shared tasks are read-only: the shared task system owns them, so use `#task` in game.
 - **Lockouts** lists unexpired expedition lockouts, instances and the safe return point. A lockout can be removed: in the database while the character is offline, and in game with the updated patch. Instances are read-only; the player can leave an expedition with `/dzquit`.
 - **Flags** lists zone flags, keys, data buckets and quest globals, with links to the Inventory & Keyring, Data Buckets and QGlobals editors. **Reload game cache** makes zones read data buckets from the database again after an edit. It uses World's stock `api reload 7` command, on the server Spire runs beside only.
 
 A database change needs Spire to see the character offline. A character between zones is asked to try again in a moment. When the character is marked in game and Spire cannot check the World roster (World is down, or runs on another host), changes stay off until that clears. The panel says which of the two it is.
 
-### Discipline
+### Account Action
 
-![Discipline: the account's status, the actions, and a suspension with its end time and reason](images/player-support/discipline.png)
+![Account Action: the account's status, the actions, and a suspension with its end time and reason](images/player-support/discipline.png)
 
-**Discipline** kicks the account's character from the game, suspends or bans the account, lifts a restriction, and revokes or restores chat. It shows the account's status, the restriction reason, whether chat is revoked, and who is playing now.
+**Account Action** kicks the account's character from the game, suspends or bans the account, lifts a restriction, and revokes or restores chat. It shows the account's status, the restriction reason, whether chat is revoked, and who is playing now.
 
 - **Kick** disconnects the account's character that is in a zone, with World's stock console `kick` command. It works without the patch, but only on the server Spire runs beside. A player at character select is not affected.
 - **Suspend** sets the account status to -1 until the chosen time. **Ban** sets it to -2 with no end date. Both ask for a second confirmation, block login in EQEmu, and kick the account's characters in game when Spire runs beside the server. **Lift restriction** clears the reason and date and sets the status back to 0.
 - Spire suspends and bans player accounts only (status 0 to -2). An account with a staff status is refused with the reason, and lifting a restriction never changes a staff status. This also keeps EQEmu's suspension expiry, which resets the status to 0 when the date passes, from removing a staff status.
 - An account restricted by an older Spire, which saved the reason and date without changing the status, is flagged: EQEmu never enforced it. Apply the restriction again to enforce it.
-- **Revoke chat** blocks OOC, auction and shout. Tells still work. While no character on the account is in game it is saved to the database and applies at the next login. For a player in game it needs the updated patch on the server Spire runs beside and applies at once. Without the patch, kick the player first or wait until they log out; on any other server, wait until they log out.
+- **Revoke chat** sets the account's revoked flag, and **Restore chat** clears it. What the flag blocks depends on the server build:
+  - With the updated patch, OOC, auction and shout are always blocked, and tells still work. The dialog says exactly this.
+  - On stock EQEmu and the earlier patch, it blocks tells, blocks OOC and auction only when those channels are server-wide, and never blocks shout. The dialog says only that the channels depend on the server build.
+  - On every build, custom (UCS) chat channels read the flag when the player connects to chat, so a change reaches them at the player's next login.
+
+  While no character on the account is in game it is saved to the database and applies at the next login. For a player in game it needs the updated patch on the server Spire runs beside and applies at once. Without the patch, kick the player first or wait until they log out; on any other server, wait until they log out.
+- **Notice by mail:** after every action that succeeds (kick, suspend, ban, lift restriction, revoke or restore chat), Spire mails the character that filed the petition a fixed notice from GameMaster with the subject "Notice of account action". It greets the character, says what the Game Master team did (with the suspension's end in UTC), and asks the player to file a petition with `#petition` with any questions. It does not include the staff member's name or the reason, which stays an internal note on the case. A suspended or banned player reads it after they can log in again. The mail appears on the case timeline like **Reply by mail** and is recorded in the audit log. A refused or failed action sends nothing, and retrying the same request does not send a second notice. If the mail cannot be written, the action still stands, and the result says the notice could not be mailed. The notice is written to the database, so it works on stock EQEmu and on any server connection.
 
 ### Player Operations changes
 
@@ -190,7 +200,7 @@ Player Support uses the **Player Support** resource: read to see the queue and c
 | Move character, corpses, Snapshots, Items, Quests & progress | Player Operations (read to view, write to change) |
 | Restore experience, remove a lockout, task changes | Player Operations write |
 | Return by parcel, snapshot restores | Mail & Parcels Editor read and write |
-| Discipline | Player Support write and Player Operations read to open; Player Operations write to act |
+| Account Action | Player Support write and Player Operations read to open; Player Operations write to act (the notice mail needs no Mail & Parcels grant) |
 | Evidence | Player Event Logs read |
 | Chat in Evidence | Player Event Logs read and **Player Support Chat Logs** read |
 | Linked accounts | **Player Support Linked Accounts** read |
@@ -201,7 +211,7 @@ Player Support uses the **Player Support** resource: read to see the queue and c
 
 ## What each server gets
 
-Spire asks World which Player Support features its patch supports with the `supportfeatures` console command, about once a minute together with the patch check. A tool that needs a missing feature stays visible and disabled with the reason: "Needs the updated Player Support patch" on the server Spire runs beside, or "Needs the game server this Spire runs beside" for any other connection.
+Spire asks World which Player Support features its patch supports with the `supportfeatures` console command, about once a minute together with the patch check. The updated patch (patch 3) reports seven: `close_petition`, `lockouts`, `tasks`, `revoke`, `corpse_exp`, `unbury` and `marquee`. A build that does not list `marquee` keeps the others; its tells simply show no marquee. A tool that needs a missing feature stays visible and disabled with the reason: "Needs the updated Player Support patch" on the server Spire runs beside, or "Needs the game server this Spire runs beside" for any other connection.
 
 | Tool | No patch | Patch without `supportfeatures` | Updated patch | Server Spire does not run beside |
 |---|---|---|---|---|
@@ -213,6 +223,9 @@ Spire asks World which Player Support features its patch supports with the `supp
 | Kick | Yes (stock) | Yes | Yes | No |
 | Suspend and ban | Yes, with kick | Yes, with kick | Yes, with kick | Yes, without kick |
 | Revoke chat | Offline only | Offline only | Offline and in game | Offline only |
+| Fixed revoke policy (OOC, auction and shout blocked, tells allowed) | No | No | Yes | Not detected; the dialog uses the general line |
+| On-screen marquee for Game Master tells | No | No | Yes | No |
+| Account action notice by mail | Yes (stock) | Yes | Yes | Yes |
 | Restore experience | No | No | Yes | No |
 | Move a buried corpse | No | No | Yes | No |
 | Reload game cache | Yes (stock) | Yes | Yes | No |
@@ -232,7 +245,6 @@ With the patch revision that has no `supportfeatures` command, live chat and mov
 - An offline task edit never completes a step. Complete it while the player is in game.
 - Restoring corpse experience needs the player in game, in the corpse's zone and instance.
 - If a resurrection is already on its way to the player when the experience is restored, the player can receive the experience twice. Check that nobody is resurrecting the player first.
-- A corpse unburied by a move keeps its original time of death.
 - The aging (30 minutes), overdue (2 hours) and follow-up (48 hours) times are fixed.
 - Viewer presence is kept by each Spire process. Two Spire instances behind one database do not see each other's viewers.
 - Instances and expeditions are read-only; Spire does not change expedition membership.

@@ -650,7 +650,7 @@ func supportPetitionCloseResult(status string, currentPatch bool) (string, strin
 		return "closed", "sent", "Removed from the in-game queue. The player can file a new petition."
 	case "deleted":
 		if currentPatch {
-			return "deleted", "sent", "Removed from the database. Zones that loaded it keep it until the next petition is filed or withdrawn; #petition works now, /petition may still say one is open."
+			return "deleted", "sent", "Removed from the database. Zones that loaded it keep it until the next petition is filed or withdrawn; #petition already sees the change."
 		}
 		return "deleted", "sent", "Removed from the database. Zones that loaded it keep it until the next petition is filed or withdrawn, so the player may be told one is still open until then."
 	case playersupport.PetitionCheckedOut:
