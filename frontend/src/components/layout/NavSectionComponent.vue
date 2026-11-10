@@ -9,6 +9,11 @@
       class="nav-link"
     >
       <i :class="config.labelIcon" v-if="config.labelIcon"></i> {{ config.label }}
+      <!-- A count that needs attention, such as petitions pending GM action. -->
+      <template v-if="config.badge > 0">
+        <span class="nav-count-badge" aria-hidden="true">{{ config.badge > 99 ? '99+' : config.badge }}</span>
+        <span class="sr-only">, {{ config.badgeLabel || config.badge }}</span>
+      </template>
     </router-link>
 
     <!-- nested nav dropdown -->
@@ -113,5 +118,20 @@ export default {
 <style scoped>
 .nav-link {
   white-space: nowrap;
+}
+.nav-count-badge {
+  display: inline-block;
+  min-width: 1.5em;
+  margin-left: .45rem;
+  padding: 0 .4em;
+  border-radius: 999px;
+  background: #dfb976;
+  color: #1f1910;
+  font-size: .7rem;
+  font-weight: 700;
+  line-height: 1.5em;
+  text-align: center;
+  vertical-align: .1em;
+  font-variant-numeric: tabular-nums;
 }
 </style>

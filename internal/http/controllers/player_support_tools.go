@@ -21,320 +21,6 @@ import (
 func clauseLockForUpdate() clause.Locking { return clause.Locking{Strength: "UPDATE"} }
 
 // ---------------------------------------------------------------------------
-// Evidence timeline: the petitioning account's player events around the time
-// the petition was filed.
-
-type supportEvent struct {
-	ID            int64     `json:"id"`
-	CharacterID   int64     `json:"character_id"`
-	Character     string    `json:"character"`
-	ZoneID        int       `json:"zone_id"`
-	EventTypeID   int       `json:"event_type_id"`
-	EventTypeName string    `json:"event_type_name"`
-	EventData     string    `json:"event_data"`
-	CreatedAt     time.Time `json:"created_at"`
-}
-
-// supportEventGroups narrows the timeline by EQEmu's event names, which stay
-// stable across versions where the numeric IDs may not.
-var supportEventGroups = map[string][]string{
-	"items": {
-		"Trade", "Loot Item", "Item Destroy", "Dropped Item", "Merchant Purchase", "Merchant Sell",
-		"Parcel Item Sent", "Parcel Item Retrieved", "Parcel Prune Routine", "NPC Handin", "Trader Purchase",
-		"Trader Sell", "Groundspawn Pickup", "Combine Success", "Combine Failure", "Item Creation",
-		"Barter Transaction", "Guild Bank Item Deposit", "Guild Bank Item Withdrawal", "Split Money",
-	},
-	"deaths":   {"Death", "Rez Accepted"},
-	"movement": {"Zoning"},
-	"gm":       {"GM Command"},
-}
-
-// supportEventPageSize keeps each page of the timeline quick to read and load.
-const supportEventPageSize = 50
-
-func (p *PlayerSupportController) events(c echo.Context) error {
-	scope, err := p.scope(c, false)
-	if err != nil {
-		return supportError(c, err)
-	}
-	if scope.connectionID > 0 && !p.permissions.CanAccessRoute(c, scope.user, scope.connectionID, "/api/v1/player_event_logs", false) {
-		return supportError(c, echo.NewHTTPError(http.StatusForbidden, "Player Event Logs access is required"))
-	}
-	view, err := scope.caseByKey(c.Param("key"))
-	if err != nil {
-		return supportError(c, err)
-	}
-	hours, _ := strconv.Atoi(c.QueryParam("hours"))
-	if hours != 6 && hours != 72 && hours != 168 {
-		hours = 24
-	}
-	group := c.QueryParam("group")
-	page, _ := strconv.Atoi(c.QueryParam("page"))
-	if page < 1 {
-		page = 1
-	}
-	accountID, err := supportAccountID(scope, view)
-	if err != nil {
-		return supportError(c, err)
-	}
-	events := []supportEvent{}
-	var total, newer int64
-	// player_event_logs is indexed by character, not account, so look up the
-	// account's characters first.
-	var characters []uint
-	if accountID > 0 {
-		if err := scope.eqemu.Table("character_data").Where("account_id = ?", accountID).Pluck("id", &characters).Error; err != nil {
-			return supportError(c, err)
-		}
-	}
-	if len(characters) > 0 {
-		// Both times are server-local, so compare inside the database.
-		query := scope.eqemu.Table("player_event_logs AS e").
-			Where("e.character_id IN ? AND e.created_at >= FROM_UNIXTIME(?)", characters, view.SubmittedAt-int64(hours)*3600)
-		if names, ok := supportEventGroups[group]; ok {
-			query = query.Where("e.event_type_name IN ?", names)
-		}
-		if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
-			return supportError(c, err)
-		}
-		// The page places the "Petition filed" marker after this many events.
-		if err := query.Session(&gorm.Session{}).Where("e.created_at >= FROM_UNIXTIME(?)", view.SubmittedAt).
-			Count(&newer).Error; err != nil {
-			return supportError(c, err)
-		}
-		pages := int((total + supportEventPageSize - 1) / supportEventPageSize)
-		if page > pages && pages > 0 {
-			page = pages
-		}
-		if err := query.Session(&gorm.Session{}).
-			Select("e.id, COALESCE(e.character_id, 0) AS character_id, COALESCE(ch.name, '') AS `character`, " +
-				"COALESCE(e.zone_id, 0) AS zone_id, COALESCE(e.event_type_id, 0) AS event_type_id, " +
-				"COALESCE(e.event_type_name, '') AS event_type_name, COALESCE(e.event_data, '') AS event_data, e.created_at").
-			Joins("LEFT JOIN character_data AS ch ON ch.id = e.character_id").
-			Order("e.created_at DESC, e.id DESC").Offset((page - 1) * supportEventPageSize).
-			Limit(supportEventPageSize).Scan(&events).Error; err != nil {
-			return supportError(c, err)
-		}
-	}
-	return c.JSON(http.StatusOK, echo.Map{
-		"events": events, "hours": hours, "group": group, "filed_at": view.SubmittedAt,
-		"page": page, "page_size": supportEventPageSize, "total": total, "newer": newer,
-	})
-}
-
-// ---------------------------------------------------------------------------
-// Inventory snapshots: what the character had at a snapshot that it no longer
-// has, so staff can send it back as parcels.
-
-type supportInventoryColumns struct {
-	Character, Slot, Item, Charges string
-	Augments                       [6]string
-}
-
-// Newer EQEmu renamed the inventory columns; read whichever this server has.
-func supportInventorySchema(db *gorm.DB, table string) (supportInventoryColumns, error) {
-	var names []string
-	err := db.Raw("SELECT LOWER(column_name) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?", table).
-		Scan(&names).Error
-	if err != nil {
-		return supportInventoryColumns{}, err
-	}
-	for _, name := range names {
-		if name == "character_id" {
-			return supportInventoryColumns{"character_id", "slot_id", "item_id", "charges",
-				[6]string{"augment_one", "augment_two", "augment_three", "augment_four", "augment_five", "augment_six"}}, nil
-		}
-		if name == "charid" {
-			return supportInventoryColumns{"charid", "slotid", "itemid", "charges",
-				[6]string{"augslot1", "augslot2", "augslot3", "augslot4", "augslot5", "augslot6"}}, nil
-		}
-	}
-	return supportInventoryColumns{}, echo.NewHTTPError(http.StatusServiceUnavailable, "This server has no "+table+" table")
-}
-
-type supportInventoryRow struct {
-	Slot    uint
-	ItemID  uint
-	Charges int
-	A1      uint
-	A2      uint
-	A3      uint
-	A4      uint
-	A5      uint
-	A6      uint
-}
-
-func (r supportInventoryRow) augments() [6]uint { return [6]uint{r.A1, r.A2, r.A3, r.A4, r.A5, r.A6} }
-
-func supportReadInventory(db *gorm.DB, table string, cols supportInventoryColumns, where string, args ...interface{}) ([]supportInventoryRow, error) {
-	selects := fmt.Sprintf("%s AS slot, %s AS item_id, COALESCE(%s, 0) AS charges", cols.Slot, cols.Item, cols.Charges)
-	for i, column := range cols.Augments {
-		selects += fmt.Sprintf(", COALESCE(%s, 0) AS a%d", column, i+1)
-	}
-	var rows []supportInventoryRow
-	err := db.Table(table).Select(selects).Where(where, args...).Where(cols.Item + " > 0").Scan(&rows).Error
-	return rows, err
-}
-
-type supportSnapshotLine struct {
-	Item     *mailParcelsItemReference    `json:"item"`
-	Augments [6]*mailParcelsItemReference `json:"augments"`
-	Had      int                          `json:"had"`
-	Has      int                          `json:"has"`
-	Missing  int                          `json:"missing"`
-}
-
-type supportItemKey struct {
-	ID       uint
-	Augments [6]uint
-}
-
-// supportMissingItems compares what the character had with what it has. An
-// item counts by its stack size when stackable, or once per slot otherwise.
-func supportMissingItems(had, has []supportInventoryRow, stackable map[uint]bool) map[supportItemKey][2]int {
-	totals := map[supportItemKey][2]int{}
-	add := func(rows []supportInventoryRow, side int) {
-		for _, row := range rows {
-			key := supportItemKey{row.ItemID, row.augments()}
-			amount := 1
-			if stackable[row.ItemID] && row.Charges > 1 {
-				amount = row.Charges
-			}
-			counts := totals[key]
-			counts[side] += amount
-			totals[key] = counts
-		}
-	}
-	add(had, 0)
-	add(has, 1)
-	for key, counts := range totals {
-		if counts[0] <= counts[1] {
-			delete(totals, key)
-		}
-	}
-	return totals
-}
-
-func (p *PlayerSupportController) snapshots(c echo.Context) error {
-	scope, view, err := p.recoveryCase(c, false)
-	if err != nil {
-		return supportError(c, err)
-	}
-	cols, err := supportInventorySchema(scope.eqemu, "inventory_snapshots")
-	if err != nil {
-		return supportError(c, err)
-	}
-	type snapshot struct {
-		TimeIndex int64 `json:"time_index"`
-		Items     int   `json:"items"`
-	}
-	snapshots := []snapshot{}
-	// The table is keyed by time first, so a recent window keeps this off a
-	// full scan. EQEmu keeps 30 days of snapshots by default.
-	err = scope.eqemu.Table("inventory_snapshots").Select("time_index, COUNT(*) AS items").
-		Where("time_index >= ? AND "+cols.Character+" = ?", time.Now().AddDate(0, 0, -30).Unix(), view.CharacterID).
-		Group("time_index").Order("time_index DESC").Limit(30).
-		Scan(&snapshots).Error
-	if err != nil {
-		return supportError(c, err)
-	}
-	return c.JSON(http.StatusOK, echo.Map{"snapshots": snapshots})
-}
-
-func (p *PlayerSupportController) snapshotDiff(c echo.Context) error {
-	scope, view, err := p.recoveryCase(c, false)
-	if err != nil {
-		return supportError(c, err)
-	}
-	timeIndex, err := strconv.ParseInt(c.Param("time"), 10, 64)
-	if err != nil || timeIndex <= 0 {
-		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Invalid snapshot"))
-	}
-	snapCols, err := supportInventorySchema(scope.eqemu, "inventory_snapshots")
-	if err != nil {
-		return supportError(c, err)
-	}
-	invCols, err := supportInventorySchema(scope.eqemu, "inventory")
-	if err != nil {
-		return supportError(c, err)
-	}
-	had, err := supportReadInventory(scope.eqemu, "inventory_snapshots", snapCols,
-		snapCols.Character+" = ? AND time_index = ?", view.CharacterID, timeIndex)
-	if err != nil {
-		return supportError(c, err)
-	}
-	if len(had) == 0 {
-		return supportError(c, echo.NewHTTPError(http.StatusNotFound, "That snapshot is no longer available"))
-	}
-	has, err := supportReadInventory(scope.eqemu, "inventory", invCols, invCols.Character+" = ?", view.CharacterID)
-	if err != nil {
-		return supportError(c, err)
-	}
-	ids := map[uint]bool{}
-	for _, row := range append(append([]supportInventoryRow{}, had...), has...) {
-		ids[row.ItemID] = true
-		for _, augment := range row.augments() {
-			if augment > 0 {
-				ids[augment] = true
-			}
-		}
-	}
-	itemDB := p.db.Get(models.Item{}, c)
-	if itemDB == nil || p.connectionID(scope.user) != scope.connectionID {
-		return supportError(c, echo.NewHTTPError(http.StatusConflict, "The active content database changed or is unavailable"))
-	}
-	items, err := supportItemReferences(itemDB.WithContext(c.Request().Context()), ids)
-	if err != nil {
-		return supportError(c, err)
-	}
-	stackable := map[uint]bool{}
-	for id, item := range items {
-		stackable[id] = item.Stackable != 0
-	}
-	lines := []supportSnapshotLine{}
-	for key, counts := range supportMissingItems(had, has, stackable) {
-		line := supportSnapshotLine{Item: items[key.ID], Had: counts[0], Has: counts[1], Missing: counts[0] - counts[1]}
-		if line.Item == nil {
-			line.Item = &mailParcelsItemReference{ID: key.ID, Name: fmt.Sprintf("Item %d", key.ID)}
-		}
-		for i, augment := range key.Augments {
-			if augment > 0 {
-				line.Augments[i] = items[augment]
-			}
-		}
-		lines = append(lines, line)
-	}
-	sort.Slice(lines, func(i, j int) bool {
-		if lines[i].Item.Name != lines[j].Item.Name {
-			return lines[i].Item.Name < lines[j].Item.Name
-		}
-		return lines[i].Item.ID < lines[j].Item.ID
-	})
-	return c.JSON(http.StatusOK, echo.Map{"time_index": timeIndex, "snapshot_items": len(had), "missing": lines})
-}
-
-func supportItemReferences(db *gorm.DB, ids map[uint]bool) (map[uint]*mailParcelsItemReference, error) {
-	result := map[uint]*mailParcelsItemReference{}
-	if len(ids) == 0 {
-		return result, nil
-	}
-	list := make([]uint, 0, len(ids))
-	for id := range ids {
-		list = append(list, id)
-	}
-	var rows []mailParcelsItemReference
-	err := db.Table("items").Select(`id, Name AS name, icon, stackable, stacksize AS stack_size, maxcharges AS max_charges,
-		nodrop AS no_drop, bagslots AS bag_slots, bagtype AS bag_type, augtype AS augment_type,
-		augslot1type AS augment_slot_1_type, augslot2type AS augment_slot_2_type, augslot3type AS augment_slot_3_type,
-		augslot4type AS augment_slot_4_type, augslot5type AS augment_slot_5_type, augslot6type AS augment_slot_6_type,
-		evolvinglevel AS evolving_level`).Where("id IN ?", list).Scan(&rows).Error
-	for i := range rows {
-		result[rows[i].ID] = &rows[i]
-	}
-	return result, err
-}
-
-// ---------------------------------------------------------------------------
 // Account history: the account's other cases, newest first.
 
 type supportHistoryCase struct {
@@ -401,8 +87,8 @@ func (s supportScope) accountHistory(view supportCaseView) ([]supportHistoryCase
 
 // ---------------------------------------------------------------------------
 // Merge: fold an earlier case from the same account into this one. The
-// earlier case's timeline, deliveries and conversation move here, and it is
-// resolved with a pointer to this case.
+// earlier case's timeline, deliveries, conversation and linked bug reports
+// move here, and it is resolved with a pointer to this case.
 
 func (p *PlayerSupportController) merge(c echo.Context) error {
 	scope, err := p.scope(c, false)
@@ -463,6 +149,9 @@ func (p *PlayerSupportController) merge(c echo.Context) error {
 				return step.Error
 			}
 		}
+		if err := supportMoveCaseLinks(tx, from.ID, record.ID); err != nil {
+			return err
+		}
 		// One conversation per account: keep it on the case that stays open.
 		var chat models.PlayerSupportChat
 		if tx.Where("case_id = ?", from.ID).Take(&chat).Error == nil {
@@ -488,6 +177,32 @@ func (p *PlayerSupportController) merge(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// supportMoveCaseLinks moves a merged case's links, such as linked bug
+// reports, to the case that stays. A link both cases have would break the
+// unique index, so the merged case's copy is dropped first. The target's links
+// are read up front because MySQL rejects a subquery on the table it changes.
+func supportMoveCaseLinks(tx *gorm.DB, from, to uint) error {
+	var existing []models.PlayerSupportCaseLink
+	if err := tx.Select("kind, ref_id").Where("case_id = ?", to).Find(&existing).Error; err != nil {
+		return err
+	}
+	var kinds []string
+	refs := map[string][]uint{}
+	for _, link := range existing {
+		if refs[link.Kind] == nil {
+			kinds = append(kinds, link.Kind)
+		}
+		refs[link.Kind] = append(refs[link.Kind], link.RefID)
+	}
+	for _, kind := range kinds {
+		if err := tx.Where("case_id = ? AND kind = ? AND ref_id IN ?", from, kind, refs[kind]).
+			Delete(&models.PlayerSupportCaseLink{}).Error; err != nil {
+			return err
+		}
+	}
+	return tx.Model(&models.PlayerSupportCaseLink{}).Where("case_id = ?", from).Update("case_id", to).Error
+}
+
 // ---------------------------------------------------------------------------
 // Saved replies shared by staff on a connection.
 
@@ -496,6 +211,8 @@ const supportReplyLimit = 50
 type supportReplyInput struct {
 	Title string `json:"title"`
 	Body  string `json:"body"`
+	// Resolves offers the reply in the Resolve dialog.
+	Resolves bool `json:"resolves"`
 }
 
 func (in supportReplyInput) clean() (supportReplyInput, error) {
@@ -533,14 +250,16 @@ func (p *PlayerSupportController) saveReply(c echo.Context) error {
 	if input, err = input.clean(); err != nil {
 		return supportError(c, err)
 	}
-	reply := models.PlayerSupportReply{ConnectionID: scope.connectionID, Title: input.Title, Body: input.Body, UpdatedBy: supportActor(scope.user)}
+	reply := models.PlayerSupportReply{
+		ConnectionID: scope.connectionID, Title: input.Title, Body: input.Body, Resolves: input.Resolves, UpdatedBy: supportActor(scope.user),
+	}
 	if id := c.Param("id"); id != "" {
 		value, err := strconv.ParseUint(id, 10, 32)
 		if err != nil {
 			return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Invalid saved reply"))
 		}
 		result := scope.spire.Model(&models.PlayerSupportReply{}).Where("id = ? AND connection_id = ?", value, scope.connectionID).
-			Updates(map[string]interface{}{"title": reply.Title, "body": reply.Body, "updated_by": reply.UpdatedBy})
+			Updates(map[string]interface{}{"title": reply.Title, "body": reply.Body, "resolves": reply.Resolves, "updated_by": reply.UpdatedBy})
 		if result.Error != nil {
 			return supportError(c, result.Error)
 		}

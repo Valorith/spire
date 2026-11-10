@@ -60,6 +60,11 @@ func (s *Service) RegisterManualResources() map[string][]string {
 		"QGlobals Editor":           {"qglobal-editor"},
 		"Chat Administration":       {"chat-administration"},
 
+		// Player Support handlers check these in addition to "player-support".
+		// No route starts with these prefixes.
+		"Player Support Chat Logs":       {"player-support-chat-logs"},
+		"Player Support Linked Accounts": {"player-support-linked-accounts"},
+
 		// admin server
 		"Server Configuration":     {"admin/serverconfig"},
 		"Spire Application Update": {"app/update"},

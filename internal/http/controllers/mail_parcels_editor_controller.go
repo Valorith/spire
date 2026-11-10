@@ -58,7 +58,10 @@ type MailParcelsEditorController struct {
 	db       *database.Resolver
 	auditLog *auditlog.UserEvent
 	config   *eqemuserverconfig.Config
-	log      *logger.AppLogger
+	// alertMail tells characters in game about mail written for them;
+	// Player Support sets it. It is best effort and never blocks the send.
+	alertMail func(db *gorm.DB, characterIDs []uint, from string)
+	log       *logger.AppLogger
 }
 
 type mailParcelsPage struct {
@@ -133,6 +136,9 @@ type mailEditorInput struct {
 }
 
 type gmMailSendInput struct {
+	// NoAlert skips the in-game new-mail alert, when the same event already
+	// told the player in game.
+	NoAlert      bool   `json:"-"`
 	CharacterIDs []uint `json:"character_ids"`
 	Timestamp    int64  `json:"timestamp"`
 	From         string `json:"from"`
@@ -457,7 +463,7 @@ func (m *MailParcelsEditorController) listMail(c echo.Context) error {
 	if err := base.Select(`
 		m.msgid AS msg_id,
 		m.charid AS character_id,
-		COALESCE(character_record.name, CONCAT('Unknown character #', m.charid)) AS character_name,
+		COALESCE(character_record.name, IF(m.charid = 0, 'Game Master mailbox (Player Support)', CONCAT('Unknown character #', m.charid))) AS character_name,
 		m.timestamp,
 		COALESCE(m.from, '') AS from_name,
 		COALESCE(m.subject, '') AS subject,
@@ -528,6 +534,10 @@ func (m *MailParcelsEditorController) createMail(c echo.Context) error {
 		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "Mail message")
 	}
+	// A record staff add by hand alerts only when it is unread mail.
+	if m.alertMail != nil && result.Status == mailStatusUnread {
+		m.alertMail(db, []uint{result.CharacterID}, result.From)
+	}
 	return c.JSON(http.StatusCreated, result)
 }
 
@@ -556,8 +566,20 @@ func (m *MailParcelsEditorController) deliverDirectMail(c echo.Context, db *gorm
 	if db == nil {
 		db = m.db.Get(models.Mail{}, c)
 	}
+	result, err := m.writeDirectMail(c, db, input, characterIDs)
+	if err != nil {
+		return mailParcelsMutationError(c, err, "GM direct message")
+	}
+	return c.JSON(http.StatusCreated, result)
+}
+
+// writeDirectMail writes validated direct mail and its audit in one
+// transaction. With a Player Support delivery on the context, the audit is the
+// case's delivery record and the recipient must be the petition character.
+func (m *MailParcelsEditorController) writeDirectMail(c echo.Context, db *gorm.DB, input gmMailSendInput, characterIDs []uint) (gmMailSendResult, error) {
 	result := gmMailSendResult{Audience: "direct", Recipients: []mailParcelsCharacterReference{}}
 	var auditID uint
+	var sent []gmMailInsert
 	err := db.Transaction(func(tx *gorm.DB) error {
 		recipients, err := loadGMDirectRecipients(tx, characterIDs)
 		if err != nil {
@@ -576,15 +598,28 @@ func (m *MailParcelsEditorController) deliverDirectMail(c echo.Context, db *gorm
 		if err != nil {
 			return err
 		}
+		sent = rows
 		result = gmMailResult("direct", recipients, rows)
 		auditID, err = m.writeAudit(c, mailParcelsEventGMSendMail, gmMailAuditPayload(input, result, rows))
 		result.AuditID = auditID
 		return err
 	})
-	if err := m.finishDelivery(c, auditID, err); err != nil {
-		return mailParcelsMutationError(c, err, "GM direct message")
+	if err = m.finishDelivery(c, auditID, err); err == nil && !input.NoAlert {
+		m.alertRows(db, sent)
 	}
-	return c.JSON(http.StatusCreated, result)
+	return result, err
+}
+
+// alertRows sends the in-game new-mail alert for committed mail rows.
+func (m *MailParcelsEditorController) alertRows(db *gorm.DB, rows []gmMailInsert) {
+	if m.alertMail == nil || len(rows) == 0 {
+		return
+	}
+	ids := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.CharID)
+	}
+	m.alertMail(db, ids, rows[0].From)
 }
 
 func (m *MailParcelsEditorController) broadcastAudience(c echo.Context) error {
@@ -615,6 +650,7 @@ func (m *MailParcelsEditorController) sendBroadcastMail(c echo.Context) error {
 	db := m.db.Get(models.Mail{}, c)
 	result := gmMailSendResult{Audience: "broadcast", Recipients: []mailParcelsCharacterReference{}}
 	var auditID uint
+	var broadcastRows []gmMailInsert
 	err := db.Transaction(func(tx *gorm.DB) error {
 		recipients, err := loadGMBroadcastRecipients(tx)
 		if err != nil {
@@ -631,6 +667,7 @@ func (m *MailParcelsEditorController) sendBroadcastMail(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		broadcastRows = rows
 		result = gmMailResult("broadcast", recipients, rows)
 		auditID, err = m.writeAudit(c, mailParcelsEventGMBroadcast, gmMailAuditPayload(input, result, rows))
 		result.AuditID = auditID
@@ -640,6 +677,7 @@ func (m *MailParcelsEditorController) sendBroadcastMail(c echo.Context) error {
 		m.discardAudit(c, auditID)
 		return mailParcelsMutationError(c, err, "GM server-wide message")
 	}
+	m.alertRows(db, broadcastRows)
 	return c.JSON(http.StatusCreated, result)
 }
 
@@ -1449,7 +1487,7 @@ func loadMailRecord(db *gorm.DB, id uint, lock bool) (mailEditorRecord, error) {
 	err := query.Select(`
 		m.msgid AS msg_id,
 		m.charid AS character_id,
-		COALESCE(character_record.name, CONCAT('Unknown character #', m.charid)) AS character_name,
+		COALESCE(character_record.name, IF(m.charid = 0, 'Game Master mailbox (Player Support)', CONCAT('Unknown character #', m.charid))) AS character_name,
 		m.timestamp,
 		COALESCE(m.from, '') AS from_name,
 		COALESCE(m.subject, '') AS subject,

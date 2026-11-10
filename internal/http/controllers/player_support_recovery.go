@@ -40,6 +40,7 @@ type supportCorpse struct {
 	Gold        uint            `json:"gold"`
 	Silver      uint            `json:"silver"`
 	Copper      uint            `json:"copper"`
+	Exp         int64           `json:"exp"`
 }
 
 type supportCorpseItem struct {
@@ -82,7 +83,7 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 	if err != nil {
 		return supportError(c, err)
 	}
-	location, _, err := supportCharacterLocation(scope.eqemu, view)
+	location, accountID, err := supportCharacterLocation(scope.eqemu, view)
 	if err != nil {
 		return supportError(c, err)
 	}
@@ -91,7 +92,7 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 		Select(`id, zone_id, instance_id, x, y, z, time_of_death,
 			COALESCE(is_buried, 0) AS is_buried, COALESCE(is_rezzed, 0) AS is_rezzed, COALESCE(rezzable, 0) AS rezzable,
 			COALESCE(platinum, 0) AS platinum, COALESCE(gold, 0) AS gold,
-			COALESCE(silver, 0) AS silver, COALESCE(copper, 0) AS copper,
+			COALESCE(silver, 0) AS silver, COALESCE(copper, 0) AS copper, COALESCE(exp, 0) AS exp,
 			(SELECT COUNT(*) FROM character_corpse_items WHERE corpse_id = corpses.id) AS item_count`).
 		Where("charid = ?", view.CharacterID).Order("time_of_death DESC, id DESC").Find(&corpses).Error
 	if err != nil {
@@ -134,9 +135,17 @@ func (p *PlayerSupportController) recovery(c echo.Context) error {
 	if local {
 		companion = p.world.Companion()
 	}
+	features := p.toolFeatures(scope)
+	var live *supportLiveLocation
+	if features.CorpseExp {
+		if status, position := p.world.Locate(view.CharacterID, accountID); status == "located" {
+			live = &supportLiveLocation{ZoneID: position.ZoneID, InstanceID: position.InstanceID}
+		}
+	}
 	return c.JSON(http.StatusOK, echo.Map{
 		"character": location, "corpses": corpses, "local_world": local,
 		"companion": companion, "live_destination": local && companion.Moves(), "bind": bind,
+		"features": features, "live_location": live,
 	})
 }
 
@@ -289,9 +298,15 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, err.Error()))
 	}
 	location, accountID, err := supportCharacterLocation(scope.eqemu, view)
+	buried := false
 	if err == nil && input.CorpseID != 0 {
-		err = scope.eqemu.Table("character_corpses").Select("zone_id, instance_id, x, y, z").
-			Where("id = ? AND charid = ? AND is_buried = 0", input.CorpseID, view.CharacterID).Take(&location).Error
+		var corpse struct {
+			Location supportLocation `gorm:"embedded"`
+			Buried   bool            `gorm:"column:is_buried"`
+		}
+		err = scope.eqemu.Table("character_corpses").Select("zone_id, instance_id, x, y, z, COALESCE(is_buried, 0) AS is_buried").
+			Where("id = ? AND charid = ?", input.CorpseID, view.CharacterID).Take(&corpse).Error
+		location, buried = corpse.Location, corpse.Buried
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil &&
 		(location.ZoneID != input.SourceZone || location.InstanceID != input.SourceInstance)) {
@@ -299,6 +314,10 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 	}
 	if err != nil {
 		return supportError(c, err)
+	}
+	// Only the updated patch moves a buried corpse, and it unburies it.
+	if buried && !p.toolFeatures(scope).Unbury {
+		return supportError(c, echo.NewHTTPError(http.StatusConflict, "Moving a buried corpse needs the updated Player Support patch"))
 	}
 	var position *playersupport.MovePosition
 	playerLabel := ""
@@ -346,6 +365,9 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 	target, kind := view.Character, "character_move"
 	if input.CorpseID != 0 {
 		target, kind = fmt.Sprintf("Corpse #%d", input.CorpseID), "corpse_move"
+		if buried {
+			target += " (buried)"
+		}
 	}
 	entry := models.PlayerSupportEntry{
 		Kind: kind, Actor: supportActor(scope.user), Delivery: "pending",
@@ -381,6 +403,9 @@ func (p *PlayerSupportController) moveRecoveryTarget(c echo.Context) error {
 		})
 	}
 	delivery, message := supportMoveResult(status, input.CorpseID != 0)
+	if buried && delivery == "sent" {
+		message += " The corpse was unburied."
+	}
 	auditContext, cancel := context.WithTimeout(context.WithoutCancel(c.Request().Context()), 3*time.Second)
 	defer cancel()
 	update := scope.spire.WithContext(auditContext).Model(&entry).Updates(map[string]interface{}{
@@ -428,4 +453,127 @@ func supportMoveResult(status string, corpse bool) (string, string) {
 	default:
 		return "unconfirmed", "The server did not confirm the move. Check the target location before retrying."
 	}
+}
+
+// supportLiveLocation is where the character is in game, for restoring a
+// corpse's experience where the player is.
+type supportLiveLocation struct {
+	ZoneID     uint `json:"zone_id"`
+	InstanceID uint `json:"instance_id"`
+}
+
+type supportCorpseExp struct {
+	ID         uint
+	ZoneID     uint
+	InstanceID uint
+	Rezzed     bool `gorm:"column:is_rezzed"`
+	Exp        int64
+}
+
+// supportCorpseExpRefusal checks a corpse experience restore before it is
+// recorded. local reports a World beside this Spire; live is the
+// character's position in game, or nil.
+func supportCorpseExpRefusal(corpse supportCorpseExp, local bool, features playersupport.Features, state string, live *supportLiveLocation, name string) error {
+	conflict := func(message string) error { return echo.NewHTTPError(http.StatusConflict, message) }
+	switch {
+	case corpse.Rezzed:
+		return conflict("This corpse was already resurrected; its experience was returned then.")
+	case corpse.Exp <= 0:
+		return conflict("This corpse holds no experience.")
+	case !local:
+		return conflict("Restoring experience needs the game server this Spire runs beside.")
+	case !features.CorpseExp:
+		return conflict("Restoring experience needs the updated Player Support patch.")
+	case state != "in_zone" || live == nil:
+		return conflict(name + " must be in game to receive experience.")
+	case live.ZoneID != corpse.ZoneID || live.InstanceID != corpse.InstanceID:
+		return conflict("Move the corpse to " + name + " first. Experience is restored where the player is.")
+	}
+	return nil
+}
+
+// supportCorpseExpResult maps the zone's answer to restore_support_corpse_exp.
+func supportCorpseExpResult(status string, exp int64, name string) supportActionResult {
+	failed := func(message string) supportActionResult {
+		return supportActionResult{Delivery: "failed", Message: message}
+	}
+	switch status {
+	case "restored":
+		return supportActionResult{Delivery: "sent", Message: "Returned " + toolGroupedNumber(exp) + " experience.",
+			Data: map[string]interface{}{"exp": exp}}
+	case "already":
+		return failed("This corpse was already resurrected; its experience was returned then.")
+	case "elsewhere":
+		return failed("The corpse is not loaded where " + name + " is. Move it to them first.")
+	case "busy":
+		return failed("The corpse is being looted or the player has a resurrection offer open. Try again in a moment.")
+	case "no_exp":
+		return failed("This corpse holds no experience.")
+	case "offline":
+		return failed(name + " left the game. Try again.")
+	case "unconfirmed":
+		return supportActionResult{Delivery: "unconfirmed", Message: "The game server did not confirm. Check " + name + "'s experience before retrying."}
+	default:
+		return failed("The game server did not confirm the change.")
+	}
+}
+
+func (p *PlayerSupportController) restoreCorpseExp(c echo.Context) error {
+	scope, view, err := p.toolCase(c, true)
+	if err != nil {
+		return supportError(c, err)
+	}
+	id, err := strconv.ParseUint(c.Param("corpse"), 10, 32)
+	if err != nil || id == 0 {
+		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Invalid corpse reference"))
+	}
+	var input struct {
+		Reason    string `json:"reason"`
+		RequestID string `json:"request_id"`
+	}
+	if c.Bind(&input) != nil {
+		return supportError(c, echo.NewHTTPError(http.StatusBadRequest, "Invalid request"))
+	}
+	var corpse supportCorpseExp
+	err = scope.eqemu.Table("character_corpses").
+		Select("id, zone_id, instance_id, COALESCE(is_rezzed, 0) AS is_rezzed, COALESCE(exp, 0) AS exp").
+		Where("id = ? AND charid = ?", id, view.CharacterID).Take(&corpse).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return supportError(c, echo.NewHTTPError(http.StatusNotFound, "That corpse is no longer there"))
+	}
+	if err != nil {
+		return supportError(c, err)
+	}
+	features := p.toolFeatures(scope)
+	state := supportCharacterState{State: "unknown"}
+	var live *supportLiveLocation
+	name := view.Character
+	if !corpse.Rezzed && corpse.Exp > 0 && features.CorpseExp {
+		if state, err = p.characterState(scope, view); err != nil {
+			return supportError(c, err)
+		}
+		if state.State == "in_zone" {
+			switch status, position := p.world.Locate(view.CharacterID, state.AccountID); status {
+			case "located":
+				live = &supportLiveLocation{ZoneID: position.ZoneID, InstanceID: position.InstanceID}
+			case "busy":
+				return supportError(c, echo.NewHTTPError(http.StatusConflict, name+" is zoning. Try again in a moment."))
+			case "offline":
+			default:
+				return supportError(c, echo.NewHTTPError(http.StatusServiceUnavailable, "Could not read "+name+"'s location from the game server"))
+			}
+		}
+	}
+	if err := supportCorpseExpRefusal(corpse, p.localWorld(scope), features, state.State, live, name); err != nil {
+		return supportError(c, err)
+	}
+	action := supportAction{
+		Kind: "corpse_exp", RequestID: input.RequestID, Reason: input.Reason, Event: "PLAYER_SUPPORT_CORPSE_EXP",
+		Summary: fmt.Sprintf("Restored experience from corpse #%d", corpse.ID),
+		Details: map[string]interface{}{"corpse_id": corpse.ID, "exp": corpse.Exp, "zone_id": corpse.ZoneID, "instance_id": corpse.InstanceID},
+	}
+	return p.runSupportAction(c, scope, view, action, func() supportActionResult {
+		status, exp := p.world.RestoreCorpseExp(view.CharacterID, state.AccountID, corpse.ID)
+		return supportCorpseExpResult(status, exp, name)
+	})
 }

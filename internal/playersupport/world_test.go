@@ -144,7 +144,7 @@ func TestStructuredSupportChatRoundTrip(t *testing.T) {
 		return TellAccepted
 	}}
 	go world.read(conn)
-	if err := world.Send(context.Background(), "request-1", 7, 42, message); err != nil {
+	if err := world.Send(context.Background(), "request-1", 7, 42, message, ""); err != nil {
 		t.Fatal(err)
 	}
 	select {

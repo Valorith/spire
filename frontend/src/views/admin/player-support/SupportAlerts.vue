@@ -1,9 +1,9 @@
 <template>
-  <b-modal visible centered modal-class="support-modal" title="Petition alerts" @hide="$emit('close')">
+  <b-modal ref="modal" visible centered scrollable modal-class="support-modal" title="Petition alerts" @hide="$emit('close')">
     <div class="alerts">
       <section class="alerts-section">
         <h3 class="support-section-label">In this browser</h3>
-        <p class="alerts-hint">Alerts fire for new petitions and player replies while Player Support is open in a tab.</p>
+        <p class="alerts-hint">Alerts fire for new petitions, player replies and follow-ups due while Player Support is open in a tab.</p>
         <div class="support-settings">
           <label for="alerts-desktop" class="support-setting" :class="{ 'is-disabled': !desktopSupported || permission === 'denied' }">
             <span class="support-setting-text"><strong id="alerts-desktop-title">Desktop notifications</strong><small id="alerts-desktop-hint">{{ desktopHint }}</small></span>
@@ -20,7 +20,7 @@
 
       <section class="alerts-section">
         <h3 class="support-section-label">For the whole team</h3>
-        <p v-if="loading" class="alerts-hint">Loading…</p>
+        <support-load-state v-if="loading" label="Loading team alerts" shape="lines" :rows="2" />
         <p v-else-if="!settings.available" class="alerts-hint">
           Discord alerts are set up from the Spire that runs beside this game server.
         </p>
@@ -49,18 +49,27 @@
 <script>
 import { SpireApi } from '@/app/api/spire-api'
 import { playChime, readAlertPrefs, saveAlertPrefs } from './support-ui'
+import { dialogFocus } from './support-dialog'
+import SupportLoadState from './SupportLoadState.vue'
 
 export default {
   name: 'SupportAlerts',
+  components: { SupportLoadState },
+  mixins: [dialogFocus],
   props: {
     connectionId: { type: Number, required: true },
     canWrite: { type: Boolean, default: false }
   },
   data () {
     return {
-      prefs: readAlertPrefs(), permission: 'Notification' in window ? window.Notification.permission : 'unsupported',
-      settings: { available: false, webhooks: [], discord_webhook_id: 0 }, webhook: 0,
-      loading: true, saving: false, saved: false, error: ''
+      prefs: readAlertPrefs(),
+      permission: 'Notification' in window ? window.Notification.permission : 'unsupported',
+      settings: { available: false, webhooks: [], discord_webhook_id: 0 },
+      webhook: 0,
+      loading: true,
+      saving: false,
+      saved: false,
+      error: ''
     }
   },
   computed: {
@@ -83,7 +92,7 @@ export default {
     }
   },
   methods: {
-    errorText (error) { return (error.response && error.response.data && error.response.data.error) || 'Request failed' },
+    errorText (error) { return (error.response && error.response.data && error.response.data.error) || 'The alert settings could not be saved. Try again.' },
     async toggleDesktop (on) {
       if (on && this.permission !== 'granted') {
         try {

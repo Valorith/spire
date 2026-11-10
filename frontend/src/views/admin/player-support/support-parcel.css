@@ -61,7 +61,7 @@
   color: var(--support-text);
 }
 .support-parcel-modal.gm-parcel-modal .modal-footer .btn:disabled,
-.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn:disabled { opacity: .5; cursor: not-allowed; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn:disabled { opacity: var(--support-disabled-opacity); cursor: not-allowed; }
 .support-parcel-modal.gm-parcel-modal .modal-footer .btn:not(:disabled):active:focus,
 .support-parcel-modal.gm-parcel-modal .modal-footer .btn:focus,
 .support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn:focus { box-shadow: none; }
@@ -147,6 +147,8 @@
 }
 .support-parcel-modal.gm-parcel-modal .form-control[aria-invalid="true"] { border-color: var(--support-danger); }
 .support-parcel-modal.gm-parcel-modal .gm-parcel-field-error { margin: 6px 0 0; color: var(--support-danger); font-size: var(--support-text-xs); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-field-hint { margin: 6px 0 0; color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.5; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-footer-note { margin-right: auto; color: var(--support-muted); font-size: var(--support-text-sm); }
 
 /* Recipient ----------------------------------------------------------------- */
 .support-parcel-modal.gm-parcel-modal .gm-parcel-recipient {
@@ -365,3 +367,9 @@
 }
 .support-parcel-modal.item-lookup-modal .item-lookup-results > button > i { color: var(--support-faint); }
 .support-parcel-modal.item-lookup-modal .item-lookup-results > button:hover > i { color: var(--support-accent); }
+
+/* Touch: the composer's buttons are full-size targets too. */
+@media (max-width: 680px), (pointer: coarse) {
+  .support-parcel-modal.gm-parcel-modal .modal-footer .btn,
+  .support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn { min-height: var(--support-touch); }
+}

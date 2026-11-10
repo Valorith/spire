@@ -17,9 +17,39 @@
  *   Radius   --support-radius-sm 4px (chips, kbd) · --support-radius 6px (buttons,
  *            fields, rows) · --support-radius-lg 10px (panels, cards, dialogs) ·
  *            --support-radius-pill (counts, dots only)
- *   Motion   colour, border and background only, --support-duration (140ms).
- *            No lifts, glows, pulses or entrance animations; the one loop is
- *            .support-spin. Reduced motion turns transitions and spinners off.
+ *   Motion   colour, border and background, --support-duration (140ms); a field
+ *            may also grow when focused (the staff note). No lifts, glows or
+ *            entrance animations. Loops only say "working" or "new": .support-spin,
+ *            the loading shimmer and the Live chat tab's unread pulse. Reduced
+ *            motion turns transitions and loops off.
+ *   Focus    one gold ring on every control, drawn inside rows that sit in a
+ *            clipping or scrolling list; fields use their border and halo.
+ *   Contrast text tokens keep 4.5:1 on every surface (faint is the floor);
+ *            a disabled control fades to --support-disabled-opacity, never
+ *            below 3.5:1. Status is never colour alone: a chip, icon or word
+ *            carries it too.
+ *   Touch    on a phone or a touch screen every control is at least
+ *            --support-touch (40px) on its short side; text links and small
+ *            icon buttons keep their look and get a larger hit area.
+ *
+ * Small screens
+ *   The page sets a layout class from its own width (not the window's: Spire's
+ *   sidebar and zoom change it): .layout-wide (queue, case, inspector),
+ *   .layout-split (queue and case, inspector under the case) and .layout-single
+ *   (the queue or one case, with a sticky bar back). .is-fill when the
+ *   workspace fills the window and each pane scrolls; otherwise the page
+ *   scrolls and Live chat is one window tall (--support-vh). Every dialog is
+ *   centered and scrollable: the body scrolls, header and footer stay in view.
+ *   On a phone a dialog does not focus a text field on its own (touchLayout()
+ *   in support-ui.js), so the on-screen keyboard does not cover it.
+ *
+ * Notices and keys
+ *   Page notices are a toast (.support-notice, PlayerSupport.vue) over the bottom
+ *   of the queue, or of the window when the queue is not beside the case, at
+ *   --support-z-toast: they never push the page down. A success leaves on its
+ *   own; a warning or an error stays. Single-key shortcuts (listed in the page's
+ *   Keyboard shortcuts dialog and the guide) work only outside text fields and
+ *   dialogs, and never use Ctrl: Spire's own shortcuts do.
  *
  * When colour is allowed
  *   Surfaces, borders and text are neutral navy. Gold (--support-accent) is the
@@ -34,6 +64,8 @@
  *                          .is-danger; sizes .is-sm; .is-icon for icon-only;
  *                          .is-block for full width. A disabled primary turns
  *                          neutral; the others fade to half opacity.
+ *                          .is-danger.is-solid is the confirm of a destructive
+ *                          change (ban, remove, clear): never the first focus.
  *   .support-chip          status chip: neutral default, .is-accent, .is-success,
  *                          .is-warning, .is-danger; .is-tag for an uppercase tag
  *                          beside a name ("alt")
@@ -47,8 +79,10 @@
  *   .support-search        field wrapper with a leading icon and trailing kbd
  *   .support-label         form label; .support-label-hint for the quiet suffix
  *   .support-segmented     segmented control: buttons with aria-pressed
- *   .support-tabs          underline tabs: buttons with aria-pressed or aria-selected;
- *                          disabled tabs fade
+ *   .support-tabs          underline tabs: role="tablist" of role="tab" buttons with
+ *                          aria-selected, aria-controls and roving tabindex; arrow
+ *                          keys move with tablistKeydown (support-ui.js). Tabs that
+ *                          do not fit scroll sideways. Disabled tabs fade
  *   .support-section-label small uppercase section heading
  *   .support-empty         empty or placeholder state: icon, strong, text;
  *                          .is-compact for a one-line dashed placeholder
@@ -58,20 +92,49 @@
  *                          quick destinations); aria-pressed marks the chosen one
  *   .support-option        selectable row in a list (aria-pressed / aria-current)
  *   .support-action-list   bordered list of action rows (.support-action)
- *   .support-dl            definition list, label left and value right
+ *   .support-dl            definition list, label left and value right;
+ *                          .is-boxed frames it (the summary a confirmation repeats)
  *   .support-stat          stat card: numeral (strong) and label (span);
  *                          .is-quiet for a zero or missing value
- *   .support-table         compact data table
+ *   .support-table         compact data table; .is-sticky keeps the header row in
+ *                          view while the dialog body scrolls (the offset is
+ *                          --support-sticky-offset, the height of a sticky tab bar)
  *   .support-settings      bordered list of .support-setting rows: a label with
  *                          .support-setting-text (strong + small) and a
  *                          .support-switch checkbox; .is-disabled on the row
- *   .support-kbd           keyboard hint
+ *   .support-check         16px checkbox (input type=checkbox); gold when checked
+ *   .support-bulkbar       bar shown while items are selected: a
+ *                          .support-bulkbar-count ("2 selected") and a ghost
+ *                          Cancel on the first line, then
+ *                          .support-bulkbar-actions holding .support-button.is-sm
+ *   .support-kbd           keyboard hint; .is-quiet for a row of hints under a field
  *   .support-link          text-styled button
+ *   .support-copy          24px quiet icon button (copy, the inspector's edit);
+ *                          .is-text shows the value before the icon ("#42").
+ *                          SupportCopy.vue wraps it with the copy and "Copied"
  *   .support-feedback      inline status text: .is-error, .is-success
  *   .support-modal-lead    first line of a dialog body; .support-modal-hint for
  *                          a note under it
  *   .support-footer-note   note on the left of a dialog footer, before the
- *                          buttons; .is-warning when it warns
+ *                          buttons; .is-warning when it warns; an icon may lead.
+ *                          On a phone it takes its own line above the buttons
+ *   .support-keys-hint     a keyboard shortcut hint, left out on a phone
+ *   .support-modal-subject the "· who it acts on" part of a dialog title: every
+ *                          tool title reads "Tool · Aranel" (or the account)
+ *   .support-blocked       "disabled because…" line under a control: lock icon
+ *                          and the reason (missing patch feature, in game or
+ *                          offline, resolved case, no permission)
+ *   .support-shimmer       a loading placeholder bar; SupportLoadState draws the
+ *                          shared skeleton and the error-with-retry state
+ *
+ * Shared dialog parts (components in this folder)
+ *   SupportReason          the required reason: label, counter, rule, inline error
+ *                          on confirm (the confirm button stays enabled), Ctrl+Enter
+ *   SupportResult          what a change did and that it is on the timeline; an
+ *                          unconfirmed change is never sent again from the dialog
+ *   SupportLoadState       skeleton while loading, error with "Try again"
+ *   SupportCopy            copies a name or an ID, says "Copied"
+ *   support-dialog.js      returns focus to the control that opened a dialog
  *
  * support-parcel.css themes the shared GMParcelComposer and its item picker when
  * Player Support opens them with modal-class "support-modal support-parcel-modal".
@@ -93,11 +156,12 @@
   --support-border-strong: #46586c;
   --support-border-hover: #62768c;
 
-  /* Text. Muted and faint keep at least 4.5:1 on --support-pane. */
+  /* Text. Muted and faint keep at least 4.5:1 on every surface, --support-selected
+     included (faint 4.9:1 there, muted 6.0:1). */
   --support-text: #eef3f8;
   --support-text-secondary: #c8d3de;
   --support-muted: #9fb0c3;
-  --support-faint: #8394a8;
+  --support-faint: #8d9eb2;
 
   /* The accent */
   --support-accent: #dfb976;
@@ -106,6 +170,7 @@
   --support-accent-soft: rgba(223, 185, 118, .12);
   --support-accent-line: rgba(223, 185, 118, .5);
   --support-on-accent: #1f1910;
+  --support-on-danger: #2a1310;
 
   /* Meaning */
   --support-success: #8fd6ad;
@@ -115,6 +180,7 @@
   --support-warning-soft: rgba(244, 186, 131, .12);
   --support-warning-line: rgba(244, 186, 131, .38);
   --support-danger: #f59f8f;
+  --support-danger-hover: #f8b6a9;
   --support-danger-soft: rgba(245, 159, 143, .12);
   --support-danger-line: rgba(245, 159, 143, .42);
 
@@ -148,16 +214,28 @@
   --support-transition: color var(--support-duration) ease, background-color var(--support-duration) ease,
     border-color var(--support-duration) ease, box-shadow var(--support-duration) ease;
   --support-focus-ring: 2px solid var(--support-accent);
+  /* A disabled control keeps at least 3.5:1 (WCAG exempts it; it must stay legible). */
+  --support-disabled-opacity: .6;
+  /* Smallest touch target on a phone or a touch screen */
+  --support-touch: 40px;
+  /* Height of an underline tab, and so of a sticky tab bar: sticky table
+     headers and lists sit this far down (--support-sticky-offset). */
+  --support-tab-height: 42px;
+  /* Page notices float above the page and under every dialog (Bootstrap's
+     backdrop is 1040, its dialogs 1050). */
+  --support-z-toast: 1030;
 
   color: var(--support-text);
 }
 
-/* Keyboard focus, everywhere in scope */
+/* Keyboard focus, everywhere in scope. Spire's global stylesheet removes the
+   outline from every focused button and link with `outline: 0 !important`, so
+   the ring needs !important too; this selector is more specific, so it wins. */
 .player-support button:focus-visible, .player-support a:focus-visible, .player-support input:focus-visible,
 .player-support textarea:focus-visible, .player-support select:focus-visible, .player-support [tabindex]:focus-visible,
 .support-modal button:focus-visible, .support-modal a:focus-visible, .support-modal input:focus-visible,
 .support-modal textarea:focus-visible, .support-modal select:focus-visible, .support-modal [tabindex]:focus-visible {
-  outline: var(--support-focus-ring);
+  outline: var(--support-focus-ring) !important;
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -192,7 +270,7 @@
   transition: var(--support-transition);
 }
 .support-button:hover:not(:disabled) { border-color: var(--support-border-hover); background: var(--support-hover); color: var(--support-text); text-decoration: none; }
-.support-button:disabled { opacity: .5; cursor: not-allowed; }
+.support-button:disabled { opacity: var(--support-disabled-opacity); cursor: not-allowed; }
 .support-button > i { font-size: 14px; }
 .support-button.is-primary { border-color: var(--support-accent); background: var(--support-accent); color: var(--support-on-accent); }
 .support-button.is-primary:hover:not(:disabled) { border-color: var(--support-accent-hover); background: var(--support-accent-hover); color: var(--support-on-accent); }
@@ -202,6 +280,8 @@
 .support-button.is-ghost:hover:not(:disabled) { border-color: transparent; background: var(--support-hover); color: var(--support-text); }
 .support-button.is-danger { border-color: var(--support-danger-line); background: transparent; color: var(--support-danger); }
 .support-button.is-danger:hover:not(:disabled) { border-color: var(--support-danger); background: var(--support-danger-soft); color: var(--support-danger); }
+.support-button.is-danger.is-solid { border-color: var(--support-danger); background: var(--support-danger); color: var(--support-on-danger); }
+.support-button.is-danger.is-solid:hover:not(:disabled) { border-color: var(--support-danger-hover); background: var(--support-danger-hover); color: var(--support-on-danger); }
 .support-button.is-sm { min-height: 28px; padding: 0 10px; font-size: var(--support-text-xs); }
 .support-button.is-icon { width: 32px; padding: 0; }
 .support-button.is-icon.is-sm { width: 28px; }
@@ -337,6 +417,8 @@ select.support-field { padding-right: 28px; }
   color: var(--support-faint);
   transition: var(--support-transition);
 }
+/* Outranks the dialog's `.support-modal label` when the wrapper is a label. */
+.support-modal .support-search { display: flex; margin: 0; color: var(--support-faint); font-weight: 400; }
 .support-search:focus-within { border-color: var(--support-accent); box-shadow: 0 0 0 3px var(--support-accent-soft); }
 .support-search input {
   flex: 1;
@@ -349,8 +431,13 @@ select.support-field { padding-right: 28px; }
   font-size: var(--support-text-md);
 }
 .support-search input::placeholder { color: var(--support-faint); }
-.support-search input:focus,
-.support-search input:focus-visible { outline: none; }
+.support-search input:focus { outline: none; }
+/* Fields show focus with their border and halo, not the ring above. */
+.player-support .support-search input:focus-visible,
+.support-modal .support-search input:focus-visible,
+.player-support .support-field:focus-visible,
+.support-modal .support-field:focus-visible,
+.support-modal .form-control:focus-visible { outline: none !important; }
 
 .support-label,
 .support-modal label {
@@ -396,16 +483,24 @@ select.support-field { padding-right: 28px; }
   background: var(--support-selected);
   color: var(--support-text);
 }
-.support-segmented > button:disabled { opacity: .5; cursor: not-allowed; }
+.support-segmented > button:disabled { opacity: var(--support-disabled-opacity); cursor: not-allowed; }
 
 /* Tabs ------------------------------------------------------------------- */
-.support-tabs { display: flex; gap: var(--support-space-5); }
+.support-tabs {
+  display: flex; gap: var(--support-space-5); min-width: 0; max-width: 100%;
+  /* The active underline covers the border under the bar. */
+  margin-bottom: -1px;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.support-tabs::-webkit-scrollbar { display: none; }
 .support-tabs > button {
   display: inline-flex;
+  flex: none;
+  white-space: nowrap;
   align-items: center;
   gap: 6px;
-  margin-bottom: -1px;
-  padding: 10px 0;
+  min-height: var(--support-tab-height);
+  padding: 0;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -415,7 +510,10 @@ select.support-field { padding-right: 28px; }
   transition: var(--support-transition);
 }
 .support-tabs > button:hover:not(:disabled) { color: var(--support-text); }
-.support-tabs > button:disabled { opacity: .5; cursor: not-allowed; }
+/* The bar scrolls sideways, so the ring is drawn inside the tab. */
+.player-support .support-tabs > button:focus-visible,
+.support-modal .support-tabs > button:focus-visible { outline-offset: -2px; }
+.support-tabs > button:disabled { opacity: var(--support-disabled-opacity); cursor: not-allowed; }
 .support-tabs > button[aria-pressed="true"],
 .support-tabs > button[aria-selected="true"] { border-bottom-color: var(--support-accent); color: var(--support-text); }
 .support-tabs > button[aria-pressed="true"] > i,
@@ -506,7 +604,7 @@ select.support-field { padding-right: 28px; }
   transition: var(--support-transition);
 }
 .support-suggestions > button:hover:not(:disabled) { border-color: var(--support-accent-line); color: var(--support-text); }
-.support-suggestions > button:disabled { opacity: .5; cursor: not-allowed; }
+.support-suggestions > button:disabled { opacity: var(--support-disabled-opacity); cursor: not-allowed; }
 .support-suggestions > button > i { color: var(--support-muted); font-size: 12px; }
 .support-suggestions > button[aria-pressed="true"] { border-color: var(--support-accent-line); background: var(--support-selected); color: var(--support-text); }
 .support-suggestions > button[aria-pressed="true"] > i { color: var(--support-accent); }
@@ -563,6 +661,9 @@ select.support-field { padding-right: 28px; }
 .support-action:hover:not(:disabled) > i:first-child,
 .support-action:hover:not(:disabled) > .support-action-chevron { color: var(--support-accent); }
 .support-action:disabled { cursor: not-allowed; }
+/* The list clips its corners, so the ring is drawn inside the row. */
+.player-support .support-action:focus-visible,
+.support-modal .support-action:focus-visible { outline-offset: -2px; }
 .support-action:disabled > *,
 .support-action:disabled > i:first-child { color: var(--support-faint); }
 .support-action:disabled .support-action-text strong { color: var(--support-muted); }
@@ -578,6 +679,7 @@ select.support-field { padding-right: 28px; }
   font-size: var(--support-text-sm);
 }
 .support-dl dt { color: var(--support-muted); font-weight: 400; }
+.support-dl.is-boxed { padding: var(--support-space-3); border: 1px solid var(--support-border); border-radius: var(--support-radius-lg); background: var(--support-pane); }
 .support-dl dd { display: flex; align-items: center; justify-content: flex-end; gap: var(--support-space-1); min-width: 0; margin: 0; color: var(--support-text); text-align: right; overflow-wrap: anywhere; }
 
 /* Stat card -------------------------------------------------------------- */
@@ -612,6 +714,12 @@ select.support-field { padding-right: 28px; }
 .support-table td { padding: var(--support-space-2); border-bottom: 1px solid var(--support-border-subtle); color: var(--support-text-secondary); text-align: left; }
 .support-table thead th { color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .support-table tbody th { color: var(--support-text); font-weight: 600; }
+.support-table td.is-number,
+.support-table th.is-number { text-align: right; }
+.support-table .is-nowrap { white-space: nowrap; }
+.support-table td.is-action { width: 1%; text-align: right; white-space: nowrap; }
+/* Sticky header row: the dialog body is the scroller, so the wrapper must not clip. */
+.support-table.is-sticky thead th { position: sticky; top: var(--support-sticky-offset, 0); z-index: 1; background: var(--support-bg); box-shadow: inset 0 -1px 0 var(--support-border-subtle); }
 
 /* Settings rows and switch ----------------------------------------------- */
 /* .support-settings holds rows. Each .support-setting is a label with the text
@@ -665,7 +773,59 @@ select.support-field { padding-right: 28px; }
   background-color: var(--support-accent);
   background-position: 16px 2px;
 }
-.support-switch:disabled { opacity: .5; }
+.support-switch:disabled { opacity: var(--support-disabled-opacity); }
+
+/* Checkbox --------------------------------------------------------------- */
+/* A 16px box; the tick is a background image for the same Firefox reason as
+   the switch. Focus uses the shared ring above. */
+.support-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius-sm);
+  background-color: var(--support-sunken);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: var(--support-transition);
+  vertical-align: middle;
+}
+.support-check:hover:not(:disabled) { border-color: var(--support-border-hover); }
+.support-check:checked {
+  border-color: var(--support-accent);
+  background-color: var(--support-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='%231f1910' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.support-check:disabled { opacity: var(--support-disabled-opacity); cursor: not-allowed; }
+
+/* Bulk action bar -------------------------------------------------------- */
+/* Replaces a filter row while items are selected: a count, then small buttons. */
+.support-bulkbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--support-space-2);
+  padding: var(--support-space-2);
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+}
+.support-bulkbar-count {
+  margin-right: auto;
+  padding-left: var(--support-space-1);
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.support-bulkbar-actions { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: 6px; }
+.support-bulkbar .support-button.is-sm { padding: 0 var(--support-space-2); }
 
 /* Keyboard hint ---------------------------------------------------------- */
 .support-kbd {
@@ -684,6 +844,7 @@ select.support-field { padding-right: 28px; }
   line-height: 1.3;
   text-align: center;
 }
+.support-kbd.is-quiet { padding: 0 var(--support-space-1); border-color: var(--support-border-subtle); border-bottom-width: 1px; background: transparent; font-weight: 400; }
 
 /* Text button and inline feedback --------------------------------------- */
 .support-link {
@@ -696,6 +857,22 @@ select.support-field { padding-right: 28px; }
   text-decoration: none;
 }
 .support-link:hover { color: var(--support-accent-hover); text-decoration: underline; }
+/* Copy and quiet inline icon buttons (SupportCopy, the inspector's edit
+   buttons): 24px, faint until hovered. .is-text shows the value before the
+   icon ("#42") and sizes to it. */
+.support-copy {
+  display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; margin: -4px -4px -4px 0; padding: 0;
+  border: 0; border-radius: var(--support-radius); background: transparent; color: var(--support-faint); font-size: var(--support-text-xs);
+  transition: var(--support-transition);
+}
+.support-copy:hover:not(:disabled) { background: var(--support-hover); color: var(--support-text); }
+.support-copy:disabled { opacity: var(--support-disabled-opacity); cursor: not-allowed; }
+.support-copy.is-text {
+  display: inline-flex; gap: var(--support-space-1); width: auto; height: auto; margin: 0 0 0 calc(var(--support-space-1) * -1); padding: 1px var(--support-space-1);
+  border-radius: var(--support-radius-sm); color: var(--support-text-secondary); font-variant-numeric: tabular-nums;
+}
+.support-copy.is-text > i { color: var(--support-faint); font-size: 11px; }
+.support-copy.is-text:hover > i { color: var(--support-accent); }
 .support-feedback { display: flex; align-items: center; gap: 6px; margin: var(--support-space-2) 0 0; color: var(--support-muted); font-size: var(--support-text-sm); }
 .support-feedback.is-error { color: var(--support-danger); }
 .support-feedback.is-success { color: var(--support-success); }
@@ -721,15 +898,31 @@ select.support-field { padding-right: 28px; }
 .support-modal .modal-footer > * { margin: 0; }
 /* A note on the left of a dialog footer, before the buttons. The reset above
    clears margins, so the auto margin lives here, where it outranks it. */
-.support-modal .modal-footer > .support-footer-note { margin-right: auto; color: var(--support-muted); font-size: var(--support-text-sm); }
-.support-modal .modal-footer > .support-footer-note.is-warning { color: var(--support-warning); }
+.support-modal .modal-footer > .support-footer-note { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; color: var(--support-muted); font-size: var(--support-text-sm); line-height: 1.4; }
+.support-modal .modal-footer > .support-footer-note > i { flex: none; color: var(--support-faint); }
+.support-modal .modal-footer > .support-footer-note.is-warning,
+.support-modal .modal-footer > .support-footer-note.is-warning > i { color: var(--support-warning); }
 .support-modal .modal-title {
+  min-width: 0;
+  overflow: hidden;
   color: var(--support-text);
   font-family: inherit;
   font-size: var(--support-text-lg);
   font-weight: 600;
   line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+/* "Tool · Aranel": the subject is quieter than the tool name. */
+.support-modal-subject { color: var(--support-muted); font-weight: 400; }
+
+/* Disabled because: a lock and the reason, under the control it explains. */
+.support-blocked { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.45; }
+.support-blocked > i { flex: none; margin-top: 2px; color: var(--support-faint); font-size: 12px; }
+
+/* Loading placeholder bar */
+.support-shimmer { display: block; border-radius: var(--support-radius-sm); background: linear-gradient(90deg, var(--support-raised) 0%, var(--support-hover) 50%, var(--support-raised) 100%); background-size: 200% 100%; animation: support-shimmer 1.4s ease-in-out infinite; }
+@keyframes support-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .support-modal .modal-header .close {
   margin: -4px -8px -4px auto;
   padding: 4px 8px;
@@ -744,9 +937,77 @@ select.support-field { padding-right: 28px; }
 .support-modal-lead { margin: 0; color: var(--support-text); font-size: var(--support-text-md); line-height: 1.5; }
 .support-modal-lead strong { font-weight: 600; }
 .support-modal-hint { margin: var(--support-space-3) 0 0; }
+.support-modal-lead + .support-dl.is-boxed { margin-top: var(--support-space-3); }
+
+/* Every dialog fits the window: the body scrolls and the header and footer stay
+   in view, also above an on-screen keyboard. Each b-modal is centered and
+   scrollable; the content is sized from the dialog rather than from 100vh,
+   which Spire's page zoom would shrink. */
+.support-modal .modal-dialog-scrollable .modal-content { max-height: 100%; }
+.support-modal .modal-body { overscroll-behavior: contain; }
+/* The backdrop covers the whole window, also where Spire zooms the page
+   (100vw and 100vh would cover only the zoomed part). */
+.support-modal + .modal-backdrop { width: 100%; height: 100%; }
+
+/* A short window (a phone held sideways, page zoom): the dialog gives its
+   margins to the body. */
+@media (max-height: 560px) {
+  .support-modal .modal-dialog { margin-top: var(--support-space-2); margin-bottom: var(--support-space-2); }
+  .support-modal .modal-dialog-scrollable { max-height: calc(100% - var(--support-space-4)); }
+  .support-modal .modal-dialog-centered { min-height: calc(100% - var(--support-space-4)); }
+  .support-modal .modal-header,
+  .support-modal .modal-footer { padding-top: var(--support-space-2); padding-bottom: var(--support-space-2); }
+}
+
+/* Phones: a dialog uses the width, its footer actions share the last row and a
+   note above them gets its own line. Keyboard hints are left out. */
+@media (max-width: 575px) {
+  .support-modal .modal-dialog { margin: var(--support-space-2); }
+  .support-modal .modal-header,
+  .support-modal .modal-footer { padding-right: var(--support-space-4); padding-left: var(--support-space-4); }
+  .support-modal .modal-body { padding-right: var(--support-space-4); padding-left: var(--support-space-4); }
+  .support-modal .modal-footer { flex-wrap: wrap; }
+  .support-modal .modal-footer > .support-footer-note { flex-basis: 100%; margin-right: 0; }
+  .support-modal .modal-footer > .support-button,
+  .support-modal .modal-footer > .btn { flex: 1 1 auto; }
+  .support-modal .support-keys-hint { display: none !important; }
+}
+
+/* Touch: every control is at least --support-touch on its short side. Text links
+   and small icon buttons keep their look and get a larger hit area. */
+@media (max-width: 680px), (pointer: coarse) {
+  .player-support,
+  .support-modal { --support-tab-height: 44px; }
+  .player-support .support-button,
+  .support-modal .support-button,
+  .support-modal .btn { min-height: var(--support-touch); }
+  .player-support .support-button.is-icon,
+  .support-modal .support-button.is-icon { width: var(--support-touch); }
+  .player-support .support-segmented > button,
+  .support-modal .support-segmented > button { min-height: calc(var(--support-touch) - 2px); }
+  .player-support .support-suggestions > button,
+  .support-modal .support-suggestions > button,
+  .support-modal .support-option { min-height: var(--support-touch); }
+  .player-support .support-field,
+  .player-support .support-search,
+  .support-modal .support-field,
+  .support-modal .support-search,
+  .support-modal .form-control { min-height: var(--support-touch); }
+  .support-modal .modal-header .close { min-width: var(--support-touch); min-height: var(--support-touch); margin: -8px -12px -8px auto; }
+  .player-support .support-link,
+  .support-modal .support-link { position: relative; }
+  .player-support .support-link::after,
+  .support-modal .support-link::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, var(--support-touch)); height: max(100%, var(--support-touch)); transform: translate(-50%, -50%); }
+  .player-support .support-check,
+  .support-modal .support-check { width: 20px; height: 20px; background-size: 14px 14px; }
+  .player-support .support-copy,
+  .support-modal .support-copy { position: relative; }
+  .player-support .support-copy::after,
+  .support-modal .support-copy::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, var(--support-touch)); height: max(100%, var(--support-touch)); transform: translate(-50%, -50%); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .player-support *,
-  .support-modal * { transition: none !important; animation: none !important; }
+  .support-modal * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
   .support-spin { animation: none; }
 }

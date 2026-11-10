@@ -556,6 +556,18 @@
   margin: 5px 0 0;
 }
 
+.gm-parcel-field-hint {
+  color: var(--parcel-muted);
+  font-size: 12px;
+  margin: 5px 0 0;
+}
+
+.gm-parcel-footer-note {
+  color: var(--parcel-muted);
+  font-size: 12px;
+  margin-right: auto;
+}
+
 .gm-parcel-review-list {
   margin-top: 10px;
 }

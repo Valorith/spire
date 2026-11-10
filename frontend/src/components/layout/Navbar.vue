@@ -22,9 +22,12 @@
       <!-- Toggler -->
       <button
         class="navbar-toggler" type="button" data-toggle="collapse" data-target="#sidebarCollapse"
-        aria-controls="sidebarCollapse" aria-expanded="false" aria-label="Toggle navigation"
+        aria-controls="sidebarCollapse" aria-expanded="false"
+        :aria-label="supportPending > 0 ? 'Toggle navigation, ' + supportPendingLabel : 'Toggle navigation'"
       >
         <span class="navbar-toggler-icon"></span>
+        <!-- On a phone the menu is closed: the Player Support count still shows on its button. -->
+        <span v-if="supportPending > 0" class="navbar-toggler-count" aria-hidden="true">{{ supportPending > 99 ? '99+' : supportPending }}</span>
       </button>
 
       <router-link
@@ -296,11 +299,17 @@ import semver                 from "semver";
 
 export default {
   computed: {
+    supportPendingLabel () {
+      return this.supportPending === 1 ? '1 petition pending GM action' : this.supportPending + ' petitions pending GM action'
+    },
     permittedAdminNavs() {
       return this.adminNavs.map(nav => {
         if (nav.to === ROUTE.ADMIN_ROOT) {
           const to = serverAdminLandingRoute()
           return to ? { ...nav, to } : null
+        }
+        if (nav.to === ROUTE.ADMIN_PLAYER_SUPPORT && canAccessAdminRoute(nav.to)) {
+          return { ...nav, badge: this.supportPending, badgeLabel: this.supportPendingLabel }
         }
         if (nav.to) return canAccessAdminRoute(nav.to) ? nav : null
         const navs = nav.navs.filter(child => canAccessAdminRoute(child.to))
@@ -348,6 +357,9 @@ export default {
   components: { DbConnectionStatusPill, NavSectionComponent, NavbarDropdownMenu, NavbarUserSettingsCog },
   data() {
     return {
+      // Petitions pending GM action, for the Player Support badge.
+      supportPending: 0,
+      supportPendingTimer: null,
 
       // state
       lastPartition: "default",
@@ -778,8 +790,12 @@ export default {
     EventBus.$on("APP_UPDATE_CHANNEL_CHANGED", this.handleUpdateChannelChanged);
     EventBus.$on("ROUTE_CHANGE", this.handleRouteChange);
     EventBus.$on("DB_CONNECTION_CHANGE", this.handleConnectionChange);
+    EventBus.$on('PLAYER_SUPPORT_PENDING', this.setSupportPending)
   },
   destroyed() {
+    EventBus.$off('PLAYER_SUPPORT_PENDING', this.setSupportPending)
+    clearInterval(this.supportPendingTimer)
+    document.removeEventListener('visibilitychange', this.loadSupportPending)
     EventBus.$off("HIDE_NAVBAR", this.toggleNavbarCollapse);
     EventBus.$off("APP_ENV_LOADED", this.handleAppEnvLoaded);
     EventBus.$off("APP_BETA_RELEASE_CHANGED", this.handleBetaReleaseChanged);
@@ -802,9 +818,36 @@ export default {
       this.latestAppVersion = LocalSettings.getLatestUpdateVersion()
       this.$forceUpdate()
     }, 1000)
+
+    // The Player Support badge: about once a minute, only while the admin
+    // navigation is shown, the tab is visible and the user may see the queue.
+    this.supportPendingTimer = setInterval(this.loadSupportPending, 60000)
+    document.addEventListener('visibilitychange', this.loadSupportPending)
+    setTimeout(this.loadSupportPending, 1500)
   },
 
   methods: {
+
+    canSeeSupportPending () {
+      return this.isAppLocal() && this.isInAdmin() && canAccessServerAdmin() && canAccessAdminRoute(ROUTE.ADMIN_PLAYER_SUPPORT)
+    },
+
+    // A failure only hides the badge; the navigation never waits for it.
+    async loadSupportPending () {
+      if (document.hidden || !this.canSeeSupportPending()) return
+      try {
+        const { data } = await SpireApi.v1().get('player-support/pending', { timeout: 8000 })
+        this.setSupportPending(data && data.pending)
+      } catch (e) {
+        this.supportPending = 0
+      }
+    },
+
+    // The Player Support page shares its fresher count.
+    setSupportPending (count) {
+      const value = Number(count)
+      this.supportPending = Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+    },
 
     updateSpire() {
       this.$bvModal.show('app-update-modal')
@@ -1049,12 +1092,34 @@ export default {
     },
     $route(to, from) {
       this.hideNavbarAfterClick()
+      // Entering the admin area shows the badge at once.
+      if (to.path.startsWith(ROUTE.ADMIN_ROOT) && !from.path.startsWith(ROUTE.ADMIN_ROOT)) this.loadSupportPending()
     }
   }
 }
 </script>
 
 <style scoped>
+.navbar-toggler {
+  position: relative;
+}
+
+.navbar-toggler-count {
+  position: absolute;
+  top: -2px;
+  right: -6px;
+  min-width: 1.5em;
+  padding: 0 .4em;
+  border-radius: 999px;
+  background: #dfb976;
+  color: #1f1910;
+  font-size: .7rem;
+  font-weight: 700;
+  line-height: 1.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .sidebar-feedback {
   display: flex;
   align-items: center;

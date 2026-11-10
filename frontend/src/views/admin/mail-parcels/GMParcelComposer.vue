@@ -3,7 +3,7 @@
     <b-modal ref="modal" :modal-class="['mail-parcels-editor-modal gm-parcel-modal', modalClass]" dialog-class="gm-parcel-dialog"
              :title="caseKey ? 'Send parcel' : 'GM Send Parcels'" centered scrollable
              :hide-header-close="sending" :no-close-on-esc="sending"
-             :no-close-on-backdrop="sending" @hidden="$emit('close')">
+             :no-close-on-backdrop="sending" @shown="focusStart" @hidden="$emit('close')">
       <b-alert v-if="error" show variant="danger" role="alert">{{ error }}</b-alert>
 
       <template v-if="step === 'compose'">
@@ -11,7 +11,7 @@
           <div class="gm-parcel-recipient">
             <i class="ra ra-player" aria-hidden="true"></i>
             <span>To <strong>{{ recipient.name }}</strong></span>
-            <span v-if="caseKey" class="gm-parcel-case">From Server Support · Case #{{ caseKey.split('-')[0] }}</span>
+            <span v-if="caseKey" class="gm-parcel-case">From Game Master · Case #{{ caseKey.split('-')[0] }}</span>
           </div>
         </slot>
 
@@ -58,12 +58,14 @@
             <label for="gm-parcel-reason">Reason for delivery</label>
             <textarea id="gm-parcel-reason" ref="reason" v-model="reason" class="form-control" rows="2"
                       required maxlength="240" :aria-invalid="reasonError ? 'true' : null"
-                      :aria-describedby="reasonError ? 'gm-parcel-reason-error' : null"></textarea>
+                      :aria-describedby="'gm-parcel-reason-hint' + (reasonError ? ' gm-parcel-reason-error' : '')"></textarea>
             <p v-if="reasonError" id="gm-parcel-reason-error" class="gm-parcel-field-error" role="alert">{{ reasonError }}</p>
+            <p id="gm-parcel-reason-hint" class="gm-parcel-field-hint">Kept in the audit log. The player does not see it.</p>
           </div>
           <div>
             <label for="gm-parcel-note">Parcel note</label>
-            <textarea id="gm-parcel-note" v-model="note" class="form-control" rows="2" maxlength="1024"></textarea>
+            <textarea id="gm-parcel-note" v-model="note" class="form-control" rows="2" maxlength="1024" aria-describedby="gm-parcel-note-hint"></textarea>
+            <p id="gm-parcel-note-hint" class="gm-parcel-field-hint">Optional. The player reads it with the parcel.</p>
           </div>
           <template v-if="!caseKey">
             <div>
@@ -122,6 +124,7 @@
                  :true-value="expectedConfirmation" false-value="" :disabled="sending || verify">
           Confirm delivery
         </label>
+        <span v-if="step === 'compose' && !hasParcelDetails" class="gm-parcel-footer-note">{{ missingDetails }}</span>
         <div class="gm-parcel-actions">
           <template v-if="step === 'compose'">
             <b-button variant="outline-secondary" @click="$refs.modal.hide()">Cancel</b-button>
@@ -170,8 +173,21 @@ export default {
   },
   data () {
     return {
-      step: 'compose', lines: [], lineSequence: 0, fromName: '', sentAt: '', note: '', reason: '', confirmation: '',
-      sending: false, verify: false, error: '', result: null, lookupTarget: null, requestId: '', reviewAttempted: false
+      step: 'compose',
+      lines: [],
+      lineSequence: 0,
+      fromName: '',
+      sentAt: '',
+      note: '',
+      reason: '',
+      confirmation: '',
+      sending: false,
+      verify: false,
+      error: '',
+      result: null,
+      lookupTarget: null,
+      requestId: '',
+      reviewAttempted: false
     }
   },
   computed: {
@@ -186,6 +202,14 @@ export default {
           const max = this.maxQuantity(line.item)
           return line.item && Number.isInteger(line.quantity) && line.quantity > 0 && (max == null || line.quantity <= max)
         }))
+    },
+    // Why Review is not available yet, beside the button.
+    missingDetails () {
+      if (!this.recipient) return 'Choose a recipient.'
+      if (!this.caseKey && !this.fromName.trim()) return 'Add a sender name.'
+      if (!this.caseKey && !sqlDateTime(this.sentAt)) return 'Set when it was sent.'
+      if (this.lines.some(line => !line.item)) return this.lines.length > 1 ? 'Choose an item for every parcel.' : 'Choose an item to send.'
+      return 'Check the quantities.'
     },
     hasValidReason () { return this.reason.trim().length >= minimumReasonLength },
     reasonError () {
@@ -208,7 +232,9 @@ export default {
         // An item that does not stack goes as one parcel per copy.
         for (let copy = 0; copy < Math.max(1, line.copies || 1) && this.lines.length < 20; copy++) {
           this.lines.push({
-            ...emptyLine(`parcel-${++this.lineSequence}`), item: line.item, quantity: line.quantity || 1,
+            ...emptyLine(`parcel-${++this.lineSequence}`),
+            item: line.item,
+            quantity: line.quantity || 1,
             augments: Array.from({ length: 6 }, (_, index) => (line.augments && line.augments[index]) || null)
           })
         }
@@ -229,6 +255,14 @@ export default {
         this.requestId = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
       }
       this.$refs.modal.show()
+    },
+    // First empty item, then a missing reason, then Review.
+    focusStart () {
+      if (this.step !== 'compose') return
+      const empty = this.lines.findIndex(line => !line.item)
+      if (empty >= 0) this.focusItem(empty)
+      else if (!this.hasValidReason && this.$refs.reason) this.$refs.reason.focus()
+      else if (this.$refs.review) this.$refs.review.$el.focus()
     },
     addLine (focus = false) {
       if (this.lines.length >= 20) return
@@ -289,9 +323,13 @@ export default {
       this.sending = true
       this.error = ''
       const payload = {
-        note: this.note, reason: this.reason.trim(), confirmation: this.confirmation,
+        note: this.note,
+        reason: this.reason.trim(),
+        confirmation: this.confirmation,
         items: this.lines.map(line => ({
-          client_key: line.key, item_id: Number(line.item.id), quantity: line.quantity,
+          client_key: line.key,
+          item_id: Number(line.item.id),
+          quantity: line.quantity,
           augment_1: Number(line.augments[0]?.id || 0),
           augment_2: Number(line.augments[1]?.id || 0),
           augment_3: Number(line.augments[2]?.id || 0),
