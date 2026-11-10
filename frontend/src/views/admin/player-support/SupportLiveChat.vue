@@ -25,75 +25,78 @@
     <!-- A log reads new messages aloud once; the history that is there when Live chat opens is not read out. -->
     <div ref="transcript" class="chat-transcript" role="log" aria-label="Chat messages" aria-relevant="additions" :aria-live="transcriptLive ? 'polite' : 'off'"
          tabindex="0" @scroll="onTranscriptScroll">
-      <div v-if="!messages.length" class="chat-empty support-empty">
-        <i class="fe fe-message-circle" aria-hidden="true"></i>
-        <strong>No messages yet</strong>
-        <p v-if="canWrite && composable">
-          Your first message goes {{ mailing ? 'to ' + mailTo + '’s in-game mailbox' : 'as a tell to ' + target }}.
-          While Player replies is on, the player can answer from any character on the account by tell or with <code>#petition</code>.
-        </p>
-        <p v-else>Tells and mail exchanged with any character on {{ record.character }}’s account appear here.</p>
-      </div>
-      <template v-for="row in rows">
-        <div v-if="row.day" :key="'day-' + row.message.id" class="chat-day" role="separator"><span>{{ row.day }}</span></div>
-        <article :key="row.message.id" class="chat-message"
-                 :class="{ 'is-outgoing': row.message.kind === 'chat_out', 'is-continued': row.continued, 'is-afk': row.message.afk, 'is-afk-failed': row.message.afk === 'failed' }">
-          <span v-if="row.message.kind === 'chat_out'" class="chat-avatar support-avatar is-sm is-accent" aria-hidden="true"><i class="fe fe-shield"></i></span>
-          <span v-else class="chat-avatar support-avatar is-sm" :style="avatar(row.message.actor || record.character)" aria-hidden="true">{{ initial(row.message.actor || record.character) }}</span>
-          <div class="chat-bubble">
-            <div class="chat-message-meta" :class="{ 'sr-only': row.continued }">
-              <strong>
-                <template v-if="row.message.kind === 'chat_out'">
-                  {{ row.message.actor || 'Game Master' }}
-                  <span v-if="row.message.recipient" class="chat-recipient">to {{ row.message.recipient }}</span>
-                  <span v-if="row.message.persona" class="chat-recipient" :title="'Players saw this tell from (GM) ' + row.message.persona">as (GM) {{ row.message.persona }}</span>
+      <!-- The content in one box, so a change to its height (a message, a card, a late font) can keep the newest message in view. -->
+      <div ref="transcriptContent" class="chat-transcript-content">
+        <div v-if="!messages.length" class="chat-empty support-empty">
+          <i class="fe fe-message-circle" aria-hidden="true"></i>
+          <strong>No messages yet</strong>
+          <p v-if="canWrite && composable">
+            Your first message goes {{ mailing ? 'to ' + mailTo + '’s in-game mailbox' : 'as a tell to ' + target }}.
+            While Player replies is on, the player can answer from any character on the account by tell or with <code>#petition</code>.
+          </p>
+          <p v-else>Tells and mail exchanged with any character on {{ record.character }}’s account appear here.</p>
+        </div>
+        <template v-for="row in rows">
+          <div v-if="row.day" :key="'day-' + row.message.id" class="chat-day" role="separator"><span>{{ row.day }}</span></div>
+          <article :key="row.message.id" class="chat-message"
+                   :class="{ 'is-outgoing': row.message.kind === 'chat_out', 'is-continued': row.continued, 'is-afk': row.message.afk, 'is-afk-failed': row.message.afk === 'failed' }">
+            <span v-if="row.message.kind === 'chat_out'" class="chat-avatar support-avatar is-sm is-accent" aria-hidden="true"><i class="fe fe-shield"></i></span>
+            <span v-else class="chat-avatar support-avatar is-sm" :style="avatar(row.message.actor || record.character)" aria-hidden="true">{{ initial(row.message.actor || record.character) }}</span>
+            <div class="chat-bubble">
+              <div class="chat-message-meta" :class="{ 'sr-only': row.continued }">
+                <strong>
+                  <template v-if="row.message.kind === 'chat_out'">
+                    {{ row.message.actor || 'Game Master' }}
+                    <span v-if="row.message.recipient" class="chat-recipient">to {{ row.message.recipient }}</span>
+                    <span v-if="row.message.persona" class="chat-recipient" :title="'Players saw this tell from (GM) ' + row.message.persona">as (GM) {{ row.message.persona }}</span>
+                  </template>
+                  <template v-else>{{ row.message.actor || record.character }}</template>
+                  <span v-if="isAlt(row.message)" class="support-chip is-tag" :title="'Not the character that filed the petition (' + record.character + ')'">alt</span>
+                </strong>
+                <time :datetime="row.message.created_at" :title="fullTime(row.message.created_at)">{{ formatTime(row.message.created_at) }}</time>
+              </div>
+              <!-- A mail, the player's or a Game Master's Reply by mail: a card that opens it, instead of the whole letter in the conversation. -->
+              <div v-if="isMail(row.message)" class="chat-mail-card" :title="row.continued ? fullTime(row.message.created_at) : null">
+                <span class="chat-mail-card-icon" aria-hidden="true"><i class="fe fe-mail"></i></span>
+                <span class="chat-mail-card-text">
+                  <span v-if="row.message.kind === 'chat_out'" class="chat-mail-card-label">Sent by mail to {{ row.message.recipient || record.character }}</span>
+                  <span v-else class="chat-mail-card-label">Mail from {{ row.message.actor || record.character }}</span>
+                  <strong class="chat-mail-card-subject" :title="row.message.subject || null">{{ row.message.subject || '(No subject)' }}</strong>
+                </span>
+                <button type="button" class="support-button is-sm chat-mail-open" aria-haspopup="dialog"
+                        :aria-label="'Read message: ' + (row.message.subject || 'mail from ' + (row.message.actor || record.character))" @click="mailMessage = row.message">
+                  <i class="fe fe-book-open" aria-hidden="true"></i> Read message
+                </button>
+              </div>
+              <p v-else :title="row.continued ? fullTime(row.message.created_at) : null"><strong v-if="row.message.subject" class="chat-subject">{{ row.message.subject }}</strong>{{ row.message.text }}</p>
+              <div v-if="((row.message.delivery && row.message.delivery !== 'sent') || row.message.afk) && !isMail(row.message)" class="chat-message-foot">
+                <!-- The player's client answered this tell as AFK, so it was forwarded by mail: one badge,
+                     the full sentence in its tooltip and for screen readers. -->
+                <span v-if="row.message.afk" class="chat-afk-badge" :class="{ 'is-failed': row.message.afk === 'failed' }" :title="afkSentence(row.message)">
+                  <i :class="row.message.afk === 'failed' ? 'fe fe-alert-triangle' : 'fe fe-mail'" aria-hidden="true"></i>
+                  <span aria-hidden="true">{{ afkLabel(row.message) }}</span>
+                  <time v-if="row.message.afk_at" :datetime="row.message.afk_at" aria-hidden="true">{{ formatTime(row.message.afk_at) }}</time>
+                  <span class="sr-only">{{ afkSentence(row.message) }}</span>
+                </span>
+                <span v-if="row.message.delivery && row.message.delivery !== 'sent'" class="chat-message-status support-chip" :class="deliveryTone(row.message.delivery)" :title="deliveryHint(row.message.delivery, row.message.kind)">
+                  <i :class="deliveryIcon(row.message.delivery, row.message.kind)" aria-hidden="true"></i> {{ deliveryLabel(row.message.delivery, row.message.kind) }}
+                </span>
+                <!-- A failed message can go again as is; one that may have arrived is only put back in the box. -->
+                <template v-if="canWrite && row.message.kind === 'chat_out' && (row.message.delivery === 'failed' || row.message.delivery === 'unconfirmed')">
+                  <button v-if="row.message.delivery === 'failed'" type="button" class="support-link chat-message-action" :disabled="busy || !composable"
+                          :aria-label="'Retry sending “' + shorten(row.message.text) + '”'" @click="resend(row.message)">
+                    <i class="fe fe-rotate-cw" aria-hidden="true"></i> Retry
+                  </button>
+                  <button type="button" class="support-link chat-message-action" :disabled="!composable"
+                          :aria-label="'Edit “' + shorten(row.message.text) + '” in the message box'" @click="editAgain(row.message)">
+                    <i class="fe fe-edit-2" aria-hidden="true"></i> Edit
+                  </button>
                 </template>
-                <template v-else>{{ row.message.actor || record.character }}</template>
-                <span v-if="isAlt(row.message)" class="support-chip is-tag" :title="'Not the character that filed the petition (' + record.character + ')'">alt</span>
-              </strong>
-              <time :datetime="row.message.created_at" :title="fullTime(row.message.created_at)">{{ formatTime(row.message.created_at) }}</time>
+              </div>
             </div>
-            <!-- A mail, the player's or a Game Master's Reply by mail: a card that opens it, instead of the whole letter in the conversation. -->
-            <div v-if="isMail(row.message)" class="chat-mail-card" :title="row.continued ? fullTime(row.message.created_at) : null">
-              <span class="chat-mail-card-icon" aria-hidden="true"><i class="fe fe-mail"></i></span>
-              <span class="chat-mail-card-text">
-                <span v-if="row.message.kind === 'chat_out'" class="chat-mail-card-label">Sent by mail to {{ row.message.recipient || record.character }}</span>
-                <span v-else class="chat-mail-card-label">Mail from {{ row.message.actor || record.character }}</span>
-                <strong class="chat-mail-card-subject" :title="row.message.subject || null">{{ row.message.subject || '(No subject)' }}</strong>
-              </span>
-              <button type="button" class="support-button is-sm chat-mail-open" aria-haspopup="dialog"
-                      :aria-label="'Read message: ' + (row.message.subject || 'mail from ' + (row.message.actor || record.character))" @click="mailMessage = row.message">
-                <i class="fe fe-book-open" aria-hidden="true"></i> Read message
-              </button>
-            </div>
-            <p v-else :title="row.continued ? fullTime(row.message.created_at) : null"><strong v-if="row.message.subject" class="chat-subject">{{ row.message.subject }}</strong>{{ row.message.text }}</p>
-            <div v-if="((row.message.delivery && row.message.delivery !== 'sent') || row.message.afk) && !isMail(row.message)" class="chat-message-foot">
-              <!-- The player's client answered this tell as AFK, so it was forwarded by mail: one badge,
-                   the full sentence in its tooltip and for screen readers. -->
-              <span v-if="row.message.afk" class="chat-afk-badge" :class="{ 'is-failed': row.message.afk === 'failed' }" :title="afkSentence(row.message)">
-                <i :class="row.message.afk === 'failed' ? 'fe fe-alert-triangle' : 'fe fe-mail'" aria-hidden="true"></i>
-                <span aria-hidden="true">{{ afkLabel(row.message) }}</span>
-                <time v-if="row.message.afk_at" :datetime="row.message.afk_at" aria-hidden="true">{{ formatTime(row.message.afk_at) }}</time>
-                <span class="sr-only">{{ afkSentence(row.message) }}</span>
-              </span>
-              <span v-if="row.message.delivery && row.message.delivery !== 'sent'" class="chat-message-status support-chip" :class="deliveryTone(row.message.delivery)" :title="deliveryHint(row.message.delivery, row.message.kind)">
-                <i :class="deliveryIcon(row.message.delivery, row.message.kind)" aria-hidden="true"></i> {{ deliveryLabel(row.message.delivery, row.message.kind) }}
-              </span>
-              <!-- A failed message can go again as is; one that may have arrived is only put back in the box. -->
-              <template v-if="canWrite && row.message.kind === 'chat_out' && (row.message.delivery === 'failed' || row.message.delivery === 'unconfirmed')">
-                <button v-if="row.message.delivery === 'failed'" type="button" class="support-link chat-message-action" :disabled="busy || !composable"
-                        :aria-label="'Retry sending “' + shorten(row.message.text) + '”'" @click="resend(row.message)">
-                  <i class="fe fe-rotate-cw" aria-hidden="true"></i> Retry
-                </button>
-                <button type="button" class="support-link chat-message-action" :disabled="!composable"
-                        :aria-label="'Edit “' + shorten(row.message.text) + '” in the message box'" @click="editAgain(row.message)">
-                  <i class="fe fe-edit-2" aria-hidden="true"></i> Edit
-                </button>
-              </template>
-            </div>
-          </div>
-        </article>
-      </template>
+          </article>
+        </template>
+      </div>
       <!-- New messages arrived while staff read earlier ones. -->
       <button v-if="newBelow" type="button" class="chat-jump support-button is-sm" @click="jumpToLatest">
         <i class="fe fe-arrow-down" aria-hidden="true"></i> New messages
@@ -137,35 +140,42 @@
         </div>
       </div>
 
-      <!-- How this message reaches the player, and whether they can answer, before it is sent. -->
+      <!-- Who the player hears from, then how this message reaches them and whether they can answer, before it is sent. -->
       <div class="chat-route">
-        <i :class="mailing ? 'fe fe-mail' : 'fe fe-send'" aria-hidden="true"></i>
-        <label for="support-live-message">{{ mailing ? 'Mail ' + mailTo : 'Tell ' + target }} <span>as {{ mailing || !persona.available ? 'GameMaster' : '(GM) ' + persona.display }}</span></label>
+        <!-- The Game Master's persona: the name players see on tells. Mail always comes from GameMaster. -->
+        <button v-if="!mailing && persona.available" type="button" class="chat-identity" aria-haspopup="dialog"
+                :aria-label="'Speaking as ' + speaker + '. Change the name players see'" :title="'Players see your tells from ' + speaker + '. Change'" @click="openPersona">
+          <span class="chat-identity-avatar support-avatar is-xs is-accent" aria-hidden="true"><i class="fe fe-shield"></i></span>
+          <span class="chat-identity-label" aria-hidden="true">Speaking as</span>
+          <strong class="chat-identity-name" aria-hidden="true">{{ speaker }}</strong>
+          <i class="fe fe-edit-2 chat-identity-edit" aria-hidden="true"></i>
+        </button>
+        <span v-else class="chat-identity is-static" :title="mailing ? 'Mail always comes from GameMaster' : personaLocked ? personaLockText : null">
+          <span class="chat-identity-avatar support-avatar is-xs" aria-hidden="true"><i :class="mailing ? 'fe fe-mail' : 'fe fe-shield'"></i></span>
+          <span class="chat-identity-label">{{ mailing ? 'From' : 'Speaking as' }}</span>
+          <strong class="chat-identity-name">GameMaster</strong>
+        </span>
+        <span class="chat-route-to">
+          <i :class="mailing ? 'fe fe-mail' : 'fe fe-send'" aria-hidden="true"></i>
+          <label for="support-live-message">{{ mailing ? 'Mail ' + mailTo : 'Tell ' + target }}<span class="sr-only"> as {{ mailing ? 'GameMaster' : speaker }}</span></label>
+        </span>
         <span v-if="onAlt && !mailing" class="support-chip is-tag" :title="'Not the character that filed the petition (' + record.character + ')'">alt</span>
         <span v-if="marquee" class="chat-route-extra" title="A delivered tell also shows on the player’s screen"><i class="fe fe-monitor" aria-hidden="true"></i> + on-screen marquee</span>
         <span v-else-if="mailing" class="chat-route-extra">· in-game mailbox</span>
         <span v-if="active" class="chat-answer"><i class="fe fe-check" aria-hidden="true"></i> Player can answer</span>
-        <!-- Persona: the name players see on this Game Master's tells. Mail always comes from GameMaster. -->
-        <button type="button" class="support-link chat-persona-toggle" :disabled="!persona.available" :aria-expanded="String(personaEditing)"
-                aria-controls="chat-persona" :aria-describedby="persona.available ? null : 'chat-persona-reason'"
-                :title="persona.available ? 'Change the name players see on your tells' : persona.reason" @click="togglePersona">
-          <i class="fe fe-user" aria-hidden="true"></i> Change name
+      </div>
+      <!-- World takes no persona here: say so quietly, where the name would be chosen. -->
+      <p v-if="personaLocked" class="support-blocked chat-identity-reason"><i class="fe fe-lock" aria-hidden="true"></i><span>{{ personaLockText }}. Tells come from GameMaster.</span></p>
+      <!-- First use: a Game Master who never chose a name learns that they can. Dismissed once per browser. -->
+      <div v-if="personaHint" class="chat-persona-hint" role="note" aria-label="Choose your name on tells">
+        <span class="chat-persona-hint-avatar support-avatar is-sm is-accent" aria-hidden="true"><i class="fe fe-shield"></i></span>
+        <p><strong>Players see your tells from (GM) Game Master.</strong>{{ ' ' }}Choose the name they see instead, such as (GM) Aranwen.</p>
+        <button type="button" class="support-button is-sm chat-persona-hint-action" aria-haspopup="dialog" @click="openPersona">Choose a name</button>
+        <button type="button" class="support-button is-ghost is-icon is-sm chat-persona-hint-close" aria-label="Dismiss the name tip" title="Dismiss" @click="dismissHint">
+          <i class="fe fe-x" aria-hidden="true"></i>
         </button>
-        <span v-if="!persona.available && persona.reason" id="chat-persona-reason" class="sr-only">{{ persona.reason }}</span>
       </div>
-      <div v-if="personaEditing" id="chat-persona" class="chat-persona" role="group" aria-labelledby="chat-persona-title">
-        <p id="chat-persona-title" class="chat-persona-title">Players see you as <b>(GM) {{ personaPreview }}</b></p>
-        <div class="chat-persona-row">
-          <input ref="personaInput" v-model="personaDraft" class="support-field" type="text" maxlength="24" autocomplete="off" spellcheck="false"
-                 aria-label="Persona" placeholder="Game Master" :aria-invalid="personaProblem ? 'true' : null" aria-describedby="chat-persona-rules chat-persona-note"
-                 @keydown.enter.prevent="savePersona(personaDraft)" @keydown.esc.stop.prevent="closePersona">
-          <button type="button" class="support-button is-primary is-sm" :disabled="Boolean(personaProblem) || personaSaving" @click="savePersona(personaDraft)">Save</button>
-          <button type="button" class="support-button is-sm" :disabled="personaSaving || !persona.persona" @click="savePersona('')">Use default</button>
-          <button type="button" class="support-button is-ghost is-sm" :disabled="personaSaving" @click="closePersona">Cancel</button>
-        </div>
-        <p id="chat-persona-rules" class="chat-persona-rules">3 to 24 letters and single spaces, starting with a letter. Leave it empty for Game Master. Mail still comes from GameMaster.</p>
-        <p id="chat-persona-note" class="chat-persona-note" :class="{ 'is-error': personaProblem }" :role="personaProblem ? 'alert' : null">{{ personaProblem || persona.warning }}</p>
-      </div>
+      <p class="sr-only" role="status">{{ personaAnnouncement }}</p>
 
       <div v-if="error && errorInComposer" class="chat-send-error" role="alert">
         <i class="fe fe-alert-circle" aria-hidden="true"></i>
@@ -226,6 +236,7 @@
 
     <support-mail-view :message="mailMessage" :character="record.character" :can-reply="canWrite && canMail && Boolean(mailMessage) && mailMessage.kind === 'chat_in'"
                        @close="mailMessage = null" @reply="mailInstead('')" />
+    <support-persona-editor v-if="personaOpen" :connection-id="connectionId" @saved="personaSaved" @close="personaClosed" />
 
     <b-modal v-model="confirmOpen" modal-class="support-modal" title="Another GM is on this case" centered scrollable @hidden="focusDraft">
       <p class="support-modal-lead">{{ confirmText }}</p>
@@ -246,16 +257,11 @@ import {
 import { SpireApi } from '@/app/api/spire-api'
 import UserContext from '@/app/user/UserContext'
 import SupportMailView from './SupportMailView.vue'
+import SupportPersonaEditor from './SupportPersonaEditor.vue'
+import { dismissPersonaHint, loadPersona, personaHintDismissed, personaState, tellName } from './support-persona'
 
-// World's rules for a persona; the server checks them again.
-function personaProblem (value) {
-  const name = (value || '').trim()
-  if (!name || name === 'Game Master') return ''
-  if (name.length < 3 || name.length > 24) return 'A persona is 3 to 24 characters.'
-  if (!/^[A-Za-z]+( [A-Za-z]+)*$/.test(name)) return 'Use letters and single spaces only, starting with a letter.'
-  if (name.replace(/ /g, '').toLowerCase() === 'gamemaster') return 'Game Master is the default name; use the default or choose another name.'
-  return ''
-}
+// How close to the end of the transcript still counts as reading the newest messages.
+const pinSlack = 70
 
 const builtInReplies = [
   'Hi, I am looking into this now.',
@@ -266,7 +272,7 @@ const builtInReplies = [
 
 export default {
   name: 'SupportLiveChat',
-  components: { SupportMailView },
+  components: { SupportMailView, SupportPersonaEditor },
   props: {
     record: { type: Object, required: true },
     // Shared saved replies; the ones that fit in a tell become quick replies.
@@ -284,11 +290,14 @@ export default {
     return {
       // The player's mail open in the reading dialog.
       mailMessage: null,
-      // The name players see on this Game Master's tells (GET player-support/persona).
-      persona: { persona: '', display: 'Game Master', available: false, reason: '', warning: '' },
-      personaEditing: false,
-      personaDraft: '',
-      personaSaving: false,
+      // The name players see on this Game Master's tells, shared with the page header (support-persona.js).
+      persona: personaState,
+      personaOpen: false,
+      personaHintHidden: personaHintDismissed(),
+      personaAnnouncement: '',
+      // The transcript keeps the newest message in view until staff scroll up to read
+      // earlier ones, and again once they are back at the end or send a message.
+      pinned: true,
       state: 'connecting',
       active: false,
       messages: [],
@@ -344,10 +353,16 @@ export default {
     mailReplies () { return Boolean(this.features && this.features.mail_replies) },
     // World also shows a delivered tell as an on-screen marquee, "Game Master: "
     // plus the message, cut to 120 characters.
-    personaProblem () { return personaProblem(this.personaDraft) },
-    personaPreview () {
-      const name = this.personaDraft.trim()
-      return name && !this.personaProblem ? name : 'Game Master'
+    // "(GM) <persona>", or GameMaster where World takes no persona.
+    speaker () { return tellName(this.persona) },
+    // World on this connection takes no persona: say why, quietly, where the name would be chosen.
+    personaLocked () { return !this.mailing && this.persona.loaded && !this.persona.available && Boolean(this.persona.reason) },
+    personaLockText () {
+      const reason = this.persona.reason
+      return reason ? 'Custom name ' + reason.charAt(0).toLowerCase() + reason.slice(1) : ''
+    },
+    personaHint () {
+      return !this.mailing && this.persona.loaded && this.persona.available && !this.persona.persona && !this.personaHintHidden
     },
     marquee () { return this.state === 'ready' && Boolean(this.features && this.features.marquee) },
     marqueeCut () { return this.marquee && marqueeCuts(this.draft) },
@@ -482,6 +497,7 @@ export default {
       this.draft = readDraft('chat', key) || ''
       this.requestId = ''
       this.error = ''
+      this.pinned = true
     },
     // The page tells other staff while a reply is being written; the draft is kept per case.
     draft (value, previous) {
@@ -490,16 +506,33 @@ export default {
     }
   },
   created () {
+    // Where this component last scrolled the transcript to, to tell its own scrolling from staff's.
+    this.scrolledTo = null
+    this.resizeObserver = null
     UserContext.getUser().then(user => { this.me = (user && user.user_name) || '' }).catch(() => {})
   },
   mounted () {
-    this.loadPersona()
+    loadPersona(this.connectionId)
     document.addEventListener('visibilitychange', this.onVisibility)
     if (this.draft.trim()) this.$emit('composing', true)
+    // Anything that changes the transcript's height or its content's (the message box
+    // growing, the page fitting the window, a card or a font arriving late, the phone's
+    // keyboard) keeps the newest message in view while the transcript is pinned.
+    if (window.ResizeObserver) {
+      this.resizeObserver = new window.ResizeObserver(() => this.keepPinned())
+      if (this.$refs.transcript) this.resizeObserver.observe(this.$refs.transcript)
+      if (this.$refs.transcriptContent) this.resizeObserver.observe(this.$refs.transcriptContent)
+    }
     this.load()
+  },
+  updated () {
+    // Every render that may have changed the transcript: new messages, the message
+    // box appearing or growing.
+    this.keepPinned()
   },
   beforeDestroy () {
     this.stopped = true
+    if (this.resizeObserver) this.resizeObserver.disconnect()
     if (this.draft.trim()) this.$emit('composing', false)
     document.removeEventListener('visibilitychange', this.onVisibility)
     this.cancelLoad()
@@ -593,43 +626,40 @@ export default {
       this.closePicker(false)
       this.useQuickReply(item.text)
     },
-    async loadPersona () {
-      try {
-        const { data } = await SpireApi.v1().get('player-support/persona', { params: { connection_id: this.connectionId } })
-        if (data && typeof data.display === 'string') this.persona = { ...this.persona, ...data }
-      } catch (e) {
-        // Unknown: tells go as GameMaster, and the control stays off.
-      }
+    openPersona () { this.personaOpen = true },
+    personaSaved () {
+      this.personaAnnouncement = 'Players now see your tells from ' + tellName(this.persona) + '.'
+      // Choosing a name, or the default on purpose, answers the tip for good.
+      if (!this.personaHintHidden) this.dismissHint(false)
     },
-    togglePersona () {
-      if (this.personaEditing) {
-        this.closePersona()
-        return
-      }
-      this.personaDraft = this.persona.persona
-      this.personaEditing = true
-      this.$nextTick(() => { if (this.$refs.personaInput) this.$refs.personaInput.focus() })
+    // The dialog gives focus back to what opened it; when that was the tip, now gone, the name takes it.
+    personaClosed () {
+      this.personaOpen = false
+      setTimeout(() => {
+        const active = document.activeElement
+        if (this.stopped || (active && active !== document.body)) return
+        const identity = this.$el.querySelector('.chat-identity')
+        if (identity && identity.tagName === 'BUTTON') identity.focus()
+      }, 30)
     },
-    closePersona () {
-      this.personaEditing = false
-      this.$nextTick(() => {
-        const toggle = this.$el.querySelector('.chat-persona-toggle')
-        if (toggle) toggle.focus()
-      })
+    dismissHint (focus = true) {
+      this.personaHintHidden = true
+      dismissPersonaHint()
+      if (focus) this.$nextTick(this.focusDraft)
     },
-    async savePersona (value) {
-      if (this.personaSaving || (value && personaProblem(value))) return
-      this.personaSaving = true
-      try {
-        const { data } = await SpireApi.v1().put('player-support/persona', { persona: value.trim() }, { params: { connection_id: this.connectionId } })
-        this.persona = { ...this.persona, ...data }
-        this.personaDraft = this.persona.persona
-        if (!this.persona.warning) this.closePersona()
-      } catch (error) {
-        this.error = this.errorText(error)
-      } finally {
-        this.personaSaving = false
-      }
+    // The distance from what is on screen to the end of the transcript.
+    transcriptGap () {
+      const area = this.$refs.transcript
+      return area ? area.scrollHeight - area.scrollTop - area.clientHeight : 0
+    },
+    scrollToLatest () {
+      const area = this.$refs.transcript
+      if (!area) return
+      area.scrollTop = area.scrollHeight
+      this.scrolledTo = area.scrollTop
+    },
+    keepPinned () {
+      if (this.pinned && this.transcriptGap() > 1) this.scrollToLatest()
     },
     afkLabel (message) {
       if (message.afk === 'failed') return 'AFK · mail failed'
@@ -682,8 +712,9 @@ export default {
         if (wait && this.active) params.after = this.cursor
         const { data } = await SpireApi.v1().get(this.endpoint, { params, cancelToken: cancellation.token, timeout: 17000 })
         if (this.stopped || version !== this.version) return
-        const transcript = this.$refs.transcript
-        const following = !transcript || transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 70
+        // Pinned: staff are reading the newest messages (or have not scrolled up since
+        // Live chat opened), so the transcript follows what arrives.
+        const following = this.pinned
         const grew = (data.cursor || 0) > (this.cursor || 0) && this.messages.length > 0
         this.state = data.state
         this.active = data.active
@@ -698,12 +729,7 @@ export default {
         if (!following && grew) this.newBelow = true
         this.cursor = data.cursor
         delay = this.active ? 350 : 8000
-        if (following) {
-          this.$nextTick(() => {
-            const area = this.$refs.transcript
-            if (area) area.scrollTop = area.scrollHeight
-          })
-        }
+        // The render this answer causes scrolls a pinned transcript to the end (updated).
         if (!this.transcriptLive) {
           this.$nextTick(() => { this.transcriptLive = true })
           this.$emit('loaded')
@@ -720,14 +746,21 @@ export default {
     },
     onTranscriptScroll () {
       const area = this.$refs.transcript
-      if (!area || area.scrollHeight - area.scrollTop - area.clientHeight >= 70) return
+      if (!area) return
+      // A scroll this component made keeps the pin; one by staff pins only near the end.
+      if (this.scrolledTo !== null && Math.abs(area.scrollTop - this.scrolledTo) <= 1) {
+        this.scrolledTo = null
+      } else {
+        this.pinned = this.transcriptGap() < pinSlack
+      }
+      if (this.transcriptGap() >= pinSlack) return
       if (this.newBelow) this.newBelow = false
       const replies = this.messages.filter(message => message.kind === 'chat_in')
       if (replies.length) this.$emit('seen', replies[replies.length - 1].created_at)
     },
     jumpToLatest () {
-      const area = this.$refs.transcript
-      if (area) area.scrollTop = area.scrollHeight
+      this.pinned = true
+      this.scrollToLatest()
       this.newBelow = false
       this.onTranscriptScroll()
     },
@@ -781,6 +814,11 @@ export default {
         }
       }
       if (action === 'send') this.confirmed = false
+      // A message staff send is always followed to the end of the transcript.
+      if (action === 'send') {
+        this.pinned = true
+        this.newBelow = false
+      }
       this.busy = true
       this.sending = action === 'send'
       this.error = ''
@@ -859,9 +897,11 @@ export default {
 
 /* Transcript */
 .chat-transcript {
-  flex: 1; display: flex; flex-direction: column; gap: var(--support-space-4); min-height: 260px; max-height: 480px;
-  padding: var(--support-space-4) var(--support-space-5); overflow: auto;
+  flex: 1; display: flex; flex-direction: column; min-height: 260px; max-height: 480px;
+  padding: var(--support-space-4) var(--support-space-5); overflow: auto; overflow-anchor: none;
 }
+/* Fills the transcript, so the empty state can centre in it. */
+.chat-transcript-content { display: flex; flex: 1 0 auto; flex-direction: column; gap: var(--support-space-4); }
 /* Filling the window, or one window tall, the transcript takes the room left. */
 .player-support.is-fill .support-chat { min-height: 0; }
 .player-support .chat-transcript { max-height: none; min-height: 0; }
@@ -960,25 +1000,43 @@ export default {
 .chat-quick > button { flex: none; white-space: nowrap; }
 .chat-quick > button:last-child { margin-right: var(--support-space-4); }
 
-.chat-route { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--support-space-2); margin-top: 2px; font-size: var(--support-text-xs); line-height: 1.5; }
-.chat-route > i { color: var(--support-accent-text); font-size: 12px; }
+.chat-route { display: flex; flex-wrap: wrap; align-items: center; gap: var(--support-space-1) var(--support-space-2); margin-top: 2px; font-size: var(--support-text-xs); line-height: 1.5; }
+.chat-route-to { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.chat-route-to > i { color: var(--support-accent-text); font-size: 12px; }
 .chat-route label { margin: 0; color: var(--support-text); font-size: var(--support-text-xs); font-weight: 600; }
-.chat-route label span { color: var(--support-muted); font-weight: 400; }
-.chat-route-extra { display: inline-flex; align-items: center; gap: 4px; color: var(--support-muted); }
-.chat-persona-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: var(--support-text-xs); }
-.chat-persona-toggle:disabled { color: var(--support-faint); cursor: not-allowed; text-decoration: none; }
-.chat-persona {
-  margin-top: var(--support-space-2); padding: var(--support-space-2) var(--support-space-3);
-  border: 1px solid var(--support-border); border-left: 3px solid var(--support-accent-line); border-radius: 0 var(--support-radius) var(--support-radius) 0;
-  background: var(--support-pane);
+
+/* Who the player hears from: the name exactly as the tell shows it, gold while it can be
+   changed, with the pencil that opens the editor. Quiet and locked where it cannot. */
+.chat-identity {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; min-height: 28px; margin: 0; padding: 2px 10px 2px 3px;
+  border: 1px solid var(--support-accent-line); border-radius: var(--support-radius-pill);
+  background: var(--support-accent-soft); color: var(--support-text-secondary); font-size: var(--support-text-xs); line-height: 1.3;
+  transition: var(--support-transition);
 }
-.chat-persona-title { margin: 0 0 6px; color: var(--support-text-secondary); font-size: var(--support-text-sm); }
-.chat-persona-title b { color: var(--support-accent-text); }
-.chat-persona-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.chat-persona-row .support-field { flex: 1 1 180px; min-width: 0; max-width: 280px; }
-.chat-persona-rules, .chat-persona-note { margin: 6px 0 0; color: var(--support-muted); font-size: var(--support-text-xs); }
-.chat-persona-note:empty { display: none; }
-.chat-persona-note.is-error { color: var(--support-danger); }
+button.chat-identity { cursor: pointer; }
+button.chat-identity:hover { border-color: var(--support-accent); background: rgba(223, 185, 118, .2); }
+.chat-identity-avatar { flex: none; }
+.chat-identity-avatar > i { font-size: 10px; }
+.chat-identity-label { flex: none; color: var(--support-muted); }
+.chat-identity-name { min-width: 0; overflow: hidden; color: var(--support-accent-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.chat-identity-edit { flex: none; color: var(--support-accent-text); font-size: 11px; opacity: .8; transition: var(--support-transition); }
+button.chat-identity:hover .chat-identity-edit, button.chat-identity:focus-visible .chat-identity-edit { opacity: 1; }
+.chat-identity.is-static { border-color: var(--support-border); background: var(--support-raised); }
+.chat-identity.is-static .chat-identity-name { color: var(--support-text); }
+.chat-identity.is-static .chat-identity-edit { color: var(--support-faint); }
+.chat-identity-reason { margin-top: -2px; }
+
+/* First use: one quiet line with the way in and a dismiss. */
+.chat-persona-hint {
+  display: flex; align-items: center; gap: var(--support-space-2) var(--support-space-3); padding: var(--support-space-2) var(--support-space-2) var(--support-space-2) var(--support-space-3);
+  border: 1px solid var(--support-accent-line); border-radius: var(--support-radius-lg); background: var(--support-accent-soft);
+}
+.chat-persona-hint > .support-avatar { flex: none; }
+.chat-persona-hint > p { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--support-text-secondary); font-size: var(--support-text-xs); line-height: 1.45; }
+.chat-persona-hint > p strong { color: var(--support-text); font-weight: 600; }
+.chat-persona-hint > .support-button { flex: none; }
+.chat-persona-hint-close { color: var(--support-muted); }
+.chat-route-extra { display: inline-flex; align-items: center; gap: 4px; color: var(--support-muted); }
 .chat-route-extra > i { font-size: 11px; }
 .chat-answer { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: var(--support-success); font-weight: 600; }
 .chat-answer > i { font-size: 12px; }
@@ -1050,7 +1108,17 @@ export default {
 .layout-single .chat-status { grid-template-areas: "icon title" "icon hint" "replies replies"; grid-template-columns: auto minmax(0, 1fr); }
 .layout-single .chat-replies { justify-content: space-between; padding-top: 6px; }
 .layout-single .chat-error { margin-right: var(--support-space-4); margin-left: var(--support-space-4); }
-.layout-single .chat-transcript { gap: var(--support-space-3); padding: var(--support-space-3) var(--support-space-4); }
+.layout-single .chat-transcript { padding: var(--support-space-3) var(--support-space-4); }
+.layout-single .chat-transcript-content { gap: var(--support-space-3); }
+/* A phone: the tip's text beside the shield and the dismiss, Choose a name under the text. */
+.layout-single .chat-persona-hint {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "avatar text close" ". action action";
+  align-items: start; gap: var(--support-space-2);
+}
+.layout-single .chat-persona-hint-avatar { grid-area: avatar; }
+.layout-single .chat-persona-hint > p { grid-area: text; align-self: center; }
+.layout-single .chat-persona-hint-close { grid-area: close; margin: -4px -4px 0 0; }
+.layout-single .chat-persona-hint-action { grid-area: action; justify-self: start; }
 .layout-single .chat-composer, .layout-single .chat-blocked { padding-right: var(--support-space-4); padding-left: var(--support-space-4); }
 .layout-single .chat-composer { gap: 6px; padding-top: var(--support-space-2); padding-bottom: var(--support-space-3); }
 .layout-single .chat-picker { right: var(--support-space-4); left: var(--support-space-4); }

@@ -46,6 +46,8 @@ type afkTestDB struct {
 	tells    []models.PlayerSupportEntry
 	claims   int // how many claims succeed
 	mailFail bool
+	// repliesOn: the account's reply route points at case 12, which is open.
+	repliesOn bool
 
 	mails    []*gmMailInsert
 	timeline []*models.PlayerSupportEntry
@@ -79,6 +81,14 @@ func (s *afkTestDB) install(t *testing.T, db *gorm.DB) *gorm.DB {
 			*dest = supportAccountName{Name: "norrathguide"}
 		case *[]models.PlayerSupportEntry:
 			*dest = append([]models.PlayerSupportEntry(nil), s.tells...)
+		case *models.PlayerSupportChat:
+			if s.repliesOn {
+				*dest = models.PlayerSupportChat{AccountID: 5, CaseID: 12}
+			}
+		case *models.PlayerSupportCase:
+			if s.repliesOn {
+				*dest = models.PlayerSupportCase{ID: 12, Status: "open"}
+			}
 		}
 	}))
 	must(db.Callback().Update().After("gorm:update").Register("test:afk", func(tx *gorm.DB) {
@@ -121,8 +131,43 @@ func afkTell(id uint, at time.Time, text string) models.PlayerSupportEntry {
 	return models.PlayerSupportEntry{ID: id, CaseID: 12, Kind: "chat_out", Actor: "Guide", Recipient: "Vayle", Text: text, Delivery: "sent", RequestKey: &key, CreatedAt: at}
 }
 
+// The footer of an AFK mail with every way to answer.
+const afkFooterAll = "\n\n----------\nTo answer the Game Master:\n- Reply to this mail.\n" +
+	"- Type #petition followed by your message.\n- Send /tell GameMaster followed by your message."
+
+func TestSupportAFKMailBody(t *testing.T) {
+	head := "Vayle,\n\nGood day! I sent you the following message regarding your open petition, but you were AFK:\n\n" +
+		"\"Test message\"\n\nSincerely,\n"
+	all := supportAFKAnswerWays{RepliesOpen: true, MailReplies: true}
+	if got := supportAFKMailBody("Vayle", "Test message", "", all); got != head+"Server Staff"+afkFooterAll {
+		t.Errorf("no persona: %q", got)
+	}
+	if got := supportAFKMailBody("Vayle", "Test message", "Valdor", all); got != head+"Valdor"+afkFooterAll {
+		t.Errorf("persona: %q", got)
+	}
+	// Without the patched UCS, a mail to GameMaster does not reach Spire.
+	noMail := "\n\n----------\nTo answer the Game Master:\n- Type #petition followed by your message.\n- Send /tell GameMaster followed by your message."
+	if got := supportAFKMailBody("Vayle", "Test message", "Valdor", supportAFKAnswerWays{RepliesOpen: true}); got != head+"Valdor"+noMail {
+		t.Errorf("no mail replies: %q", got)
+	}
+	// With Player replies off every way is refused, so none is offered.
+	off := "\n\n----------\nReplies to the Game Master are not open on your petition right now. A Game Master will open them when they need your answer."
+	for _, ways := range []supportAFKAnswerWays{{}, {MailReplies: true}} {
+		if got := supportAFKMailBody("Vayle", "Test message", "", ways); got != head+"Server Staff"+off {
+			t.Errorf("replies off %+v: %q", ways, got)
+		}
+	}
+	for _, line := range strings.Split(supportAFKMailBody("Vayle", "Test message", "Valdor", all), "\n") {
+		for _, r := range line {
+			if r < 0x20 || r > 0x7e {
+				t.Fatalf("not plain ASCII: %q", line)
+			}
+		}
+	}
+}
+
 func TestForwardAFKMailsTheTellOnce(t *testing.T) {
-	state := &afkTestDB{tells: []models.PlayerSupportEntry{afkTell(40, afkNow.Add(-time.Second), "Your tunic is at the parcel merchant.")}, claims: 1}
+	state := &afkTestDB{tells: []models.PlayerSupportEntry{afkTell(40, afkNow.Add(-time.Second), "Your tunic is at the parcel merchant.")}, claims: 1, repliesOn: true}
 	db := state.open(t)
 	var alerted []uint
 	p := &PlayerSupportController{notifyMail: func(_ *gorm.DB, ids []uint, from string) { alerted = append(alerted, ids...) }}
@@ -134,7 +179,9 @@ func TestForwardAFKMailsTheTellOnce(t *testing.T) {
 	}
 	mail := state.mails[0]
 	if mail.CharID != 100 || mail.To != "Vayle" || mail.From != "GameMaster" || mail.Subject != "Message about your petition" ||
-		mail.Body != "The following message was sent to you by a Game Master regarding your open petition, but you were AFK: Your tunic is at the parcel merchant." ||
+		mail.Body != "Vayle,\n\nGood day! I sent you the following message regarding your open petition, but you were AFK:\n\n"+
+			"\"Your tunic is at the parcel merchant.\"\n\nSincerely,\nServer Staff\n\n----------\nTo answer the Game Master:\n"+
+			"- Type #petition followed by your message.\n- Send /tell GameMaster followed by your message." ||
 		mail.Status != mailStatusUnread {
 		t.Errorf("mail %+v", mail)
 	}
@@ -248,19 +295,53 @@ func TestHandleTellAFK(t *testing.T) {
 	}
 }
 
-// Each tell the answer can be for is mailed, one mail each, in order.
+// Each tell the answer can be for is mailed, one mail each, in order, signed
+// with the persona that tell was sent under.
 func TestForwardAFKSeveralTells(t *testing.T) {
+	second := afkTell(41, afkNow.Add(-time.Second), "Second.")
+	second.Persona = "Tunare Guide"
 	state := &afkTestDB{tells: []models.PlayerSupportEntry{
 		afkTell(40, afkNow.Add(-20*time.Second), "First."),
-		afkTell(41, afkNow.Add(-time.Second), "Second."),
+		second,
 	}, claims: 2}
 	db := state.open(t)
 	p := &PlayerSupportController{notifyMail: func(*gorm.DB, []uint, string) {}}
 	if !p.forwardAFK(context.Background(), db, db, afkFrame(supportAFKText), afkNow) || len(state.mails) != 2 {
 		t.Fatalf("%d mails", len(state.mails))
 	}
-	if !strings.HasSuffix(state.mails[0].Body, "First.") || !strings.HasSuffix(state.mails[1].Body, "Second.") {
+	if !strings.Contains(state.mails[0].Body, "\"First.\"\n\nSincerely,\nServer Staff\n\n----------\n") ||
+		!strings.Contains(state.mails[1].Body, "\"Second.\"\n\nSincerely,\nTunare Guide\n\n----------\n") {
 		t.Errorf("mails %q, %q", state.mails[0].Body, state.mails[1].Body)
+	}
+}
+
+// The footer offers ways to answer only while Player replies is on for the
+// tell's case.
+func TestForwardAFKMailFooterFollowsReplies(t *testing.T) {
+	p := &PlayerSupportController{notifyMail: func(*gorm.DB, []uint, string) {}}
+	off := "\n\n----------\nReplies to the Game Master are not open on your petition right now. A Game Master will open them when they need your answer."
+	for _, repliesOn := range []bool{true, false} {
+		state := &afkTestDB{tells: []models.PlayerSupportEntry{afkTell(40, afkNow.Add(-time.Second), "Hi")}, claims: 1, repliesOn: repliesOn}
+		db := state.open(t)
+		p.forwardAFK(context.Background(), db, db, afkFrame(supportAFKText), afkNow)
+		if len(state.mails) != 1 {
+			t.Fatalf("replies on %v: %d mails", repliesOn, len(state.mails))
+		}
+		body := state.mails[0].Body
+		if repliesOn && (!strings.Contains(body, "To answer the Game Master:") || strings.HasSuffix(body, off)) {
+			t.Errorf("replies on: %q", body)
+		}
+		if !repliesOn && !strings.HasSuffix(body, off) {
+			t.Errorf("replies off: %q", body)
+		}
+	}
+	// A reply route to another case is not this case's replies.
+	state := &afkTestDB{tells: []models.PlayerSupportEntry{afkTell(40, afkNow.Add(-time.Second), "Hi")}, claims: 1, repliesOn: true}
+	state.tells[0].CaseID = 13
+	db := state.open(t)
+	p.forwardAFK(context.Background(), db, db, afkFrame(supportAFKText), afkNow)
+	if len(state.mails) != 1 || !strings.HasSuffix(state.mails[0].Body, off) {
+		t.Errorf("other case: %+v", state.mails)
 	}
 }
 

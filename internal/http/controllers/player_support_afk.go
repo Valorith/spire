@@ -34,8 +34,71 @@ const (
 	supportAFKFastWindow = 2 * time.Second
 
 	supportAFKMailSubject = "Message about your petition"
-	supportAFKMailPrefix  = "The following message was sent to you by a Game Master regarding your open petition, but you were AFK: "
+	// supportAFKMailSignature signs the mail when the tell carried no
+	// persona.
+	supportAFKMailSignature = "Server Staff"
 )
+
+// supportAFKAnswerWays is what the AFK mail's footer may offer the player:
+// how Spire would take an answer when the mail is written.
+type supportAFKAnswerWays struct {
+	// RepliesOpen: Player replies is on for the tell's case, so a tell to
+	// GameMaster, #petition <message> and a mail to GameMaster are filed on
+	// it (acceptInbound). Otherwise each is refused, and the player is told.
+	RepliesOpen bool
+	// MailReplies: World's UCS passes mail to GameMaster on to Spire
+	// (playersupport.Features.MailReplies).
+	MailReplies bool
+}
+
+// supportAFKMailBody is the mail carrying a tell the player missed while AFK,
+// signed with the persona the tell was sent under, and a footer on how to
+// answer. Lines are separated by a bare newline, like Spire's other mails.
+// The tell is at most 200 characters (playersupport.ValidateMessage), so the
+// body needs no shortening.
+func supportAFKMailBody(character, message, persona string, ways supportAFKAnswerWays) string {
+	signature := strings.TrimSpace(persona)
+	if signature == "" {
+		signature = supportAFKMailSignature
+	}
+	return character + ",\n\n" +
+		"Good day! I sent you the following message regarding your open petition, but you were AFK:\n\n" +
+		"\"" + message + "\"\n\n" +
+		"Sincerely,\n" + signature + "\n\n" +
+		"----------\n" + supportAFKMailFooter(ways)
+}
+
+// supportAFKMailFooter tells the player how to answer, listing only ways that
+// are taken now. A tell goes to GameMaster rather than to "(GM) <persona>":
+// World remembers a persona for a day and forgets it when it restarts, but
+// GameMaster always reaches Player Support.
+func supportAFKMailFooter(ways supportAFKAnswerWays) string {
+	if !ways.RepliesOpen {
+		return "Replies to the Game Master are not open on your petition right now. A Game Master will open them when they need your answer."
+	}
+	footer := "To answer the Game Master:\n"
+	if ways.MailReplies {
+		footer += "- Reply to this mail.\n"
+	}
+	return footer +
+		"- Type #petition followed by your message.\n" +
+		"- Send /tell GameMaster followed by your message."
+}
+
+// supportAFKRepliesOpen reports whether Player replies is on for the case:
+// the account's reply route points at it and it is not resolved, as
+// acceptInbound requires.
+func supportAFKRepliesOpen(db *gorm.DB, accountID, caseID uint) bool {
+	var chat models.PlayerSupportChat
+	if db.Where("account_id = ?", accountID).Limit(1).Find(&chat).Error != nil || chat.CaseID != caseID {
+		return false
+	}
+	var record models.PlayerSupportCase
+	if db.Select("id", "status").Where("id = ?", caseID).Limit(1).Find(&record).Error != nil {
+		return false
+	}
+	return record.ID == caseID && record.Status != "" && record.Status != "resolved"
+}
 
 // A sent tell's AFK state (PlayerSupportEntry.Afk): claimed, then mailed or
 // failed. Empty means no AFK answer was seen.
@@ -140,9 +203,13 @@ func (p *PlayerSupportController) forwardAFKTell(eqemu, db *gorm.DB, frame playe
 	if claim.Error != nil || claim.RowsAffected != 1 {
 		return
 	}
+	ways := supportAFKAnswerWays{
+		RepliesOpen: supportAFKRepliesOpen(db, frame.AccountID, tell.CaseID),
+		MailReplies: p.world != nil && p.world.Features().MailReplies,
+	}
 	row := gmMailInsert{
 		CharID: frame.CharacterID, Timestamp: now.Unix(), From: playersupport.Identity,
-		Subject: supportAFKMailSubject, Body: supportAFKMailPrefix + tell.Text, To: frame.Character, Status: mailStatusUnread,
+		Subject: supportAFKMailSubject, Body: supportAFKMailBody(frame.Character, tell.Text, tell.Persona, ways), To: frame.Character, Status: mailStatusUnread,
 	}
 	state, delivery := supportAFKMailed, "mail"
 	text := "Player was AFK: the Game Master tell was mailed to " + frame.Character + "\n" + tell.Text

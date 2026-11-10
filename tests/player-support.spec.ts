@@ -2186,61 +2186,162 @@ test('shows a Game Master Reply by mail in Live chat as soon as it is sent, with
   await expect(page.locator('.kind-reply').filter({ hasText: 'Your tunic' })).toHaveCount(1);
 });
 
-test('lets a Game Master choose the name players see on tells, with World support', async ({ page }) => {
-  const sent = { id: 9, kind: 'chat_out', actor: 'Guide', recipient: 'Aranel', persona: 'Aranwen', text: 'I am on it.', delivery: 'sent', created_at: '2026-11-08T12:00:00Z' };
-  await mockSupport(page, ['player-support'], { id: 7 }, { messages: [sent] });
-  let persona = '';
+// The persona endpoint as the server answers it; PUT bodies are kept in order.
+async function mockPersona(page: Page, initial: Record<string, unknown> = {}, put?: (persona: string) => { status: number; json: object } | null) {
+  const state: Record<string, unknown> = { persona: '', display: 'Game Master', available: true, reason: '', warning: '', ...initial };
   const puts: string[] = [];
   await page.route('**/api/v1/player-support/persona*', async route => {
     if (route.request().method() === 'PUT') {
-      persona = route.request().postDataJSON().persona;
+      const persona = route.request().postDataJSON().persona;
       puts.push(persona);
+      const answer = put ? put(persona) : null;
+      if (answer && answer.status >= 400) return route.fulfill(answer);
+      Object.assign(state, { persona, display: persona || 'Game Master', warning: '' }, answer ? answer.json : {});
     }
-    return route.fulfill({ json: { persona, display: persona || 'Game Master', available: true } });
+    return route.fulfill({ json: state });
   });
+  return puts;
+}
+
+test('lets a Game Master choose the name players see on tells, with World support', async ({ page }) => {
+  const sent = { id: 9, kind: 'chat_out', actor: 'Guide', recipient: 'Aranel', persona: 'Aranwen', text: 'I am on it.', delivery: 'sent', created_at: '2026-11-08T12:00:00Z' };
+  await mockSupport(page, ['player-support'], { id: 7 }, { messages: [sent] });
+  const puts = await mockPersona(page);
   await page.goto(`/admin/player-support?case=${caseKey}`);
   await page.getByRole('tab', { name: /^Live chat/ }).click();
   // A sent tell shows the name players saw.
   await expect(page.getByRole('log', { name: 'Chat messages' }).getByText('as (GM) Aranwen')).toBeVisible();
-  const route = page.locator('.chat-route');
-  await expect(route).toContainText('Tell Aranel as (GM) Game Master');
 
-  await page.getByRole('button', { name: 'Change name' }).click();
-  const editor = page.getByRole('group', { name: /Players see you as/ });
-  const input = editor.getByLabel('Persona');
+  // The composer says who the player hears from, and the message box's name says it too.
+  const identity = page.getByRole('button', { name: 'Speaking as (GM) Game Master. Change the name players see' });
+  await expect(identity).toBeVisible();
+  await expect(identity).toContainText('Speaking as(GM) Game Master');
+  await expect(page.locator('#support-live-message')).toHaveAccessibleName('Tell Aranel as (GM) Game Master');
+  // The page header has it too, and a first-use tip says it can be changed.
+  const header = page.getByRole('button', { name: 'Your name on tells: (GM) Game Master. Change' });
+  await expect(header).toBeVisible();
+  const hint = page.getByRole('note', { name: 'Choose your name on tells' });
+  await expect(hint).toContainText('Players see your tells from (GM) Game Master.');
+
+  await identity.click();
+  const dialog = page.getByRole('dialog', { name: 'Your name on tells' });
+  const input = dialog.getByLabel('Name');
   await expect(input).toBeFocused();
-  await expect(editor).toContainText('3 to 24 letters and single spaces, starting with a letter.');
+  await expect(dialog).toContainText('Mail still comes from GameMaster.');
+  await expect(dialog).toContainText('3 to 24 letters and single spaces, starting with a letter.');
+  const preview = dialog.locator('.persona-preview-line');
+  await expect(preview).toHaveText(`(GM) Game Master tells you, 'I am looking into your petition now.'`);
   await input.fill('Bad  Name');
-  await expect(editor.getByRole('alert')).toHaveText('Use letters and single spaces only, starting with a letter.');
-  await expect(editor.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await expect(dialog.getByRole('alert')).toHaveText('Use letters and single spaces only, starting with a letter.');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await input.fill('Ar');
+  await expect(dialog.getByRole('alert')).toHaveText('Use 3 to 24 characters.');
   await input.fill('game master');
-  await expect(editor.getByRole('alert')).toContainText('Game Master is the default name');
+  await expect(dialog.getByRole('alert')).toContainText('Game Master is the default name');
   await input.fill('Aranwen');
-  await expect(editor).toContainText('Players see you as (GM) Aranwen');
-  await editor.getByRole('button', { name: 'Save' }).click();
-  await expect(editor).toHaveCount(0);
-  await expect(route).toContainText('Tell Aranel as (GM) Aranwen');
-  await expect(page.getByRole('button', { name: 'Change name' })).toBeFocused();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(preview).toHaveText(`(GM) Aranwen tells you, 'I am looking into your petition now.'`);
+  await expect(dialog.locator('.persona-count')).toHaveText('7/24');
+  // Enter saves; the dialog closes and focus goes back to the name.
+  await input.press('Enter');
+  await expect(dialog).toHaveCount(0);
+  expect(puts).toEqual(['Aranwen']);
+  const named = page.getByRole('button', { name: 'Speaking as (GM) Aranwen. Change the name players see' });
+  await expect(named).toBeFocused();
+  await expect(page.locator('#support-live-message')).toHaveAccessibleName('Tell Aranel as (GM) Aranwen');
+  await expect(page.getByRole('button', { name: 'Your name on tells: (GM) Aranwen. Change' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Players now see your tells from (GM) Aranwen.' })).toHaveCount(1);
+  await expect(hint).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Change name' }).click();
-  await page.getByRole('group', { name: /Players see you as/ }).getByRole('button', { name: 'Use default' }).click();
-  await expect(route).toContainText('Tell Aranel as (GM) Game Master');
+  // From the header: Esc closes without saving, and focus goes back to the header.
+  const headerNamed = page.getByRole('button', { name: 'Your name on tells: (GM) Aranwen. Change' });
+  await headerNamed.click();
+  await expect(dialog.getByLabel('Name')).toHaveValue('Aranwen');
+  await dialog.getByLabel('Name').fill('Someone Else');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(headerNamed).toBeFocused();
+  expect(puts).toEqual(['Aranwen']);
+
+  // Use default goes back to Game Master at once.
+  await named.click();
+  await dialog.getByRole('button', { name: 'Use default (Game Master)' }).click();
+  await expect(dialog).toHaveCount(0);
   expect(puts).toEqual(['Aranwen', '']);
+  await expect(identity).toBeVisible();
+  // Choosing on purpose answered the tip: it does not come back, not even after a reload.
+  await expect(hint).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(identity).toBeVisible();
+  await expect(hint).toHaveCount(0);
+});
+
+test('dismisses the first-use name tip for good, and keeps the composer usable on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockSupport(page, ['player-support']);
+  await mockPersona(page);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  const hint = page.getByRole('note', { name: 'Choose your name on tells' });
+  await expect(hint).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Speaking as \(GM\) Game Master/ })).toBeVisible();
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+  // The editor fits a phone, its reset on its own line above Cancel and Save.
+  await hint.getByRole('button', { name: 'Choose a name' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Your name on tells' });
+  await expect(dialog).toBeVisible();
+  const reset = await dialog.getByRole('button', { name: 'Use default (Game Master)' }).boundingBox();
+  const save = await dialog.getByRole('button', { name: 'Save' }).boundingBox();
+  expect(save!.y).toBeGreaterThan(reset!.y + reset!.height - 1);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await hint.getByRole('button', { name: 'Dismiss the name tip' }).click();
+  await expect(hint).toHaveCount(0);
+  await expect(page.getByLabel('Tell Aranel')).toBeFocused();
+  await page.reload();
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(page.getByRole('button', { name: /^Speaking as \(GM\) Game Master/ })).toBeVisible();
+  await expect(hint).toHaveCount(0);
+});
+
+test('keeps the name dialog open with the reason when saving fails or the name warns', async ({ page }) => {
+  await mockSupport(page, ['player-support']);
+  await mockPersona(page, {}, persona => persona === 'Aranel'
+    ? { status: 200, json: { warning: 'A character is named Aranel. Players you message see (GM) Aranel, and their replies still come to you.' } }
+    : persona === 'Broken' ? { status: 500, json: { error: 'The persona could not be saved' } } : null);
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await page.getByRole('button', { name: /^Speaking as/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Your name on tells' });
+  await dialog.getByLabel('Name').fill('Broken');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('The persona could not be saved');
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeEnabled();
+  await dialog.getByLabel('Name').fill('Aranel');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByRole('status')).toContainText('Saved. A character is named Aranel.');
+  await expect(dialog.getByRole('button', { name: 'Saved' })).toBeVisible();
+  await dialog.locator('.persona-cancel').click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Speaking as \(GM\) Aranel\./ })).toBeVisible();
 });
 
 test('keeps the persona control off when World does not support personas', async ({ page }) => {
   await mockSupport(page, ['player-support']);
-  await page.route('**/api/v1/player-support/persona*', route => route.fulfill({
-    json: { persona: 'Aranwen', display: 'Aranwen', available: false, reason: 'Needs the updated Player Support patch on World' },
-  }));
+  await mockPersona(page, { persona: 'Aranwen', display: 'Aranwen', available: false, reason: 'Needs the updated Player Support patch on World' });
   await page.goto(`/admin/player-support?case=${caseKey}`);
   await page.getByRole('tab', { name: /^Live chat/ }).click();
-  const toggle = page.getByRole('button', { name: 'Change name' });
-  await expect(toggle).toBeDisabled();
-  await expect(toggle).toHaveAttribute('title', 'Needs the updated Player Support patch on World');
-  await expect(toggle).toHaveAccessibleDescription('Needs the updated Player Support patch on World');
+  // Quiet, not clickable, and it says why.
+  const identity = page.locator('.chat-identity');
+  await expect(identity).toHaveText(/Speaking as\s*GameMaster/);
+  await expect(page.getByRole('button', { name: /^Speaking as/ })).toHaveCount(0);
+  await expect(page.locator('.chat-identity-reason')).toHaveText('Custom name needs the updated Player Support patch on World. Tells come from GameMaster.');
+  await expect(page.getByRole('button', { name: /^Your name on tells/ })).toHaveCount(0);
+  await expect(page.getByRole('note', { name: 'Choose your name on tells' })).toHaveCount(0);
   // Tells go as before.
-  await expect(page.locator('.chat-route')).toContainText('Tell Aranel as GameMaster');
+  await expect(page.locator('#support-live-message')).toHaveAccessibleName('Tell Aranel as GameMaster');
 });
 
 test('shows unmistakably when a tell was forwarded by mail because the player was AFK', async ({ page }) => {
@@ -2293,4 +2394,105 @@ test('shows unmistakably when a tell was forwarded by mail because the player wa
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(forwarded.locator('.chat-afk-badge')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+// Live chat history: opens at the newest message, and stays there only while staff are there.
+function longChat(count = 60) {
+  const start = Date.parse('2026-11-08T08:00:00Z');
+  return Array.from({ length: count }, (_, i) => ({
+    id: i + 1, kind: i % 2 ? 'chat_in' : 'chat_out', actor: i % 2 ? 'Aranel' : 'Guide', recipient: i % 2 ? '' : 'Aranel',
+    text: `History message ${i + 1}: ` + 'the tunic was in the bank slot, then it was gone. '.repeat(1 + (i % 3)),
+    delivery: 'sent', created_at: new Date(start + i * 10 * 60000).toISOString(),
+  }));
+}
+async function chatGap(page: Page) {
+  return page.getByRole('log', { name: 'Chat messages' }).evaluate(element => element.scrollHeight - element.scrollTop - element.clientHeight);
+}
+
+test('opens the Live chat history at the newest message, after switching tabs and cases too', async ({ page }) => {
+  await mockSupport(page, ['player-support'], { id: 7 }, { messages: longChat() });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  const log = page.getByRole('log', { name: 'Chat messages' });
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(log.getByText('History message 60:')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+  expect(await log.evaluate(element => element.scrollHeight > element.clientHeight * 2)).toBe(true);
+
+  // Back from Timeline and from Evidence.
+  await page.getByRole('tab', { name: /^Timeline/ }).click();
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(log.getByText('History message 60:')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+  await page.getByRole('tab', { name: /^Evidence/ }).click();
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+
+  // Another case.
+  await page.getByRole('button', { name: /^Thornwick / }).click();
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(log.getByText('History message 60:')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+});
+
+test('opens the Live chat history at the newest message on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 700 });
+  await mockSupport(page, ['player-support'], { id: 7 }, { messages: longChat() });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(page.getByRole('log', { name: 'Chat messages' }).getByText('History message 60:')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+});
+
+test('keeps the Live chat history at the newest message when the message box grows after it loaded', async ({ page }) => {
+  await mockSupport(page, ['player-support'], { id: 7 }, { messages: longChat() });
+  // The persona answers late: the first-use tip then grows the message box under a transcript already at its end.
+  await page.route('**/api/v1/player-support/persona*', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return route.fulfill({ json: { persona: '', display: 'Game Master', available: true } });
+  });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  await expect(page.getByRole('log', { name: 'Chat messages' }).getByText('History message 60:')).toBeVisible();
+  await expect(page.getByRole('note', { name: 'Choose your name on tells' })).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+});
+
+test('follows new Live chat messages only while staff are at the newest, and always after sending', async ({ page }) => {
+  await mockSupport(page, ['player-support'], { id: 7 }, { messages: longChat() });
+  // Player replies on, so Live chat checks for messages often; each check can bring one more.
+  const history = longChat();
+  let next = history.length;
+  const arrive = () => history.push({ ...history[1], id: ++next, text: `Arrived message ${next}`, created_at: new Date(Date.parse('2026-11-08T22:00:00Z') + next * 60000).toISOString() });
+  await page.route('**/api/v1/player-support/cases/*/chat*', route => {
+    if (route.request().method() !== 'GET') {
+      const input = route.request().postDataJSON();
+      if (input.action === 'send') history.push({ ...history[0], id: ++next, text: input.text, created_at: new Date().toISOString() });
+      return route.fulfill({ status: 204 });
+    }
+    return route.fulfill({ json: { state: 'ready', active: true, messages: history, cursor: history.length, companion: 'ready', recipient: 'Aranel' } });
+  });
+  await page.goto(`/admin/player-support?case=${caseKey}`);
+  await page.getByRole('tab', { name: /^Live chat/ }).click();
+  const log = page.getByRole('log', { name: 'Chat messages' });
+  await expect(log.getByText('History message 60:')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+
+  // At the end: a new message is followed.
+  arrive();
+  await expect(log.getByText(`Arrived message ${next}`)).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+
+  // Scrolled up to read: a new message does not move the view, and New messages offers the way down.
+  await log.evaluate(element => { element.scrollTop = 200; });
+  await expect.poll(() => chatGap(page)).toBeGreaterThan(400);
+  arrive();
+  await expect(page.getByRole('button', { name: 'New messages' })).toBeVisible();
+  expect(await log.evaluate(element => element.scrollTop)).toBe(200);
+
+  // Sending brings the view to the end.
+  await page.getByLabel('Tell Aranel').fill('Checking your bank now.');
+  await page.getByLabel('Tell Aranel').press('Enter');
+  await expect(log.getByText('Checking your bank now.')).toBeVisible();
+  await expect.poll(() => chatGap(page)).toBeLessThanOrEqual(2);
+  await expect(page.getByRole('button', { name: 'New messages' })).toHaveCount(0);
 });

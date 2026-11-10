@@ -10,6 +10,11 @@
         <span class="support-live" :title="'Queue refreshes every 12 seconds' + (refreshedAt ? ' · last updated ' + clock(refreshedAt) : '')">
           <span class="support-live-dot" aria-hidden="true"></span> Live
         </span>
+        <!-- Your name on tells: the persona players see, one click from anywhere on the page. -->
+        <button v-if="connectionId !== null && persona.available" type="button" class="support-button is-ghost support-tellname" aria-haspopup="dialog"
+                :aria-label="'Your name on tells: ' + personaName + '. Change'" :title="'Players see your tells from ' + personaName + '. Change'" @click="personaOpen = true">
+          <span class="support-avatar is-xs is-accent" aria-hidden="true"><i class="fe fe-shield"></i></span><span class="support-button-label support-tellname-name">{{ personaName }}</span>
+        </button>
         <button v-if="connectionId !== null" type="button" class="support-button is-ghost" aria-label="Support insights" title="Response times and staff activity" @click="panel = 'metrics'">
           <i class="fe fe-bar-chart-2" aria-hidden="true"></i><span class="support-button-label"> Insights</span>
         </button>
@@ -655,6 +660,7 @@
     </b-modal>
     <support-mail-view :message="mailMessage" :character="record ? record.character : ''" :can-reply="canWrite && canDeliver"
                        @close="mailMessage = null" @reply="mailInstead('')" />
+    <support-persona-editor v-if="personaOpen && connectionId !== null" :connection-id="connectionId" @close="personaOpen = false" />
     <b-modal v-model="shortcutsOpen" modal-class="support-modal" title="Keyboard shortcuts" centered scrollable>
       <p class="support-modal-lead">Single keys work while the cursor is not in a text field.</p>
       <section v-for="group in shortcutGroups" :key="group.title" class="support-shortcut-group">
@@ -697,6 +703,8 @@ import SupportBatch from './SupportBatch.vue'
 import SupportMailView from './SupportMailView.vue'
 import SupportCopy from './SupportCopy.vue'
 import SupportReason from './SupportReason.vue'
+import SupportPersonaEditor from './SupportPersonaEditor.vue'
+import { loadPersona, personaState, tellName } from './support-persona'
 import UserContext from '@/app/user/UserContext'
 import { EventBus } from '@/app/event-bus/event-bus'
 import {
@@ -832,7 +840,8 @@ export default {
     SupportBatch,
     SupportMailView,
     SupportCopy,
-    SupportReason
+    SupportReason,
+    SupportPersonaEditor
   },
   data () {
     // The queue's filter, category and search, as this browser left them.
@@ -845,6 +854,9 @@ export default {
       total: 0,
       cases: [],
       connectionId: null,
+      // The name players see on this staff member's tells, shared with Live chat (support-persona.js).
+      persona: personaState,
+      personaOpen: false,
       selectedKey: '',
       record: null,
       activity: [],
@@ -980,6 +992,7 @@ export default {
     }
   },
   computed: {
+    personaName () { return tellName(this.persona) },
     // The summary cards, each one a queue filter. Red only for a count that needs someone.
     summaryCards () {
       const summary = this.summary || {}
@@ -1256,6 +1269,7 @@ export default {
     }
   },
   watch: {
+    connectionId (id) { if (id !== null) loadPersona(id) },
     '$route.query.case' (key) {
       if (this.connectionId !== null && key && key !== this.selectedKey) {
         this.mobileDetail = true
@@ -2289,6 +2303,11 @@ export default {
 .support-alerts-button { position: relative; }
 .support-alert-dot { position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--support-accent); }
 .support-header-actions > .support-button:last-child { margin-left: var(--support-space-1); }
+/* Your name on tells: gold, the one place on the page it shows outside Live chat. */
+.support-tellname { gap: 6px; padding-left: 6px; color: var(--support-accent-text); }
+.support-tellname:hover:not(:disabled) { color: var(--support-accent-text); }
+.support-tellname-name { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+.support-tellname .support-avatar > i { font-size: 10px; }
 
 /* Queue at a glance: the figure and its label on one line, so the row reads
    left to right like a sentence. The card that is the queue's filter is gold. */
