@@ -3,22 +3,22 @@
     <div class="metrics">
       <div class="metrics-bar">
         <p>Petitions filed in the last {{ days }} days.</p>
-        <div class="metrics-range" role="group" aria-label="Period">
+        <div class="support-segmented metrics-range" role="group" aria-label="Period">
           <button v-for="option in [7, 30, 90]" :key="option" type="button" :aria-pressed="String(days === option)" @click="setDays(option)">{{ option }} days</button>
         </div>
       </div>
-      <p v-if="error" class="metrics-error" role="alert">{{ error }}</p>
-      <p v-else-if="!data" class="metrics-muted" role="status">Loading…</p>
+      <p v-if="error" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> <span>{{ error }}</span></p>
+      <p v-else-if="!data" class="metrics-muted metrics-loading" role="status">Loading…</p>
       <template v-else>
         <div class="metrics-cards">
-          <div class="metrics-card tone-blue"><span>Filed</span><strong>{{ data.filed }}</strong></div>
-          <div class="metrics-card tone-green"><span>Resolved</span><strong>{{ data.resolved }}</strong><small>{{ percent(data.resolved, data.filed - data.merged) }}</small></div>
-          <div class="metrics-card tone-gold"><span>Median first response</span><strong>{{ duration(data.first_response_minutes) }}</strong><small>{{ data.responded }} answered</small></div>
-          <div class="metrics-card tone-violet"><span>Median time to resolve</span><strong>{{ duration(data.resolve_minutes) }}</strong><small v-if="data.merged">{{ data.merged }} merged</small></div>
+          <div class="support-stat" :class="{ 'is-quiet': !data.filed }"><strong>{{ data.filed }}</strong><span>Filed</span></div>
+          <div class="support-stat" :class="{ 'is-quiet': !data.resolved }"><strong>{{ data.resolved }}</strong><span>Resolved</span><small>{{ percent(data.resolved, data.filed - data.merged) }}</small></div>
+          <div class="support-stat" :class="{ 'is-quiet': data.first_response_minutes == null }"><strong>{{ duration(data.first_response_minutes) }}</strong><span>Median first response</span><small>{{ data.responded }} answered</small></div>
+          <div class="support-stat" :class="{ 'is-quiet': data.resolve_minutes == null }"><strong>{{ duration(data.resolve_minutes) }}</strong><span>Median time to resolve</span><small v-if="data.merged">{{ data.merged }} merged</small></div>
         </div>
-        <h3>By staff member</h3>
-        <p v-if="!data.staff.length" class="metrics-muted">No responses or resolutions in this period.</p>
-        <table v-else class="metrics-table">
+        <h3 class="support-section-label metrics-heading">By staff member</h3>
+        <p v-if="!data.staff.length" class="support-empty is-compact metrics-empty">No responses or resolutions in this period.</p>
+        <table v-else class="support-table metrics-table">
           <thead><tr><th scope="col">Staff</th><th scope="col">Responses</th><th scope="col">Resolved</th><th scope="col"><span class="sr-only">Share</span></th></tr></thead>
           <tbody>
             <tr v-for="member in data.staff" :key="member.name">
@@ -33,7 +33,7 @@
       </template>
     </div>
     <template #modal-footer>
-      <button type="button" class="btn btn-outline-light btn-sm" @click="$emit('close')">Done</button>
+      <button type="button" class="support-button" @click="$emit('close')">Done</button>
     </template>
   </b-modal>
 </template>
@@ -79,26 +79,21 @@ export default {
 </script>
 
 <style scoped>
-.metrics-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.metrics-bar p { margin: 0; color: #a9b9ca; font-size: .82rem; }
-.metrics-range { display: flex; gap: 4px; }
-.metrics-range button { padding: 3px 11px; border-radius: 999px; border: 1px solid #34465a; background: #172230; color: #b8c8d8; font-size: .76rem; }
-.metrics-range button[aria-pressed="true"] { color: #1f1910; background: #dfb976; border-color: #dfb976; font-weight: 650; }
-.metrics-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
-.metrics-card { --tone: #9cc5f5; display: grid; gap: 2px; padding: 11px 13px; border: 1px solid #2f3d4d; border-top: 3px solid var(--tone); border-radius: 10px; background: #172230; }
-.metrics-card.tone-green { --tone: #8fd6ad; }
-.metrics-card.tone-gold { --tone: #dfb976; }
-.metrics-card.tone-violet { --tone: #b9a0f0; }
-.metrics-card span { color: #8fa1b5; font-size: .72rem; }
-.metrics-card strong { color: #f0f4f8; font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-.metrics-card small { color: #8fa1b5; font-size: .7rem; }
-.metrics h3 { margin: 18px 0 8px; color: #f0f4f8; font-size: .86rem; font-weight: 650; }
-.metrics-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
-.metrics-table th, .metrics-table td { padding: 7px 8px; border-bottom: 1px solid #243241; text-align: left; color: #d5e0ea; font-variant-numeric: tabular-nums; }
-.metrics-table thead th { color: #8fa1b5; font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
-.metrics-table tbody th { color: #eef3f8; font-weight: 600; }
-.metrics-share { width: 34%; }
-.metrics-share span { display: block; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #dfb976, #f4ba83); }
-.metrics-muted { margin: 10px 0 0; color: #8fa1b5; font-size: .76rem; }
-.metrics-error { color: #ffadbd; font-size: .82rem; }
+/* Dialog chrome, stat cards, segmented control, table and empty state come from support-theme.css. */
+.metrics-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--support-space-3); margin-bottom: var(--support-space-4); }
+.metrics-bar p { margin: 0; color: var(--support-text-secondary); font-size: var(--support-text-sm); }
+.metrics-range { min-width: 228px; }
+.metrics-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--support-space-2); }
+/* Labels are long here ("Median time to resolve"); wrap rather than truncate. */
+.metrics-cards .support-stat > span { white-space: normal; }
+.metrics-heading { margin: var(--support-space-5) 0 var(--support-space-1); }
+.metrics-table td:nth-child(2), .metrics-table td:nth-child(3) { width: 96px; }
+.metrics-share { width: 36%; }
+.metrics-share span { display: block; min-width: 2px; height: 6px; border-radius: var(--support-radius-sm); background: var(--support-accent); }
+.metrics-empty { margin: var(--support-space-2) 0 0; }
+.metrics-muted { margin: var(--support-space-4) 0 0; color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.5; }
+.metrics-loading { margin: 0; padding: var(--support-space-5) 0; font-size: var(--support-text-sm); text-align: center; }
+@media (max-width: 560px) {
+  .metrics-range { width: 100%; }
+}
 </style>

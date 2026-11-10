@@ -5,7 +5,7 @@
         Shared with everyone working petitions on this server. Short plain-text replies also show as Live chat quick replies.
         Use <code>{character}</code> for the player’s name.
       </p>
-      <p v-if="error" class="replies-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ error }}</p>
+      <p v-if="error" class="support-callout is-danger replies-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> <span>{{ error }}</span></p>
 
       <ul v-if="replies.length" class="replies-list">
         <li v-for="reply in replies" :key="reply.id" :class="{ 'is-editing': editing === reply.id }">
@@ -14,37 +14,37 @@
               <strong>{{ reply.title }}</strong>
               <p>{{ reply.body }}</p>
               <small>
-                <span v-if="fitsTell(reply.body)" class="replies-tag"><i class="fe fe-message-circle" aria-hidden="true"></i> Quick reply</span>
-                <span class="replies-tag"><i class="fe fe-mail" aria-hidden="true"></i> Mail template</span>
+                <span v-if="fitsTell(reply.body)" class="support-chip"><i class="fe fe-message-circle" aria-hidden="true"></i> Quick reply</span>
+                <span class="support-chip"><i class="fe fe-mail" aria-hidden="true"></i> Mail template</span>
                 <span v-if="reply.updated_by">· {{ reply.updated_by }}</span>
               </small>
             </div>
             <div v-if="canWrite" class="replies-actions">
-              <button type="button" class="replies-icon" :aria-label="'Edit ' + reply.title" :disabled="busy" @click="edit(reply)"><i class="fe fe-edit-2" aria-hidden="true"></i></button>
-              <button type="button" class="replies-icon is-danger" :aria-label="'Delete ' + reply.title" :disabled="busy" @click="remove(reply)"><i class="fe fe-trash-2" aria-hidden="true"></i></button>
+              <button type="button" class="support-button is-ghost is-icon is-sm" :aria-label="'Edit ' + reply.title" :disabled="busy" @click="edit(reply)"><i class="fe fe-edit-2" aria-hidden="true"></i></button>
+              <button type="button" class="support-button is-ghost is-icon is-sm replies-delete" :aria-label="'Delete ' + reply.title" :disabled="busy" @click="remove(reply)"><i class="fe fe-trash-2" aria-hidden="true"></i></button>
             </div>
           </div>
         </li>
       </ul>
-      <p v-else class="replies-empty">No saved replies yet. The built-in quick replies and templates are used until you add some.</p>
+      <p v-else class="support-empty is-compact replies-empty"><i class="fe fe-bookmark" aria-hidden="true"></i> No saved replies yet. The built-in quick replies and templates are used until you add some.</p>
 
       <form v-if="canWrite" class="replies-form" @submit.prevent="save">
-        <h3>{{ editing ? 'Edit reply' : 'Add a reply' }}</h3>
+        <h3 class="support-section-label">{{ editing ? 'Edit reply' : 'Add a reply' }}</h3>
         <label for="reply-title">Title</label>
         <input id="reply-title" ref="title" v-model="title" class="form-control" maxlength="80" placeholder="Item restored">
         <label for="reply-body">Reply <span>({{ body.length }}/2,000 · {{ fitsTell(body.trim()) ? 'fits in a tell' : 'mail only' }})</span></label>
         <textarea id="reply-body" v-model="body" class="form-control" rows="4" maxlength="2000"
                   placeholder="Hi {character}, we restored the item you reported."></textarea>
         <div class="replies-form-actions">
-          <button v-if="editing" type="button" class="btn btn-outline-light btn-sm" :disabled="busy" @click="reset">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm" :disabled="busy || !title.trim() || !body.trim()">
+          <button v-if="editing" type="button" class="support-button" :disabled="busy" @click="reset">Cancel</button>
+          <button type="submit" class="support-button is-primary" :disabled="busy || !title.trim() || !body.trim()">
             {{ editing ? 'Save changes' : 'Add reply' }}
           </button>
         </div>
       </form>
     </div>
     <template #modal-footer>
-      <button type="button" class="btn btn-outline-light btn-sm" @click="$emit('close')">Done</button>
+      <button type="button" class="support-button" @click="$emit('close')">Done</button>
     </template>
   </b-modal>
 </template>
@@ -115,24 +115,27 @@ export default {
 </script>
 
 <style scoped>
-.replies-lead { margin: 0 0 12px; color: #a9b9ca; font-size: .82rem; }
-.replies code { color: #f3dcae; background: #241f18; padding: 1px 5px; border-radius: 4px; }
-.replies-error { display: flex; gap: 8px; align-items: center; color: #ffadbd; font-size: .82rem; }
-.replies-empty { color: #8fa1b5; font-size: .8rem; }
-.replies-list { display: grid; gap: 6px; margin: 0 0 14px; padding: 0; list-style: none; }
-.replies-list li { padding: 9px 12px; border: 1px solid #2f3d4d; border-radius: 9px; background: #172230; }
-.replies-list li.is-editing { border-color: #dfb976; }
-.replies-row { display: flex; gap: 10px; align-items: flex-start; }
+/* Dialog chrome, fields, buttons, chips, callouts and empty state come from support-theme.css. */
+.replies-lead { margin: 0 0 var(--support-space-4); color: var(--support-text-secondary); font-size: var(--support-text-sm); line-height: 1.55; }
+.replies-error { margin: 0 0 var(--support-space-3); }
+.replies-empty { margin: 0 0 var(--support-space-4); }
+.replies-list { display: grid; gap: var(--support-space-2); margin: 0 0 var(--support-space-4); padding: 0; list-style: none; }
+.replies-list li {
+  padding: 10px var(--support-space-3); border: 1px solid var(--support-border); border-radius: var(--support-radius);
+  background: var(--support-pane); transition: var(--support-transition);
+}
+.replies-list li.is-editing { border-color: var(--support-accent-line); background: var(--support-selected); box-shadow: inset 2px 0 0 var(--support-accent); }
+.replies-row { display: flex; align-items: flex-start; gap: var(--support-space-3); }
 .replies-text { flex: 1; min-width: 0; }
-.replies-text strong { color: #eef3f8; font-size: .84rem; font-weight: 650; }
-.replies-text p { margin: 3px 0 5px; color: #c9d6e3; font-size: .78rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 4.6em; overflow: hidden; }
-.replies-text small { display: flex; flex-wrap: wrap; gap: 6px; color: #8fa1b5; font-size: .7rem; }
-.replies-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; background: #22303f; color: #b8c8d8; }
-.replies-actions { display: flex; gap: 4px; }
-.replies-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid #34465a; background: #121b25; color: #b8c8d8; }
-.replies-icon:hover:not(:disabled) { border-color: #dfb976; color: #f3dcae; }
-.replies-icon.is-danger:hover:not(:disabled) { border-color: #c06a7b; color: #ffadbd; }
-.replies-form { padding-top: 12px; border-top: 1px solid #2a3948; }
-.replies-form h3 { margin: 0; color: #f0f4f8; font-size: .86rem; font-weight: 650; }
-.replies-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.replies-text strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; }
+.replies-text p {
+  max-height: 4.65em; margin: 2px 0 var(--support-space-2); overflow: hidden;
+  color: var(--support-text-secondary); font-size: var(--support-text-sm); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.replies-text small { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--support-muted); font-size: var(--support-text-xs); }
+.replies-actions { display: flex; gap: 2px; margin: -2px -6px 0 0; }
+.support-button.replies-delete:hover:not(:disabled) { background: var(--support-danger-soft); color: var(--support-danger); }
+.replies-form { padding-top: var(--support-space-4); border-top: 1px solid var(--support-border-subtle); }
+.replies-form .support-section-label { margin: 0; }
+.replies-form-actions { display: flex; justify-content: flex-end; gap: var(--support-space-2); margin-top: var(--support-space-3); }
 </style>

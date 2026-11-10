@@ -1,0 +1,752 @@
+/*
+ * Player Support theme
+ * ====================
+ * Shared tokens and components for the Player Support page and its dialogs.
+ * Imported once, unscoped, by PlayerSupport.vue. Everything is scoped to
+ * `.player-support` (the page root) or `.support-modal` (the modal-class on
+ * every Player Support b-modal, which BootstrapVue renders outside the page).
+ * A dialog only receives these tokens if its b-modal has modal-class="support-modal".
+ *
+ * Scales (use these tokens, not literals)
+ *   Type     --support-text-xs 12px · sm 13px · md 14px · lg 16px · xl 22px · 2xl 28px
+ *            xs: chips, labels, meta, kbd.  sm: secondary text, buttons, controls.
+ *            md: body copy, messages.  lg: section and dialog titles.
+ *            xl: summary numerals, case name.  2xl: page title only.
+ *            Weights: 400 body, 600 emphasis and controls, 700 numerals and titles.
+ *   Space    --support-space-1 4px · 2 8px · 3 12px · 4 16px · 5 24px · 6 32px
+ *   Radius   --support-radius-sm 4px (chips, kbd) · --support-radius 6px (buttons,
+ *            fields, rows) · --support-radius-lg 10px (panels, cards, dialogs) ·
+ *            --support-radius-pill (counts, dots only)
+ *   Motion   colour, border and background only, --support-duration (140ms).
+ *            No lifts, glows, pulses or entrance animations; the one loop is
+ *            .support-spin. Reduced motion turns transitions and spinners off.
+ *
+ * When colour is allowed
+ *   Surfaces, borders and text are neutral navy. Gold (--support-accent) is the
+ *   one accent: the primary action, the current selection (tab, filter card,
+ *   selected row) and "new". Success, warning and danger appear only when they
+ *   carry meaning (state of a case, an error, urgency > 0) and never as
+ *   decoration. Icons are neutral unless they belong to a coloured state.
+ *   The per-name avatar hue (support-ui.js) is the one deliberate exception.
+ *
+ * Components (all prefixed support-)
+ *   .support-button        buttons: default secondary, .is-primary, .is-ghost,
+ *                          .is-danger; sizes .is-sm; .is-icon for icon-only;
+ *                          .is-block for full width. A disabled primary turns
+ *                          neutral; the others fade to half opacity.
+ *   .support-chip          status chip: neutral default, .is-accent, .is-success,
+ *                          .is-warning, .is-danger; .is-tag for an uppercase tag
+ *                          beside a name ("alt")
+ *   .support-count         small numeric count next to a heading or tab
+ *   .support-presence      dot + text presence: .presence-online|offline|unknown
+ *   .support-avatar        circular letter avatar: .is-xs 18 · .is-sm 28 ·
+ *                          (default) 32 · .is-lg 40; .is-accent for you and the
+ *                          Game Master instead of a per-name hue
+ *   .support-spin          spinning icon while something loads
+ *   .support-field         input, textarea, select (also .support-modal .form-control)
+ *   .support-search        field wrapper with a leading icon and trailing kbd
+ *   .support-label         form label; .support-label-hint for the quiet suffix
+ *   .support-segmented     segmented control: buttons with aria-pressed
+ *   .support-tabs          underline tabs: buttons with aria-pressed or aria-selected;
+ *                          disabled tabs fade
+ *   .support-section-label small uppercase section heading
+ *   .support-empty         empty or placeholder state: icon, strong, text;
+ *                          .is-compact for a one-line dashed placeholder
+ *   .support-callout       inline note or banner: neutral default, .is-accent,
+ *                          .is-success, .is-warning, .is-danger
+ *   .support-suggestions   group of quick-pick buttons (quick replies, templates,
+ *                          quick destinations); aria-pressed marks the chosen one
+ *   .support-option        selectable row in a list (aria-pressed / aria-current)
+ *   .support-action-list   bordered list of action rows (.support-action)
+ *   .support-dl            definition list, label left and value right
+ *   .support-stat          stat card: numeral (strong) and label (span);
+ *                          .is-quiet for a zero or missing value
+ *   .support-table         compact data table
+ *   .support-settings      bordered list of .support-setting rows: a label with
+ *                          .support-setting-text (strong + small) and a
+ *                          .support-switch checkbox; .is-disabled on the row
+ *   .support-kbd           keyboard hint
+ *   .support-link          text-styled button
+ *   .support-feedback      inline status text: .is-error, .is-success
+ *   .support-modal-lead    first line of a dialog body; .support-modal-hint for
+ *                          a note under it
+ *   .support-footer-note   note on the left of a dialog footer, before the
+ *                          buttons; .is-warning when it warns
+ *
+ * support-parcel.css themes the shared GMParcelComposer and its item picker when
+ * Player Support opens them with modal-class "support-modal support-parcel-modal".
+ */
+
+.player-support,
+.support-modal {
+  /* Surfaces, darkest to lightest */
+  --support-sunken: #0f151d;
+  --support-bg: #121922;
+  --support-pane: #17202b;
+  --support-raised: #1d2836;
+  --support-hover: #212d3b;
+  --support-selected: #233040;
+
+  /* Borders */
+  --support-border-subtle: #243140;
+  --support-border: #2f3d4d;
+  --support-border-strong: #46586c;
+  --support-border-hover: #62768c;
+
+  /* Text. Muted and faint keep at least 4.5:1 on --support-pane. */
+  --support-text: #eef3f8;
+  --support-text-secondary: #c8d3de;
+  --support-muted: #9fb0c3;
+  --support-faint: #8394a8;
+
+  /* The accent */
+  --support-accent: #dfb976;
+  --support-accent-hover: #ecc98e;
+  --support-accent-text: #e8c88f;
+  --support-accent-soft: rgba(223, 185, 118, .12);
+  --support-accent-line: rgba(223, 185, 118, .5);
+  --support-on-accent: #1f1910;
+
+  /* Meaning */
+  --support-success: #8fd6ad;
+  --support-success-soft: rgba(143, 214, 173, .12);
+  --support-success-line: rgba(143, 214, 173, .38);
+  --support-warning: #f4ba83;
+  --support-warning-soft: rgba(244, 186, 131, .12);
+  --support-warning-line: rgba(244, 186, 131, .38);
+  --support-danger: #f59f8f;
+  --support-danger-soft: rgba(245, 159, 143, .12);
+  --support-danger-line: rgba(245, 159, 143, .42);
+
+  /* Type */
+  --support-text-xs: .75rem;
+  --support-text-sm: .8125rem;
+  --support-text-md: .875rem;
+  --support-text-lg: 1rem;
+  --support-text-xl: 1.375rem;
+  --support-text-2xl: 1.75rem;
+
+  /* Space */
+  --support-space-1: 4px;
+  --support-space-2: 8px;
+  --support-space-3: 12px;
+  --support-space-4: 16px;
+  --support-space-5: 24px;
+  --support-space-6: 32px;
+
+  /* Radius */
+  --support-radius-sm: 4px;
+  --support-radius: 6px;
+  --support-radius-lg: 10px;
+  --support-radius-pill: 999px;
+
+  /* Elevation and motion */
+  --support-tint: rgba(255, 255, 255, .07);
+  --support-shadow-panel: 0 12px 32px rgba(0, 0, 0, .3);
+  --support-shadow-dialog: 0 24px 64px rgba(0, 0, 0, .5);
+  --support-duration: 140ms;
+  --support-transition: color var(--support-duration) ease, background-color var(--support-duration) ease,
+    border-color var(--support-duration) ease, box-shadow var(--support-duration) ease;
+  --support-focus-ring: 2px solid var(--support-accent);
+
+  color: var(--support-text);
+}
+
+/* Keyboard focus, everywhere in scope */
+.player-support button:focus-visible, .player-support a:focus-visible, .player-support input:focus-visible,
+.player-support textarea:focus-visible, .player-support select:focus-visible, .player-support [tabindex]:focus-visible,
+.support-modal button:focus-visible, .support-modal a:focus-visible, .support-modal input:focus-visible,
+.support-modal textarea:focus-visible, .support-modal select:focus-visible, .support-modal [tabindex]:focus-visible {
+  outline: var(--support-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Inline code */
+.player-support code,
+.support-modal code {
+  padding: 1px 5px;
+  border-radius: var(--support-radius-sm);
+  background: var(--support-raised);
+  color: var(--support-accent-text);
+  font-size: .92em;
+}
+
+/* Buttons ---------------------------------------------------------------- */
+.support-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: var(--support-transition);
+}
+.support-button:hover:not(:disabled) { border-color: var(--support-border-hover); background: var(--support-hover); color: var(--support-text); text-decoration: none; }
+.support-button:disabled { opacity: .5; cursor: not-allowed; }
+.support-button > i { font-size: 14px; }
+.support-button.is-primary { border-color: var(--support-accent); background: var(--support-accent); color: var(--support-on-accent); }
+.support-button.is-primary:hover:not(:disabled) { border-color: var(--support-accent-hover); background: var(--support-accent-hover); color: var(--support-on-accent); }
+/* A disabled primary reads as unavailable, not as a dimmed gold call to action. */
+.support-button.is-primary:disabled { border-color: var(--support-border); background: var(--support-raised); color: var(--support-faint); opacity: 1; }
+.support-button.is-ghost { border-color: transparent; background: transparent; color: var(--support-muted); }
+.support-button.is-ghost:hover:not(:disabled) { border-color: transparent; background: var(--support-hover); color: var(--support-text); }
+.support-button.is-danger { border-color: var(--support-danger-line); background: transparent; color: var(--support-danger); }
+.support-button.is-danger:hover:not(:disabled) { border-color: var(--support-danger); background: var(--support-danger-soft); color: var(--support-danger); }
+.support-button.is-sm { min-height: 28px; padding: 0 10px; font-size: var(--support-text-xs); }
+.support-button.is-icon { width: 32px; padding: 0; }
+.support-button.is-icon.is-sm { width: 28px; }
+.support-button.is-block { width: 100%; }
+
+/* Chips and counts ------------------------------------------------------- */
+.support-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--support-radius-sm);
+  background: var(--support-tint);
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-xs);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.support-chip > i { font-size: 11px; }
+.support-chip.is-accent { background: var(--support-accent-soft); color: var(--support-accent-text); }
+.support-chip.is-success { background: var(--support-success-soft); color: var(--support-success); }
+.support-chip.is-warning { background: var(--support-warning-soft); color: var(--support-warning); }
+.support-chip.is-danger { background: var(--support-danger-soft); color: var(--support-danger); }
+/* A short uppercase tag beside a name, such as "alt" */
+.support-chip.is-tag { height: 18px; letter-spacing: .04em; text-transform: uppercase; }
+
+.support-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--support-radius-pill);
+  background: var(--support-tint);
+  color: var(--support-muted);
+  font-size: var(--support-text-xs);
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Presence: a dot and plain text ----------------------------------------- */
+.support-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--support-muted);
+  font-size: var(--support-text-xs);
+  font-weight: 400;
+  white-space: nowrap;
+}
+.support-presence::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--support-faint);
+}
+.support-presence.presence-online { color: var(--support-text-secondary); }
+.support-presence.presence-online::before { background: var(--support-success); }
+.support-presence.presence-unknown::before { background: transparent; box-shadow: inset 0 0 0 1px var(--support-faint); }
+
+/* Avatar: one shape, a size scale ---------------------------------------- */
+.support-avatar {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--support-raised);
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
+.support-avatar.is-xs { width: 18px; height: 18px; font-size: 10px; }
+.support-avatar.is-sm { width: 28px; height: 28px; font-size: var(--support-text-xs); }
+.support-avatar.is-lg { width: 40px; height: 40px; font-size: var(--support-text-lg); }
+/* You and the Game Master: the accent instead of a per-name hue */
+.support-avatar.is-accent { background: var(--support-accent-soft); box-shadow: inset 0 0 0 1px var(--support-accent-line); color: var(--support-accent-text); }
+
+/* Spinner: on an icon while something loads ----------------------------- */
+.support-spin { display: inline-block; animation: support-spin 900ms linear infinite; }
+@keyframes support-spin { to { transform: rotate(360deg); } }
+
+/* Form fields ------------------------------------------------------------ */
+.support-field,
+.support-modal .form-control {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius);
+  background: var(--support-sunken);
+  color: var(--support-text);
+  font-size: var(--support-text-md);
+  line-height: 1.45;
+  transition: var(--support-transition);
+}
+.support-field::placeholder,
+.support-modal .form-control::placeholder { color: var(--support-faint); opacity: 1; }
+.player-support .support-field:focus,
+.support-modal .support-field:focus,
+.support-modal .form-control:focus {
+  border-color: var(--support-accent);
+  background: var(--support-sunken);
+  color: var(--support-text);
+  box-shadow: 0 0 0 3px var(--support-accent-soft);
+  outline: none;
+}
+.support-field:disabled,
+.support-modal .form-control:disabled { opacity: .6; cursor: not-allowed; }
+textarea.support-field { resize: vertical; }
+select.support-field { padding-right: 28px; }
+
+.support-search {
+  display: flex;
+  align-items: center;
+  gap: var(--support-space-2);
+  margin: 0;
+  padding: 0 var(--support-space-2) 0 10px;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius);
+  background: var(--support-sunken);
+  color: var(--support-faint);
+  transition: var(--support-transition);
+}
+.support-search:focus-within { border-color: var(--support-accent); box-shadow: 0 0 0 3px var(--support-accent-soft); }
+.support-search input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  color: var(--support-text);
+  font-size: var(--support-text-md);
+}
+.support-search input::placeholder { color: var(--support-faint); }
+.support-search input:focus,
+.support-search input:focus-visible { outline: none; }
+
+.support-label,
+.support-modal label {
+  display: block;
+  margin: var(--support-space-3) 0 6px;
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+}
+.support-label-hint,
+.support-modal label > span { color: var(--support-faint); font-weight: 400; }
+
+/* Segmented control ------------------------------------------------------ */
+.support-segmented {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-sunken);
+}
+.support-segmented > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--support-radius-sm);
+  background: transparent;
+  color: var(--support-muted);
+  font-size: var(--support-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: var(--support-transition);
+}
+.support-segmented > button:hover:not(:disabled) { color: var(--support-text); }
+.support-segmented > button[aria-pressed="true"] {
+  border-color: var(--support-border-strong);
+  background: var(--support-selected);
+  color: var(--support-text);
+}
+.support-segmented > button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Tabs ------------------------------------------------------------------- */
+.support-tabs { display: flex; gap: var(--support-space-5); }
+.support-tabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -1px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--support-muted);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+  transition: var(--support-transition);
+}
+.support-tabs > button:hover:not(:disabled) { color: var(--support-text); }
+.support-tabs > button:disabled { opacity: .5; cursor: not-allowed; }
+.support-tabs > button[aria-pressed="true"],
+.support-tabs > button[aria-selected="true"] { border-bottom-color: var(--support-accent); color: var(--support-text); }
+.support-tabs > button[aria-pressed="true"] > i,
+.support-tabs > button[aria-selected="true"] > i { color: var(--support-accent); }
+
+/* Section label ---------------------------------------------------------- */
+.support-section-label {
+  display: flex;
+  align-items: center;
+  gap: var(--support-space-2);
+  margin: 0 0 var(--support-space-3);
+  color: var(--support-muted);
+  font-family: inherit;
+  font-size: var(--support-text-xs);
+  font-weight: 600;
+  letter-spacing: .06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+/* Empty state ------------------------------------------------------------ */
+.support-empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: var(--support-space-6) var(--support-space-4);
+  color: var(--support-muted);
+  font-size: var(--support-text-sm);
+  line-height: 1.5;
+  text-align: center;
+}
+.support-empty > i { margin-bottom: var(--support-space-1); color: var(--support-faint); font-size: 24px; }
+.support-empty > strong { color: var(--support-text); font-size: var(--support-text-md); font-weight: 600; }
+.support-empty > p,
+.support-empty > span { max-width: 360px; margin: 0; }
+/* A one-line placeholder inside a dialog: icon and text in a row, dashed outline */
+.support-empty.is-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--support-space-2);
+  padding: var(--support-space-4);
+  border: 1px dashed var(--support-border);
+  border-radius: var(--support-radius-lg);
+}
+.support-empty.is-compact > i { flex: none; margin: 0; font-size: inherit; }
+
+/* Callout ---------------------------------------------------------------- */
+.support-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--support-border);
+  border-left-width: 3px;
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-sm);
+  line-height: 1.5;
+}
+.support-callout > i { flex: none; margin-top: 3px; color: var(--support-muted); font-size: 14px; }
+.support-callout strong { color: var(--support-text); font-weight: 600; }
+.support-callout p { margin: 2px 0 0; }
+.support-callout.is-accent { border-left-color: var(--support-accent); }
+.support-callout.is-accent > i { color: var(--support-accent); }
+.support-callout.is-success { border-left-color: var(--support-success); }
+.support-callout.is-success > i { color: var(--support-success); }
+.support-callout.is-warning { border-left-color: var(--support-warning); }
+.support-callout.is-warning > i { color: var(--support-warning); }
+.support-callout.is-danger { border-left-color: var(--support-danger); }
+.support-callout.is-danger > i { color: var(--support-danger); }
+
+/* Suggestions (quick picks) ---------------------------------------------- */
+.support-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+.support-suggestions > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-xs);
+  transition: var(--support-transition);
+}
+.support-suggestions > button:hover:not(:disabled) { border-color: var(--support-accent-line); color: var(--support-text); }
+.support-suggestions > button:disabled { opacity: .5; cursor: not-allowed; }
+.support-suggestions > button > i { color: var(--support-muted); font-size: 12px; }
+.support-suggestions > button[aria-pressed="true"] { border-color: var(--support-accent-line); background: var(--support-selected); color: var(--support-text); }
+.support-suggestions > button[aria-pressed="true"] > i { color: var(--support-accent); }
+
+/* Selectable option row -------------------------------------------------- */
+.support-option {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: var(--support-space-2) 10px;
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  text-align: left;
+  transition: var(--support-transition);
+}
+.support-option:hover:not(:disabled) { border-color: var(--support-border-strong); background: var(--support-hover); }
+.support-option[aria-pressed="true"],
+.support-option[aria-current="true"] { border-color: var(--support-accent-line); background: var(--support-selected); box-shadow: inset 2px 0 0 var(--support-accent); }
+
+/* Action list ------------------------------------------------------------ */
+.support-action-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius-lg);
+  background: var(--support-bg);
+  list-style: none;
+}
+.support-action {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--support-text);
+  text-align: left;
+  transition: var(--support-transition);
+}
+.support-action + .support-action { border-top: 1px solid var(--support-border-subtle); }
+.support-action > i:first-child { color: var(--support-muted); font-size: 15px; text-align: center; }
+.support-action > .support-action-chevron { color: var(--support-faint); font-size: 14px; }
+.support-action-text { display: grid; min-width: 0; line-height: 1.3; }
+.support-action-text strong { font-size: var(--support-text-sm); font-weight: 600; }
+.support-action-text small { overflow: hidden; color: var(--support-muted); font-size: var(--support-text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.support-action:hover:not(:disabled) { background: var(--support-hover); color: var(--support-text); text-decoration: none; }
+.support-action:hover:not(:disabled) > i:first-child,
+.support-action:hover:not(:disabled) > .support-action-chevron { color: var(--support-accent); }
+.support-action:disabled { cursor: not-allowed; }
+.support-action:disabled > *,
+.support-action:disabled > i:first-child { color: var(--support-faint); }
+.support-action:disabled .support-action-text strong { color: var(--support-muted); }
+.support-action:disabled > .support-action-chevron { visibility: hidden; }
+
+/* Definition list -------------------------------------------------------- */
+.support-dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--support-space-2) var(--support-space-3);
+  margin: 0;
+  font-size: var(--support-text-sm);
+}
+.support-dl dt { color: var(--support-muted); font-weight: 400; }
+.support-dl dd { display: flex; align-items: center; justify-content: flex-end; gap: var(--support-space-1); min-width: 0; margin: 0; color: var(--support-text); text-align: right; overflow-wrap: anywhere; }
+
+/* Stat card -------------------------------------------------------------- */
+.support-stat {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius-lg);
+  background: var(--support-pane);
+  color: var(--support-text);
+  text-align: left;
+  transition: var(--support-transition);
+}
+.support-stat > strong {
+  color: var(--support-text);
+  font-size: var(--support-text-xl);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.support-stat > span { overflow: hidden; color: var(--support-muted); font-size: var(--support-text-sm); text-overflow: ellipsis; white-space: nowrap; }
+.support-stat > small { color: var(--support-faint); font-size: var(--support-text-xs); }
+/* A zero or a missing value reads as quiet, not as a figure */
+.support-stat.is-quiet > strong { color: var(--support-faint); }
+
+/* Table ------------------------------------------------------------------ */
+.support-table { width: 100%; border-collapse: collapse; font-size: var(--support-text-sm); font-variant-numeric: tabular-nums; }
+.support-table th,
+.support-table td { padding: var(--support-space-2); border-bottom: 1px solid var(--support-border-subtle); color: var(--support-text-secondary); text-align: left; }
+.support-table thead th { color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.support-table tbody th { color: var(--support-text); font-weight: 600; }
+
+/* Settings rows and switch ----------------------------------------------- */
+/* .support-settings holds rows. Each .support-setting is a label with the text
+   first and the .support-switch checkbox last, so focus follows the visual order;
+   give the label for= so it names the checkbox, not a button inside the text.
+   Two classes so the row outranks the dialog's `.support-modal label`. */
+.support-settings { overflow: hidden; border: 1px solid var(--support-border); border-radius: var(--support-radius-lg); background: var(--support-pane); }
+.support-settings > .support-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--support-space-4);
+  margin: 0;
+  padding: 10px var(--support-space-3);
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 400;
+  cursor: pointer;
+}
+.support-setting + .support-setting { border-top: 1px solid var(--support-border-subtle); }
+.support-setting.is-disabled { cursor: not-allowed; }
+.support-setting-text { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.support-setting-text strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; }
+.support-setting-text small { color: var(--support-muted); font-size: var(--support-text-xs); line-height: 1.45; }
+.support-setting.is-disabled strong { color: var(--support-muted); }
+.support-setting:hover:not(.is-disabled) .support-switch:not(:checked) { border-color: var(--support-muted); }
+
+/* The knob is a background image on the input itself, not ::before: Firefox draws
+   no pseudo-elements on form controls. --support-switch-knob is its colour. */
+.support-switch {
+  --support-switch-knob: var(--support-muted);
+  flex: none;
+  width: 32px;
+  height: 18px;
+  margin: 0;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius-pill);
+  background-color: var(--support-sunken);
+  background-image: radial-gradient(circle closest-side, var(--support-switch-knob) calc(100% - .5px), transparent 100%);
+  background-position: 2px 2px;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: inherit;
+  transition: var(--support-transition), background-position var(--support-duration) ease;
+}
+.support-switch:checked {
+  --support-switch-knob: var(--support-on-accent);
+  border-color: var(--support-accent);
+  background-color: var(--support-accent);
+  background-position: 16px 2px;
+}
+.support-switch:disabled { opacity: .5; }
+
+/* Keyboard hint ---------------------------------------------------------- */
+.support-kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid var(--support-border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--support-radius-sm);
+  background: var(--support-raised);
+  box-shadow: none;
+  color: var(--support-muted);
+  font-family: inherit;
+  font-size: var(--support-text-xs);
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* Text button and inline feedback --------------------------------------- */
+.support-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--support-accent-text);
+  font-size: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+.support-link:hover { color: var(--support-accent-hover); text-decoration: underline; }
+.support-feedback { display: flex; align-items: center; gap: 6px; margin: var(--support-space-2) 0 0; color: var(--support-muted); font-size: var(--support-text-sm); }
+.support-feedback.is-error { color: var(--support-danger); }
+.support-feedback.is-success { color: var(--support-success); }
+
+/* Dialog chrome ---------------------------------------------------------- */
+.support-modal .modal-content {
+  overflow: hidden;
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius-lg);
+  background: var(--support-bg);
+  box-shadow: var(--support-shadow-dialog);
+  color: var(--support-text);
+}
+.support-modal .modal-header,
+.support-modal .modal-footer {
+  padding: var(--support-space-3) var(--support-space-5);
+  border-color: var(--support-border);
+  border-radius: 0;
+  background: var(--support-pane);
+}
+.support-modal .modal-header { align-items: center; }
+.support-modal .modal-footer { gap: var(--support-space-2); }
+.support-modal .modal-footer > * { margin: 0; }
+/* A note on the left of a dialog footer, before the buttons. The reset above
+   clears margins, so the auto margin lives here, where it outranks it. */
+.support-modal .modal-footer > .support-footer-note { margin-right: auto; color: var(--support-muted); font-size: var(--support-text-sm); }
+.support-modal .modal-footer > .support-footer-note.is-warning { color: var(--support-warning); }
+.support-modal .modal-title {
+  color: var(--support-text);
+  font-family: inherit;
+  font-size: var(--support-text-lg);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.support-modal .modal-header .close {
+  margin: -4px -8px -4px auto;
+  padding: 4px 8px;
+  border-radius: var(--support-radius);
+  color: var(--support-muted);
+  opacity: 1;
+  text-shadow: none;
+  transition: var(--support-transition);
+}
+.support-modal .modal-header .close:hover:not(:disabled) { background: var(--support-hover); color: var(--support-text); }
+.support-modal .modal-body { padding: var(--support-space-4) var(--support-space-5) var(--support-space-5); font-size: var(--support-text-md); }
+.support-modal-lead { margin: 0; color: var(--support-text); font-size: var(--support-text-md); line-height: 1.5; }
+.support-modal-lead strong { font-weight: 600; }
+.support-modal-hint { margin: var(--support-space-3) 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .player-support *,
+  .support-modal * { transition: none !important; animation: none !important; }
+  .support-spin { animation: none; }
+}

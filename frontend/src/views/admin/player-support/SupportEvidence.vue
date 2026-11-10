@@ -1,27 +1,27 @@
 <template>
   <section class="support-evidence" aria-label="Evidence">
     <header class="evidence-bar">
-      <div class="evidence-filters" role="group" aria-label="Event type">
+      <div class="evidence-filters support-segmented" role="group" aria-label="Event type">
         <button v-for="option in groups" :key="option.id" type="button" :aria-pressed="String(group === option.id)" @click="setGroup(option.id)">
           <i :class="option.icon" aria-hidden="true"></i> {{ option.label }}
         </button>
       </div>
       <label class="evidence-window">
         <span class="sr-only">Time window</span>
-        <select v-model.number="hours" aria-label="Time window" @change="load(1)">
+        <select v-model.number="hours" class="support-field" aria-label="Time window" @change="load(1)">
           <option v-for="option in windows" :key="option.hours" :value="option.hours">{{ option.label }}</option>
         </select>
       </label>
     </header>
     <p class="evidence-lead">
       Player events from every character on <strong>{{ record.account }}</strong>’s account, from {{ windowLabel }} before the petition to now.
-      <span v-if="total" class="evidence-total">{{ total.toLocaleString() }} {{ total === 1 ? 'event' : 'events' }}</span>
+      <span v-if="total" class="evidence-total support-count">{{ total.toLocaleString() }} {{ total === 1 ? 'event' : 'events' }}</span>
     </p>
 
-    <p v-if="error" class="evidence-message is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ error }}</p>
-    <p v-else-if="loading && !events.length" class="evidence-message" role="status"><i class="fe fe-loader is-spinning" aria-hidden="true"></i> Loading events…</p>
-    <div v-else-if="!events.length" class="evidence-empty">
-      <span class="evidence-empty-mark"><i class="fe fe-search" aria-hidden="true"></i></span>
+    <p v-if="error" class="evidence-message support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
+    <p v-else-if="loading && !events.length" class="evidence-message support-feedback" role="status"><i class="fe fe-loader support-spin" aria-hidden="true"></i> Loading events…</p>
+    <div v-else-if="!events.length" class="evidence-empty support-empty">
+      <i class="fe fe-search" aria-hidden="true"></i>
       <strong>No events in this window</strong>
       <p>Try a longer window or another type. Events only appear for types turned on in Player Event Log settings.</p>
     </div>
@@ -47,9 +47,9 @@
       </template>
     </ol>
     <nav v-if="pages > 1" class="evidence-pager" aria-label="Event pages">
-      <button type="button" :disabled="loading || page <= 1" @click="load(page - 1)"><i class="fe fe-chevron-left" aria-hidden="true"></i> Newer</button>
+      <button type="button" class="support-button is-sm" :disabled="loading || page <= 1" @click="load(page - 1)"><i class="fe fe-chevron-left" aria-hidden="true"></i> Newer</button>
       <span>Page {{ page }} of {{ pages }} · {{ firstShown }}–{{ lastShown }} of {{ total.toLocaleString() }}</span>
-      <button type="button" :disabled="loading || page >= pages" @click="load(page + 1)">Older <i class="fe fe-chevron-right" aria-hidden="true"></i></button>
+      <button type="button" class="support-button is-sm" :disabled="loading || page >= pages" @click="load(page + 1)">Older <i class="fe fe-chevron-right" aria-hidden="true"></i></button>
     </nav>
   </section>
 </template>
@@ -75,8 +75,8 @@ const styles = {
   Trade: ['fe fe-repeat', 'item'], 'Loot Item': ['fe fe-download', 'item'], 'Item Destroy': ['fe fe-trash-2', 'loss'],
   'Dropped Item': ['fe fe-arrow-down-circle', 'loss'], 'Merchant Sell': ['fe fe-dollar-sign', 'loss'],
   'Merchant Purchase': ['fe fe-shopping-cart', 'item'], 'Parcel Item Sent': ['fe fe-package', 'item'],
-  'Parcel Item Retrieved': ['fe fe-package', 'item'], 'NPC Handin': ['fe fe-gift', 'loss'], Death: ['fe fe-x-octagon', 'death'],
-  'Rez Accepted': ['fe fe-heart', 'death'], Zoning: ['fe fe-map', 'move'], 'GM Command': ['fe fe-terminal', 'gm'],
+  'Parcel Item Retrieved': ['fe fe-package', 'item'], 'NPC Handin': ['fe fe-gift', 'loss'], Death: ['fe fe-x-circle', 'death'],
+  'Rez Accepted': ['fe fe-heart', 'other'], Zoning: ['fe fe-map', 'move'], 'GM Command': ['fe fe-terminal', 'gm'],
   'Possible Hack': ['fe fe-alert-triangle', 'loss']
 }
 
@@ -92,7 +92,7 @@ export default {
       itemNames: {}, group: 'items', hours: 24, events: [], filedAt: 0, page: 1, pageSize: 50, total: 0, newer: 0, loading: false, error: '', version: 0,
       groups: [
         { id: 'items', label: 'Items', icon: 'fe fe-package' },
-        { id: 'deaths', label: 'Deaths', icon: 'fe fe-x-octagon' },
+        { id: 'deaths', label: 'Deaths', icon: 'fe fe-x-circle' },
         { id: 'movement', label: 'Zoning', icon: 'fe fe-map' },
         { id: 'gm', label: 'GM commands', icon: 'fe fe-terminal' },
         { id: '', label: 'All', icon: 'fe fe-layers' }
@@ -199,55 +199,53 @@ export default {
 </script>
 
 <style scoped>
-.support-evidence { display: flex; flex-direction: column; min-height: 0; flex: 1; padding: 12px 23px 16px; overflow-y: auto; }
-.evidence-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
-.evidence-filters { display: flex; flex-wrap: wrap; gap: 5px; }
-.evidence-filters button, .evidence-window select {
-  display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-size: .76rem;
-  color: var(--support-muted); background: var(--support-raised); border: 1px solid var(--support-border);
+/* Layout only. Colours, type, radius and spacing come from support-theme.css. */
+.support-evidence { display: flex; flex: 1; flex-direction: column; min-height: 0; padding: var(--support-space-3) var(--support-space-5) var(--support-space-4); overflow-y: auto; }
+
+/* Filters */
+.evidence-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--support-space-2); }
+.evidence-filters { grid-auto-columns: auto; }
+.evidence-window { margin: 0; }
+.evidence-window select { width: auto; min-height: 32px; padding: 5px var(--support-space-2) 5px 10px; font-size: var(--support-text-sm); line-height: 1.4; }
+.evidence-lead { margin: var(--support-space-3) 0 var(--support-space-1); color: var(--support-muted); font-size: var(--support-text-sm); line-height: 1.6; }
+.evidence-total { margin-left: var(--support-space-1); }
+.evidence-lead strong { color: var(--support-text-secondary); font-weight: 600; }
+.evidence-message { margin: var(--support-space-2) 0 0; }
+.evidence-empty { flex: 1; }
+
+/* Rows: neutral, divided like the queue, icons like the timeline */
+.evidence-list { margin: 0; padding: 0; list-style: none; }
+.evidence-list.is-loading { opacity: .55; }
+.evidence-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--support-space-3); padding: var(--support-space-3) 0; border-bottom: 1px solid var(--support-border-subtle); }
+.evidence-icon {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border: 1px solid var(--support-border); border-radius: 50%; background: var(--support-pane); color: var(--support-muted); font-size: 13px;
 }
-.evidence-filters button[aria-pressed="true"] { color: #1f1910; background: var(--support-accent); border-color: var(--support-accent); font-weight: 650; }
-.evidence-filters button:hover:not([aria-pressed="true"]) { color: var(--support-text); border-color: var(--support-border-strong); }
-.evidence-window select { padding-right: 26px; }
-.evidence-lead { margin: 10px 0 12px; color: var(--support-muted); font-size: .78rem; }
-.evidence-lead strong { color: var(--support-text); font-weight: 600; }
-.evidence-message { display: flex; gap: 8px; align-items: center; color: var(--support-muted); font-size: .82rem; }
-.evidence-message.is-error { color: #ffadbd; }
-.evidence-empty { display: grid; justify-items: center; gap: 6px; margin: 40px auto; max-width: 340px; text-align: center; color: var(--support-muted); font-size: .8rem; }
-.evidence-empty strong { color: var(--support-text); font-size: .9rem; }
-.evidence-empty p { margin: 0; }
-.evidence-empty-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; color: var(--support-accent); background: var(--support-accent-soft); }
-.evidence-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.evidence-row {
-  --tone: #8fa1b5;
-  display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 9px 12px;
-  border: 1px solid var(--support-border); border-left: 3px solid var(--tone); border-radius: 9px; background: var(--support-raised);
+/* Tone only where it matters to a missing-item petition: items leaving the character, and deaths. */
+.tone-loss .evidence-icon { border-color: var(--support-warning-line); color: var(--support-warning); }
+.tone-death .evidence-icon { border-color: var(--support-danger-line); color: var(--support-danger); }
+.evidence-body { min-width: 0; padding-top: 4px; }
+.evidence-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--support-space-2); line-height: 1.4; }
+.evidence-heading strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; }
+.evidence-who { color: var(--support-muted); font-size: var(--support-text-xs); }
+.evidence-who.is-alt { color: var(--support-text-secondary); }
+.evidence-heading time { margin-left: auto; color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
+.evidence-detail { margin-top: 2px; color: var(--support-text-secondary); font-size: var(--support-text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+
+/* Petition filed: a quiet divider; the flag carries the accent */
+.evidence-marker { display: flex; align-items: center; gap: var(--support-space-3); padding: var(--support-space-3) 0; border-bottom: 1px solid var(--support-border-subtle); }
+.evidence-marker::before, .evidence-marker::after { content: ""; flex: 1; height: 1px; background: var(--support-border); }
+.evidence-marker span { display: inline-flex; align-items: center; gap: 6px; color: var(--support-text-secondary); font-size: var(--support-text-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.evidence-marker i { color: var(--support-accent); }
+
+/* Pager */
+.evidence-pager { display: flex; align-items: center; justify-content: space-between; gap: var(--support-space-3); margin-top: var(--support-space-3); color: var(--support-muted); font-size: var(--support-text-xs); font-variant-numeric: tabular-nums; }
+
+@media (min-width: 1900px) {
+  .support-evidence { padding-right: var(--support-space-6); padding-left: var(--support-space-6); }
 }
-.evidence-row.tone-item { --tone: #7fb6e8; }
-.evidence-row.tone-loss { --tone: #f0a35e; }
-.evidence-row.tone-death { --tone: #ef7f8f; }
-.evidence-row.tone-move { --tone: #62d2d8; }
-.evidence-row.tone-gm { --tone: #c6a0f0; }
-.evidence-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: var(--tone); background: color-mix(in srgb, var(--tone) 15%, transparent); }
-.evidence-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: .8rem; }
-.evidence-heading strong { color: var(--support-text); font-weight: 650; }
-.evidence-who { color: var(--support-muted); }
-.evidence-who.is-alt { color: #c6a0f0; }
-.evidence-heading time { margin-left: auto; color: var(--support-muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
-.evidence-detail { margin-top: 3px; color: #d5e0ea; font-size: .78rem; overflow-wrap: anywhere; }
-.evidence-marker { display: flex; align-items: center; gap: 10px; margin: 6px 0; color: var(--support-accent); font-size: .74rem; font-weight: 650; }
-.evidence-marker::before, .evidence-marker::after { content: ""; flex: 1; height: 1px; background: color-mix(in srgb, var(--support-accent) 45%, transparent); }
-.evidence-total { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #263443; color: var(--support-text); font-size: .7rem; font-weight: 650; }
-.evidence-list.is-loading { opacity: .55; transition: opacity 120ms ease; }
-.evidence-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; color: var(--support-muted); font-size: .74rem; font-variant-numeric: tabular-nums; }
-.evidence-pager button {
-  display: inline-flex; align-items: center; gap: 4px; padding: 4px 11px; border-radius: 8px; font-size: .76rem;
-  color: var(--support-text); background: var(--support-raised); border: 1px solid var(--support-border);
+@media (max-width: 680px) {
+  .support-evidence { padding: var(--support-space-3) var(--support-space-4) var(--support-space-4); }
+  .evidence-filters i { display: none; }
 }
-.evidence-pager button:hover:not(:disabled) { border-color: var(--support-accent); }
-.evidence-pager button:disabled { opacity: .4; }
-.is-spinning { animation: evidence-spin 1s linear infinite; }
-@keyframes evidence-spin { to { transform: rotate(360deg); } }
-@media (max-width: 680px) { .support-evidence { padding: 10px 12px 14px; } }
-@media (prefers-reduced-motion: reduce) { .is-spinning { animation: none; } }
 </style>

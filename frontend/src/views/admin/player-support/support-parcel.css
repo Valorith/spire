@@ -1,0 +1,367 @@
+/*
+ * Send parcel inside Player Support
+ * =================================
+ * GMParcelComposer is shared with the Mail & Parcels editor and styled there by
+ * mail-parcels-controls.css. Player Support passes modal-class="support-modal
+ * support-parcel-modal", so the dialog also receives the support-theme tokens and
+ * chrome; the rules below bring the composer's own parts onto that theme.
+ *
+ * Every rule is namespaced under .support-parcel-modal, so nothing here reaches
+ * the Mail & Parcels editor. Selectors start with .support-parcel-modal.gm-parcel-modal
+ * (or .support-parcel-modal.item-lookup-modal for the item picker) to outrank
+ * mail-parcels-controls.css, whichever of the two stylesheets loads last.
+ */
+
+/* The composer's palette, pointed at the theme ------------------------------ */
+.support-parcel-modal .gm-parcel-dialog {
+  --parcel-surface: var(--support-bg);
+  --parcel-panel: var(--support-pane);
+  --parcel-border: var(--support-border);
+  --parcel-text: var(--support-text);
+  --parcel-muted: var(--support-muted);
+  --parcel-gold: var(--support-accent);
+}
+
+/* Chrome: the same header, body and footer as the other support dialogs ------ */
+.support-parcel-modal.gm-parcel-modal .modal-content {
+  border-color: var(--support-border);
+  border-radius: var(--support-radius-lg);
+  background-color: var(--support-bg) !important; /* mail-parcels-controls.css sets it !important */
+}
+.support-parcel-modal.gm-parcel-modal .modal-header,
+.support-parcel-modal.gm-parcel-modal .modal-footer { padding: var(--support-space-3) var(--support-space-5); }
+.support-parcel-modal.gm-parcel-modal .modal-footer { gap: var(--support-space-2) var(--support-space-4); }
+.support-parcel-modal.gm-parcel-modal .modal-title { font-size: var(--support-text-lg); font-weight: 600; line-height: 1.4; }
+.support-parcel-modal.gm-parcel-modal .modal-body { padding: var(--support-space-4) var(--support-space-5) var(--support-space-5); font-size: var(--support-text-md); }
+
+/* Buttons: the composer's b-buttons take the .support-button look ----------- */
+.support-parcel-modal.gm-parcel-modal .modal-footer .btn,
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--support-border-strong);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  box-shadow: none;
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: var(--support-transition);
+}
+.support-parcel-modal.gm-parcel-modal .modal-footer .btn:hover:not(:disabled),
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn:hover:not(:disabled) {
+  border-color: var(--support-border-hover);
+  background: var(--support-hover);
+  color: var(--support-text);
+}
+.support-parcel-modal.gm-parcel-modal .modal-footer .btn:disabled,
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn:disabled { opacity: .5; cursor: not-allowed; }
+.support-parcel-modal.gm-parcel-modal .modal-footer .btn:not(:disabled):active:focus,
+.support-parcel-modal.gm-parcel-modal .modal-footer .btn:focus,
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn:focus { box-shadow: none; }
+
+/* The one primary: Review / Send parcels */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-actions .btn-warning {
+  border-color: var(--support-accent);
+  background: var(--support-accent);
+  color: var(--support-on-accent);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-actions .btn-warning:hover:not(:disabled) {
+  border-color: var(--support-accent-hover);
+  background: var(--support-accent-hover);
+  color: var(--support-on-accent);
+}
+/* Disabled, it reads as unavailable like every disabled .support-button.is-primary */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-actions .btn-warning:disabled {
+  border-color: var(--support-border);
+  background: var(--support-raised);
+  color: var(--support-faint);
+  opacity: 1;
+}
+/* Done, alone on the result step, is secondary like Done everywhere else */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-actions > .btn-warning:only-child {
+  border-color: var(--support-border-strong);
+  background: var(--support-raised);
+  color: var(--support-text);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-actions > .btn-warning:only-child:hover:not(:disabled) {
+  border-color: var(--support-border-hover);
+  background: var(--support-hover);
+  color: var(--support-text);
+}
+
+/* + Add parcel: a quiet small secondary */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn {
+  min-height: 28px;
+  padding: 0 10px;
+  border-color: var(--support-border);
+  background: transparent;
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-xs);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading .btn > i { margin: 0 !important; /* the icon's Bootstrap mr-1 is !important */ color: var(--support-muted); font-size: 11px; }
+
+/* Confirmation checkbox in the footer */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-confirmation {
+  display: flex;
+  align-items: center;
+  gap: var(--support-space-2);
+  min-height: 32px;
+  margin: 0;
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-confirmation input { accent-color: var(--support-accent); }
+
+/* Errors: the danger callout look ------------------------------------------- */
+.support-parcel-modal.gm-parcel-modal .alert-danger {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 var(--support-space-3);
+  padding: 10px 12px;
+  border: 1px solid var(--support-border);
+  border-left: 3px solid var(--support-danger);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-sm);
+  line-height: 1.5;
+}
+.support-parcel-modal.gm-parcel-modal .alert-danger::before {
+  content: "\e902"; /* Feather alert-circle, as in the other dialogs' callouts */
+  flex: none;
+  margin-top: 3px;
+  color: var(--support-danger);
+  font-family: Feather;
+  font-size: 14px;
+  line-height: 1;
+}
+.support-parcel-modal.gm-parcel-modal .form-control[aria-invalid="true"] { border-color: var(--support-danger); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-field-error { margin: 6px 0 0; color: var(--support-danger); font-size: var(--support-text-xs); }
+
+/* Recipient ----------------------------------------------------------------- */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-recipient {
+  gap: var(--support-space-3);
+  min-height: 0;
+  padding: 10px var(--support-space-3);
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius-lg);
+  background: var(--support-pane);
+  color: var(--support-muted);
+  font-size: var(--support-text-sm);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-recipient > i {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-muted);
+  font-size: 15px;
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-recipient strong { color: var(--support-text); font-size: var(--support-text-md); font-weight: 600; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-case { color: var(--support-muted); font-size: var(--support-text-xs); }
+
+/* Parcel rows --------------------------------------------------------------- */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines { margin-top: var(--support-space-4); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading { margin-bottom: var(--support-space-2); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-lines__heading h3 {
+  color: var(--support-muted);
+  font-size: var(--support-text-xs);
+  font-weight: 600;
+  letter-spacing: .06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-line {
+  padding: 6px;
+  border-color: var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-pane);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-line + .gm-parcel-line { margin-top: var(--support-space-2); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-line__top { gap: var(--support-space-2); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-item {
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--support-radius);
+  font-size: var(--support-text-md);
+  transition: var(--support-transition);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-item > strong { font-weight: 600; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-item > i { color: var(--support-faint); font-size: 13px; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-icon {
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-muted);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-item:hover,
+.support-parcel-modal.gm-parcel-modal .gm-parcel-augments > button:hover {
+  border-color: var(--support-border-strong);
+  background: var(--support-hover);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-item:hover > i { color: var(--support-accent); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-line__remove {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--support-radius);
+  color: var(--support-muted);
+  transition: var(--support-transition);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-line__remove:hover {
+  border-color: transparent;
+  background: var(--support-danger-soft);
+  color: var(--support-danger);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-quantity { flex-basis: 84px; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-quantity label { margin: 0 0 var(--support-space-1); color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 600; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-augments { gap: 6px; margin: 6px 0 2px 4px; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-augments > button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-color: var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-sunken);
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-xs);
+  transition: var(--support-transition);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-augments strong { font-weight: 600; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-socket-number { color: var(--support-muted); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-augments small { color: var(--support-muted); font-size: var(--support-text-xs); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-augments > button > i { color: var(--support-faint); font-size: 11px; }
+
+/* Fields: labels and inputs as in the other dialogs ------------------------- */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-fields,
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-details { gap: var(--support-space-3) var(--support-space-4); margin-top: var(--support-space-4); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-fields label {
+  margin: 0 0 6px;
+  color: var(--support-text-secondary);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+}
+.support-parcel-modal.gm-parcel-modal .form-control {
+  min-height: 34px;
+  border-color: var(--support-border-strong);
+  background-color: var(--support-sunken) !important; /* mail-parcels-controls.css sets it !important */
+  color: var(--support-text);
+  font-size: var(--support-text-md);
+}
+.support-parcel-modal.gm-parcel-modal .form-control-sm { height: 32px; min-height: 32px; padding: 5px 8px; font-size: var(--support-text-sm); }
+.support-parcel-modal.gm-parcel-modal .form-control:focus {
+  border-color: var(--support-accent);
+  box-shadow: 0 0 0 3px var(--support-accent-soft);
+}
+
+/* Review -------------------------------------------------------------------- */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-list {
+  margin-top: var(--support-space-3);
+  padding: 0 var(--support-space-3);
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius-lg);
+  background: var(--support-sunken);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-list article {
+  padding: 10px 0;
+  border-bottom-color: var(--support-border-subtle);
+  font-size: var(--support-text-md);
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-list article:last-child { border-bottom: 0; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-list strong { font-weight: 600; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-list small { color: var(--support-muted); font-size: var(--support-text-xs); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-quantity { color: var(--support-text-secondary); font-weight: 600; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-details dt {
+  margin-bottom: var(--support-space-1);
+  color: var(--support-muted);
+  font-size: var(--support-text-xs);
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.support-parcel-modal.gm-parcel-modal .gm-parcel-review-details dd { color: var(--support-text-secondary); font-size: var(--support-text-md); line-height: 1.5; }
+
+/* Result -------------------------------------------------------------------- */
+.support-parcel-modal.gm-parcel-modal .gm-parcel-result h3 { color: var(--support-text); font-size: var(--support-text-md); font-weight: 600; }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-result__heading > i { color: var(--support-success); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-result-list > li { border-bottom-color: var(--support-border-subtle); font-size: var(--support-text-sm); }
+.support-parcel-modal.gm-parcel-modal .gm-parcel-result-list > li > span,
+.support-parcel-modal.gm-parcel-modal .gm-parcel-receipt { color: var(--support-muted); font-size: var(--support-text-xs); }
+
+@media (max-width: 575px) {
+  .support-parcel-modal.gm-parcel-modal .modal-header,
+  .support-parcel-modal.gm-parcel-modal .modal-body,
+  .support-parcel-modal.gm-parcel-modal .modal-footer { padding-right: var(--support-space-4); padding-left: var(--support-space-4); }
+}
+
+/*
+ * Choose item picker
+ * ------------------
+ * MailParcelsItemLookup opens its own modal. GMParcelComposer passes its
+ * modal-class through to it, so inside Player Support the picker carries
+ * "support-modal support-parcel-modal" too: the theme supplies the tokens,
+ * dialog chrome, focus ring and reduced motion, and the rules below restyle
+ * the picker's own parts. The Mail & Parcels editor passes no class, so none
+ * of this reaches it.
+ */
+.support-parcel-modal.item-lookup-modal .spire-editor-search > i { left: 11px; color: var(--support-faint); font-size: 13px; }
+.support-parcel-modal.item-lookup-modal .spire-editor-search .form-control {
+  height: 34px;
+  padding-left: 32px !important; /* content-editor-workspace.css sets it !important */
+  font-size: var(--support-text-md);
+}
+.support-parcel-modal.item-lookup-modal .item-lookup-clear { margin-top: var(--support-space-2); }
+.support-parcel-modal.item-lookup-modal .item-lookup-clear button {
+  padding: 0;
+  color: var(--support-accent-text);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
+}
+.support-parcel-modal.item-lookup-modal .item-lookup-clear button:hover { text-decoration: underline; }
+.support-parcel-modal.item-lookup-modal .lookup-state {
+  min-height: 0;
+  padding: var(--support-space-5) var(--support-space-2);
+  color: var(--support-muted);
+  font-size: var(--support-text-sm);
+}
+.support-parcel-modal.item-lookup-modal .item-lookup-results {
+  max-height: 320px;
+  margin-top: var(--support-space-3);
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius-lg);
+  background: var(--support-bg);
+  box-shadow: none;
+}
+.support-parcel-modal.item-lookup-modal .item-lookup-results > button {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: var(--support-space-2) var(--support-space-3);
+  border-bottom: 1px solid var(--support-border-subtle);
+  background: transparent;
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+}
+.support-parcel-modal.item-lookup-modal .item-lookup-results > button:last-child { border-bottom: 0; }
+.support-parcel-modal.item-lookup-modal .item-lookup-results > button:hover { background: var(--support-hover); }
+.support-parcel-modal.item-lookup-modal .item-lookup-results strong { font-weight: 600; }
+.support-parcel-modal.item-lookup-modal .item-lookup-results small { margin-top: 2px; color: var(--support-muted); font-size: var(--support-text-xs); }
+.support-parcel-modal.item-lookup-modal .item-lookup-results__icon {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-muted);
+}
+.support-parcel-modal.item-lookup-modal .item-lookup-results > button > i { color: var(--support-faint); }
+.support-parcel-modal.item-lookup-modal .item-lookup-results > button:hover > i { color: var(--support-accent); }

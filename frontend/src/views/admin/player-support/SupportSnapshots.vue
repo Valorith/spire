@@ -5,37 +5,37 @@
         EQEmu saves inventory snapshots on a schedule and with <code>#invsnapshot</code>. Pick one from the last 30 days to see what
         {{ record.character }} had then but no longer has.
       </p>
-      <p v-if="error" class="snapshots-message is-error" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> {{ error }}</p>
-      <p v-else-if="loading" class="snapshots-message" role="status">Loading snapshots…</p>
-      <div v-else-if="!snapshots.length" class="snapshots-empty">
-        <span class="snapshots-mark"><i class="fe fe-camera-off" aria-hidden="true"></i></span>
+      <p v-if="error" class="support-callout is-danger" role="alert"><i class="fe fe-alert-circle" aria-hidden="true"></i> <span>{{ error }}</span></p>
+      <p v-else-if="loading" class="snapshots-status" role="status">Loading snapshots…</p>
+      <div v-else-if="!snapshots.length" class="support-empty snapshots-empty">
+        <i class="fe fe-camera-off" aria-hidden="true"></i>
         <strong>No snapshots for {{ record.character }}</strong>
         <p>Turn on the <code>Character:ActiveInvSnapshots</code> rule, or take one in game with <code>#invsnapshot capture</code>.</p>
       </div>
       <div v-else class="snapshots-workspace">
         <div class="snapshots-list" role="group" aria-label="Snapshots">
-          <button v-for="snapshot in snapshots" :key="snapshot.time_index" type="button" :aria-pressed="String(selected === snapshot.time_index)"
+          <button v-for="snapshot in snapshots" :key="snapshot.time_index" type="button" class="support-option" :aria-pressed="String(selected === snapshot.time_index)"
                   @click="choose(snapshot.time_index)">
             <strong>{{ formatDate(snapshot.time_index) }}</strong>
             <span>{{ relative(snapshot.time_index) }} · {{ snapshot.items }} items</span>
           </button>
         </div>
         <div class="snapshots-diff" aria-live="polite">
-          <p v-if="diffLoading" class="snapshots-message" role="status">Comparing with the current inventory…</p>
-          <p v-else-if="!selected" class="snapshots-message">Choose a snapshot.</p>
-          <div v-else-if="!missing.length" class="snapshots-empty is-compact">
-            <span class="snapshots-mark is-good"><i class="fe fe-check" aria-hidden="true"></i></span>
+          <p v-if="diffLoading" class="snapshots-status" role="status">Comparing with the current inventory…</p>
+          <p v-else-if="!selected" class="snapshots-status">Choose a snapshot.</p>
+          <div v-else-if="!missing.length" class="support-empty snapshots-empty is-good">
+            <i class="fe fe-check-circle" aria-hidden="true"></i>
             <strong>Nothing is missing</strong>
             <p>Everything in this snapshot is still in {{ record.character }}’s inventory or bank.</p>
           </div>
           <template v-else>
             <div class="snapshots-diff-head">
               <span>{{ missing.length }} {{ missing.length === 1 ? 'item is' : 'items are' }} missing</span>
-              <button type="button" class="snapshots-link" @click="toggleAll">{{ allChosen ? 'Clear' : 'Select all' }}</button>
+              <button type="button" class="support-link" @click="toggleAll">{{ allChosen ? 'Clear' : 'Select all' }}</button>
             </div>
             <ul class="snapshots-items">
               <li v-for="(line, index) in missing" :key="index">
-                <label>
+                <label :class="{ 'is-chosen': chosen.includes(index), 'is-disabled': !chosen.includes(index) && !fits(index) }">
                   <input v-model="chosen" type="checkbox" :value="index" :disabled="!chosen.includes(index) && !fits(index)">
                   <span class="snapshots-item">
                     <strong>{{ line.item.name }}</strong>
@@ -52,11 +52,11 @@
       </div>
     </div>
     <template #modal-footer>
-      <span v-if="!canRestore && missing.length" class="snapshots-note">Restoring needs Mail &amp; Parcels write access.</span>
-      <span v-else-if="overflow" class="snapshots-note is-warning">Only the first 20 parcels fit in one batch. Restore the rest after sending.</span>
-      <span v-else-if="parcels" class="snapshots-note">{{ parcels }} of 20 parcels in this batch</span>
-      <button type="button" class="btn btn-outline-light btn-sm" @click="$emit('close')">Close</button>
-      <button v-if="canRestore" type="button" class="btn btn-primary btn-sm" :disabled="!chosen.length" @click="restore">
+      <span v-if="!canRestore && missing.length" class="support-footer-note">Restoring needs Mail &amp; Parcels write access.</span>
+      <span v-else-if="overflow" class="support-footer-note is-warning">Only the first 20 parcels fit in one batch. Restore the rest after sending.</span>
+      <span v-else-if="parcels" class="support-footer-note">{{ parcels }} of 20 parcels in this batch</span>
+      <button type="button" class="support-button" @click="$emit('close')">Close</button>
+      <button v-if="canRestore" type="button" class="support-button is-primary" :disabled="!chosen.length" @click="restore">
         <i class="fe fe-package" aria-hidden="true"></i> Restore {{ Math.min(parcels, 20) || '' }} as parcels
       </button>
     </template>
@@ -173,39 +173,56 @@ export default {
 </script>
 
 <style scoped>
-.snapshots-lead { margin: 0 0 12px; color: #a9b9ca; font-size: .82rem; }
-.snapshots code { color: #f3dcae; background: #241f18; padding: 1px 5px; border-radius: 4px; }
-.snapshots-message { color: #a9b9ca; font-size: .82rem; }
-.snapshots-message.is-error { color: #ffadbd; }
-.snapshots-empty { display: grid; justify-items: center; gap: 6px; padding: 30px 10px; text-align: center; color: #a9b9ca; font-size: .8rem; }
-.snapshots-empty.is-compact { padding: 22px 10px; }
-.snapshots-empty strong { color: #f0f4f8; font-size: .9rem; }
-.snapshots-empty p { margin: 0; max-width: 360px; }
-.snapshots-mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; color: #dfb976; background: #352c1f; }
-.snapshots-mark.is-good { color: #8fd6ad; background: #183026; }
-.snapshots-workspace { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 12px; min-height: 260px; }
-.snapshots-list { display: grid; align-content: start; gap: 5px; max-height: 380px; overflow-y: auto; }
-.snapshots-list button {
-  display: grid; gap: 2px; padding: 8px 10px; text-align: left; border-radius: 8px;
-  color: #c9d6e3; background: #172230; border: 1px solid #2f3d4d; font-size: .78rem;
-}
-.snapshots-list button span { color: #8fa1b5; font-size: .7rem; }
-.snapshots-list button[aria-pressed="true"] { border-color: #dfb976; background: #241f18; color: #f3dcae; }
+/* Layout only. Colours, type, radius and spacing come from support-theme.css. */
+.snapshots-lead { margin: 0 0 var(--support-space-4); color: var(--support-muted); font-size: var(--support-text-sm); line-height: 1.5; }
+.snapshots-status { margin: 0; padding: var(--support-space-2) 0; color: var(--support-muted); font-size: var(--support-text-sm); }
+.snapshots-empty.is-good > i { color: var(--support-success); }
+.snapshots-workspace { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--support-space-4); min-height: 260px; }
+.snapshots-list { display: grid; align-content: start; gap: var(--support-space-1); max-height: 380px; overflow-y: auto; }
+.snapshots-list .support-option strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.snapshots-list .support-option span { color: var(--support-muted); font-size: var(--support-text-xs); }
 .snapshots-diff { min-width: 0; }
-.snapshots-diff-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; color: #f0f4f8; font-size: .82rem; font-weight: 650; }
-.snapshots-link { background: none; border: 0; color: #dfb976; font-size: .76rem; padding: 0; }
-.snapshots-items { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: 340px; overflow-y: auto; }
-.snapshots-items label {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; margin: 0;
-  padding: 7px 10px; border: 1px solid #2f3d4d; border-radius: 8px; background: #121b25; cursor: pointer; font-weight: 400;
+.snapshots-diff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--support-space-3);
+  margin-bottom: var(--support-space-2);
+  color: var(--support-text);
+  font-size: var(--support-text-sm);
+  font-weight: 600;
 }
-.snapshots-items label:hover { border-color: #46586c; }
-.snapshots-item { display: grid; line-height: 1.3; }
-.snapshots-item strong { color: #eef3f8; font-size: .8rem; font-weight: 600; }
-.snapshots-augments { color: #8fa1b5; font-size: .7rem; }
-.snapshots-count { color: #f4ba83; font-size: .78rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-.snapshots-note { margin-right: auto; color: #8fa1b5; font-size: .74rem; }
-.snapshots-note.is-warning { color: #f4ba83; }
-.snapshots-count small { display: block; color: #8fa1b5; font-size: .66rem; font-weight: 500; text-align: right; }
-@media (max-width: 600px) { .snapshots-workspace { grid-template-columns: 1fr; } .snapshots-list { max-height: 160px; } }
+.snapshots-diff-head .support-link { font-size: var(--support-text-sm); }
+.snapshots-items { display: grid; gap: var(--support-space-1); max-height: 340px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.snapshots-items label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--support-space-3);
+  margin: 0;
+  padding: var(--support-space-2) var(--support-space-3);
+  border: 1px solid var(--support-border);
+  border-radius: var(--support-radius);
+  background: var(--support-raised);
+  color: var(--support-text);
+  font-weight: 400;
+  cursor: pointer;
+  transition: var(--support-transition);
+}
+.snapshots-items label:hover { border-color: var(--support-border-strong); background: var(--support-hover); }
+.snapshots-items label.is-chosen { border-color: var(--support-accent-line); background: var(--support-selected); }
+.snapshots-items label.is-disabled { cursor: not-allowed; }
+.snapshots-items label.is-disabled:hover { border-color: var(--support-border); background: var(--support-raised); }
+.snapshots-items label.is-disabled .snapshots-item strong { color: var(--support-muted); }
+.snapshots-items input { width: 15px; height: 15px; margin: 0; accent-color: var(--support-accent); }
+.snapshots-items input:disabled { cursor: not-allowed; }
+.snapshots-item { display: grid; gap: 2px; min-width: 0; line-height: 1.35; }
+.snapshots-item strong { color: var(--support-text); font-size: var(--support-text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.snapshots-items .snapshots-augments { color: var(--support-muted); font-size: var(--support-text-xs); }
+.snapshots-items .snapshots-count { color: var(--support-text-secondary); font-size: var(--support-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.snapshots-count small { display: block; color: var(--support-muted); font-size: var(--support-text-xs); font-weight: 400; }
+@media (max-width: 600px) {
+  .snapshots-workspace { grid-template-columns: minmax(0, 1fr); }
+  .snapshots-list { max-height: 160px; }
+}
 </style>
