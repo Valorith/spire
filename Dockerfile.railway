@@ -21,7 +21,8 @@ RUN npm run build
 ############################
 # Backend build (Go)
 ############################
-FROM golang:1.23-bookworm AS backend
+# Pin a supported security release; keep Bookworm aligned with the runtime.
+FROM golang:1.26.11-bookworm AS backend
 WORKDIR /app
 
 COPY go.mod go.sum ./

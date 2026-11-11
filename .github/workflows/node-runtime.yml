@@ -1,10 +1,19 @@
-name: Node runtime validation
+name: Container runtime validation
 
 on:
   pull_request:
     paths:
       - '.node-version'
       - 'Dockerfile.railway'
+      - '.dockerignore'
+      - 'entrypoint.railway.sh'
+      - 'scripts/test-railway-backend.sh'
+      - 'go.mod'
+      - 'go.sum'
+      - 'main.go'
+      - 'boot/**'
+      - 'cmd/**'
+      - 'internal/**'
       - 'containers/workspace/Dockerfile'
       - 'frontend/package*.json'
       - 'frontend/eqsage-embed/package*.json'
@@ -16,7 +25,7 @@ permissions:
 jobs:
   linux-containers:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,3 +37,29 @@ jobs:
       - name: Build optional Railway frontend stage
         run: docker build --file Dockerfile.railway --target frontend --tag node-frontend-qa .
       - run: docker run --rm --entrypoint node node-frontend-qa --version | grep -Fx "v$(cat .node-version)"
+      - name: Build optional Railway backend stage
+        run: docker build --file Dockerfile.railway --target backend --tag railway-backend-qa .
+      - name: Verify Railway Go toolchain and backend regressions
+        run: |
+          expected_go_version="$(sed -n 's/^FROM golang:\([0-9.]*\)-bookworm AS backend$/go\1/p' Dockerfile.railway)"
+          test -n "$expected_go_version"
+          docker run --rm --env "EXPECTED_GO_VERSION=$expected_go_version" --env CGO_ENABLED=0 --env GOTOOLCHAIN=local --entrypoint sh railway-backend-qa -ec '
+            test "$(go env GOVERSION)" = "$EXPECTED_GO_VERSION"
+            go version -m /out/spire | head -n 1 | grep -Fw "$EXPECTED_GO_VERSION"
+            go test -count=1 -timeout=10m ./boot ./internal/http/... ./internal/database ./internal/permissions ./internal/websocket ./internal/updater ./internal/atomicfile ./internal/filepathcheck
+            GOOS=linux GOARCH=arm64 go build -o /tmp/spire-linux-arm64 ./main.go
+          '
+      - name: Build and verify optional Railway runtime image
+        run: |
+          docker build --file Dockerfile.railway --tag railway-runtime-qa .
+          docker run --rm --entrypoint sh railway-runtime-qa -ec '
+            test "$(id -u)" = 10001
+            test -x /app/spire
+            test -x /entrypoint.sh
+            test -s /app/frontend/dist/index.html
+            test -s /frontend/dist/index.html
+          '
+      - name: Test isolated Railway database integrations and HTTP startup
+        run: |
+          bash scripts/test-railway-backend.sh railway-backend-qa mariadb:11.8.9
+          bash scripts/test-railway-backend.sh railway-backend-qa mysql:9.7.4
