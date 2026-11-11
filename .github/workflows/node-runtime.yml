@@ -7,6 +7,7 @@ on:
       - 'Dockerfile.railway'
       - '.dockerignore'
       - 'entrypoint.railway.sh'
+      - 'scripts/test-railway-backend.sh'
       - 'go.mod'
       - 'go.sum'
       - 'main.go'
@@ -58,3 +59,7 @@ jobs:
             test -s /app/frontend/dist/index.html
             test -s /frontend/dist/index.html
           '
+      - name: Test isolated Railway database integrations and HTTP startup
+        run: |
+          bash scripts/test-railway-backend.sh railway-backend-qa mariadb:11.8.9
+          bash scripts/test-railway-backend.sh railway-backend-qa mysql:9.7.4
