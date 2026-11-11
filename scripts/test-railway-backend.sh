@@ -50,6 +50,8 @@ docker run --rm --interactive --network "$network" \
 set -eu
 # Override the repository's development fixture inside this disposable container.
 cat > /app/.env.testing <<EOF
+# Optional model-preview assets require an external download and are not used by these tests.
+SKIP_ASSET_CHECK=1
 APP_ENV=testing
 APP_KEY=0000000000000000000000000000000000000000000000000000000000000000
 JWT_SECRET_KEY=spire-ci-only
@@ -72,13 +74,14 @@ export SPIRE_SUPPORT_IT_EQEMU=eqemu_goqa
 # Includes schema migration recovery, petition alert idempotency (mocked delivery),
 # and the previously untagged real-database user/relationship integration test.
 go test -count=1 -timeout=10m ./...
+go test -v -count=1 -timeout=10m -run '^(TestSimpleUserCreateWithRelationships|TestSpireMigrateIntegration|TestAnnouncePetitionsIntegration)$' ./internal/integration ./internal/database ./internal/http/controllers
 
 CONTAINER
 
 # Exercise the final non-root image and its normal Railway entrypoint. The
 # internal Docker network has no external egress and publishes no host ports.
-docker run --detach --rm --name "$application" --network "$network" \
-  --env APP_ENV=production \
+docker run --detach --name "$application" --network "$network" \
+  --env APP_ENV=production --env SKIP_ASSET_CHECK=1 \
   --env APP_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
   --env JWT_SECRET_KEY=spire-ci-only \
   --env "MYSQL_SPIRE_HOST=$database" --env MYSQL_SPIRE_PORT=3306 \
