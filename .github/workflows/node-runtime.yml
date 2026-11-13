@@ -46,7 +46,7 @@ jobs:
           docker run --rm --env "EXPECTED_GO_VERSION=$expected_go_version" --env CGO_ENABLED=0 --env GOTOOLCHAIN=local --entrypoint sh railway-backend-qa -ec '
             test "$(go env GOVERSION)" = "$EXPECTED_GO_VERSION"
             go version -m /out/spire | head -n 1 | grep -Fw "$EXPECTED_GO_VERSION"
-            go test -count=1 -timeout=10m ./boot ./internal/http/... ./internal/database ./internal/permissions ./internal/websocket ./internal/updater ./internal/atomicfile ./internal/filepathcheck
+            go test -count=1 -timeout=10m ./boot ./internal/auth ./internal/user ./internal/http/... ./internal/database ./internal/permissions ./internal/websocket ./internal/updater ./internal/atomicfile ./internal/filepathcheck
             GOOS=linux GOARCH=arm64 go build -o /tmp/spire-linux-arm64 ./main.go
           '
       - name: Build and verify optional Railway runtime image
