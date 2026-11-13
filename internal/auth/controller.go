@@ -7,7 +7,7 @@ import (
 	"github.com/EQEmuTools/spire/internal/models"
 	"github.com/EQEmuTools/spire/internal/user"
 	"github.com/danilopolani/gocialite"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	gocache "github.com/patrickmn/go-cache"
 	"net/http"

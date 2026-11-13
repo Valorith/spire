@@ -1,10 +1,12 @@
 package user
 
 import (
+	"errors"
 	"fmt"
 	"github.com/EQEmuTools/spire/internal/database"
 	"github.com/EQEmuTools/spire/internal/models"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	gocache "github.com/patrickmn/go-cache"
@@ -32,31 +34,48 @@ func NewContextMiddleware(
 type jwtCustomClaims struct {
 	Authorized bool   `json:"authorized"`
 	UserId     string `json:"userId"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
+}
+
+// Validate rejects unusable identities before successHandler can load a user.
+// Registered time claims are validated separately by the JWT parser.
+func (c jwtCustomClaims) Validate() error {
+	id, err := strconv.Atoi(c.UserId)
+	if err != nil || id <= 0 {
+		return errors.New("invalid JWT user ID")
+	}
+	return nil
 }
 
 func (m ContextMiddleware) HandleHeader() echo.MiddlewareFunc {
-	return middleware.JWTWithConfig(middleware.JWTConfig{
-		SuccessHandler: m.successHandler,
-		Skipper:        m.skipperHeader,
-		SigningKey:     []byte(os.Getenv("JWT_SECRET_KEY")),
-		Claims:         &jwtCustomClaims{},
-	})
+	return m.jwtMiddleware("header:Authorization:Bearer ", m.skipperHeader)
 }
 
 func (m ContextMiddleware) HandleQuerystring() echo.MiddlewareFunc {
-	return middleware.JWTWithConfig(middleware.JWTConfig{
+	return m.jwtMiddleware("query:jwt", m.skipperQuery)
+}
+
+func (m ContextMiddleware) jwtMiddleware(tokenLookup string, skipper middleware.Skipper) echo.MiddlewareFunc {
+	key := []byte(os.Getenv("JWT_SECRET_KEY"))
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuedAt())
+	return echojwt.WithConfig(echojwt.Config{
 		SuccessHandler: m.successHandler,
-		TokenLookup:    "query:jwt",
-		Skipper:        m.skipperQuery,
-		SigningKey:     []byte(os.Getenv("JWT_SECRET_KEY")),
-		Claims:         &jwtCustomClaims{},
+		TokenLookup:    tokenLookup,
+		Skipper:        skipper,
+		ParseTokenFunc: func(_ echo.Context, token string) (interface{}, error) {
+			// Keep HS256 and legacy issued-at validation explicit. Allocate claims
+			// per request so concurrent requests cannot share an identity.
+			return parser.ParseWithClaims(token, &jwtCustomClaims{}, func(_ *jwt.Token) (interface{}, error) {
+				return key, nil
+			})
+		},
 	})
 }
 
 func (m ContextMiddleware) skipperHeader(c echo.Context) bool {
 	// Skip JWT signature validation if authenticated with basic auth
-	if strings.Contains(c.Request().Header.Get("Authorization"), "Basic") {
+	scheme, _, _ := strings.Cut(c.Request().Header.Get("Authorization"), " ")
+	if strings.EqualFold(scheme, "Basic") {
 		return true
 	}
 
@@ -89,10 +108,7 @@ func (m ContextMiddleware) successHandler(c echo.Context) {
 	// signature validation
 	user := c.Get("user").(*jwt.Token)
 	claims := user.Claims.(*jwtCustomClaims)
-	userId, err := strconv.Atoi(claims.UserId)
-	if err != nil {
-		panic("Failed to convert JWT UserID")
-	}
+	userId, _ := strconv.Atoi(claims.UserId) // checked by jwtCustomClaims.Validate
 
 	// cache user context for 10 minutes to refrain from repeated DB hits
 	userKey := fmt.Sprintf("user-%v", userId)
