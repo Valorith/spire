@@ -60,7 +60,7 @@ alerts, alter webhook settings, or change the alert delivery policy.
 
 - bash scripts/test-railway-entrypoint.sh: real entrypoint with a stub binary;
   checks default-off, explicit opt-in, migration-before-server, failure stops
-  startup, invalid configuration, ports and exit codes.
+  startup, cancellation signal forwarding, invalid configuration, ports and exit codes.
 - scripts/test-railway-backend.sh: isolated MySQL/MariaDB integration suite plus
   APP_ENV=production and opt-in runtime on a separate empty schema, verifies settings-table
   creation and preservation of an existing cursor on a repeated migration.

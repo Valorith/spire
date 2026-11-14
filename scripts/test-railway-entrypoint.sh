@@ -5,10 +5,17 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 export SPIRE_ENTRYPOINT_CALLS="$scratch/calls"
+export SPIRE_MIGRATION_SIGNAL="$scratch/signal"
 cat > "$scratch/spire" <<'STUB'
 #!/bin/sh
 printf '%s\n' "$*" >> "$SPIRE_ENTRYPOINT_CALLS"
 if [ "$1" = spire:migrate ]; then
+  if [ "${MIGRATION_BLOCK:-0}" = 1 ]; then
+    trap 'echo stopped > "$SPIRE_MIGRATION_SIGNAL"; exit 143' TERM
+    echo $$ > "${SPIRE_MIGRATION_SIGNAL}.pid"
+    echo ready > "$SPIRE_MIGRATION_SIGNAL"
+    while :; do sleep 0.1; done
+  fi
   exit "${MIGRATION_STATUS:-0}"
 fi
 exit "${SERVER_STATUS:-0}"
@@ -52,4 +59,40 @@ done
 run 4321 0 9 9 1
 printf 'spire:migrate\nhttp:serve --port 4321\n' > "$scratch/expected"
 cmp "$scratch/expected" "$SPIRE_ENTRYPOINT_CALLS"
-echo 'Railway entrypoint migration ordering and fail-closed tests passed'
+# Cancel while migration is running: forward TERM, reap the child, never serve.
+: > "$SPIRE_ENTRYPOINT_CALLS"
+PORT=8080 SPIRE_MIGRATE_ON_START=1 MIGRATION_BLOCK=1 sh "$scratch/entrypoint.sh" &
+entrypoint_pid=$!
+for attempt in $(seq 1 100); do
+  if [ -f "$SPIRE_MIGRATION_SIGNAL" ] && grep -qx ready "$SPIRE_MIGRATION_SIGNAL"; then
+    break
+  fi
+  sleep 0.1
+done
+if ! grep -qx ready "$SPIRE_MIGRATION_SIGNAL"; then
+  kill -TERM "$entrypoint_pid" 2>/dev/null || true
+  wait "$entrypoint_pid" || true
+  echo 'Migration did not start' >&2
+  exit 1
+fi
+kill -TERM "$entrypoint_pid"
+# Bound the negative test so broken forwarding fails instead of hanging CI.
+for attempt in $(seq 1 100); do
+  if ! kill -0 "$entrypoint_pid" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if kill -0 "$entrypoint_pid" 2>/dev/null; then
+  kill -KILL "$(cat "${SPIRE_MIGRATION_SIGNAL}.pid")" "$entrypoint_pid" 2>/dev/null || true
+  wait "$entrypoint_pid" 2>/dev/null || true
+  echo 'Migration cancellation timed out' >&2
+  exit 1
+fi
+set +e
+wait "$entrypoint_pid"
+status=$?
+set -e
+test "$status" -eq 143
+grep -qx stopped "$SPIRE_MIGRATION_SIGNAL"
+printf 'spire:migrate\n' > "$scratch/expected"
+cmp "$scratch/expected" "$SPIRE_ENTRYPOINT_CALLS"
+echo 'Railway entrypoint ordering, opt-in, failure and cancellation tests passed'
