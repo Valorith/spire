@@ -8,6 +8,7 @@ on:
       - '.dockerignore'
       - 'entrypoint.railway.sh'
       - 'scripts/test-railway-backend.sh'
+      - 'scripts/test-railway-entrypoint.sh'
       - 'go.mod'
       - 'go.sum'
       - 'main.go'
@@ -30,6 +31,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Test Railway startup migration gate
+        run: bash scripts/test-railway-entrypoint.sh
       - name: Build and verify workspace Node toolchain
         run: |
           docker build --file containers/workspace/Dockerfile --target node-runtime --tag node-toolchain-qa containers/workspace
