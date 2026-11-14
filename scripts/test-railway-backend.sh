@@ -39,6 +39,8 @@ fi
 docker exec --interactive "$database" "$database_client" --user=root --password=spire-ci-only <<'SQL'
 CREATE DATABASE spire_goqa;
 CREATE DATABASE eqemu_goqa;
+-- Keep runtime startup separate from schemas migrated by the Go tests.
+CREATE DATABASE spire_runtime_qa;
 CREATE TABLE eqemu_goqa.petitions (dib bigint unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY, petid bigint unsigned, charname varchar(64), zone varchar(64), urgency int, petitiontext text, senttime bigint unsigned);
 INSERT INTO eqemu_goqa.petitions (petid, charname, zone, urgency, petitiontext, senttime) VALUES (1, 'SyntheticQA', 'qeynos', 0, 'Synthetic integration test petition', 100);
 CREATE TABLE eqemu_goqa.discord_webhooks (id bigint unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY, webhook_name varchar(255), webhook_url varchar(2048), created_at datetime(3), deleted_at datetime(3));
@@ -81,11 +83,11 @@ CONTAINER
 # Exercise the final non-root image and its normal Railway entrypoint. The
 # internal Docker network has no external egress and publishes no host ports.
 docker run --detach --name "$application" --network "$network" \
-  --env APP_ENV=production --env SKIP_ASSET_CHECK=1 \
+  --env APP_ENV=production --env SKIP_ASSET_CHECK=1 --env SPIRE_MIGRATE_ON_START=1 \
   --env APP_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
   --env JWT_SECRET_KEY=spire-ci-only \
   --env "MYSQL_SPIRE_HOST=$database" --env MYSQL_SPIRE_PORT=3306 \
-  --env MYSQL_SPIRE_DATABASE=spire_goqa --env MYSQL_SPIRE_USERNAME=root --env MYSQL_SPIRE_PASSWORD=spire-ci-only \
+  --env MYSQL_SPIRE_DATABASE=spire_runtime_qa --env MYSQL_SPIRE_USERNAME=root --env MYSQL_SPIRE_PASSWORD=spire-ci-only \
   --env "MYSQL_EQEMU_HOST=$database" --env MYSQL_EQEMU_PORT=3306 \
   --env MYSQL_EQEMU_DATABASE=eqemu_goqa --env MYSQL_EQEMU_USERNAME=root --env MYSQL_EQEMU_PASSWORD=spire-ci-only \
   "$runtime_image" >/dev/null
@@ -116,3 +118,14 @@ then
   docker logs "$application"
   exit 1
 fi
+
+# Opted-in startup must create the settings table with APP_ENV=production and no
+# local EQEmu configuration. No settings row means Discord remains disabled.
+docker exec "$database" "$database_client" --user=root --password=spire-ci-only --batch --skip-column-names \
+  --execute="SELECT COUNT(*) FROM spire_runtime_qa.spire_player_support_settings" | grep -Fx 0
+# Running the migration again must preserve existing settings/cursor values.
+docker exec "$database" "$database_client" --user=root --password=spire-ci-only \
+  --execute="INSERT INTO spire_runtime_qa.spire_player_support_settings (id, discord_webhook_id, alerted_through, updated_by) VALUES (1, 0, 12345, 'SyntheticQA')"
+MSYS_NO_PATHCONV=1 docker exec "$application" /app/spire spire:migrate
+docker exec "$database" "$database_client" --user=root --password=spire-ci-only --batch --skip-column-names \
+  --execute="SELECT CONCAT(discord_webhook_id, ':', alerted_through, ':', updated_by) FROM spire_runtime_qa.spire_player_support_settings WHERE id = 1" | grep -Fx '0:12345:SyntheticQA'
